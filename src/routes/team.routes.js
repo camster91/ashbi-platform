@@ -224,8 +224,10 @@ export default async function teamRoutes(fastify) {
         metadata: { fromRole: before.role, toRole: member.role },
       });
     }
-    // A deactivated client-portal user's open portal sockets are dropped now.
-    if (member.role === 'CLIENT' && member.isActive === false) {
+    // A client-portal user who is deactivated, or whose role changed (which
+    // ended their sessions), loses their open portal sockets now. Staff
+    // sockets never join those rooms, so this is a no-op for staff.
+    if (member.isActive === false || (before && role && before.role !== member.role)) {
       revokeClientSocketsFrom(fastify, { userId: member.id }, request.log);
     }
     if (before && isActive !== undefined && before.isActive !== member.isActive) {
@@ -326,6 +328,8 @@ export default async function teamRoutes(fastify) {
     });
     // And any support view by or of them (#416).
     await revokeImpersonationsForUser(request.prisma, request, id, 'revoked_password_reset');
+    // Their sessions ended: so do any client-portal sockets they hold.
+    revokeClientSocketsFrom(fastify, { userId: id }, request.log);
 
     return { success: true };
   });

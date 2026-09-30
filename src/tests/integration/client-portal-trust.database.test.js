@@ -126,6 +126,18 @@ test('client portal: revocation, cross-organization isolation and auditable appr
     assert.deepEqual(ownProjects.map((project) => project.id), [a.project.id]);
     const ownReviews = (await as(tokenA, 'GET', '/reviews')).json().sessions;
     assert.deepEqual(ownReviews.map((session) => session.id), [a.review.id]);
+    // The documents list carries what the portal shows, never the storage
+    // path, stored file name or organization.
+    const ownDocuments = (await as(tokenA, 'GET', `/projects/${a.project.id}/documents`)).json();
+    assert.deepEqual(ownDocuments.map((doc) => doc.id), [a.document.id]);
+    assert.deepEqual(Object.keys(ownDocuments[0]).sort(), ['checksumSha256', 'createdAt', 'id', 'mimeType', 'originalName', 'size', 'uploadedBy']);
+    // A trashed project is gone from the portal, as if unknown.
+    await raw.project.update({ where: { id: a.project.id }, data: { deletedAt: new Date() } });
+    assert.deepEqual((await as(tokenA, 'GET', '/projects')).json(), []);
+    for (const url of [`/projects/${a.project.id}`, `/projects/${a.project.id}/documents`, `/documents/${a.document.id}/download`]) {
+      assert.equal((await as(tokenA, 'GET', url)).statusCode, 404, `trashed project: ${url}`);
+    }
+    await raw.project.update({ where: { id: a.project.id }, data: { deletedAt: null } });
 
     for (const [method, url, payload] of [
       ['GET', `/projects/${b.project.id}`],

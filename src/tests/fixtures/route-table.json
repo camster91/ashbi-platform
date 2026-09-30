@@ -486,7 +486,6 @@
   "HEAD /api/reviews",
   "HEAD /api/reviews/",
   "HEAD /api/reviews/:id",
-  "HEAD /api/reviews/:id/export",
   "HEAD /api/reviews/:id/share-links",
   "HEAD /api/reviews/capabilities",
   "HEAD /api/search",

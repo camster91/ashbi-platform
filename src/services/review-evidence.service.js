@@ -101,10 +101,11 @@ function roleFor(actorType, userId, roles) {
  *
  * @param {any} prisma tenant-scoped Prisma client
  * @param {{ id: string, projectId: string, organizationId?: string } & Record<string, any>} session
- * @param {{ exportedBy: { id: string, name?: string | null, email?: string | null }, now?: Date }} options
+ * @param {{ exportedBy: { id: string, name?: string | null, email?: string | null }, now?: Date, limits?: typeof EVIDENCE_LIMITS }} options
+ *   `limits` defaults to EVIDENCE_LIMITS (tests pass smaller bounds).
  */
-export async function buildReviewEvidence(prisma, session, { exportedBy, now = new Date() }) {
-  const chain = await walkFullVersionChain(prisma, session);
+export async function buildReviewEvidence(prisma, session, { exportedBy, now = new Date(), limits = EVIDENCE_LIMITS }) {
+  const chain = await walkFullVersionChain(prisma, session, { maxVersions: limits.versions });
   const sessionIds = chain.ids;
 
   const [project, sessions, annotationRows, decisionRows, shareLinkRows] = await Promise.all([
@@ -123,22 +124,22 @@ export async function buildReviewEvidence(prisma, session, { exportedBy, now = n
     prisma.reviewAnnotation.findMany({
       where: { sessionId: { in: sessionIds } },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      take: take(EVIDENCE_LIMITS.annotations),
+      take: take(limits.annotations),
     }),
     prisma.reviewDecision.findMany({
       where: { sessionId: { in: sessionIds } },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      take: take(EVIDENCE_LIMITS.decisions),
+      take: take(limits.decisions),
     }),
     prisma.reviewShareLink.findMany({
       where: { sessionId: { in: sessionIds } },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      take: take(EVIDENCE_LIMITS.shareLinks),
+      take: take(limits.shareLinks),
     }),
   ]);
-  const annotationsBounded = bounded(annotationRows, EVIDENCE_LIMITS.annotations);
-  const decisionsBounded = bounded(decisionRows, EVIDENCE_LIMITS.decisions);
-  const shareLinksBounded = bounded(shareLinkRows, EVIDENCE_LIMITS.shareLinks);
+  const annotationsBounded = bounded(annotationRows, limits.annotations);
+  const decisionsBounded = bounded(decisionRows, limits.decisions);
+  const shareLinksBounded = bounded(shareLinkRows, limits.shareLinks);
   const annotations = annotationsBounded.rows;
   const decisions = decisionsBounded.rows;
   const shareLinks = shareLinksBounded.rows;
@@ -147,8 +148,8 @@ export async function buildReviewEvidence(prisma, session, { exportedBy, now = n
   const auditBounded = bounded(await prisma.auditEvent.findMany({
     where: { entityId: { in: auditEntityIds }, action: { startsWith: 'review.' } },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    take: take(EVIDENCE_LIMITS.auditEvents),
-  }), EVIDENCE_LIMITS.auditEvents);
+    take: take(limits.auditEvents),
+  }), limits.auditEvents);
   const auditEvents = auditBounded.rows;
 
   const actorIds = new Set();
@@ -256,7 +257,7 @@ export async function buildReviewEvidence(prisma, session, { exportedBy, now = n
       decisionsTruncated: decisionsBounded.truncated,
       shareLinksTruncated: shareLinksBounded.truncated,
       auditTrailTruncated: auditBounded.truncated,
-      limits: EVIDENCE_LIMITS,
+      limits,
       assetsWithoutChecksum: versions.filter((row) => row.asset && !row.asset.checksum).length,
     },
   };

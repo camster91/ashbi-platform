@@ -9,7 +9,10 @@
 //   actor, role and comment, share links and the review audit trail, and no
 //   storage path or share token;
 // - it has the same access as viewing the review: another organization's
-//   staff get 404, non-staff principals 403, anonymous callers 401.
+//   staff get 404, non-staff principals 403, anonymous callers 401;
+// - it is bounded: the full version chain (beyond the page's 50 hops) up to
+//   EVIDENCE_LIMITS.versions, capped lists with truncation flags, a per-user
+//   rate limit, GET only, and the audit event carries the file's SHA-256.
 //
 // Runs only when TENANT_INTEGRATION_DATABASE_URL points at a disposable,
 // fully migrated database.
@@ -28,7 +31,8 @@ import { PrismaPg } from '@prisma/adapter-pg';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'unit-test-secret-at-least-32-characters';
 
 const { createScopedPrisma } = await import('../../utils/prisma-tenant-proxy.js');
-const { default: reviewRoutes } = await import('../../routes/review.routes.js');
+const { default: reviewRoutes, EXPORT_RATE_LIMIT } = await import('../../routes/review.routes.js');
+const { EVIDENCE_LIMITS, buildReviewEvidence, walkFullVersionChain } = await import('../../services/review-evidence.service.js');
 const { default: reviewPortalRoutes } = await import('../../routes/review-portal.routes.js');
 const { default: attachmentRoutes } = await import('../../routes/attachment.routes.js');
 const { reauthCookies, withSession } = await import('../helpers/reauth.js');
@@ -207,15 +211,40 @@ test('review evidence export carries versions, checksums, markup, decisions and 
     ]) {
       assert.ok(trail.includes(expected), `audit trail has ${expected}: ${trail.join(', ')}`);
     }
-    assert.deepEqual(evidence.completeness, { versionChainComplete: true, annotationsTruncated: false, auditTrailTruncated: false, assetsWithoutChecksum: 0 });
+    assert.deepEqual(evidence.completeness, {
+      versionChainComplete: true, annotationsTruncated: false, decisionsTruncated: false, shareLinksTruncated: false,
+      auditTrailTruncated: false, limits: { ...EVIDENCE_LIMITS }, assetsWithoutChecksum: 0,
+    });
 
-    // The export itself is audited, with counts only.
+    // The export itself is audited, with counts and the hash of the file sent.
     const exportAudit = await raw.auditEvent.findFirst({ where: { organizationId: orgA, action: 'review.evidence_exported', entityId: v2.id } });
     assert.ok(exportAudit);
     assert.deepEqual(
-      [exportAudit.actorUserId, exportAudit.metadata.versionCount, exportAudit.metadata.annotationCount, exportAudit.metadata.decisionCount, exportAudit.metadata.shareLinkCount],
-      [users.team.id, 2, 2, 2, 1],
+      [exportAudit.actorUserId, exportAudit.metadata.versionCount, exportAudit.metadata.annotationCount, exportAudit.metadata.decisionCount, exportAudit.metadata.shareLinkCount, exportAudit.metadata.evidenceSha256],
+      [users.team.id, 2, 2, 2, 1, exported.headers['x-evidence-sha256']],
     );
+
+    // HEAD is not a route: it neither builds nor audits an export.
+    const head = await app.inject({ method: 'HEAD', url: `/api/reviews/${v2.id}/export`, headers: { 'x-test-user': 'team' } });
+    assert.equal(head.statusCode, 404);
+    assert.equal(await raw.auditEvent.count({ where: { organizationId: orgA, action: 'review.evidence_exported' } }), 1);
+
+    // Each list reports truncation only when it exceeded its bound (a
+    // bound-sized list is complete).
+    const scoped = createScopedPrisma(raw, orgA);
+    const v2Row = await raw.reviewSession.findUnique({ where: { id: v2.id } });
+    const exact = await buildReviewEvidence(scoped, v2Row, { exportedBy: users.a, limits: { ...EVIDENCE_LIMITS, annotations: 2, decisions: 2, shareLinks: 1 } });
+    assert.deepEqual(
+      [exact.annotations.length, exact.decisions.length, exact.shareLinks.length, exact.completeness.annotationsTruncated, exact.completeness.decisionsTruncated, exact.completeness.shareLinksTruncated],
+      [2, 2, 1, false, false, false],
+    );
+    const cut = await buildReviewEvidence(scoped, v2Row, { exportedBy: users.a, limits: { ...EVIDENCE_LIMITS, annotations: 1, decisions: 1, shareLinks: 0 } });
+    assert.deepEqual(
+      [cut.annotations.length, cut.decisions.length, cut.shareLinks.length, cut.completeness.annotationsTruncated, cut.completeness.decisionsTruncated, cut.completeness.shareLinksTruncated, cut.completeness.versionChainComplete],
+      [1, 1, 0, true, true, true, true],
+    );
+    const oneVersion = await buildReviewEvidence(scoped, v2Row, { exportedBy: users.a, limits: { ...EVIDENCE_LIMITS, versions: 1 } });
+    assert.deepEqual([oneVersion.versions.length, oneVersion.completeness.versionChainComplete], [1, false]);
     // Exporting the older version yields the same chain, marked current there.
     const olderExport = (await staff('a', 'GET', `/${v1.id}/export`)).json();
     assert.deepEqual(olderExport.versions.map((version) => version.current), [true, false]);
@@ -240,6 +269,46 @@ test('review evidence export carries versions, checksums, markup, decisions and 
     // Refused exports are not audited.
     assert.equal(await raw.auditEvent.count({ where: { organizationId: orgB } }), 0);
     assert.equal(await raw.auditEvent.count({ where: { organizationId: orgA, action: 'review.evidence_exported' } }), 3);
+
+    // ── A version chain longer than the 50 hops the review page walks ──────
+    const chainLength = 55;
+    let previous = null;
+    const chainIds = [];
+    for (let version = 1; version <= chainLength; version += 1) {
+      const row = await raw.reviewSession.create({ data: {
+        organizationId: orgA, projectId: projectA.id, attachmentId: legacy.id, title: 'Long chain', version,
+        status: version === chainLength ? 'open' : 'closed', previousSessionId: previous, createdById: users.a.id,
+      } });
+      chainIds.push(row.id);
+      previous = row.id;
+    }
+    const longExport = await staff('team', 'GET', `/${chainIds.at(-1)}/export`);
+    assert.equal(longExport.statusCode, 200, longExport.body);
+    const long = longExport.json();
+    assert.deepEqual(long.versions.map((version) => version.sessionId), chainIds, 'every version, oldest first');
+    assert.equal(long.completeness.versionChainComplete, true);
+    const fromMiddle = (await staff('team', 'GET', `/${chainIds[20]}/export`)).json();
+    assert.equal(fromMiddle.versions.length, chainLength);
+    // Beyond the walk's bound the chain is reported as incomplete, whichever
+    // end the walk stopped at.
+    for (const id of [chainIds[0], chainIds[20], chainIds.at(-1)]) {
+      const walked = await walkFullVersionChain(scoped, { id, projectId: projectA.id }, { maxVersions: 50 });
+      assert.equal(walked.ids.length, 50);
+      assert.equal(walked.complete, false);
+    }
+    assert.deepEqual(await walkFullVersionChain(scoped, { id: chainIds[0], projectId: projectA.id }, { maxVersions: chainLength }), { ids: chainIds, complete: true });
+
+    // ── Per-user rate limit ─────────────────────────────────────────────────
+    // 'team' has exported 3 times; the limit is EXPORT_RATE_LIMIT.max per minute.
+    let limited;
+    for (let attempt = 3; attempt <= EXPORT_RATE_LIMIT.max; attempt += 1) {
+      limited = await staff('team', 'GET', `/${v2.id}/export`);
+    }
+    assert.equal(limited.statusCode, 429, limited.body);
+    assert.equal(limited.json().code, 'REVIEW_EXPORT_RATE_LIMITED');
+    assert.ok(Number(limited.headers['retry-after']) > 0);
+    // Another user's budget is separate.
+    assert.equal((await staff('a', 'GET', `/${v2.id}/export`)).statusCode, 200);
   } finally {
     await app?.close();
     const files = await raw.attachment.findMany({ where: { organizationId: { in: [orgA, orgB] } }, select: { filename: true } });
