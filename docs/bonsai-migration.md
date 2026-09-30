@@ -187,8 +187,9 @@ file.
   taxonomy). Warnings do not block a live run.
 - Created, existing and skipped counts per entity; see *Reconciliation
   report*. Compare each `created + existing + skipped` total with the source
-  row counts. Clients are merged from three files, so their total differs
-  from `clients.csv` alone.
+  row counts; for time entries add `duplicates` (later copies of a repeated
+  row are counted only there). Clients are merged from three files, so their
+  total differs from `clients.csv` alone.
 - `stats.owners.mappedToImporter`: every owner name listed on stdout as
   `[owner mapped to importer]` should be either expected or fixed by creating
   the Ashbi user first.

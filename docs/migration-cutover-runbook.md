@@ -223,18 +223,19 @@ project. Rerun the dry run: every page must be `unchanged` (`notes.planned` is
 ### Bonsai (no ledger)
 
 ```sql
-SELECT count(*) FROM projects WHERE "organizationId" = :org AND "bonsaiProjectId" IS NOT NULL;
+SELECT count(*) FROM projects WHERE "organizationId" = :org;
 SELECT count(*) FROM invoices WHERE "organizationId" = :org AND "bonsaiInvoiceId" IS NOT NULL;
 SELECT count(*) FROM time_entries t JOIN projects p ON p.id = t."projectId"
 WHERE p."organizationId" = :org AND t.source = 'BONSAI_IMPORT';
 ```
 
-On a first import into an empty organization, the invoice and time-entry
-counts equal `stats.invoices.created` and `stats.timeEntries.created`. The
-project count equals `stats.projects.created` minus the source project rows
-with a blank `project_id`: those projects are created with no
-`bonsaiProjectId`, so the query above does not see them (count them in
-`projects.csv`). Rerun the dry run:
+On a first import into an empty organization, every project in it was
+created by the run, so the project count equals `stats.projects.created`
+(this also covers projects created from rows with a blank `project_id`,
+which get no `bonsaiProjectId`), and the invoice and time-entry counts equal
+`stats.invoices.created` and `stats.timeEntries.created`. Into an
+organization that already has projects, compare the project count before and
+after the run instead. Rerun the dry run:
 `created` must be `0` for every entity. Compare paid and outstanding totals
 per client with Bonsai.
 
@@ -285,7 +286,7 @@ Roll back in reverse import order, newest run first.
 | Slack | `node scripts/import-slack-export.mjs --organization-id <id> --rollback <runId> --summary-file <new-report.json>` | Refused (`ROLLBACK_BLOCKED`) when a message outside the run replies to one of its messages |
 | Notion | **Manual; no run id.** Delete the notes named in `notion_import_records."noteId"` for the project and window, and delete those records. Alternatively, restore the pre-import backup | See the Notion playbook's *Rollback* |
 | ClickUp | **Nothing to roll back** in the importer. Delete tasks entered by hand in the app | The importer writes only its report |
-| Bonsai | **Manual; no run id.** Restore the pre-import backup (the only full undo, and it reverts every organization), or remove the created records by hand and restore overwritten client and project fields from the workspace export | See the Bonsai playbook's *Rollback* |
+| Bonsai | **Manual; no run id.** Restore the pre-import backup: the only full undo, and it reverts every organization. Otherwise a **partial** undo: remove the records this run created (its import window only; every run shares the `BONSAI_IMPORT` marker). This cannot restore fields the import overwrote on existing clients and projects (`tier`, `totalRevenueUsd`, `totalRevenueCad`, `bonsaiProjectId`), which the workspace export does not capture | See the Bonsai playbook's *Rollback* |
 
 The per-run commands write a `migration_import.rolled_back` audit event and
 mark the run `ROLLED_BACK`. After a rollback, rerun the dry run to confirm
