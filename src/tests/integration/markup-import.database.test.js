@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
+import { importScopeLockKey } from '../../services/operator-import-common.js';
 
 // Runs the real MarkUp.io comments importer CLI against a real PostgreSQL
 // database (built with `prisma migrate deploy`) to prove the reconciliation
@@ -394,6 +395,42 @@ test('MarkUp.io import plans, creates reviews, reruns idempotently, reports conf
     const rootRolledBack = runCli(['--organization-id', ids.orgA, '--rollback', rootOnlyRunId], workDir);
     assert.equal(rootRolledBack.status, 0, rootRolledBack.stderr);
     assert.deepEqual(rootRolledBack.report.deleted, { sessions: 0, comments: 1, attachments: 0, files: 0, records: 1 });
+
+    // Imports and rollbacks of one source in one organization are serialised
+    // by an advisory lock taken before the ledger is read. A rollback that
+    // deletes a comment-only run while an import waits is therefore seen by
+    // the import, which re-creates the comment instead of reporting it
+    // unchanged from a stale ledger.
+    const rootAgain = runCli([...base, '--apply'], workDir);
+    assert.equal(rootAgain.status, 0, rootAgain.stderr);
+    assert.equal(rootAgain.report.totals.commentsCreated, 1);
+    const scopeKey = importScopeLockKey('MARKUP_CSV', ids.orgA);
+    let releaseScope;
+    const scopeHeld = new Promise((resolve) => { releaseScope = resolve; });
+    let scopeReady = false;
+    const rollbackLike = raw.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${scopeKey}, 0))`;
+      // What rolling back that comment-only run removes.
+      const again = await tx.markupImportRecord.findMany({ where: { runId: rootAgain.report.run.id } });
+      await tx.reviewAnnotation.deleteMany({ where: { id: { in: again.map((record) => record.annotationId) } } });
+      await tx.markupImportRecord.deleteMany({ where: { runId: rootAgain.report.run.id } });
+      await tx.importRun.update({ where: { id: rootAgain.report.run.id }, data: { status: 'ROLLED_BACK', rolledBackAt: new Date() } });
+      scopeReady = true;
+      await scopeHeld;
+    }, { timeout: 60_000 });
+    while (!scopeReady) await new Promise((resolve) => setTimeout(resolve, 10));
+    let waitingDone = false;
+    const waiting = runCliAsync([...base, '--apply'], workDir).then((result) => { waitingDone = true; return result; });
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    assert.equal(waitingDone, false, 'the import waits for the rollback of the same organization and source');
+    releaseScope();
+    await rollbackLike;
+    const afterRollback = await waiting;
+    assert.equal(afterRollback.status, 0, afterRollback.stderr);
+    assert.equal(afterRollback.report.totals.commentsCreated, 1, 'the rolled-back comment is imported again, not reported unchanged');
+    assert.equal(await raw.reviewAnnotation.count({ where: { sessionId: homeSessionId, body: 'A new root comment' } }), 1);
+    const cleanup = runCli(['--organization-id', ids.orgA, '--rollback', afterRollback.report.run.id], workDir);
+    assert.equal(cleanup.status, 0, cleanup.stderr);
     fs.writeFileSync(csv, withReply);
 
     // Kind and outcome vocabularies are enforced by the database.

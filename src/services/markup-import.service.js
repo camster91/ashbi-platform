@@ -40,6 +40,7 @@ import {
   countBy,
   findInChunks,
   lockImportRun,
+  lockImportScope,
   lockRowsForUpdate,
   pendingRollbackFiles,
   removeRolledBackFiles,
@@ -641,6 +642,9 @@ export async function runMarkupImport(db, { organizationId, projectId, importDat
   if (report.errors.length) { finishExceptions(report); throw new OperatorImportBlockedError(report); }
   try {
     await db.$transaction(async (transaction) => {
+      // Before the ledger is read: no concurrent import or rollback of this
+      // source in this organization can change it until this run commits.
+      await lockImportScope(transaction, MARKUP_IMPORT_SOURCE, organizationId);
       context.run = await transaction.importRun.create({
         data: { organizationId, source: MARKUP_IMPORT_SOURCE, status: 'APPLIED', sourceLabel: importData.label },
       });
@@ -678,8 +682,10 @@ export async function runMarkupImport(db, { organizationId, projectId, importDat
 export async function rollbackMarkupImportRun(db, { organizationId, runId }) {
   if (!organizationId || !runId) throw new OperatorImportError('MISSING_ARGUMENT', 'organizationId and runId are required');
   const result = await db.$transaction(async (transaction) => {
-    // Serialise rollbacks (and cleanup retries) of this run: the status and
-    // pending-file list below are read under the lock.
+    // Serialise against imports of this source (their ledger reads) and, per
+    // run, against other rollbacks and cleanup retries: the status and
+    // pending-file list below are read under the locks.
+    await lockImportScope(transaction, MARKUP_IMPORT_SOURCE, organizationId);
     await lockImportRun(transaction, runId);
     const run = await transaction.importRun.findFirst({ where: { id: runId, organizationId, source: MARKUP_IMPORT_SOURCE } });
     if (!run) throw new OperatorImportError('RUN_NOT_FOUND', 'Import run was not found in this organization');

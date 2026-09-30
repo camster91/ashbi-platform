@@ -277,6 +277,23 @@ export async function lockRowsForUpdate(tx, table, ids) {
     : tx.$queryRaw`SELECT id FROM "attachments" WHERE id = ANY(${chunk}::text[]) ORDER BY id FOR UPDATE`));
 }
 
+/** The advisory-lock key serialising one organization's imports of a source. */
+export function importScopeLockKey(source, organizationId) {
+  return `operator-import:${source}:${organizationId}`;
+}
+
+/**
+ * Serialise every live import and rollback of one source in one organization
+ * for the rest of the transaction. Taken first, before the reconciliation
+ * ledger is read, so a run never plans from a ledger another run or rollback
+ * is changing: each sees the other's committed result. Lock order everywhere:
+ * this scope lock, then the import run, attachments, review sessions.
+ */
+export async function lockImportScope(tx, source, organizationId) {
+  const key = importScopeLockKey(source, organizationId);
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+}
+
 /**
  * Lock one import run's row for the rest of the transaction, before its
  * status and summary are read. Two rollbacks of the same run (or a rollback

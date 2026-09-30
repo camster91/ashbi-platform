@@ -209,6 +209,10 @@ recorded in its summary (`pendingFileCleanup`) and the command exits with
 an error. Rerun the same `--rollback <runId>` to retry them; once every file
 is gone a further rerun reports that the run was already rolled back.
 
+Live imports and rollbacks of this source in one organization run one at a
+time (a database advisory lock): a second operator's `--apply` or
+`--rollback` waits for the first to commit and then works from its result.
+
 ## Known limits
 
 - The CSV is operator-prepared; Ashbi cannot verify it against MarkUp.io.
