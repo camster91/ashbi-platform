@@ -12,9 +12,11 @@ export default async function dashboardRoutes(fastify) {
     const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
     const [
-      // MRR — sum of monthlyAmountUsd for active retainers
+      // MRR — sum of monthlyAmountUsd for active retainers. Sums and counts
+      // are computed in the database: a list read of a soft-deletable model
+      // stops at 100 rows, which would understate an agency's totals.
       activeRetainers,
-      // Outstanding invoices
+      // Outstanding invoices (SENT + OVERDUE)
       outstandingInvoices,
       // Active projects
       activeProjectCount,
@@ -44,15 +46,19 @@ export default async function dashboardRoutes(fastify) {
       // Draft invoices: prepared but not sent, so NOT outstanding. Reported
       // separately so the dashboard can say "Drafts $12.2K" instead of
       // implying there is nothing to bill.
-      draftInvoices
+      draftInvoices,
+      // Outstanding invoices that are overdue (marked OVERDUE or past due)
+      overdueInvoices
     ] = await Promise.all([
-      request.prisma.retainerPlan.findMany({
+      request.prisma.retainerPlan.aggregate({
         where: { retainerStatus: 'ACTIVE' },
-        select: { monthlyAmountUsd: true }
+        _sum: { monthlyAmountUsd: true },
+        _count: { _all: true }
       }),
-      request.prisma.invoice.findMany({
+      request.prisma.invoice.aggregate({
         where: { status: { in: ['SENT', 'OVERDUE'] } },
-        select: { total: true, status: true, dueDate: true }
+        _sum: { total: true },
+        _count: { _all: true }
       }),
       request.prisma.project.count({
         where: { status: { notIn: ['LAUNCHED', 'CANCELLED', 'ON_HOLD'] } }
@@ -263,16 +269,23 @@ export default async function dashboardRoutes(fastify) {
         where: { status: 'DRAFT' },
         _sum: { total: true },
         _count: { _all: true }
+      }),
+      request.prisma.invoice.aggregate({
+        where: {
+          status: { in: ['SENT', 'OVERDUE'] },
+          OR: [{ status: 'OVERDUE' }, { dueDate: { lt: now } }]
+        },
+        _sum: { total: true },
+        _count: { _all: true }
       })
     ]);
 
     // Calculate MRR
-    const mrr = activeRetainers.reduce((sum, r) => sum + (r.monthlyAmountUsd || 0), 0);
+    const mrr = activeRetainers?._sum?.monthlyAmountUsd || 0;
 
     // Outstanding totals
-    const totalOutstanding = outstandingInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-    const overdueInvoices = outstandingInvoices.filter(inv => inv.status === 'OVERDUE' || (inv.dueDate && new Date(inv.dueDate) < now));
-    const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+    const totalOutstanding = outstandingInvoices?._sum?.total || 0;
+    const overdueAmount = overdueInvoices?._sum?.total || 0;
 
     // Build client health grid with computed fields
     const clientHealth = activeClients.map(client => {
@@ -308,12 +321,12 @@ export default async function dashboardRoutes(fastify) {
     return {
       // MRR counts ACTIVE retainer plans only (monthlyAmountUsd).
       mrr,
-      activeRetainerCount: activeRetainers.length,
+      activeRetainerCount: activeRetainers?._count?._all || 0,
       // Outstanding = SENT + OVERDUE invoices; drafts are reported separately.
       totalOutstanding,
-      outstandingCount: outstandingInvoices.length,
+      outstandingCount: outstandingInvoices?._count?._all || 0,
       overdueAmount,
-      overdueCount: overdueInvoices.length,
+      overdueCount: overdueInvoices?._count?._all || 0,
       draftInvoiceTotal: draftInvoices?._sum?.total || 0,
       draftInvoiceCount: draftInvoices?._count?._all || 0,
       activeProjects: activeProjectCount,
