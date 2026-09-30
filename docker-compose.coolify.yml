@@ -19,6 +19,8 @@ services:
         APP_REVISION: ${SOURCE_COMMIT:-unknown}
     restart: unless-stopped
     command: ["sh", "scripts/start.sh"]
+    # Let in-flight requests and sockets finish (the VPS script uses 30s).
+    stop_grace_period: 30s
     expose:
       - "3002"
     # Coolify writes every variable from its Environment Variables tab to
@@ -36,12 +38,16 @@ services:
       - HEALTH_DETAILS_LOOPBACK=false
       - DATABASE_URL=postgresql://${POSTGRES_USER:-ashbi}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-ashbi}?schema=public
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
-      - CREDENTIALS_KEY=${CREDENTIALS_KEY:?CREDENTIALS_KEY is required}
-      - ADMIN_INVITE_TOKEN=${ADMIN_INVITE_TOKEN:?ADMIN_INVITE_TOKEN is required}
-      - WEBHOOK_SECRET=${WEBHOOK_SECRET:?WEBHOOK_SECRET is required}
-      - APP_URL=${APP_URL:?APP_URL is required}
-      - CORS_ORIGIN=${CORS_ORIGIN:?CORS_ORIGIN is required}
+      - JWT_SECRET=${JWT_SECRET:?}
+      - CREDENTIALS_KEY=${CREDENTIALS_KEY:?}
+      - ADMIN_INVITE_TOKEN=${ADMIN_INVITE_TOKEN:?}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:?}
+      - APP_URL=${APP_URL:?}
+      # Links in emails, invites, portal and OAuth callbacks. Unset, the app
+      # falls back to the production host, so these are required.
+      - HUB_URL=${HUB_URL:?}
+      - PORTAL_BASE_URL=${PORTAL_BASE_URL:?}
+      - CORS_ORIGIN=${CORS_ORIGIN:?}
       - TRUST_PROXY=${TRUST_PROXY:-1}
     volumes:
       - uploads:/app/uploads
@@ -68,6 +74,8 @@ services:
         APP_REVISION: ${SOURCE_COMMIT:-unknown}
     restart: unless-stopped
     command: ["npm", "run", "start:worker"]
+    # Let in-flight queue jobs finish (the VPS script uses 120s).
+    stop_grace_period: 120s
     env_file:
       - path: .env
         required: false
@@ -75,10 +83,12 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://${POSTGRES_USER:-ashbi}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-ashbi}?schema=public
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
-      - CREDENTIALS_KEY=${CREDENTIALS_KEY:?CREDENTIALS_KEY is required}
-      - WEBHOOK_SECRET=${WEBHOOK_SECRET:?WEBHOOK_SECRET is required}
-      - APP_URL=${APP_URL:?APP_URL is required}
+      - JWT_SECRET=${JWT_SECRET:?}
+      - CREDENTIALS_KEY=${CREDENTIALS_KEY:?}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:?}
+      - APP_URL=${APP_URL:?}
+      - HUB_URL=${HUB_URL:?}
+      - PORTAL_BASE_URL=${PORTAL_BASE_URL:?}
     volumes:
       - uploads:/app/uploads
       - appconfig:/app/config
@@ -97,8 +107,11 @@ services:
       start_period: 20s
 
   # Applies the committed migration chain once per deploy, before the API and
-  # worker start. A failed migration stops the deploy with the old containers
-  # still serving.
+  # worker start. Compose stops the old API and worker containers before this
+  # runs, so a deploy has downtime, and a failed migration leaves the API down
+  # until it is fixed forward or the database is restored (see the guide).
+  # Coolify shows the stack as degraded because this container has exited;
+  # that is expected.
   migrate:
     build:
       context: .

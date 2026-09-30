@@ -13,8 +13,15 @@ stack for staging or a new environment, and to rehearse that move.
 
 - **Migrations first.** `migrate` runs `prisma migrate deploy` against the
   committed migration chain and exits. `app` and `worker` start only after it
-  succeeds, so a failed migration stops the deploy before new code serves
-  traffic.
+  succeeds.
+- **Deploys have downtime.** Coolify runs `docker compose up`: the old API and
+  worker are stopped before the migration runs and the new ones start, so
+  expect an outage of the migration time plus about a minute. A failed
+  migration leaves the API **down**, not on the old version; see
+  [Rollback](#rollback). On redeploy the API gets 30 seconds and the worker
+  120 seconds to finish in-flight work.
+- **Expected status.** Coolify may show the stack as *degraded* after a
+  deploy because the one-shot `migrate` container has exited. That is normal.
 - **Persistent data** lives in named volumes that survive redeploys:
   - `pgdata`: the database;
   - `redisdata`: Redis, with append-only persistence;
@@ -27,17 +34,22 @@ stack for staging or a new environment, and to rehearse that move.
 - **Health.** The API container reports healthy when `/api/live` answers; the
   worker when its Redis heartbeat is fresh. `/api/health` shows database,
   Redis and worker readiness.
-- **Build revision.** Coolify's `SOURCE_COMMIT` is passed as `APP_REVISION`, so
-  `/api/health` reports which commit is running.
+- **Build revision.** Coolify's `SOURCE_COMMIT` is passed as `APP_REVISION`
+  when **Include Source Commit in Build** is enabled in the resource's
+  settings (it is off by default); otherwise the revision reads `unknown`.
 
 ## One-time setup
 
 1. In Coolify: **New resource → Public/Private repository → Docker Compose**.
    Choose this repository, branch `main`, and set the compose file location to
    `/docker-compose.coolify.yml`.
-2. **Domain.** On the `app` service, set the domain (for example
-   `https://hub.example.com`). Coolify fills `SERVICE_FQDN_APP_3002` and issues
-   the TLS certificate.
+2. **Domain.** On the `app` service, set the domain with the container port,
+   `https://hub.example.com:3002`. Coolify serves it on
+   `https://hub.example.com` (the port only tells its proxy where to send
+   traffic), fills `SERVICE_FQDN_APP_3002` and issues the TLS certificate.
+   Before the first deploy, also decide `POSTGRES_USER` and `POSTGRES_DB` if
+   you do not want the `ashbi` defaults: they only take effect when the
+   database volume is first created.
 3. **Environment variables.** Coolify generates `SERVICE_PASSWORD_POSTGRES`.
    Set the rest in the Environment Variables tab. Generate secrets with
    `openssl rand -hex 32` and never reuse them between environments.
@@ -49,6 +61,8 @@ stack for staging or a new environment, and to rehearse that move.
    | `ADMIN_INVITE_TOKEN` | yes | random; used once to create the first admin |
    | `WEBHOOK_SECRET` | yes | random |
    | `APP_URL` | yes | the public URL, for example `https://hub.example.com` |
+   | `HUB_URL` | yes | the same URL. Used in password-reset and invite emails, estimate links, automations and OAuth callbacks; unset, the app falls back to the production host |
+   | `PORTAL_BASE_URL` | yes | the same URL (client portal and proposal links) |
    | `CORS_ORIGIN` | yes | the same origin as `APP_URL` |
    | `TRUST_PROXY` | no (default `1`) | `1` behind Coolify's single proxy |
    | `POSTGRES_DB`, `POSTGRES_USER` | no (default `ashbi`) | database name and role |
@@ -57,10 +71,17 @@ stack for staging or a new environment, and to rehearse that move.
    | `AI_PROVIDER` plus that provider's key (`ANTHROPIC_API_KEY`, `OLLAMA_API_KEY`, …) | for AI features | `AI_DISABLED=true` turns AI off |
    | `SENTRY_DSN`, `OBSERVABILITY_OWNER`, `CREDENTIALS_KEY_OWNER` | recommended | error reporting and named owners; missing values are logged as warnings |
 
-   Every variable set in the tab reaches both the API and the worker, so any
-   other integration variable from `.env.example` works the same way. The
-   deploy fails fast if a required variable is missing, and the API refuses to
-   start with any placeholder value from `.env.example`.
+   The required variables are passed explicitly, and the deploy fails fast if
+   one is missing. Every other variable reaches the containers through the
+   `.env` file Coolify writes beside the compose file, so any integration
+   variable from `.env.example` works the same way. The API refuses to start
+   with any placeholder value from `.env.example`.
+
+   Check this after the first deploy, from Coolify's terminal for the `app`
+   container, for each optional integration you set:
+   `printenv MAILGUN_DOMAIN STRIPE_SECRET_KEY SENTRY_DSN | wc -l`. A missing
+   one means the `.env` passthrough did not work; add it to the `environment`
+   list of `app` and `worker` as `NAME=${NAME:-}`.
 4. **Deploy.** Watch the `migrate` logs finish with "All migrations have been
    successfully applied", then check `https://<domain>/api/health`.
 5. **First administrator.** Create the first admin once, then keep the invite
@@ -87,19 +108,35 @@ release gates ([release-gates.md](release-gates.md)). The safe setup is:
 The direct-VPS script also enforces a pre-migration backup and a rollback
 floor; Coolify does not. Before switching production:
 
-- Schedule database backups: Coolify's scheduled backup for the `postgres`
-  service, or the encrypted job in [backup-and-restore.md](backup-and-restore.md).
-  Include the `uploads` volume.
+- Schedule backups of the database **and** the `uploads` volume. Coolify's
+  scheduled backups cover standalone database resources, not a `postgres`
+  service inside this stack, so adapt the encrypted job in
+  [backup-and-restore.md](backup-and-restore.md): `pg_dump` through
+  `docker exec` on the `postgres` container, plus an archive of the `uploads`
+  volume. Until that job writes `/app/config/backup-status.json`, the backup
+  check in `/api/health/details` reads unavailable.
 - Take a manual backup before any deploy that adds migrations.
 - Rehearse a restore into a separate Coolify environment.
 
 ## Rollback
 
-- **Code only (no new migrations):** redeploy the previous commit from
-  Coolify's deployment history.
-- **With migrations:** migrations are forward-only. Restore the pre-deploy
-  database backup, then redeploy the previous commit. Uploaded files are not
-  affected by a code rollback.
+Coolify's one-click rollback to an earlier image is not available for Docker
+Compose resources. Roll back by pinning the source:
+
+- **Code only (no new migrations):** set the resource's Git commit to the
+  previous good SHA and redeploy, then set it back to `main` once fixed.
+- **With migrations:** migrations are forward-only, so the old code needs the
+  old schema.
+  1. Stop the `app` and `worker` services, so nothing writes while you
+     restore and no new code runs against the old schema.
+  2. Restore the pre-deploy database backup into `postgres`.
+  3. Pin the previous commit and redeploy.
+
+  Restoring loses every database write since the backup. Files uploaded
+  after it stay in the `uploads` volume without a database record; list and
+  remove them only after checking with the people affected.
+- **Prefer fixing forward** when the failed migration can be corrected: a
+  fix commit on `main` redeploys without losing data.
 
 ## Upgrading from the direct-VPS deployment
 
@@ -108,7 +145,10 @@ Move the data before the domain:
 1. Stop writes on the old host and take a final backup:
    `pg_dump --format=custom`, plus a copy of `data/uploads` and `data/config`.
 2. Restore the dump into the new stack's `postgres` service with `pg_restore`.
-   Copy the files into the `uploads` and `appconfig` volumes.
+   Copy the files into the `uploads` and `appconfig` volumes. Coolify
+   prefixes volume names with the resource id (`<id>_uploads`); copied files
+   must be owned by uid 1000 (`node`), for example with
+   `chown -R 1000:1000` inside a helper container that mounts the volume.
 3. Reuse the old `JWT_SECRET` and `CREDENTIALS_KEY`. A new `CREDENTIALS_KEY`
    makes stored integration credentials unreadable; a new `JWT_SECRET` signs
    everyone out.
