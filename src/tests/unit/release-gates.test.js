@@ -66,6 +66,13 @@ describe('mandatory release gates', () => {
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('Redis realtime integration tests')));
   });
 
+  it('fails closed when the Redis realtime tests may skip in the required gates', () => {
+    const root = copyWorkflows();
+    const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
+    fs.writeFileSync(workflow, fs.readFileSync(workflow, 'utf8').replace("REQUIRE_REDIS_TESTS: '1'", ''));
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('REQUIRE_REDIS_TESTS')));
+  });
+
   it('fails closed when a quality command is removed', () => {
     const root = copyWorkflows();
     const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');

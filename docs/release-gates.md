@@ -25,8 +25,8 @@ The canonical gate owns these blocking checks:
 - backend type check and backend/frontend lint;
 - backend unit and integration tests against PostgreSQL with pgvector (the
   committed migration chain is applied with `prisma migrate deploy`) and Redis
-  (the realtime adapter/emitter tests; under `CI` a missing Redis fails the run
-  instead of skipping those tests);
+  (the realtime adapter/emitter tests; the gate sets `REQUIRE_REDIS_TESTS=1`, so
+  a missing Redis fails the run instead of skipping those tests);
 - frontend unit tests;
 - the production build, frontend performance budgets and Lighthouse budgets;
 - desktop, mobile, and accessibility browser smoke, public-route splitting and

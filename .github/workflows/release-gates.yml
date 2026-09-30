@@ -100,6 +100,7 @@ jobs:
       - name: Backend integration tests
         env:
           REDIS_URL: redis://localhost:6379
+          REQUIRE_REDIS_TESTS: '1'
         run: npm run test:integration
       - name: Frontend unit tests
         run: npm --prefix web test
