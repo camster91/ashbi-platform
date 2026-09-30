@@ -16,8 +16,10 @@ import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 // another client of the same export) is reported rather than failing only
 // live, expenses stay inside the importing organization, blank owners are
 // unmatched, the fallback admin is chosen deterministically, duplicate time
-// entries in one export are counted the same way in both modes, and an
-// existing report path stops a live run before anything is written.
+// entries in one export are counted the same way in both modes, a domain an
+// earlier row moves an existing client off is free for a later row in both
+// modes, and an existing report path stops a live run before anything is
+// written.
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const importer = path.join(repoRoot, 'scripts', 'import-bonsai-full.js');
@@ -47,11 +49,14 @@ test('Bonsai import reports findings in the dry run, stays inside its tenant and
   const suffix = randomUUID();
   const ids = {
     orgA: `bonsai-org-a-${suffix}`, orgB: `bonsai-org-b-${suffix}`,
-    existingA: `bonsai-client-a-${suffix}`, clientB: `bonsai-client-b-${suffix}`,
+    existingA: `bonsai-client-a-${suffix}`, mover: `bonsai-client-mover-${suffix}`, clientB: `bonsai-client-b-${suffix}`,
     inactiveAdmin: `bonsai-inactive-${suffix}`, oldestAdmin: `bonsai-oldest-${suffix}`, newerAdmin: `bonsai-newer-${suffix}`,
     userB: `bonsai-user-b-${suffix}`, expenseB: `bonsai-expense-b-${suffix}`,
   };
-  const domains = { orgB: `taken-${suffix}.example`, twin: `twin-${suffix}.example`, existingA: `existing-${suffix}.example` };
+  const domains = {
+    orgB: `taken-${suffix}.example`, twin: `twin-${suffix}.example`, existingA: `existing-${suffix}.example`,
+    movedFrom: `moved-from-${suffix}.example`, movedTo: `moved-to-${suffix}.example`,
+  };
   const existingEmail = `existing+${suffix}@example.test`;
   const hosting = `Hosting ${suffix}`;
   const figma = `Figma ${suffix}`;
@@ -70,6 +75,12 @@ test('Bonsai import reports findings in the dry run, stays inside its tenant and
       // Two clients of the same export share one website.
       ['Twin One', 'Tom', '', '', domains.twin, ''],
       ['Twin Two', 'Tim', '', '', domains.twin, ''],
+      // An existing client moves to a new website, and a later row takes the
+      // domain it gave up: free in the dry run too, as in the live run.
+      ['Mover Co', 'Mo', '', '', domains.movedTo, ''],
+      ['Claimer Co', 'Cy', '', '', domains.movedFrom, ''],
+      // Existing Co keeps its domain (its new one is taken), so this is taken.
+      ['Holdout Co', 'Hal', '', '', domains.existingA, ''],
     ]);
     writeCsv(dir, 'addresses.csv', ['Client', 'Address 1', 'Address 2', 'City', 'Region', 'Postal Code', 'Country']);
     writeCsv(dir, 'projects.csv', ['client_or_company_name', 'title', 'project_id', 'status', 'project_budget_amount', 'amount_paid', 'start_date', 'finish_date'], [
@@ -104,6 +115,7 @@ test('Bonsai import reports findings in the dry run, stays inside its tenant and
     ] });
     await raw.client.createMany({ data: [
       { id: ids.existingA, organizationId: ids.orgA, name: 'Existing Co', domain: domains.existingA },
+      { id: ids.mover, organizationId: ids.orgA, name: 'Mover Co', domain: domains.movedFrom },
       { id: ids.clientB, organizationId: ids.orgB, name: 'Tenant B client', domain: domains.orgB },
     ] });
     await raw.contact.create({ data: { clientId: ids.existingA, email: existingEmail, name: 'Erin', isPrimary: true } });
@@ -135,7 +147,7 @@ test('Bonsai import reports findings in the dry run, stays inside its tenant and
     assert.deepEqual(dry.report.stats.errors, []);
     assert.equal(dry.report.complete, true);
     const domainWarnings = dry.report.stats.warnings.filter((warning) => warning.code === 'CLIENT_DOMAIN_TAKEN');
-    assert.deepEqual(domainWarnings.map((warning) => warning.client).sort(), ['Existing Co', 'New Co', 'Twin Two']);
+    assert.deepEqual(domainWarnings.map((warning) => warning.client).sort(), ['Existing Co', 'Holdout Co', 'New Co', 'Twin Two']);
     // Nothing identifies the other organization or its client.
     const serialized = JSON.stringify(dry.report);
     assert.ok(!serialized.includes(ids.orgB) && !serialized.includes(ids.clientB) && !serialized.includes('Tenant B'));
@@ -143,7 +155,8 @@ test('Bonsai import reports findings in the dry run, stays inside its tenant and
     assert.deepEqual(dry.report.stats.expenses, { created: 1, skipped: 1 });
     assert.deepEqual(dry.report.stats.timeEntries, { created: 2, existing: 0, skipped: 0, duplicates: 1 });
     assert.equal(dry.report.stats.owners.mappedToImporter, 1);
-    assert.equal(await raw.client.count({ where: { organizationId: ids.orgA } }), 1, 'a dry run writes nothing');
+    assert.equal(await raw.client.count({ where: { organizationId: ids.orgA } }), 2, 'a dry run writes nothing');
+    assert.equal((await raw.client.findUnique({ where: { id: ids.mover } })).domain, domains.movedFrom, 'a dry run moves no domain');
 
     // 3. An existing report path stops a live run before any write.
     const occupied = path.join(workDir, 'occupied.json');
@@ -152,7 +165,7 @@ test('Bonsai import reports findings in the dry run, stays inside its tenant and
     assert.notEqual(refused.status, 0);
     assert.match(refused.stderr, /already exists/);
     assert.equal(fs.readFileSync(occupied, 'utf8'), 'earlier evidence\n');
-    assert.equal(await raw.client.count({ where: { organizationId: ids.orgA } }), 1, 'the refused live run wrote nothing');
+    assert.equal(await raw.client.count({ where: { organizationId: ids.orgA } }), 2, 'the refused live run wrote nothing');
 
     // 4. The live run commits and reports the same counts as the dry run.
     const live = runCli(['--confirm', ...base, '--csv-dir', csvDir], workDir);
@@ -170,6 +183,9 @@ test('Bonsai import reports findings in the dry run, stays inside its tenant and
     assert.equal(byName['New Co'].domain, null, 'a taken domain is not written on create');
     assert.equal(byName['Twin One'].domain, domains.twin);
     assert.equal(byName['Twin Two'].domain, null);
+    assert.equal(byName['Mover Co'].domain, domains.movedTo);
+    assert.equal(byName['Claimer Co'].domain, domains.movedFrom, 'a domain released earlier in the run is taken');
+    assert.equal(byName['Holdout Co'].domain, null);
 
     const expensesA = await raw.expense.findMany({ where: { client: { organizationId: ids.orgA } } });
     assert.deepEqual(expensesA.map((expense) => expense.description), [hosting]);
