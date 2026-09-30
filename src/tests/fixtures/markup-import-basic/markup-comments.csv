@@ -1,0 +1,12 @@
+markup_project,file_name,comment_id,page,x_percent,y_percent,author_email,author_name,comment,status,created_at,thread_id,parent_comment_id
+Website redesign,homepage.png,c1,,25,40,{{ALICE_EMAIL}},Alice,Make the hero bigger,open,2025-06-01T10:00:00+02:00,t1,
+Website redesign,homepage.png,c2,,,,client@not-in-ashbi.test,Carla Client,"Agreed, and brighter",open,2025-06-01T11:00:00+02:00,t1,c1
+Website redesign,homepage.png,c3,,80,10,client@not-in-ashbi.test,Carla Client,The logo is blurry,resolved,2025-06-02T09:00:00+02:00,t2,
+Website redesign,homepage.png,c4,,,,{{ALICE_EMAIL}},Alice,Fixed in the next version,open,2025-06-02T10:00:00+02:00,t2,c3
+Website redesign,homepage.png,c5,,,,{{ALICE_EMAIL}},Alice,A reply to a reply joins the thread,open,2025-06-02T11:00:00+02:00,t2,c4
+Website redesign,homepage.png,c6,,150,20,client@not-in-ashbi.test,Carla Client,Pinned outside the image,open,2025-06-03T09:00:00+02:00,t3,
+Website redesign,homepage.png,c7,,,,client@not-in-ashbi.test,Carla Client,Reply to a comment that was not exported,open,2025-06-03T10:00:00+02:00,t9,c99
+Website redesign,brief.pdf,p1,2,50,50,{{ALICE_EMAIL}},Alice,Typo in the page 2 heading,open,2025-06-04T09:00:00+02:00,t10,
+Website redesign,brief.pdf,p2,,,,client@not-in-ashbi.test,Carla Client,"General note on the brief:
+two lines",resolved,2025-06-04T10:00:00+02:00,t11,
+Website redesign,logo.svg,s1,,10,10,{{ALICE_EMAIL}},Alice,SVG files are not supported,open,2025-06-05T09:00:00+02:00,t20,

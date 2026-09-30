@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-105 models, 0 enums, 50 tenant-scoped, 13 soft-deletable.
+107 models, 0 enums, 52 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -60,7 +60,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [FormDraft](#model-formdraft) | `form_drafts` | yes | no | 13 |
 | [GoogleCalendarConnection](#model-googlecalendarconnection) | `google_calendar_connections` | yes | no | 14 |
 | [ImpersonationSession](#model-impersonationsession) | `impersonation_sessions` | yes | no | 13 |
-| [ImportRun](#model-importrun) | `import_runs` | yes | no | 12 |
+| [ImportRun](#model-importrun) | `import_runs` | yes | no | 14 |
 | [IntakeForm](#model-intakeform) | `intake_forms` | no | no | 11 |
 | [IntakeFormResponse](#model-intakeformresponse) | `intake_form_responses` | no | no | 8 |
 | [Integration](#model-integration) | `integrations` | yes | no | 11 |
@@ -69,19 +69,21 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [InvoiceLineItem](#model-invoicelineitem) | `invoice_line_items` | no | no | 9 |
 | [InvoicePayment](#model-invoicepayment) | `invoice_payments` | no | no | 9 |
 | [LineItemTemplate](#model-lineitemtemplate) | `line_item_templates` | yes | no | 11 |
+| [LoomImportRecord](#model-loomimportrecord) | `loom_import_records` | yes | no | 22 |
 | [MailgunWebhookReceipt](#model-mailgunwebhookreceipt) | `mailgun_webhook_receipts` | no | no | 3 |
+| [MarkupImportRecord](#model-markupimportrecord) | `markup_import_records` | yes | no | 22 |
 | [Message](#model-message) | `messages` | no | no | 15 |
 | [Milestone](#model-milestone) | `milestones` | no | yes | 13 |
 | [Note](#model-note) | `notes` | no | yes | 18 |
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 58 |
+| [Organization](#model-organization) | `organizations` | no | no | 60 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
 | [PlatformSetting](#model-platformsetting) | `platform_settings` | no | no | 5 |
-| [Project](#model-project) | `projects` | yes | yes | 51 |
+| [Project](#model-project) | `projects` | yes | yes | 53 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
 | [ProjectTemplate](#model-projecttemplate) | `project_templates` | yes | no | 10 |
@@ -1198,7 +1200,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | --- | --- | --- | --- | --- | --- |
 | `id` | String | id, required | `cuid()` |  |  |
 | `organizationId` | String | required |  |  |  |
-| `source` | String | required |  |  | SLACK_EXPORT |
+| `source` | String | required |  |  | SLACK_EXPORT, LOOM_MANIFEST, MARKUP_CSV |
 | `status` | String | required | `"APPLIED"` |  | APPLIED, ROLLED_BACK |
 | `sourceLabel` | String | optional |  |  | Export directory basename; never an absolute path |
 | `summary` | Json | optional |  |  | Counts only; no message content |
@@ -1208,6 +1210,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `slackImportRecords` | SlackImportRecord[] | list, required |  | → SlackImportRecord |  |
+| `loomImportRecords` | LoomImportRecord[] | list, required |  | → LoomImportRecord |  |
+| `markupImportRecords` | MarkupImportRecord[] | list, required |  | → MarkupImportRecord |  |
 
 ### Model IntakeForm
 
@@ -1428,6 +1432,43 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 
+### Model LoomImportRecord
+
+- Table: `loom_import_records`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([organizationId, sourceKey])`
+  - `@@index([organizationId, projectId])`
+  - `@@index([runId])`
+  - `@@index([attachmentId])`
+  - `@@index([projectId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `projectId` | String | required |  |  |  |
+| `runId` | String | required |  |  |  |
+| `attachmentId` | String | optional |  |  |  |
+| `sourceKey` | String | required |  |  | loom:<videoId> |
+| `loomUrl` | String | required |  |  | canonical https://www.loom.com/share/<videoId> |
+| `title` | String | required |  |  |  |
+| `sourceCreatedAt` | DateTime | required |  |  | the recording's original timestamp |
+| `ownerEmail` | String | optional |  |  | manifest owner_email (lowercased) |
+| `ownerUserId` | String | optional |  |  | matched active Ashbi user; null when attributed to the operator |
+| `fileName` | String | required |  |  |  |
+| `fileSize` | Int | required |  |  |  |
+| `fileSha256` | String | required |  |  |  |
+| `contentSha256` | String | required |  |  | manifest row fields + file SHA-256 |
+| `outcome` | String | required | `"IMPORTED"` |  | IMPORTED (CHECK constraint) |
+| `importedAt` | DateTime | required | `now()` |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `project` | Project | required |  | → Project, via (projectId) → (id), onDelete Cascade |  |
+| `run` | ImportRun | required |  | → ImportRun, via (runId) → (id), onDelete Cascade |  |
+
 ### Model MailgunWebhookReceipt
 
 - Table: `mailgun_webhook_receipts`
@@ -1441,6 +1482,45 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `id` | String | id, required | `cuid()` |  |  |
 | `token` | String | unique, required |  |  |  |
 | `receivedAt` | DateTime | required | `now()` |  |  |
+
+### Model MarkupImportRecord
+
+- Table: `markup_import_records`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([organizationId, sourceKey])`
+  - `@@index([organizationId, projectId])`
+  - `@@index([runId])`
+  - `@@index([reviewSessionId])`
+  - `@@index([annotationId])`
+  - `@@index([attachmentId])`
+  - `@@index([projectId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `projectId` | String | required |  |  |  |
+| `runId` | String | required |  |  |  |
+| `kind` | String | required |  |  | SESSION or ANNOTATION (CHECK constraint) |
+| `sourceKey` | String | required |  |  | markup:<project>/<file>[/<commentId>], each part URI-encoded |
+| `markupProject` | String | required |  |  |  |
+| `fileName` | String | required |  |  |  |
+| `commentId` | String | optional |  |  | ANNOTATION only |
+| `threadId` | String | optional |  |  | ANNOTATION only |
+| `reviewSessionId` | String | optional |  |  |  |
+| `annotationId` | String | optional |  |  | ANNOTATION only |
+| `attachmentId` | String | optional |  |  | SESSION only |
+| `contentSha256` | String | required |  |  | SESSION: the file SHA-256; ANNOTATION: the comment row |
+| `fileSha256` | String | optional |  |  | SESSION only |
+| `outcome` | String | required | `"IMPORTED"` |  | IMPORTED (CHECK constraint) |
+| `importedAt` | DateTime | required | `now()` |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `project` | Project | required |  | → Project, via (projectId) → (id), onDelete Cascade |  |
+| `run` | ImportRun | required |  | → ImportRun, via (runId) → (id), onDelete Cascade |  |
 
 ### Model Message
 
@@ -1652,6 +1732,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `notionImportRecords` | NotionImportRecord[] | list, required |  | → NotionImportRecord |  |
 | `importRuns` | ImportRun[] | list, required |  | → ImportRun |  |
 | `slackImportRecords` | SlackImportRecord[] | list, required |  | → SlackImportRecord |  |
+| `loomImportRecords` | LoomImportRecord[] | list, required |  | → LoomImportRecord |  |
+| `markupImportRecords` | MarkupImportRecord[] | list, required |  | → MarkupImportRecord |  |
 | `aiBridgeActions` | AiBridgeAction[] | list, required |  | → AiBridgeAction |  |
 | `publicInquiries` | PublicInquiry[] | list, required |  | → PublicInquiry |  |
 | `auditEvents` | AuditEvent[] | list, required |  | → AuditEvent |  |
@@ -1810,6 +1892,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `slackChannelMappings` | SlackChannelMapping[] | list, required |  | → SlackChannelMapping |  |
 | `notionImportRecords` | NotionImportRecord[] | list, required |  | → NotionImportRecord |  |
 | `slackImportRecords` | SlackImportRecord[] | list, required |  | → SlackImportRecord |  |
+| `loomImportRecords` | LoomImportRecord[] | list, required |  | → LoomImportRecord |  |
+| `markupImportRecords` | MarkupImportRecord[] | list, required |  | → MarkupImportRecord |  |
 | `reviewSessions` | ReviewSession[] | list, required |  | → ReviewSession |  |
 
 ### Model ProjectCommunication

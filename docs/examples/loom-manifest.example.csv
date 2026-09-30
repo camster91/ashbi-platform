@@ -1,0 +1,4 @@
+loom_url,title,created_at,owner_email,file_name,project_id,description
+https://www.loom.com/share/0123456789abcdef0123456789abcdef,Kickoff walkthrough,2025-03-04T10:15:00-05:00,alex@your-agency.example,kickoff-walkthrough.mp4,<ashbi-project-id>,"First pass at the brief, with next steps"
+https://www.loom.com/share/Homepage-review-fedcba9876543210fedcba9876543210,Homepage review,2025-04-01T09:00:00+00:00,sam@your-agency.example,homepage-review.mp4,<ashbi-project-id>,
+https://www.loom.com/share/aaaabbbbccccddddeeeeffff00001111,Launch checklist,2025-05-01T12:00:00Z,,launch-checklist.webm,<another-ashbi-project-id>,Owner left the workspace; attributed to the operator

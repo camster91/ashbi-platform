@@ -37,7 +37,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'weeklydigest', 'tasktemplate', 'outreachsequence', 'emailtriageitem',
   'aicontext', 'ashconversation', 'projecttemplate', 'brandsettings',
   'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit',
-  'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'importrun', 'slackimportrecord', 'aibridgeaction',
+  'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'importrun', 'slackimportrecord', 'loomimportrecord', 'markupimportrecord', 'aibridgeaction',
   'publicinquiry', 'auditevent', 'aiproviderconnection', 'aiusagerecord',
   'reviewsession', 'domainevent',
   // Per-organization invoice number counters (docs/invoicing.md).
@@ -112,6 +112,14 @@ const DIRECT_PARENT_RELATIONS = {
   googlecalendarconnection: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   notionimportrecord: [{ relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true }],
   slackimportrecord: [
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true },
+    { relation: 'run', field: 'runId', model: 'importrun', delegate: 'importRun', required: true },
+  ],
+  loomimportrecord: [
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true },
+    { relation: 'run', field: 'runId', model: 'importrun', delegate: 'importRun', required: true },
+  ],
+  markupimportrecord: [
     { relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true },
     { relation: 'run', field: 'runId', model: 'importrun', delegate: 'importRun', required: true },
   ],

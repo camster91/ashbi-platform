@@ -8,7 +8,8 @@ it never writes back to Slack. The importer follows the same contract as the
 durable source reconciliation, changed sources reported rather than
 overwritten, reruns that never duplicate, and a live run that rolls back
 completely on any finding. It adds a per-run ledger so a completed import can
-also be rolled back by run id.
+also be rolled back by run id. The [Loom](loom-migration.md) and
+[MarkUp.io](markup-migration.md) importers reuse the same ledger and contract.
 
 ## Prerequisites
 
