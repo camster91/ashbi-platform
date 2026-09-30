@@ -10,11 +10,18 @@ import {
   templateRenderSchema,
   aiProviderSwitchSchema,
   aiKillSwitchSchema,
+  mfaRequirementSchema,
 } from '../validators/schemas.js';
 import env from '../config/env.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { requireRecentAuth } from '../auth/reauth.js';
 import { getPlatformAiStatus, setPlatformAiDisabled } from '../ai/governance.js';
+import {
+  getOrganizationMfaPolicy,
+  listStaffIdsWithoutMfa,
+  MfaPolicyError,
+  setOrganizationMfaRequirement,
+} from '../services/organization-mfa-policy.service.js';
 
 // Re-read the account so a demoted or deactivated operator loses the right
 // immediately, not when their session token expires.
@@ -284,6 +291,42 @@ export default async function settingsRoutes(fastify) {
       canManage: await isPlatformOperator(request.prisma, request.user),
       platformAi: await getPlatformAiStatus(),
     };
+  });
+
+  // ==================== SECURITY ====================
+
+  // Organization MFA requirement (#416 follow-up, docs/privileged-actions.md
+  // "Organization MFA requirement"). Admins of the organization only.
+  fastify.get('/mfa-requirement', {
+    onRequest: [fastify.adminOnly],
+  }, async (request) => getOrganizationMfaPolicy(request.prisma, {
+    organizationId: request.user.organizationId,
+    actorUserId: request.user.id,
+  }));
+
+  // Turning it on needs the acting admin's own two-factor (409
+  // MFA_SELF_ENROLLMENT_REQUIRED otherwise); either change needs step-up
+  // re-authentication and writes organization.mfa_requirement_changed.
+  fastify.put('/mfa-requirement', {
+    onRequest: [fastify.adminOnly],
+    preHandler: [requireRecentAuth, validateBody(mfaRequirementSchema)],
+  }, async (request, reply) => {
+    try {
+      const result = await setOrganizationMfaRequirement(request.prisma, request, {
+        organizationId: request.user.organizationId,
+        actorUserId: request.user.id,
+        required: request.body.required,
+      });
+      // Realtime opened before the requirement applied is ended now; the
+      // handshake and join-project checks refuse it until each person enrolls.
+      if (result.changed && result.required && fastify.disconnectUserSockets) {
+        await fastify.disconnectUserSockets(await listStaffIdsWithoutMfa(request.prisma, request.user.organizationId));
+      }
+      return result;
+    } catch (err) {
+      if (err instanceof MfaPolicyError) return reply.status(err.status).send({ error: err.message, code: err.code });
+      throw err;
+    }
   });
 
   // Deployment-wide AI kill switch (#413, docs/ai-byok.md). Turning it on

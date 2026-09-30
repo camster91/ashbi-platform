@@ -28,6 +28,7 @@ import {
   verifyMfaChallenge,
   verifySecondFactor,
 } from '../auth/mfa.js';
+import { isMfaEnrollmentRequired } from '../auth/mfa-enforcement.js';
 import {
   mfaAdminResetSchema,
   mfaConfirmSchema,
@@ -167,10 +168,17 @@ export default async function mfaRoutes(fastify) {
   }
 
   // Current MFA status for the signed-in staff user.
+  // `requiredByOrganization`: the organization requires two-factor for all
+  // staff (src/auth/mfa-enforcement.js); until this person enrolls, their
+  // session reaches only these enrollment endpoints.
   fastify.get('/mfa', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     const user = await loadStaffUser(request, reply);
     if (!user) return reply;
-    return mfaStatus(user);
+    const policy = await request.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { organization: { select: { mfaRequired: true } } },
+    });
+    return { ...mfaStatus(user), requiredByOrganization: policy?.organization?.mfaRequired === true };
   });
 
   // Start (or restart) enrollment: a new secret replaces any unconfirmed one.
@@ -272,7 +280,13 @@ export default async function mfaRoutes(fastify) {
     });
     reissueSession(reply, user, updated.sessionVersion);
     await recordMfaEvent(request.prisma, request, user, 'disabled', { method: factor.method });
-    return { enabled: false };
+    // Allowed even when the organization requires two-factor (it is how a
+    // person replaces their authenticator), but this session is then limited
+    // to enrollment until they set it up again, and their open realtime
+    // connections end (reconnecting is refused until they enroll).
+    const mfaEnrollmentRequired = await isMfaEnrollmentRequired(request.prisma, user.id);
+    if (mfaEnrollmentRequired) await fastify.disconnectUserSockets?.([user.id]);
+    return { enabled: false, mfaEnrollmentRequired };
   });
 
   // Step-up re-authentication (#416). Proves the signed-in user is present
@@ -442,6 +456,10 @@ export default async function mfaRoutes(fastify) {
       },
     });
     await recordMfaEvent(request.prisma, request, target, 'admin_reset', { actorUserId: admin.id, wasEnabled });
+    // Every session of the target was revoked above; end their open realtime
+    // connections too (under an organization MFA requirement, reconnecting is
+    // refused until they enroll again).
+    await fastify.disconnectUserSockets?.([target.id]);
     return { reset: true, userId: target.id };
   });
 }

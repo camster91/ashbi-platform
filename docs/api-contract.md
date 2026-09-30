@@ -102,6 +102,12 @@ Sessions must also be current: revoked sessions get `401`. Signed-in staff
 routes with `x-tenancy: scoped` return `403` to client-portal sessions and to
 sessions with no organization.
 
+When the caller's organization requires two-factor authentication and the
+caller (a staff session or an API key's owner) has not enrolled, every route
+except enrollment, `GET /api/auth/me`, sign-out and credential exchange
+answers `403` with `code: MFA_ENROLLMENT_REQUIRED`
+([privileged actions](privileged-actions.md#organization-mfa-requirement)).
+
 ## Error contract
 
 Error responses are JSON objects with at least an `error` string
