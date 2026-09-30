@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import StatusBadge from '../components/ui/StatusBadge';
+import { statusBadge } from '../pages/client-portal/shared';
 import {
   STATUS_DOMAINS,
   STATUS_TONE_CLASSES,
@@ -45,6 +46,11 @@ describe('lib/status', () => {
     expect(statusLabel('invoice', 'SENT')).toBe('Sent');
     expect(statusLabel('invoice', 'SENT', { audience: 'client' })).toBe('Awaiting Payment');
     expect(statusLabel('estimate', 'SENT', { audience: 'client' })).toBe('Pending Review');
+  });
+
+  it('uses the same client wording for a sent invoice on the portal list', () => {
+    render(statusBadge('SENT'));
+    expect(screen.getByText(statusLabel('invoice', 'SENT', { audience: 'client' }).toUpperCase())).toBeInTheDocument();
   });
 
   it('falls back to a neutral, readable label for unknown statuses', () => {

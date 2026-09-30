@@ -113,7 +113,9 @@ export function statusBadge(status) {
   const s = (status || '').toUpperCase();
   if (s === 'PAID') return <PortalBadge color="success">PAID</PortalBadge>;
   if (s === 'OVERDUE') return <PortalBadge color="danger">OVERDUE</PortalBadge>;
-  if (s === 'SENT' || s === 'PENDING' || s === 'DRAFT') return <PortalBadge color="warning">DUE</PortalBadge>;
+  // Same client wording as PortalInvoice (lib/status.js clientLabel).
+  if (s === 'SENT') return <PortalBadge color="warning">AWAITING PAYMENT</PortalBadge>;
+  if (s === 'PENDING' || s === 'DRAFT') return <PortalBadge color="warning">DUE</PortalBadge>;
   if (s === 'VOID') return <PortalBadge color="default">VOID</PortalBadge>;
   return <PortalBadge color="default">{s}</PortalBadge>;
 }
