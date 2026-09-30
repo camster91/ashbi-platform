@@ -32028,6 +32028,94 @@
         "x-access": "public",
         "x-tenancy": "exempt"
       }
+    },
+    "/api/work-queue": {
+      "get": {
+        "operationId": "get_api_work_queue",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "enum": [
+                "needs_action",
+                "awaiting_approval",
+                "waiting_on_client",
+                "at_risk"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "schema": {
+              "default": "everyone",
+              "enum": [
+                "me",
+                "everyone"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "clientId",
+            "required": false,
+            "schema": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "projectId",
+            "required": false,
+            "schema": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/work-queue",
+        "tags": [
+          "work-queue"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
     }
   },
   "servers": [
@@ -32260,6 +32348,9 @@
     },
     {
       "name": "webhooks"
+    },
+    {
+      "name": "work-queue"
     }
   ]
 }

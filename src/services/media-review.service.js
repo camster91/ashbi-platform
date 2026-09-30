@@ -5,6 +5,8 @@
 import crypto from 'node:crypto';
 
 /** Session lifecycle. `closed` is read-only (e.g. replaced by a new version). */
+/** Staff roles admitted to the media review workspace (routes and the operator queue). */
+export const REVIEW_STAFF_ROLES = Object.freeze(['ADMIN', 'TEAM']);
 export const REVIEW_STATUSES = Object.freeze(['open', 'approved', 'changes_requested', 'closed']);
 export const REVIEW_DECISIONS = Object.freeze(['approved', 'changes_requested']);
 

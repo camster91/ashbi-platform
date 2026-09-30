@@ -67,6 +67,7 @@ const InvoiceDetail = lazy(() => import('./pages/InvoiceDetail'));
 const Expenses = lazy(() => import('./pages/Expenses'));
 const Pipeline = lazy(() => import('./pages/Pipeline'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const WorkQueue = lazy(() => import('./pages/WorkQueue'));
 const Credentials = lazy(() => import('./pages/Credentials'));
 const Chat = lazy(() => import('./pages/Chat'));
 const AiContextSettings = lazy(() => import('./pages/AiContextSettings'));
@@ -222,6 +223,7 @@ function AppRoutes() {
                   <Suspense fallback={<PageLoader />}>
                   <Routes>
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/queue" element={<WorkQueue />} />
                   <Route path="/" element={<Navigate to="/dashboard" />} />
                   <Route path="/inbox" element={<Inbox />} />
                   <Route path="/thread/:id" element={<Thread />} />
