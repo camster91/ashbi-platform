@@ -10,6 +10,7 @@ import { recordAuditEvent, recordRequestAuditEvent } from '../services/audit-eve
 import { clearReauthCookieOptions, REAUTH_COOKIE, recentAuthProblem, sendReauthRequired } from '../auth/reauth.js';
 import { dummyPasswordCheck, hashPassword, upgradeLegacyHash, verifyPassword, warmDummyPasswordHash } from '../auth/password.js';
 import { accountThrottle } from '../auth/credential-throttle.js';
+import { isMfaEnrollmentRequired } from '../auth/mfa-enforcement.js';
 import { AccountWithoutOrganizationError } from '../auth/providers/local.provider.js';
 import {
   IMPERSONATION_COOKIE,
@@ -180,10 +181,15 @@ export default async function authRoutes(fastify) {
         });
       }
       const { user, token } = result;
+      // The session is issued either way; when the organization requires
+      // two-factor and this person has not enrolled, it reaches only the
+      // enrollment endpoints (src/auth/mfa-enforcement.js) and the web app
+      // goes straight to setup.
+      const mfaEnrollmentRequired = await isMfaEnrollmentRequired(request.prisma, user.id);
 
       reply
         .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
-        .send({ user });
+        .send({ user: { ...user, mfaEnrollmentRequired } });
     } catch (err) {
       if (err instanceof AccountWithoutOrganizationError) {
         // The password was right; say what is wrong instead of guessing a
@@ -248,8 +254,15 @@ export default async function authRoutes(fastify) {
     }
 
     const impersonation = describeImpersonation(request.impersonation);
+    // Whether the signed-in person (the admin during a support view) must
+    // enroll in two-factor before using anything else.
+    const mfaEnrollmentRequired = await isMfaEnrollmentRequired(
+      request.prisma,
+      request.impersonation?.actorUserId ?? request.user.id,
+    );
     return {
       ...user,
+      mfaEnrollmentRequired,
       skills: typeof user.skills === 'string' ? JSON.parse(user.skills || '[]') : (user.skills || []),
       // Present only while an admin views as this person (#416).
       ...(impersonation ? { impersonation } : {}),

@@ -15,6 +15,12 @@ present; it never rejects an anonymous request. A route without a guard
 below is therefore reachable without a session, and any check it performs
 happens inside its handler. Role checks inside handlers are not shown.
 
+Across every guard, the global `preHandler` from `src/auth/mfa-enforcement.js`
+refuses a staff identity whose organization requires two-factor
+authentication and who has not enrolled (`403 MFA_ENROLLMENT_REQUIRED`),
+except on `MFA_ENROLLMENT_ALLOWED_ROUTES` (enrollment, `/api/auth/me`,
+sign-out, credential exchange, probes). See docs/privileged-actions.md.
+
 The Tenancy column shows whether `tenancyMiddleware` scopes the route's
 Prisma client to the caller's organization (`scoped`) or hands it the raw
 client (`exempt`). A signed-in route marked `exempt` must confine its own
@@ -38,8 +44,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Access | Routes |
 | --- | --- |
-| admin | 34 |
-| admin + recent-auth | 13 |
+| admin | 35 |
+| admin + recent-auth | 14 |
 | admin + recent-auth (access change) | 1 |
 | admin + staff | 6 |
 | api-key | 1 |
@@ -51,7 +57,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | recent-auth + staff | 4 |
 | staff | 365 |
 | staff (inline) | 1 |
-| **total** | 546 |
+| **total** | 548 |
 
 ## Routes by prefix
 
@@ -838,6 +844,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | DELETE | `/api/settings/assignment-rules/:id` | admin | scoped |  |
 | PUT | `/api/settings/assignment-rules/:id` | admin | scoped |  |
 | GET | `/api/settings/escalation` | staff | scoped |  |
+| GET | `/api/settings/mfa-requirement` | admin | scoped |  |
+| PUT | `/api/settings/mfa-requirement` | admin + recent-auth | scoped |  |
 | GET | `/api/settings/sla` | staff | scoped |  |
 | GET | `/api/settings/templates` | staff | scoped |  |
 | POST | `/api/settings/templates` | admin | scoped |  |

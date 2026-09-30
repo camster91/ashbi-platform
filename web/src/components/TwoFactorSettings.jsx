@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, Copy, Download, ShieldCheck, ShieldOff } from 'lucide-react';
 import { api } from '../lib/api';
+import { announceMfaEnrollmentRequired } from '../lib/mfa-enrollment';
 import QueryErrorState from './QueryErrorState';
 import { Button, LoadingState } from './ui';
 
@@ -157,7 +158,7 @@ function Enrollment({ onEnabled }) {
   );
 }
 
-function DisableForm({ onDisabled }) {
+function DisableForm({ onDisabled, requiredByOrganization }) {
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [useRecovery, setUseRecovery] = useState(false);
@@ -165,7 +166,14 @@ function DisableForm({ onDisabled }) {
 
   const disable = useMutation({
     mutationFn: (body) => api.disableMfa(body),
-    onSuccess: () => { setPassword(''); setCode(''); onDisabled(); },
+    onSuccess: (data) => {
+      setPassword('');
+      setCode('');
+      onDisabled();
+      // The organization requires two-factor: this session is now limited
+      // to setting it up again.
+      if (data?.mfaEnrollmentRequired) announceMfaEnrollmentRequired();
+    },
     onError: (err) => { setError(err.message || 'Two-factor authentication could not be turned off.'); setCode(''); },
   });
 
@@ -182,6 +190,11 @@ function DisableForm({ onDisabled }) {
   return (
     <form onSubmit={submit} className="space-y-3 border-t border-border pt-4" aria-label="Turn off two-factor authentication">
       <p className="text-sm text-muted-foreground">Turning this off signs out your other sessions.</p>
+      {requiredByOrganization && (
+        <p className="text-sm text-foreground">
+          Your organization requires two-factor authentication. If you turn it off, you will have to set it up again before you can keep working.
+        </p>
+      )}
       <div>
         <label htmlFor="mfa-disable-password" className="block text-sm font-medium mb-1">Current password</label>
         <input
@@ -226,8 +239,12 @@ function DisableForm({ onDisabled }) {
   );
 }
 
-/** Settings → Security: optional TOTP two-factor authentication for staff. */
-export default function TwoFactorSettings() {
+/**
+ * Settings → Security: TOTP two-factor authentication for staff. Also the
+ * body of the setup page an organization's MFA requirement sends people to;
+ * there `onEnrolled` is called once the recovery codes were saved.
+ */
+export default function TwoFactorSettings({ onEnrolled } = {}) {
   const queryClient = useQueryClient();
   const [recoveryCodes, setRecoveryCodes] = useState(null);
   const [notice, setNotice] = useState('');
@@ -239,7 +256,16 @@ export default function TwoFactorSettings() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['mfa-status'] });
 
   if (recoveryCodes) {
-    return <RecoveryCodes codes={recoveryCodes} onDone={() => { setRecoveryCodes(null); refresh(); }} />;
+    return (
+      <RecoveryCodes
+        codes={recoveryCodes}
+        onDone={() => {
+          setRecoveryCodes(null);
+          refresh();
+          onEnrolled?.();
+        }}
+      />
+    );
   }
   if (isLoading) return <LoadingState label="Loading security settings…" compact />;
   if (error) {
@@ -251,7 +277,20 @@ export default function TwoFactorSettings() {
       <div className="space-y-3">
         {notice && <p role="status" className="text-sm text-foreground">{notice}</p>}
         <p className="text-sm"><span className="font-medium">Two-factor authentication:</span> Off</p>
+        {status?.requiredByOrganization && !onEnrolled && (
+          <p className="text-sm text-foreground">Your organization requires two-factor authentication for every staff account.</p>
+        )}
         <Enrollment onEnabled={(codes) => { setNotice(''); setRecoveryCodes(codes); }} />
+      </div>
+    );
+  }
+
+  // Set up meanwhile (another tab): nothing left to do on the setup page.
+  if (onEnrolled) {
+    return (
+      <div className="space-y-3">
+        <p role="status" className="text-sm">Two-factor authentication is on for your account.</p>
+        <Button type="button" onClick={() => onEnrolled()}>Continue</Button>
       </div>
     );
   }
@@ -270,7 +309,10 @@ export default function TwoFactorSettings() {
         {status.recoveryCodesRemaining} of 10 recovery codes remaining.
         {status.recoveryCodesRemaining <= 3 && ' Turn two-factor authentication off and on again to get new codes.'}
       </p>
-      <DisableForm onDisabled={() => { setNotice('Two-factor authentication is off. Other sessions were signed out.'); refresh(); }} />
+      <DisableForm
+        requiredByOrganization={Boolean(status.requiredByOrganization)}
+        onDisabled={() => { setNotice('Two-factor authentication is off. Other sessions were signed out.'); refresh(); }}
+      />
     </div>
   );
 }

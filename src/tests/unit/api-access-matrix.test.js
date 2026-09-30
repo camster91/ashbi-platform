@@ -164,6 +164,12 @@ function renderAccessMatrix(routes) {
   out.push('below is therefore reachable without a session, and any check it performs');
   out.push('happens inside its handler. Role checks inside handlers are not shown.');
   out.push('');
+  out.push('Across every guard, the global `preHandler` from `src/auth/mfa-enforcement.js`');
+  out.push('refuses a staff identity whose organization requires two-factor');
+  out.push('authentication and who has not enrolled (`403 MFA_ENROLLMENT_REQUIRED`),');
+  out.push('except on `MFA_ENROLLMENT_ALLOWED_ROUTES` (enrollment, `/api/auth/me`,');
+  out.push('sign-out, credential exchange, probes). See docs/privileged-actions.md.');
+  out.push('');
   out.push('The Tenancy column shows whether `tenancyMiddleware` scopes the route\'s');
   out.push('Prisma client to the caller\'s organization (`scoped`) or hands it the raw');
   out.push('client (`exempt`). A signed-in route marked `exempt` must confine its own');

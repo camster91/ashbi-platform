@@ -177,7 +177,7 @@ describe('MFA enrollment', () => {
     assert.equal(db.users[0].mfaEnabled, false);
 
     const status = await app.inject({ method: 'GET', url: '/mfa', cookies });
-    assert.deepEqual(status.json(), { eligible: true, enabled: false, enabledAt: null, pendingEnrollment: true, recoveryCodesRemaining: 0 });
+    assert.deepEqual(status.json(), { eligible: true, enabled: false, enabledAt: null, pendingEnrollment: true, recoveryCodesRemaining: 0, requiredByOrganization: false });
 
     const wrong = await app.inject({ method: 'POST', url: '/mfa/confirm', cookies, payload: { code: wrongCode(secret) } });
     assert.equal(wrong.statusCode, 400);

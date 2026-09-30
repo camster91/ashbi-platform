@@ -31,6 +31,7 @@ import {
   startViewSocketSweep,
 } from './auth/impersonation.js';
 import { createJoinProjectHandler, createLeaveProjectHandler } from './auth/project-room-access.js';
+import { createMfaEnforcementHook, isMfaEnrollmentRequired } from './auth/mfa-enforcement.js';
 import { createSocketAuthMiddleware } from './auth/socket-auth.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
@@ -269,6 +270,10 @@ fastify.decorate('prisma', new Proxy({}, {
   },
 }));
 fastify.decorate('auth', getAuthProvider(fastify));
+// Organization MFA requirement (docs/privileged-actions.md): a staff identity
+// that must still enroll reaches only the enrollment endpoints. A preHandler,
+// so it runs after every route's own session / API key guard.
+fastify.addHook('preHandler', createMfaEnforcementHook({ prisma, verifySessionToken: (token) => fastify.jwt.verify(token) }));
 fastify.addHook('preHandler', tenancyMiddleware);
 fastify.decorate('authenticateWithApiKey', authenticateApiKey);
 
@@ -367,13 +372,19 @@ fastify.addHook('onClose', async () => {
 // Handshake: sessions only (src/auth/socket-auth.js). Realtime is paused
 // during a support view (#416): a handshake carrying the view cookie is
 // refused before verification, and an admin with an open view is refused
-// after the session is verified.
+// after the session is verified. A staff member whose organization requires
+// two-factor authentication is refused until they enroll.
 io.use(createSocketAuthMiddleware({
   verifyToken: (token) => fastify.jwt.verify(token),
   parseCookie: (header) => fastify.parseCookie(header),
   prisma,
   refuseBeforeVerify: (cookies) => (socketHandshakeDuringView(cookies) ? 'Realtime is paused during a support view' : null),
-  refuseAfterVerify: async (decoded) => ((await actorHasOpenView(prisma, decoded)) ? 'Realtime is paused during a support view' : null),
+  refuseAfterVerify: async (decoded) => {
+    if (await actorHasOpenView(prisma, decoded)) return 'Realtime is paused during a support view';
+    // Organization MFA requirement: no realtime until the person enrolls.
+    if (await isMfaEnrollmentRequired(prisma, decoded.id)) return 'Two-factor authentication setup is required';
+    return null;
+  },
 }));
 
 // Socket.IO connection handling. Without this, the client-emitted `join` /
