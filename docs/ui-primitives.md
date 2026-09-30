@@ -84,7 +84,7 @@ removes hover transforms (`hover-lift`, `hover:-translate-*`, `hover:scale-*`,
 | `Card` | `hover-lift` lift and shadow, `transition-all` 300 ms, when interactive. | The global rule removes the lift; the shadow change is instant. |
 | `CardHeader` … `CardFooter` | None. | Unchanged. |
 | `StatCard` | `hover:-translate-y-1` lift, `transition-all` 200 ms. | The global rule removes the lift; changes are instant. |
-| `Modal` | Backdrop fades in (`transition-opacity`). | `motion-reduce:transition-none`; the dialog appears immediately. |
+| `Modal` | None in practice: the backdrop carries `transition-opacity`, but no opacity changes, so the backdrop and dialog appear immediately. | Unchanged (`motion-reduce:transition-none` is already set). |
 | `ModalFooter`, `ConfirmDialog` | None of their own (ConfirmDialog inherits `Modal`). | As `Modal`. |
 | `Badge` | None. | Unchanged. |
 | `Alert` | Fades in (`animate-fade-in`); colour transition on the dismiss button. | `motion-reduce:animate-none`; shown fully, no fade. |
