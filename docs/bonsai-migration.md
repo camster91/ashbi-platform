@@ -80,7 +80,7 @@ compared case-insensitively.
 
 | Bonsai | Ashbi |
 | --- | --- |
-| `Client` (or an invoice/project client name) | `Client.name`; `contactPerson` = `Contact Name`; `phone`; `domain` = `Website`, unless another client in **any** organization, or an earlier client of the same export, already has it: then the domain is not written (a new client gets none, a matched client keeps its current one) and a `CLIENT_DOMAIN_TAKEN` warning is reported; address fields from `addresses.csv` matched by client name, `country` defaulting to `US` |
+| `Client` (or an invoice/project client name) | `Client.name`; `contactPerson` = `Contact Name`; `phone`; `domain` = `Website`, unless another client in **any** organization, or an earlier client of the same export, already has it: then the domain is not written (a new client gets none, a matched client keeps its current one) and a `CLIENT_DOMAIN_TAKEN` warning is reported. A domain that an earlier row of the same export moves a matched client off (a new or blank `Website`) is free for later rows, in the dry run as in the live run; address fields from `addresses.csv` matched by client name, `country` defaulting to `US` |
 | paid invoices per client | `totalRevenueUsd` / `totalRevenueCad` (sum of `paid_amount` of `paid` invoices, by currency; anything but `CAD` counts as USD) and `tier`: `T1` at 5,000 or more, `T2` at 2,000 or more, else `T3`, using USD + CAD × 0.74 |
 | `Contact Email` (or the invoice `client_email`) | one primary `Contact` per client and email |
 | project `status` | `active` → `DESIGN_DEV`, `completed` → `LAUNCHED`, `archived` → `ON_HOLD`, anything else → `STARTING_UP` |
@@ -215,9 +215,11 @@ rolled back, and nothing is kept, when:
 
 A refused or failed live run writes **no** report file. The report is
 written only after the transaction commits; its path was checked before the
-run started, so a committed import is not left without its report. (If
-another process creates the file in the meantime, the report is printed to
-stdout instead and the command exits `1`.)
+run started. A report that cannot be written after the commit does **not**
+roll the import back: the command exits `1` with the import committed. If
+another process created the file in the meantime, the report is printed to
+stdout instead; if the write itself fails (for example a full disk), rerun the
+dry run and the checks in step 4 to verify what was committed.
 
 ### 4. Verify
 
@@ -310,7 +312,7 @@ a disposition before `--confirm`:
 
 | Code | Report entry | Meaning | Category |
 | --- | --- | --- | --- |
-| `CLIENT_DOMAIN_TAKEN` | `{ code, client, domain }` | The client's `Website` is already the `domain` of another client, in this or **another** organization, or of an earlier client of the same export (`Client.domain` is unique across all organizations). The client is imported without it: a new client gets no domain, a matched client keeps its current one. Nothing about the other client or its organization is read or reported | warning |
+| `CLIENT_DOMAIN_TAKEN` | `{ code, client, domain }` | The client's `Website` is already the `domain` of another client, in this or **another** organization, or of an earlier client of the same export (`Client.domain` is unique across all organizations). A domain an earlier row moves a matched client off does not count as taken, in either mode. The client is imported without it: a new client gets no domain, a matched client keeps its current one. Nothing about the other client or its organization is read or reported | warning |
 | `EXPENSE_NO_CLIENT` | `{ code, description, date, amount, currency, client }` | The expense's `client` is blank or did not resolve to a client of this import. `Expense` has no `organizationId`, so without a client it would belong to no organization; it is **not imported** and counted in `stats.expenses.skipped`. `client` is the name from the CSV, or `null` when blank. To import it, give it a client in a copy of `expenses.csv` or enter it by hand | unsupported |
 
 These are not in `stats.errors` or `stats.warnings`:
@@ -346,7 +348,10 @@ record.
 
 Each report file is created with the `wx` flag and mode `0600`. An existing
 path is never overwritten: it is refused (exit `2`) before the run starts,
-so nothing is imported without a report.
+so no import begins against a path that is already taken. This is not a
+guarantee that every committed import has a report: a report write that fails
+after the commit leaves the import committed (see step 3), so after any
+failed live command, check the database before assuming nothing changed.
 
 ## Known limits
 

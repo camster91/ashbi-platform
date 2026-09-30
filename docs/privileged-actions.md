@@ -100,7 +100,8 @@ Not applicable today:
   only removes access.
 - **Organization-wide data export**: there is no HTTP export route. The
   workspace export is the operator CLI `scripts/export-workspace.js`, which
-  runs with database access, not a user session.
+  runs with database access, not a user session; see
+  [workspace-export.md](workspace-export.md).
 - **Credential vault export**: there is no bulk export; the list route returns
   masked passwords only.
 

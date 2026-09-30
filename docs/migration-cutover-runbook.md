@@ -15,9 +15,16 @@ The per-system playbooks are authoritative for inputs, flags and findings:
 | Loom | [loom-migration.md](loom-migration.md) | `scripts/import-loom.mjs` | `--apply` | yes, `--rollback <runId>` | `import_runs` (`LOOM_MANIFEST`), `loom_import_records` |
 | MarkUp.io | [markup-migration.md](markup-migration.md) | `scripts/import-markup.mjs` | `--apply` | yes, `--rollback <runId>` | `import_runs` (`MARKUP_CSV`), `markup_import_records` |
 
-Every importer is one-way and never writes back to the source system. Every
-importer writes its report with owner-only permissions and refuses to
-overwrite an existing report path. Keep every report as evidence.
+Every importer is one-way and never writes back to the source system. When
+given a report path, every importer writes its report with owner-only
+permissions and refuses to overwrite an existing path. Always pass a report
+path (`--summary-file` is optional for every live importer, and without it no
+report file is written; the ClickUp dry-run planner requires it and exits `2`
+without it), and do not assume a report exists after a failed
+live run: every live importer (Notion, Slack, Loom, MarkUp.io and Bonsai)
+writes its report only after its database work has committed, so a failed
+write leaves the import committed without a report file. Slack, Loom and
+MarkUp.io also print the report to stdout. Keep every report as evidence.
 
 Use the [reconciliation sign-off template](examples/import-reconciliation-template.md)
 for each dry run and each live run.
@@ -158,7 +165,13 @@ For each importer, per run:
 5. Verify (next section) and sign the live-run report.
 
 A live run that finds a blocking finding rolls back completely and writes no
-report file. Fix the finding and start again at the dry run.
+report file. Fix the finding and start again at the dry run. A missing report
+does not by itself prove a rollback: every live importer writes its report
+after the commit, so a failed report write leaves that import committed.
+After any failed live command, check before rerunning: for Slack, Loom and
+MarkUp.io, look for a new `import_runs` row for the organization (its id is
+the run id for `--rollback`); for Notion and Bonsai, run the verification
+queries below.
 
 ## Verification
 

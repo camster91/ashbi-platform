@@ -384,16 +384,21 @@ async function runImport(prisma) {
   const clientIdMap = new Map(); // normalized name → DB id
   const emailToClientId = new Map(); // email → DB client id
   const domainsClaimed = new Map(); // domain → client key that takes it in this run
+  const domainsReleased = new Map(); // domain → id of the existing client this run moves off it
 
   // Client.domain is unique across ALL organizations. Decide before any write,
   // identically in a dry run and a live run, whether this client may take the
-  // domain. Only the fact that it is taken is reported: nothing about the
-  // holder (which may be another organization's client) is read or shown.
+  // domain. The decision is made against the planned state of this run: a
+  // domain an earlier row of this export moved an existing client off is free
+  // in both modes, although a dry run never writes that update. Only the fact
+  // that it is taken is reported: nothing about the holder (which may be
+  // another organization's client) is read or shown.
   async function domainTaken(domain, key, ownClientId) {
     const claimant = domainsClaimed.get(domain);
     if (claimant !== undefined) return claimant !== key;
     const holder = await prisma.client.findFirst({ where: { domain }, select: { id: true } });
-    return Boolean(holder) && holder.id !== ownClientId;
+    if (!holder || holder.id === ownClientId) return false;
+    return domainsReleased.get(domain) !== holder.id;
   }
 
   // Every imported invoice needs an accountable agency user. Never create a
@@ -465,6 +470,11 @@ async function runImport(prisma) {
       }
 
       if (existing) {
+        // The update moves this client off its current domain (a new website,
+        // or none): later rows of this export may take that domain.
+        if (existing.domain && clientData.domain !== undefined && clientData.domain !== existing.domain) {
+          domainsReleased.set(existing.domain, existing.id);
+        }
         if (!DRY_RUN) {
           await prisma.client.update({ where: { id: existing.id }, data: clientData });
         }
