@@ -63,6 +63,11 @@ export function validateReleaseGates(root = process.cwd()) {
   if (!/TENANT_INTEGRATION_DATABASE_URL:\s*postgresql:\/\/postgres:testpass@localhost:5432\/testdb/.test(release)) {
     failures.push('release-gates.yml does not enable dedicated-database policy integration tests');
   }
+  const qualityJob = release.split(/^  quality:/m)[1]?.split(/^  browser:/m)[0] ?? '';
+  if (!/^\s{6}redis:\s*$/m.test(qualityJob) || !/REDIS_URL:\s*redis:\/\/localhost:6379/.test(qualityJob)
+    || !/REQUIRE_REDIS_TESTS:\s*'1'/.test(qualityJob)) {
+    failures.push('release-gates.yml quality job does not run the Redis realtime integration tests (redis service, REDIS_URL, REQUIRE_REDIS_TESTS)');
+  }
   const browserJob = release.split(/^  browser:/m)[1]?.split(/^  stack-e2e:/m)[0] ?? '';
   if (!browserJob.includes('npm run build')) failures.push('release-gates.yml browser job does not build the production frontend');
 
