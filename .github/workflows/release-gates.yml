@@ -24,6 +24,17 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
+      # Realtime integration tests (src/tests/integration/realtime-redis.test.js)
+      # run two Socket.IO servers and the worker emitter over a real Redis.
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
     env:
       CI: true
       NODE_ENV: test
@@ -87,6 +98,8 @@ jobs:
       - name: Backend unit tests
         run: npm test
       - name: Backend integration tests
+        env:
+          REDIS_URL: redis://localhost:6379
         run: npm run test:integration
       - name: Frontend unit tests
         run: npm --prefix web test

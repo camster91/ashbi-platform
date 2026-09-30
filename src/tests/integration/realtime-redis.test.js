@@ -31,7 +31,11 @@ async function redisReachable() {
   }
 }
 
-const skip = (await redisReachable()) ? false : `Redis is not reachable at ${redisUrl}`;
+const reachable = await redisReachable();
+// CI provides a Redis service (release-gates.yml); there a missing Redis is a
+// failure, not a silent skip. Locally the tests skip without Redis.
+if (!reachable && process.env.CI) throw new Error(`Redis is not reachable at ${redisUrl}; the release gates must provide it`);
+const skip = reachable ? false : `Redis is not reachable at ${redisUrl}`;
 
 // A unique channel key per run, so parallel runs never see each other. The
 // production path (REALTIME_CHANNEL_KEY -> realtimeRedisSource().key -> the

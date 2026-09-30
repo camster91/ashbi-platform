@@ -59,6 +59,13 @@ describe('mandatory release gates', () => {
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('test:e2e:journeys')));
   });
 
+  it('fails closed when the Redis service for the realtime integration tests is removed', () => {
+    const root = copyWorkflows();
+    const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
+    fs.writeFileSync(workflow, fs.readFileSync(workflow, 'utf8').replace('REDIS_URL: redis://localhost:6379', 'REDIS_URL: ""'));
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('Redis realtime integration tests')));
+  });
+
   it('fails closed when a quality command is removed', () => {
     const root = copyWorkflows();
     const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
