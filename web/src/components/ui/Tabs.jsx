@@ -1,4 +1,4 @@
-import { createContext, forwardRef, useContext, useId, useState } from 'react';
+import { createContext, forwardRef, useContext, useId, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 
 // WAI-ARIA tabs pattern (https://www.w3.org/WAI/ARIA/apg/patterns/tabs/) with
@@ -15,9 +15,13 @@ function useTabs(component) {
 
 const safeId = (value) => String(value).replace(/[^\w-]/g, '_');
 
+// Values may be numbers; the DOM hands them back as strings after keyboard
+// navigation, so always compare as strings.
+const sameValue = (a, b) => a != null && b != null && String(a) === String(b);
+
 /**
  * Tabs root. Controlled with `value` + `onValueChange`, or uncontrolled with
- * `defaultValue`.
+ * `defaultValue` (the first enabled tab when omitted).
  */
 const Tabs = forwardRef(({
   value,
@@ -36,13 +40,13 @@ const Tabs = forwardRef(({
   const selected = controlled ? value : internal;
 
   const select = (next) => {
-    if (next === selected) return;
+    if (sameValue(next, selected)) return;
     if (!controlled) setInternal(next);
     onValueChange?.(next);
   };
 
   return (
-    <TabsContext.Provider value={{ baseId, selected, select, orientation }}>
+    <TabsContext.Provider value={{ baseId, selected, select, orientation, controlled, setInternal }}>
       <div ref={ref} className={className} {...props}>
         {children}
       </div>
@@ -56,7 +60,22 @@ const PREV_KEYS = { horizontal: 'ArrowLeft', vertical: 'ArrowUp' };
 
 /** The `role="tablist"` row. Give it an `aria-label` or `aria-labelledby`. */
 const TabList = forwardRef(({ className, children, onKeyDown, ...props }, ref) => {
-  const { select, orientation } = useTabs('TabList');
+  const { select, orientation, selected, controlled, setInternal } = useTabs('TabList');
+  const listRef = useRef(null);
+  const setRefs = (node) => {
+    listRef.current = node;
+    if (typeof ref === 'function') ref(node);
+    else if (ref) ref.current = node;
+  };
+
+  // Uncontrolled with no defaultValue: select the first enabled tab so one
+  // tab is always in the Tab order and its panel shows.
+  useLayoutEffect(() => {
+    if (controlled || selected != null || !listRef.current) return;
+    const first = [...listRef.current.querySelectorAll('[role="tab"]')]
+      .find((tab) => tab.closest('[role="tablist"]') === listRef.current && !tab.disabled);
+    if (first) setInternal(first.getAttribute('data-value'));
+  }, [controlled, selected, setInternal]);
 
   const handleKeyDown = (event) => {
     onKeyDown?.(event);
@@ -80,7 +99,7 @@ const TabList = forwardRef(({ className, children, onKeyDown, ...props }, ref) =
 
   return (
     <div
-      ref={ref}
+      ref={setRefs}
       role="tablist"
       aria-orientation={orientation}
       onKeyDown={handleKeyDown}
@@ -100,7 +119,7 @@ TabList.displayName = 'TabList';
 /** One tab. `value` is a string and matches a `TabPanel`. */
 const Tab = forwardRef(({ value, disabled = false, className, children, onClick, ...props }, ref) => {
   const { baseId, selected, select } = useTabs('Tab');
-  const isSelected = selected === value;
+  const isSelected = sameValue(selected, value);
   return (
     <button
       ref={ref}
@@ -141,7 +160,7 @@ Tab.displayName = 'Tab';
  */
 const TabPanel = forwardRef(({ value, forceMount = false, className, children, ...props }, ref) => {
   const { baseId, selected } = useTabs('TabPanel');
-  const isSelected = selected === value;
+  const isSelected = sameValue(selected, value);
   if (!isSelected && !forceMount) return null;
   return (
     <div

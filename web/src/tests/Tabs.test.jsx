@@ -101,4 +101,51 @@ describe('Tabs', () => {
     expect(() => render(<Tab value="x">X</Tab>)).toThrow(/inside <Tabs>/);
     spy.mockRestore();
   });
+  it('keeps numeric values working after arrow-key navigation', () => {
+    function Numeric() {
+      const [value, setValue] = useState(1);
+      return (
+        <Tabs value={value} onValueChange={setValue}>
+          <TabList aria-label="Years">
+            <Tab value={1}>First</Tab>
+            <Tab value={2}>Second</Tab>
+          </TabList>
+          <TabPanel value={1}>Year one</TabPanel>
+          <TabPanel value={2}>Year two</TabPanel>
+        </Tabs>
+      );
+    }
+    render(<Numeric />);
+    const first = screen.getByRole('tab', { name: 'First' });
+    first.focus();
+    fireEvent.keyDown(first, { key: 'ArrowRight' });
+    const second = screen.getByRole('tab', { name: 'Second' });
+    expect(second).toHaveAttribute('aria-selected', 'true');
+    expect(second).toHaveAttribute('tabindex', '0');
+    expect(first).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('Year two');
+    fireEvent.keyDown(second, { key: 'ArrowLeft' });
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('Year one');
+  });
+
+  it('defaults an uncontrolled Tabs without defaultValue to the first enabled tab', () => {
+    const onValueChange = vi.fn();
+    render(
+      <Tabs onValueChange={onValueChange}>
+        <TabList aria-label="Views">
+          <Tab value="a" disabled>A</Tab>
+          <Tab value="b">B</Tab>
+          <Tab value="c">C</Tab>
+        </TabList>
+        <TabPanel value="b">Panel b</TabPanel>
+        <TabPanel value="c">Panel c</TabPanel>
+      </Tabs>
+    );
+    const b = screen.getByRole('tab', { name: 'B' });
+    expect(b).toHaveAttribute('aria-selected', 'true');
+    expect(b).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('Panel b');
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
 });

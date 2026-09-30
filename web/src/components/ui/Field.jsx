@@ -9,7 +9,7 @@ const joinIds = (...ids) => ids.filter(Boolean).join(' ') || undefined;
  * optional error, and wires them to its single control child (Input, Select,
  * Textarea or any element that accepts these props):
  *
- * - `id` (generated unless you pass one),
+ * - `id` (the Field's `id`, else the child's own `id`, else generated),
  * - `aria-describedby` = hint id + error id (merged with the child's own),
  * - `aria-invalid` when `error` is set,
  * - `required` when `required` is set.
@@ -28,7 +28,9 @@ export default function Field({
   children,
 }) {
   const autoId = useId();
-  const id = idProp || `field${autoId.replace(/:/g, '')}`;
+  // Keep an id the control already has, so existing label/test hooks survive.
+  const childId = typeof children !== 'function' && isValidElement(children) ? children.props.id : undefined;
+  const id = idProp || childId || `field${autoId.replace(/:/g, '')}`;
   const hintId = hint ? `${id}-hint` : undefined;
   const errorId = error ? `${id}-error` : undefined;
 

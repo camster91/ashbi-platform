@@ -52,7 +52,50 @@ describe('Field', () => {
   });
 });
 
+describe('Field ids', () => {
+  it("keeps the child's own id when Field has none", () => {
+    render(
+      <Field label="Email" hint="Work address">
+        <Input id="login-email" />
+      </Field>
+    );
+    const input = screen.getByRole('textbox', { name: 'Email' });
+    expect(input).toHaveAttribute('id', 'login-email');
+    expect(input).toHaveAttribute('aria-describedby', 'login-email-hint');
+  });
+
+  it("prefers Field's id over the child's", () => {
+    render(
+      <Field label="Email" id="outer">
+        <Input id="inner" />
+      </Field>
+    );
+    expect(screen.getByRole('textbox', { name: 'Email' })).toHaveAttribute('id', 'outer');
+  });
+});
+
 describe('Select', () => {
+  it('shows the placeholder when uncontrolled with no defaultValue', () => {
+    render(
+      <Select
+        aria-label="Currency"
+        placeholder="Choose…"
+        options={[{ value: 'CAD', label: 'Canadian dollar' }, { value: 'USD', label: 'US dollar' }]}
+      />
+    );
+    const select = screen.getByRole('combobox', { name: 'Currency' });
+    expect(select).toHaveValue('');
+    expect(screen.getByRole('option', { name: 'Choose…' }).selected).toBe(true);
+  });
+
+  it('respects an explicit defaultValue over the placeholder', () => {
+    render(
+      <Select aria-label="Currency" placeholder="Choose…" defaultValue="USD" options={[{ value: 'CAD' }, { value: 'USD' }]} />
+    );
+    expect(screen.getByRole('combobox', { name: 'Currency' })).toHaveValue('USD');
+  });
+
+
   it('renders options with a disabled placeholder and the Input look', () => {
     render(
       <Field label="Currency">
