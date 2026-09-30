@@ -28,6 +28,7 @@ import {
 } from '../services/automation.service.js';
 import { resolveEmbeddingOrganizationId } from './embedding-ownership.js';
 import { checkAllEscalations, checkThreadEscalation, runForEachOrganization } from './escalation.js';
+import { processNotificationJob } from './notification-job.js';
 import { dispatchDomainEvents } from '../services/domain-event-dispatcher.service.js';
 import { initSentry, Sentry } from '../observability/sentry.js';
 import { sendOperationalAlert } from '../observability/alerts.js';
@@ -216,27 +217,11 @@ const escalationWorker = createWorker(
   { concurrency: 2 }
 );
 
-// Notification Worker
+// Notification Worker: persists the row, then emits it live through the
+// Redis emitter (src/jobs/notification-job.js).
 const notificationWorker = createWorker(
   QUEUES.NOTIFICATIONS,
-  async (job) => {
-    const { userId, type, title, message, data } = job.data;
-
-    // Create in-app notification
-    await runTenantJob(prisma, job.data?.organizationId, (tenantPrisma) => (
-      tenantPrisma.notification.create({
-        data: {
-          type,
-          title,
-          message,
-          data: data ? JSON.stringify(data) : null,
-          userId
-        }
-      })
-    ), backgroundPrisma);
-
-    return { delivered: true };
-  },
+  (job) => processNotificationJob(job, { prisma, backgroundPrisma }),
   { concurrency: 10 }
 );
 

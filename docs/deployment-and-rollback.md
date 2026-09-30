@@ -162,6 +162,38 @@ Redis-less development setup use the in-memory store. A Redis outage skips the
 limiter rather than failing requests. The SPA treats a 429 from
 `/api/auth/me` as "retry later" (keeps the session and shows a notice).
 
+## Realtime across replicas (Socket.IO)
+
+When `REDIS_URL` is set (always, in staging and production), every API
+replica attaches the Socket.IO Redis adapter (`@socket.io/redis-adapter`,
+`src/realtime/adapter.js`) on two dedicated reconnecting connections, so:
+
+- a room emit (`user:<id>`, `project:<id>`, ...) reaches that room's sockets on
+  every replica, whichever replica or process produced it;
+- `io.in(room).fetchSockets()` (call signalling) returns sockets connected to
+  other replicas, and `disconnectSockets()` drops them cluster-wide;
+- the worker delivers the notifications it writes (notification queue jobs,
+  SLA escalations, automations such as overdue invoices) live through the
+  Redis emitter (`@socket.io/redis-emitter`, `src/realtime/emitter.js`), with
+  the same `notification:new` / `notification` events as `fastify.notify`.
+  Escalation rows are emitted only after their transaction commits.
+
+There is no separate toggle. Without `REDIS_URL` (a Redis-less development
+setup) and in tests, the API keeps the in-memory adapter (one instance) and
+the emitter is a no-op; the web app's 30-second notification poll still shows
+worker notifications. The web app connects over WebSocket first
+(`transports: ['websocket', 'polling']`); a client that falls back to HTTP
+long-polling needs sticky sessions at the proxy when more than one API
+replica serves traffic, because the adapter shares rooms, not a polling
+session's handshake.
+
+A Redis outage delays realtime delivery (commands queue until Redis is back;
+the rows are already persisted and the poll still shows them), and a
+`fetchSockets()` that gets no reply from a replica in time drops that call
+signal. Adding or removing API replicas needs no realtime configuration. The
+channels use the adapter's default `socket.io` key prefix, so do not point
+two unrelated deployments at the same Redis database.
+
 ## Client IP behind a proxy (`TRUST_PROXY`)
 
 Production is reached through Traefik (`docker-compose.prod.yml`), so every

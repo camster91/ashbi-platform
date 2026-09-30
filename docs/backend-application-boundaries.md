@@ -21,7 +21,9 @@ Routes, services, agents, and subscribers must not import `src/server.js` or
 `src/index.js`. Runtime dependencies are passed inward:
 
 - subscribers receive the Fastify and Socket.IO instances;
-- notification persistence receives an optional Socket.IO emitter;
+- notification persistence receives an optional Socket.IO emitter; code that
+  runs in the worker (or has no `io`) uses the shared Redis emitter from
+  `src/realtime/emitter.js` through `emitNotification()`;
 - routes use the request-scoped `request.prisma` client;
 - application configuration that prevents isolated construction is supplied
   through `buildApp()` options.
