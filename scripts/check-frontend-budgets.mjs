@@ -67,10 +67,13 @@ export function validateFrontendBudgets(dist) {
   const workerFiles = fs.existsSync(assetsDir)
     ? fs.readdirSync(assetsDir).filter((name) => WORKER_FILE.test(name)).map((name) => `assets/${name}`)
     : [];
+  // initialKeys are manifest keys (source paths); compare emitted files.
+  const initialFiles = new Set([...initialKeys].map((key) => manifest[key]?.file).filter(Boolean));
   for (const file of workerFiles) {
+    if (initialFiles.has(file)) failures.push(`worker ${file} is in the initial JavaScript graph`);
+    // A worker listed as a manifest chunk is already held to anyJsChunk.
     if (chunkFiles.has(file)) continue;
     check(bytes(dist, file), BUDGETS.workerJs, `worker ${file}`);
-    if (initialKeys.has(file)) failures.push(`worker ${file} is in the initial JavaScript graph`);
   }
 
   const dynamicImports = new Set(entry.dynamicImports ?? []);

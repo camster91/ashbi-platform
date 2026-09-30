@@ -55,3 +55,18 @@ test('worker bundles outside the manifest have their own budget', () => {
     assert.ok(failures.some((failure) => failure.includes('worker assets/pdf-render.worker-AbC123.js')), failures.join('; '));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test('a worker statically imported by the entry fails the initial-graph rule', () => {
+  const root = fixture();
+  try {
+    const file = 'assets/pdf-render.worker-AbC123.js';
+    fs.writeFileSync(path.join(root, file), Buffer.alloc(10));
+    const manifestPath = path.join(root, '.vite', 'manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    manifest['src/pdf-render.worker.js'] = { file };
+    manifest['index.html'].imports = ['src/pdf-render.worker.js'];
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    const failures = validateFrontendBudgets(root);
+    assert.ok(failures.some((failure) => failure.includes(`worker ${file} is in the initial JavaScript graph`)), failures.join('; '));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
