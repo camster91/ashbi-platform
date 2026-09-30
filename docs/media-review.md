@@ -106,6 +106,7 @@ Staff API, `/api/reviews` (staff session, ADMIN or TEAM, tenant-scoped):
 | `GET /api/reviews/:id/share-links` | Links with their state (`active`, `expired`, `revoked`); never the token or hash. |
 | `POST /api/reviews/:id/share-links` | **Step-up.** `{ label?, expiresInDays? (1–90, default 14), allowDecision? }`. Returns the token once. |
 | `POST /api/reviews/:id/share-links/:linkId/revoke` | Revoke (idempotent). |
+| `GET /api/reviews/:id/export` | Evidence export: a JSON download of the whole version chain, see [Evidence export](#evidence-export). Audited as `review.evidence_exported`. |
 
 Staff view the file through the existing authenticated
 `GET /api/attachments/uploads/:filename`.
@@ -404,11 +405,59 @@ links (`src/utils/public-document-access.js`), with a stricter storage rule.
 `lastUsedAt` is updated at most once a minute per link, so staff can see
 whether a link was used.
 
+## Evidence export
+
+`GET /api/reviews/:id/export` (the "Export evidence" button on the staff
+review page) downloads `review-evidence-<title>-<date>.json` with
+`Content-Disposition: attachment`, `Cache-Control: no-store` and an
+`X-Evidence-Sha256` header holding the SHA-256 of the exact body sent. Access
+is the same as viewing the review: ADMIN or TEAM staff of the review's
+organization; another organization's review answers 404 like an unknown id,
+non-staff principals 403. Each export is audited as `review.evidence_exported`
+(counts only). Format `ashbi.review-evidence`, `formatVersion: 1`:
+
+| Field | Content |
+| --- | --- |
+| `exportedAt`, `exportedBy` | When and by which staff user. |
+| `review` | Id, title, status, version, project id and name, client sharing and decision settings, web capture source, creator and timestamps. |
+| `versions` | Every version in the chain (oldest first, `current` marks the exported one), each with its `asset`: attachment id, original file name, stored file name, MIME type, kind, size, `checksum` (`{ algorithm: "sha256", value }`, or `null` for files stored before checksums) and uploader and upload time. |
+| `annotations` | Every comment and reply of every version with `sessionId`/`version`, author type, `authorRole` (`ADMIN`/`TEAM` for staff, `CLIENT`, `GUEST`), author id, name and guest email, share link used, body, timecode, page, region, markup `shape`/`points`/`color`, resolution and timestamps. |
+| `decisions` | Every append-only decision with version, decision, actor type, `actorRole`, actor id, name and email, share link used, `comment` and timestamp. |
+| `shareLinks` | Every share link: label, `allowDecision`, creator, created, expiry, revocation (time and by whom), last use and state. Never the token or its hash. |
+| `auditTrail` | The `review.*` audit events of these sessions and links (session creation, client access changes, share link creation and revocation, decisions, earlier exports). |
+| `completeness` | Whether the version chain, annotations (bounded at 2,000 per version) and audit trail (2,000 events) are complete, and how many assets have no checksum. |
+
+Storage paths and share tokens are never included.
+
+## Upload checksums
+
+Every newly stored attachment records `checksumSha256` (lowercase hex,
+CHECK-constrained by migration `20261001090000_attachment_checksum`),
+computed from the same in-memory buffer that is written to disk, so the file
+is not read back: staff attachments (`POST /api/attachments`), staff and
+client-portal chat uploads, client-portal document uploads, web page
+captures, and Loom and MarkUp.io imports. Review asset versions are
+attachments, so every new version carries its checksum into the evidence
+export. Rows stored earlier keep `NULL` (no backfill). Expense receipts are
+referenced by URL rather than an attachment row; `POST
+/api/expenses/upload-receipt` returns the checksum with the URL but nothing
+stores it yet.
+
+A file the upload policy refuses on any of those HTTP upload routes (and the
+expense receipt route) is recorded as an `upload.rejected` audit event with
+the surface, refusal code (`DOUBLE_EXTENSION`, `EXTENSION_NOT_ALLOWED`,
+`MIME_MISMATCH`, `EMPTY_FILE`, `TOO_LARGE`, `CONTENT_MISMATCH`), declared MIME
+type, size, extension and project, never the file name or content
+([audit-events.md](audit-events.md)). Multipart bodies over the transport
+limit are cut off by the multipart parser before the policy runs and are not
+audited yet.
+
 ## Retention
 
 Not decided in this slice: review sessions, annotations, decisions and share
-links are kept until their project or attachment is deleted. Retention,
-export and legal hold for review history (including guest names and emails
+links are kept until their project or attachment is deleted. The
+[evidence export](#evidence-export) gives a portable copy of one review;
+retention, bulk export and legal hold for review history (including guest names and emails
 on annotations and decisions) belong to #310. Expired and revoked links stay
 as records so the audit trail and "via" references keep meaning.
 

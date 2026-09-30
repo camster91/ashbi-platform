@@ -10,8 +10,10 @@ import bcrypt from 'bcrypt';
 import { CLIENT_SESSION_TOKEN_TYPE, isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
 import { MAGIC_LINK_TOKEN_TYPE, redeemMagicLink } from '../auth/magic-link.js';
 import { accountThrottle } from '../auth/credential-throttle.js';
+import { resolvePortalPrincipal } from '../auth/portal-principal.js';
 import { clearStaleSessionCookie } from '../auth/request-session.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { recordRejectedUpload, sha256Hex } from '../services/upload-integrity.service.js';
 import { contentDisposition } from '../utils/send-file.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
 import clientPortalReviewRoutes from './client-portal-review.routes.js';
@@ -83,37 +85,9 @@ async function sendMagicLinkEmail(toEmail, toName, magicLink) {
   return true;
 }
 
-export async function resolvePortalPrincipal(prisma, payload) {
-  if (!payload?.id || !payload?.contactId || !payload?.clientId || payload.role !== 'CLIENT') return null;
-
-  const [user, contact, client] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: payload.id },
-      select: { id: true, email: true, name: true, role: true, clientId: true, organizationId: true, isActive: true, sessionVersion: true },
-    }),
-    prisma.contact.findFirst({
-      where: { id: payload.contactId, clientId: payload.clientId },
-      select: { id: true, email: true, name: true, clientId: true },
-    }),
-    prisma.client.findFirst({
-      where: {
-        id: payload.clientId,
-        deletedAt: null,
-        status: 'ACTIVE',
-        relationshipStatus: { notIn: ['ARCHIVED', 'CHURNED'] },
-      },
-      select: { id: true, organizationId: true, name: true },
-    }),
-  ]);
-
-  if (!user?.isActive || user.role !== 'CLIENT' || user.clientId !== payload.clientId) return null;
-  if (!contact || !client || user.organizationId !== client.organizationId) return null;
-  if (user.email.toLowerCase() !== contact.email.toLowerCase()) return null;
-  if (payload.organizationId && payload.organizationId !== client.organizationId) return null;
-  if (!Number.isInteger(payload.sessionVersion) || payload.sessionVersion !== user.sessionVersion) return null;
-
-  return { user, contact, client };
-}
+// Re-resolved on every portal request, verify-token and socket handshake
+// (src/auth/portal-principal.js).
+export { resolvePortalPrincipal };
 
 /**
  * Claims for the emailed magic link. Only identifiers: verify-token re-resolves
@@ -478,7 +452,7 @@ export default async function clientPortalRoutes(fastify) {
           : { status: 'OPEN', approvedAt: null },
       });
       if (response.count !== 1) return null;
-      await transaction.activity.create({
+      const activity = await transaction.activity.create({
         data: {
           type: action === 'APPROVE' ? 'CLIENT_REVISION_APPROVED' : 'CLIENT_REVISION_CHANGES_REQUESTED',
           action: action === 'APPROVE' ? 'approved' : 'requested_changes',
@@ -489,11 +463,22 @@ export default async function clientPortalRoutes(fastify) {
           projectId,
           userId,
         },
+        select: { id: true },
       });
-      return transaction.revisionRound.findUnique({ where: { id: revision.id } });
+      return { round: await transaction.revisionRound.findUnique({ where: { id: revision.id } }), activityId: activity.id };
     });
     if (!updated) return reply.status(409).send({ error: 'Revision round is no longer awaiting a response' });
-    return updated;
+    // Append-only evidence of the client's decision (the Activity row above
+    // is the project feed entry and goes with the project).
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'client_portal.revision_responded',
+      actorType: 'CLIENT',
+      actorUserId: userId ?? null,
+      organizationId: request.clientUser.organizationId,
+      entityId: revision.id,
+      metadata: { projectId, clientId, contactId, response: action, roundNumber: revision.roundNumber, activityId: updated.activityId },
+    });
+    return updated.round;
   });
 
   fastify.post('/projects/:id/feedback', {
@@ -518,6 +503,14 @@ export default async function clientPortalRoutes(fastify) {
         userId,
       },
       select: { id: true, createdAt: true },
+    });
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'client_portal.feedback_submitted',
+      actorType: 'CLIENT',
+      actorUserId: userId ?? null,
+      organizationId: request.clientUser.organizationId,
+      entityId: project.id,
+      metadata: { clientId, contactId, activityId: activity.id, messageLength: request.body.message.length },
     });
     return reply.status(201).send(activity);
   });
@@ -631,8 +624,14 @@ export default async function clientPortalRoutes(fastify) {
 
     const data = await request.file();
     if (!data) return reply.status(400).send({ error: 'No file uploaded' });
-    const { stored, error } = await storeValidatedUpload(data);
-    if (error) return reply.status(400).send({ error });
+    const { stored, error, rejected } = await storeValidatedUpload(data);
+    if (error) {
+      await recordRejectedUpload(request.prisma, request, {
+        ...rejected, surface: 'client_portal_chat', projectId: project.id,
+        organizationId: project.organizationId, actorType: 'CLIENT', actorUserId: authorUser.id,
+      });
+      return reply.status(400).send({ error });
+    }
 
     const attachment = await request.prisma.attachment.create({
       data: {
@@ -819,6 +818,10 @@ export default async function clientPortalRoutes(fastify) {
     const buffer = await data.toBuffer();
     const validation = fileUpload.validate(data.filename, data.mimetype, buffer);
     if (!validation.valid) {
+      await recordRejectedUpload(request.prisma, request, {
+        surface: 'client_portal_documents', validation, filename: data.filename, mimeType: data.mimetype, size: buffer.length,
+        projectId: project.id, organizationId: project.organizationId, actorType: 'CLIENT', actorUserId: request.clientUser.id ?? null,
+      });
       return reply.status(400).send({ error: validation.error });
     }
 
@@ -857,6 +860,7 @@ export default async function clientPortalRoutes(fastify) {
         mimeType: validation.mimetype,
         size: buffer.length,
         path: `/uploads/${filename}`,
+        checksumSha256: sha256Hex(buffer),
         entityType: 'PROJECT',
         entityId: id,
         uploadedById: authorUser.id,
@@ -876,20 +880,17 @@ export default async function clientPortalRoutes(fastify) {
     const { docId } = request.params;
 
     const doc = await request.prisma.attachment.findUnique({ where: { id: docId } });
-    if (!doc) {
+    // Another client's (or organization's) file answers 404 exactly like an
+    // unknown id, so a document id's existence is not revealed (as on the
+    // download route).
+    if (!doc || doc.entityType !== 'PROJECT') {
       return reply.status(404).send({ error: 'Document not found' });
     }
-
-    // Verify the document belongs to a project owned by this client
-    if (doc.entityType === 'PROJECT') {
-      const project = await request.prisma.project.findFirst({
-        where: { id: doc.entityId, clientId }
-      });
-      if (!project) {
-        return reply.status(403).send({ error: 'Not authorized' });
-      }
-    } else {
-      return reply.status(403).send({ error: 'Not authorized' });
+    const project = await request.prisma.project.findFirst({
+      where: { id: doc.entityId, clientId }
+    });
+    if (!project) {
+      return reply.status(404).send({ error: 'Document not found' });
     }
 
     // Clients may remove only files they uploaded themselves: agency

@@ -17,6 +17,7 @@ import {
   chatReactionCreateSchema,
 } from '../validators/schemas.js';
 import { safeParse } from '../utils/safeParse.js';
+import { recordRejectedUpload } from '../services/upload-integrity.service.js';
 import { emitChatEvent, mayNotifyMention, projectRoom, toClientChatPayload } from '../auth/project-room-access.js';
 import {
   CHAT_ATTACHMENT_ENTITY,
@@ -174,8 +175,11 @@ export default async function chatRoutes(fastify) {
 
     const data = await request.file();
     if (!data) return reply.status(400).send({ error: 'No file uploaded' });
-    const { stored, error } = await storeValidatedUpload(data);
-    if (error) return reply.status(400).send({ error });
+    const { stored, error, rejected } = await storeValidatedUpload(data);
+    if (error) {
+      await recordRejectedUpload(request.prisma, request, { ...rejected, surface: 'chat', projectId });
+      return reply.status(400).send({ error });
+    }
 
     const attachment = await request.prisma.attachment.create({
       data: {

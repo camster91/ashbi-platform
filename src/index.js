@@ -31,7 +31,7 @@ import {
   startViewSocketSweep,
 } from './auth/impersonation.js';
 import { createJoinProjectHandler, createLeaveProjectHandler } from './auth/project-room-access.js';
-import { createSocketAuthMiddleware } from './auth/socket-auth.js';
+import { createSocketAuthMiddleware, withClientReauthorization } from './auth/socket-auth.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 
@@ -411,13 +411,16 @@ io.on('connection', (socket) => {
   // project-room-access.js), which never carries internal chat or fields.
   // Acknowledges the result so a reconnecting call can wait for the room
   // before re-signalling.
-  socket.on('join-project', createJoinProjectHandler(socket, {
+  // A client-portal socket is re-authorized on every join: a client paused
+  // or archived (or a contact removed) since the handshake is refused and
+  // disconnected (src/auth/socket-auth.js).
+  socket.on('join-project', withClientReauthorization(prisma, socket, createJoinProjectHandler(socket, {
     findProject: (projectId) => prisma.project.findUnique({
       where: { id: projectId },
       select: { clientId: true, client: { select: { organizationId: true } } },
     }),
     logger,
-  }));
+  })));
 
   socket.on('leave-project', createLeaveProjectHandler(socket));
 

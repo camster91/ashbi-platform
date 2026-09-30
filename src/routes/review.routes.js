@@ -34,6 +34,9 @@ import { captureWebPage as defaultCaptureWebPage, WebCaptureError } from '../ser
 import { requireRecentAuth } from '../auth/reauth.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { scanReviewMedia } from '../services/media-scan.service.js';
+import { buildReviewEvidence, reviewEvidenceFileName, serializeReviewEvidence } from '../services/review-evidence.service.js';
+import { sha256Hex } from '../services/upload-integrity.service.js';
+import { contentDisposition } from '../utils/send-file.js';
 import {
   ANNOTATIONS_PER_SESSION_MAX,
   ReviewSessionClosedError,
@@ -293,6 +296,7 @@ export default async function reviewRoutes(fastify, options = {}) {
           mimeType: 'image/png',
           size: capture.png.length,
           path: `/uploads/${filename}`,
+          checksumSha256: sha256Hex(capture.png),
           entityType: 'PROJECT',
           entityId: projectId,
           uploadedById: request.user.id,
@@ -386,6 +390,35 @@ export default async function reviewRoutes(fastify, options = {}) {
       decisions: decisions.map(staffDecision),
       shareLinks: shareLinks.map((link) => staffShareLink(link, now)),
     };
+  });
+
+  // Evidence export (docs/media-review.md "Evidence export"): the review, its
+  // asset versions with checksums, annotations, decisions, share links and
+  // review audit trail as a JSON download. Same access as viewing the review:
+  // staff of the review's organization (another tenant's id answers 404).
+  fastify.get('/:id/export', { onRequest: [fastify.authenticate], preHandler: [requireReviewStaff] }, async (request, reply) => {
+    const session = await loadSession(request, reply);
+    if (!session) return reply;
+    const now = new Date();
+    const evidence = await buildReviewEvidence(request.prisma, session, { exportedBy: request.user, now });
+    const { body, sha256 } = serializeReviewEvidence(evidence);
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'review.evidence_exported',
+      entityId: session.id,
+      metadata: {
+        versionCount: evidence.versions.length,
+        annotationCount: evidence.annotations.length,
+        decisionCount: evidence.decisions.length,
+        shareLinkCount: evidence.shareLinks.length,
+        auditEventCount: evidence.auditTrail.length,
+      },
+    });
+    return reply
+      .header('Content-Type', 'application/json; charset=utf-8')
+      .header('Content-Disposition', contentDisposition('attachment', reviewEvidenceFileName(session, now)))
+      .header('Cache-Control', 'no-store')
+      .header('X-Evidence-Sha256', sha256)
+      .send(body);
   });
 
   // Add an annotation, or a reply to one (parentId).

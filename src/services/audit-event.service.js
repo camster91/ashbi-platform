@@ -43,6 +43,10 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'api_key.revoked': { entityType: 'api_key', metadata: ['ownerUserId'] },
   'settings.ai_provider_changed': { entityType: 'settings', metadata: ['fromProvider', 'toProvider', 'fromModel', 'toModel'] },
   'client_portal.document_deleted': { entityType: 'attachment', metadata: ['projectId', 'clientId', 'mimeType', 'size', 'storedFilename', 'fileRetained'] },
+  'client_portal.revision_responded': { entityType: 'revision_round', metadata: ['projectId', 'clientId', 'contactId', 'response', 'roundNumber', 'activityId'] },
+  'client_portal.feedback_submitted': { entityType: 'project', metadata: ['clientId', 'contactId', 'activityId', 'messageLength'] },
+  // A file the upload policy refused (docs/media-review.md "Upload checksums").
+  'upload.rejected': { entityType: 'attachment', metadata: ['surface', 'reason', 'mimeType', 'size', 'extension', 'projectId'] },
   'ai.connection_connected': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'baseUrlHost', 'defaultModel', 'allowedModelCount', 'monthlyBudgetCents', 'replacedStatus'] },
   'ai.connection_validated': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'baseUrlHost', 'result', 'errorType', 'fromStatus', 'toStatus'] },
   'ai.connection_rotated': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'previousKeyLast4', 'baseUrlHost'] },
@@ -70,6 +74,7 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'review.share_link_created': { entityType: 'review_share_link', metadata: ['sessionId', 'expiresAt', 'expiresInDays', 'allowDecision'] },
   'review.share_link_revoked': { entityType: 'review_share_link', metadata: ['sessionId', 'wasExpired'] },
   'review.client_access_changed': { entityType: 'review_session', metadata: ['sharedWithClient', 'clientCanDecide', 'fromSharedWithClient', 'fromClientCanDecide'] },
+  'review.evidence_exported': { entityType: 'review_session', metadata: ['versionCount', 'annotationCount', 'decisionCount', 'shareLinkCount', 'auditEventCount'] },
   'estimate.approved': { entityType: 'estimate', metadata: ['fromStatus', 'toStatus', 'via', 'total'] },
   'estimate.declined': { entityType: 'estimate', metadata: ['fromStatus', 'toStatus', 'via', 'total'] },
   'estimate.link_revoked': { entityType: 'estimate', metadata: ['alreadyRevoked'] },
