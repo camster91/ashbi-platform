@@ -2,13 +2,13 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Light public portal pages (#317). They use a hardcoded light slate palette
-// (bg-white cards on a slate-50 -> slate-100 page), not theme tokens. The
-// root `.dark` class follows the OS preference even on public pages, so
-// `text-muted-foreground` would flip to a light colour on these white cards;
-// muted text therefore stays in the slate palette at AA-compliant shades.
-// PortalIntakeForm is intentionally excluded: it is a dark (slate-950/900)
-// page where slate-300/400 text is the high-contrast choice.
+// Light public portal pages (#317, #118). They now use design tokens (card
+// surfaces on the cream background). The root `.dark` class follows the OS
+// preference even on public pages, so each page calls usePortalLightTheme()
+// to pin the light token set while mounted; otherwise `text-muted-foreground`
+// would flip to a light colour. PortalIntakeForm is intentionally excluded:
+// it is a dark (slate-950/900) page where slate-300/400 text is the
+// high-contrast choice (it is on the raw-colour allowlist).
 const LIGHT_PORTAL_PAGES = [
   'src/pages/Portal.jsx',
   'src/pages/PortalBooking.jsx',
@@ -62,6 +62,12 @@ describe('portal and shell muted text contrast (#317)', () => {
       .filter(([, line]) => LOW_CONTRAST.test(line))
       .map(([lineNumber, line]) => `${file}:${lineNumber}: ${line.trim()}`);
     expect(offenders).toEqual([]);
+  });
+
+  it.each(LIGHT_PORTAL_PAGES)('%s pins the light token set', (file) => {
+    const source = readFileSync(resolve(process.cwd(), file), 'utf8');
+    expect(source).toContain("import usePortalLightTheme from '../hooks/usePortalLightTheme';");
+    expect(source).toMatch(/export default function \w+\([^)]*\) \{\n {2}usePortalLightTheme\(\);/);
   });
 
   it.each([

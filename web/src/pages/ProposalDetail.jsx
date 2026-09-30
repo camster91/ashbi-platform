@@ -225,15 +225,15 @@ export default function ProposalDetail() {
       {/* Status Banner */}
       {proposal.status !== 'DRAFT' && (
         <Card className={`p-4 ${
-          proposal.status === 'APPROVED' ? 'border-green-500/30 bg-green-50 dark:bg-green-900/10' :
-          proposal.status === 'DECLINED' ? 'border-red-500/30 bg-red-50 dark:bg-red-900/10' :
-          'border-blue-500/30 bg-blue-50 dark:bg-blue-900/10'
+          proposal.status === 'APPROVED' ? 'border-success/30 bg-success/5' :
+          proposal.status === 'DECLINED' ? 'border-destructive/30 bg-destructive/5' :
+          'border-info/30 bg-info/5'
         }`}>
           <div className="flex items-center gap-2 text-sm">
-            {proposal.status === 'APPROVED' && <CheckCircle className="w-4 h-4 text-green-600" />}
-            {proposal.status === 'DECLINED' && <XCircle className="w-4 h-4 text-red-600" />}
-            {proposal.status === 'SENT' && <Send className="w-4 h-4 text-blue-600" />}
-            {proposal.status === 'VIEWED' && <FileText className="w-4 h-4 text-amber-600" />}
+            {proposal.status === 'APPROVED' && <CheckCircle className="w-4 h-4 text-success" />}
+            {proposal.status === 'DECLINED' && <XCircle className="w-4 h-4 text-destructive" />}
+            {proposal.status === 'SENT' && <Send className="w-4 h-4 text-info" />}
+            {proposal.status === 'VIEWED' && <FileText className="w-4 h-4 text-warning" />}
             <span className="font-medium">
               {proposal.status === 'APPROVED' && `Approved on ${new Date(proposal.approvedAt).toLocaleDateString('en-CA')}`}
               {proposal.status === 'DECLINED' && `Declined on ${new Date(proposal.declinedAt).toLocaleDateString('en-CA')}`}

@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Receipt, Plus, Send, DollarSign, Clock, CheckCircle, AlertTriangle,
-  ExternalLink, CreditCard, FileText, Filter, Search, Download,
-  TrendingUp, ArrowUpRight, MoreVertical, Trash2, Eye, RefreshCw,
+  Plus, Send, DollarSign, Clock, CheckCircle, AlertTriangle, CreditCard,
+  FileText, Search, Download, Trash2, Eye,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, EmptyState, LoadingState, SlowNotice } from '../components/ui';
+import {
+  Button, Card, EmptyState, LoadingState, SlowNotice, StatusBadge, Tab, TabList, TabPanel, Tabs,
+} from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -19,13 +20,6 @@ import { formatInvoiceMoney, formatInvoiceDate } from '../lib/format';
 
 const HST_RATE = 13;
 
-const STATUS_CONFIG = {
-  DRAFT:   { label: 'Draft',   color: 'bg-muted text-muted-foreground',                                              icon: Receipt },
-  SENT:    { label: 'Sent',    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',            icon: Send },
-  PAID:    { label: 'Paid',    color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',        icon: CheckCircle },
-  OVERDUE: { label: 'Overdue', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',               icon: AlertTriangle },
-  VOID:    { label: 'Void',    color: 'bg-muted text-muted-foreground',              icon: Receipt },
-};
 
 function fmt(n, currency) {
   return formatInvoiceMoney(n, currency);
@@ -247,23 +241,16 @@ export default function Invoices() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border" role="tablist" aria-label="Invoice views">
-        {[['list', 'All Invoices'], ['collections', 'Collections Dashboard']].map(([tab, label]) => (
-          <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabList aria-label="Invoice views">
+          <Tab value="list">All Invoices</Tab>
+          <Tab value="collections">Collections Dashboard</Tab>
+        </TabList>
 
-      {activeTab === 'collections' ? (
-        <CollectionsDashboard stats={stats} invoices={invoices} onMarkPaid={(id) => markPaidMutation.mutate({ id })} />
-      ) : (
-        <>
+        <TabPanel value="collections">
+          <CollectionsDashboard stats={stats} invoices={invoices} onMarkPaid={(id) => markPaidMutation.mutate({ id })} />
+        </TabPanel>
+        <TabPanel value="list" className="space-y-6">
           {/* Stats Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <StatCard label="Outstanding" value={statMoney(stats, 'totalOutstanding')} icon={DollarSign} color="blue" />
@@ -365,8 +352,8 @@ export default function Invoices() {
             pending={deleteMutation.isPending}
             error={deleteMutation.error?.message}
           />
-        </>
-      )}
+        </TabPanel>
+      </Tabs>
     </div>
   );
 }
@@ -374,11 +361,9 @@ export default function Invoices() {
 // ─── Invoice Row ─────────────────────────────────────────────────────────────
 function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, sendLoading }) {
   const displayStatus = invoice.isOverdue ? 'OVERDUE' : invoice.status;
-  const config = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.DRAFT;
-  const StatusIcon = config.icon;
 
   return (
-    <Card className={`p-4 hover:shadow-sm transition-shadow cursor-pointer ${invoice.isOverdue ? 'border-red-500/30' : ''}`}>
+    <Card className={`p-4 hover:shadow-sm transition-shadow cursor-pointer ${invoice.isOverdue ? 'border-destructive/30' : ''}`}>
       {/* Mobile Layout */}
       <div className="sm:hidden" onClick={onView}>
         <div className="flex items-start justify-between gap-2 mb-2">
@@ -391,10 +376,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
               >
                 {invoice.invoiceNumber}
               </Link>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${config.color}`}>
-                <StatusIcon className="w-3 h-3" />
-                {config.label}
-              </span>
+              <StatusBadge domain="invoice" status={displayStatus} />
             </div>
             <p className="text-sm text-muted-foreground truncate">{invoice.client?.name}</p>
           </div>
@@ -402,13 +384,13 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           {invoice.dueDate && (
-            <span className={`flex items-center gap-1 ${invoice.isOverdue ? 'text-red-500' : ''}`}>
+            <span className={`flex items-center gap-1 ${invoice.isOverdue ? 'text-destructive' : ''}`}>
               <Clock className="w-3 h-3" />
               {invoice.isOverdue ? `${getDaysOverdue(invoice.dueDate)}d overdue` : `Due ${formatDate(invoice.dueDate)}`}
             </span>
           )}
           {invoice.paidAt && (
-            <span className="flex items-center gap-1 text-green-600">
+            <span className="flex items-center gap-1 text-success">
               <CheckCircle className="w-3 h-3" />
               Paid {formatDate(invoice.paidAt)}
             </span>
@@ -425,7 +407,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
             <Button size="sm" variant="outline" onClick={onMarkPaid} leftIcon={<DollarSign className="w-3 h-3" />}>Mark Paid</Button>
           )}
           {isAdmin && invoice.status !== 'PAID' && (
-            <Button size="sm" variant="ghost" onClick={onDelete} leftIcon={<Trash2 className="w-3 h-3" />} className="text-red-700 hover:text-red-800 dark:text-red-300 dark:hover:text-red-200">Void</Button>
+            <Button size="sm" variant="ghost" onClick={onDelete} leftIcon={<Trash2 className="w-3 h-3" />} className="text-destructive hover:text-destructive/80">Void</Button>
           )}
         </div>
       </div>
@@ -448,13 +430,13 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
             <span className="font-semibold text-foreground text-sm">{fmt(invoice.total, invoice.currency)}</span>
             {invoice.dueDate && (
-              <span className={`flex items-center gap-1 ${invoice.isOverdue ? 'text-red-500' : ''}`}>
+              <span className={`flex items-center gap-1 ${invoice.isOverdue ? 'text-destructive' : ''}`}>
                 <Clock className="w-3 h-3" />
                 {invoice.isOverdue ? `${getDaysOverdue(invoice.dueDate)}d overdue` : `Due ${formatDate(invoice.dueDate)}`}
               </span>
             )}
             {invoice.paidAt && (
-              <span className="flex items-center gap-1 text-green-600">
+              <span className="flex items-center gap-1 text-success">
                 <CheckCircle className="w-3 h-3" />
                 Paid {formatDate(invoice.paidAt)}
               </span>
@@ -465,10 +447,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
           </div>
         </div>
 
-        <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${config.color}`}>
-          <StatusIcon className="w-3 h-3" />
-          {config.label}
-        </span>
+        <StatusBadge domain="invoice" status={displayStatus} className="py-1" />
 
         <div className="flex items-center gap-1">
           {invoice.status === 'DRAFT' && isAdmin && (
@@ -765,7 +744,7 @@ function InvoiceCreateForm({
             <span>{fmt(formSubtotal, form.currency)}</span>
           </div>
           {formDiscount > 0 && (
-            <div className="flex justify-between text-green-600">
+            <div className="flex justify-between text-success">
               <span>Discount</span>
               <span>-{fmt(formDiscount, form.currency)}</span>
             </div>
@@ -814,12 +793,12 @@ function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
       {overdue.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-red-500" />
+            <AlertTriangle className="w-5 h-5 text-destructive" />
             Overdue Invoices ({overdue.length})
           </h2>
           <div className="space-y-2">
             {overdue.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(inv => (
-              <Card key={inv.id} className="p-4 border-red-200 dark:border-red-900/30">
+              <Card key={inv.id} className="p-4 border-destructive/30">
                 <div className="flex items-center gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
@@ -827,7 +806,7 @@ function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
                       <span className="text-muted-foreground">·</span>
                       <span className="text-sm">{inv.client?.name}</span>
                     </div>
-                    <div className="text-xs text-red-500 mt-0.5">
+                    <div className="text-xs text-destructive mt-0.5">
                       {getDaysOverdue(inv.dueDate)} days overdue · Due {formatDate(inv.dueDate)}
                     </div>
                   </div>
@@ -845,7 +824,7 @@ function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
 
       {overdue.length === 0 && (
         <Card className="p-8 text-center">
-          <CheckCircle className="w-10 h-10 text-green-500 mx-auto mb-3" />
+          <CheckCircle className="w-10 h-10 text-success mx-auto mb-3" />
           <p className="font-medium">All clear!</p>
           <p className="text-sm text-muted-foreground mt-1">No overdue invoices. 🎉</p>
         </Card>
@@ -856,9 +835,9 @@ function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
 
 // ─── Stat Cards ───────────────────────────────────────────────────────────────
 const COLOR_MAP = {
-  blue: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30',
-  green: 'bg-green-100 text-green-600 dark:bg-green-900/30',
-  red: 'bg-red-100 text-red-600 dark:bg-red-900/30',
+  blue: 'bg-info/10 text-info',
+  green: 'bg-success/10 text-success',
+  red: 'bg-destructive/10 text-destructive',
   gray: 'bg-muted text-muted-foreground',
 };
 
@@ -881,9 +860,9 @@ function StatCard({ label, value, sub, icon: Icon, color }) {
 
 function BigStat({ label, value, sub, color, urgent }) {
   return (
-    <Card className={`p-5 ${urgent ? 'border-red-400/40 dark:border-red-700/40' : ''}`}>
+    <Card className={`p-5 ${urgent ? 'border-destructive/40' : ''}`}>
       <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${urgent ? 'text-red-500' : ''}`}>{value}</p>
+      <p className={`text-2xl font-bold mt-1 ${urgent ? 'text-destructive' : ''}`}>{value}</p>
       {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
     </Card>
   );

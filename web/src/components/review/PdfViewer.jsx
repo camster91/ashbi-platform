@@ -167,7 +167,7 @@ export default function PdfViewer({ url, fileName, page, onPageChange, onPageCou
           ref={canvasRef}
           role="img"
           aria-label={`Page ${page} of ${fileName}`}
-          className={cn('block h-auto w-full bg-white', (state !== 'ready' || !size) && 'hidden')}
+          className={cn('block h-auto w-full bg-card', (state !== 'ready' || !size) && 'hidden')}
         />
         {state === 'ready' && size && children?.(page)}
       </div>

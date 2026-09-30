@@ -21,10 +21,10 @@ import QueryErrorState from '../components/QueryErrorState';
 
 function HoursBar({ percentUsed }) {
   const color =
-    percentUsed >= 100 ? 'bg-red-500' :
-    percentUsed >= 80  ? 'bg-amber-500' :
-    percentUsed >= 60  ? 'bg-yellow-400' :
-    'bg-green-500';
+    percentUsed >= 100 ? 'bg-destructive' :
+    percentUsed >= 80  ? 'bg-warning' :
+    percentUsed >= 60  ? 'bg-warning' :
+    'bg-success';
   return (
     <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
       <div
@@ -155,9 +155,9 @@ export default function Retainers() {
           <Card className="p-4">
             <div className="flex items-center gap-2">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Scope Creep Risk</p>
-              {atRiskCount > 0 && <AlertTriangle className="w-4 h-4 text-amber-500" />}
+              {atRiskCount > 0 && <AlertTriangle className="w-4 h-4 text-warning" />}
             </div>
-            <p className={`text-2xl font-bold mt-1 ${atRiskCount > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+            <p className={`text-2xl font-bold mt-1 ${atRiskCount > 0 ? 'text-warning' : 'text-success'}`}>
               {atRiskCount} / {allRetainers.length}
             </p>
           </Card>
@@ -317,11 +317,11 @@ export default function Retainers() {
                     </div>
                     <div className="flex items-center gap-2">
                       {plan.scopeCreepRisk ? (
-                        <span className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
+                        <span className="flex items-center gap-1 text-xs text-warning bg-warning/5 px-2 py-0.5 rounded-full">
                           <AlertTriangle className="w-3 h-3" /> Scope Risk
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-full">
+                        <span className="flex items-center gap-1 text-xs text-success bg-success/5 px-2 py-0.5 rounded-full">
                           <CheckCircle className="w-3 h-3" /> On Track
                         </span>
                       )}
@@ -350,7 +350,7 @@ export default function Retainers() {
                         <Clock className="w-3 h-3" />
                         {plan.hoursUsed} / {plan.hoursPerMonth} hours used
                       </span>
-                      <span className={plan.percentUsed >= 80 ? 'text-amber-600 font-semibold' : ''}>
+                      <span className={plan.percentUsed >= 80 ? 'text-warning font-semibold' : ''}>
                         {plan.percentUsed}%
                       </span>
                     </div>

@@ -27,13 +27,13 @@ const CATEGORIES = [
 ];
 
 const CATEGORY_COLORS = {
-  OFFICE: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  SOFTWARE: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  TRAVEL: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  MEALS: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  CONTRACTORS: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+  OFFICE: 'bg-info/10 text-info',
+  SOFTWARE: 'bg-primary/10 text-primary',
+  TRAVEL: 'bg-warning/10 text-warning',
+  MEALS: 'bg-warning/10 text-warning',
+  CONTRACTORS: 'bg-info/10 text-info',
   MARKETING: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
-  HOSTING: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
+  HOSTING: 'bg-primary/10 text-primary',
   SUBCONTRACTOR: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
   SUPPLIES: 'bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-400',
   OTHER: 'bg-muted text-muted-foreground',
@@ -251,8 +251,8 @@ export default function Expenses() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-              <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />
+            <div className="p-2 rounded-lg bg-success/10">
+              <DollarSign className="w-5 h-5 text-success" />
             </div>
             <div>
               <p className="text-sm text-muted-foreground">This Month</p>
@@ -262,8 +262,8 @@ export default function Expenses() {
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-              <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            <div className="p-2 rounded-lg bg-info/10">
+              <TrendingUp className="w-5 h-5 text-info" />
             </div>
             <div>
               <p className="text-sm text-muted-foreground">All Time</p>
@@ -273,8 +273,8 @@ export default function Expenses() {
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-              <Receipt className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Receipt className="w-5 h-5 text-primary" />
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total Entries</p>
@@ -284,8 +284,8 @@ export default function Expenses() {
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
-              <Tag className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            <div className="p-2 rounded-lg bg-warning/10">
+              <Tag className="w-5 h-5 text-warning" />
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Categories</p>
@@ -610,7 +610,7 @@ export default function Expenses() {
                         {expense.category}
                       </span>
                       {expense.billable && (
-                        <span className="ml-1 inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                        <span className="ml-1 inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-success/10 text-success">
                           Billable
                         </span>
                       )}
@@ -646,7 +646,7 @@ export default function Expenses() {
                         </button>
                         <button
                           onClick={() => { deleteMutation.reset(); setExpenseToDelete(expense); }}
-                          className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-muted-foreground hover:text-red-600"
+                          className="p-1.5 rounded hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
                           title="Delete"
                         >
                           <Trash2 className="w-4 h-4" />

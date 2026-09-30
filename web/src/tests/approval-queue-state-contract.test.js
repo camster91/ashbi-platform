@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.resolve(testDirectory, '../pages/ApprovalQue
 describe('Approval Queue workflow-state contract', () => {
   it('distinguishes named loading, failed, and empty collection states', () => {
     expect(source).toContain("import QueryErrorState from '../components/QueryErrorState'");
-    expect(source).toContain("import { Button, LoadingState } from '../components/ui'");
+    expect(source).toContain("import { Button, LoadingState, StatusBadge } from '../components/ui'");
     expect(source).toContain('label="Loading approvals\u2026"');
     expect(source).toContain('<QueryErrorState');
     expect(source).toContain('onRetry={fetchApprovals}');

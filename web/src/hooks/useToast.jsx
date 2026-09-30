@@ -15,17 +15,17 @@ const ICONS = {
 };
 
 const STYLES = {
-  success: 'border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800 text-green-800 dark:text-green-300',
-  error: 'border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 text-red-800 dark:text-red-300',
-  warning: 'border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 text-amber-800 dark:text-amber-300',
-  info: 'border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800 text-blue-800 dark:text-blue-300',
+  success: 'border-success/30 bg-success/5 text-success',
+  error: 'border-destructive/30 bg-destructive/5 text-destructive',
+  warning: 'border-warning/30 bg-warning/5 text-warning',
+  info: 'border-info/30 bg-info/5 text-info',
 };
 
 const ICON_STYLES = {
-  success: 'text-green-500',
-  error: 'text-red-500',
-  warning: 'text-amber-500',
-  info: 'text-blue-500',
+  success: 'text-success',
+  error: 'text-destructive',
+  warning: 'text-warning',
+  info: 'text-info',
 };
 
 function Toast({ id, type = 'info', title, message, action, duration, timer, now, onDismiss, onPause, onResume }) {

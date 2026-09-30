@@ -22,9 +22,9 @@ import { formatRelativeTime } from '../lib/utils';
 import QueryErrorState from '../components/QueryErrorState';
 
 function urgencyColor(days) {
-  if (days > 30) return 'text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400';
-  if (days > 14) return 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400';
-  return 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400';
+  if (days > 30) return 'text-destructive bg-destructive/5';
+  if (days > 14) return 'text-warning bg-warning/5';
+  return 'text-warning bg-warning/5';
 }
 
 function urgencyLabel(days) {
@@ -120,7 +120,7 @@ export default function InvoiceChaser() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
-            <Zap className="w-6 h-6 text-amber-500" />
+            <Zap className="w-6 h-6 text-warning" />
             Invoice Chaser
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -145,15 +145,15 @@ export default function InvoiceChaser() {
 
       {/* Summary Banner */}
       {overdueInvoices.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/10 p-4 flex items-center gap-4">
-          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+        <div className="rounded-xl border border-warning/30 bg-warning/5 p-4 flex items-center gap-4">
+          <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+            <p className="text-sm font-medium text-warning">
               {overdueInvoices.length} overdue {overdueInvoices.length === 1 ? 'invoice' : 'invoices'} totaling{' '}
               <span className="font-bold">${totalOutstanding.toLocaleString('en-CA', { minimumFractionDigits: 2 })}</span>
             </p>
           </div>
-          <DollarSign className="w-5 h-5 text-amber-600" />
+          <DollarSign className="w-5 h-5 text-warning" />
         </div>
       )}
 
@@ -171,7 +171,7 @@ export default function InvoiceChaser() {
         />
       ) : overdueInvoices.length === 0 ? (
         <Card className="p-12 text-center">
-          <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
+          <CheckCircle className="w-12 h-12 text-success mx-auto mb-4" />
           <h3 className="text-lg font-medium">All caught up!</h3>
           <p className="text-sm text-muted-foreground mt-1">No overdue invoices right now.</p>
         </Card>
@@ -262,7 +262,7 @@ export default function InvoiceChaser() {
                           </Button>
                         )}
                         {sendSuccess[invoice.id] && (
-                          <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                          <span className="text-xs text-success font-medium flex items-center gap-1">
                             <CheckCircle className="w-3 h-3" /> Sent
                           </span>
                         )}

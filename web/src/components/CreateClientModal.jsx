@@ -46,14 +46,14 @@ export default function CreateClientModal({ isOpen, onClose }) {
     <Modal isOpen={isOpen} onClose={onClose} title="Add New Client">
       <form onSubmit={handleSubmit}>
         {error && (
-          <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-lg">
+          <div className="mb-4 p-3 text-sm text-destructive bg-destructive/5 rounded-lg">
             {error}
           </div>
         )}
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-foreground mb-1">
               Client Name *
             </label>
             <input
@@ -68,7 +68,7 @@ export default function CreateClientModal({ isOpen, onClose }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-foreground mb-1">
               Domain
             </label>
             <input
@@ -79,13 +79,13 @@ export default function CreateClientModal({ isOpen, onClose }) {
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="acmecorp.com"
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Used for automatic email matching
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-foreground mb-1">
               Status
             </label>
             <select
@@ -105,14 +105,14 @@ export default function CreateClientModal({ isOpen, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
+            className="px-4 py-2 text-sm text-foreground hover:bg-muted rounded-lg"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={mutation.isPending}
-            className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
+            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
           >
             {mutation.isPending ? 'Creating...' : 'Create Client'}
           </button>

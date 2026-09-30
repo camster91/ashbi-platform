@@ -26,6 +26,7 @@ import {
 import { TASK_PRIORITIES } from '@shared/task-priority.js';
 import { api } from '../lib/api';
 import { formatDate, cn } from '../lib/utils';
+import { statusClasses } from '../lib/status';
 import NotionEditor from '../components/NotionEditor';
 import { normalizeTaskBlocks } from '../lib/taskContent';
 import { Button, Badge, Card, EmptyState, LoadingState } from '../components/ui';
@@ -237,22 +238,14 @@ function PropertiesPanel({ task, onUpdate }) {
     },
   ];
 
-  const getStatusColor = (status) => {
-    const colors = {
-      'PENDING': 'bg-yellow-100 text-yellow-800',
-      'IN_PROGRESS': 'bg-blue-100 text-blue-800',
-      'COMPLETED': 'bg-green-100 text-green-800',
-      'BLOCKED': 'bg-red-100 text-red-800',
-    };
-    return colors[status] || 'bg-muted text-muted-foreground';
-  };
+  const getStatusColor = (status) => statusClasses('task', status);
 
   const getPriorityColor = (priority) => {
     const colors = {
-      'CRITICAL': 'text-red-700 dark:text-red-400',
-      'HIGH': 'text-orange-800 dark:text-orange-400',
-      'NORMAL': 'text-blue-700 dark:text-blue-400',
-      'LOW': 'text-green-800 dark:text-green-400',
+      'CRITICAL': 'text-destructive',
+      'HIGH': 'text-warning',
+      'NORMAL': 'text-info',
+      'LOW': 'text-success',
     };
     return colors[priority] || 'text-muted-foreground';
   };
@@ -452,7 +445,7 @@ function CommentsSection({ comments, taskId }) {
           </Button>
         </div>
         {commentError && (
-          <div role="alert" className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div role="alert" className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
             <span>Comment was not posted. Try again.</span>
             <button type="button" onClick={() => addCommentMutation.mutate(commentError)} disabled={addCommentMutation.isPending} className="underline">Try again</button>
           </div>
@@ -618,7 +611,7 @@ export default function TaskPage() {
           projectId={task.project?.id}
         />
       </div>
-      {contentSaveError && <div role="alert" className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"><span>Content was not saved. Try again.</span><button type="button" onClick={() => updateMutation.mutate({ content: contentSaveError })} disabled={updateMutation.isPending} className="underline">Try again</button></div>}
+      {contentSaveError && <div role="alert" className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"><span>Content was not saved. Try again.</span><button type="button" onClick={() => updateMutation.mutate({ content: contentSaveError })} disabled={updateMutation.isPending} className="underline">Try again</button></div>}
 
       {/* Subpages */}
       <SubpagesList 

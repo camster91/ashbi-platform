@@ -13,8 +13,6 @@ import Modal, { ModalFooter } from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { formatMoney } from '../lib/format';
 
-const PRIMARY = '#2e2958';
-const ACCENT = '#e6f354';
 
 function fmt(n) {
   if (n == null) return '--';
@@ -22,10 +20,10 @@ function fmt(n) {
 }
 
 const STAGE_CONFIG = {
-  leads: { icon: Target, color: 'from-violet-500 to-purple-600', bg: 'bg-violet-500/10', text: 'text-violet-500', border: 'border-violet-500/30' },
-  proposals: { icon: FileText, color: 'from-blue-500 to-cyan-500', bg: 'bg-blue-500/10', text: 'text-blue-500', border: 'border-blue-500/30' },
-  contracts: { icon: ScrollText, color: 'from-amber-500 to-orange-500', bg: 'bg-amber-500/10', text: 'text-amber-500', border: 'border-amber-500/30' },
-  projects: { icon: FolderOpen, color: 'from-emerald-500 to-green-600', bg: 'bg-emerald-500/10', text: 'text-emerald-500', border: 'border-emerald-500/30' },
+  leads: { icon: Target, color: 'from-violet-500 to-purple-600', bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/30' },
+  proposals: { icon: FileText, color: 'from-blue-500 to-cyan-500', bg: 'bg-info/10', text: 'text-info', border: 'border-info/30' },
+  contracts: { icon: ScrollText, color: 'from-amber-500 to-orange-500', bg: 'bg-warning/10', text: 'text-warning', border: 'border-warning/30' },
+  projects: { icon: FolderOpen, color: 'from-emerald-500 to-green-600', bg: 'bg-success/10', text: 'text-success', border: 'border-success/30' },
   invoiced: { icon: Receipt, color: 'from-pink-500 to-rose-500', bg: 'bg-pink-500/10', text: 'text-pink-500', border: 'border-pink-500/30' },
   paid: { icon: DollarSign, color: 'from-emerald-400 to-teal-500', bg: 'bg-teal-500/10', text: 'text-teal-500', border: 'border-teal-500/30' },
 };
@@ -87,13 +85,12 @@ function CreateDealModal({ isOpen, onClose, stages }) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="New Deal">
       <form onSubmit={handleSubmit}>
-        {error && <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-lg">{error}</div>}
+        {error && <div className="mb-4 p-3 text-sm text-destructive bg-destructive/5 rounded-lg">{error}</div>}
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Deal Name *</label>
             <input type="text" name="name" value={formData.name} onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
-              style={{ '--tw-ring-color': ACCENT }} placeholder="Website Redesign" autoFocus />
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring" placeholder="Website Redesign" autoFocus />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Client</label>
@@ -125,8 +122,7 @@ function CreateDealModal({ isOpen, onClose, stages }) {
           <button type="button" onClick={onClose}
             className="px-4 py-2 text-sm text-muted-foreground hover:bg-muted rounded-lg">Cancel</button>
           <button type="submit" disabled={mutation.isPending}
-            className="px-4 py-2 text-sm text-white rounded-lg hover:opacity-90 disabled:opacity-50"
-            style={{ backgroundColor: PRIMARY }}>
+            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50">
             {mutation.isPending ? 'Creating...' : 'Create Deal'}
           </button>
         </ModalFooter>
@@ -212,7 +208,7 @@ function AIScoreButton({ deal, stageLabel }) {
         className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         title="AI Lead Score">
         {loading ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
-          : <Sparkles className="w-4 h-4" style={{ color: ACCENT }} />}
+          : <Sparkles className="w-4 h-4 text-brand-lime" />}
       </button>
       {show && (
         <div className="absolute right-0 top-full mt-1 z-30 w-64 bg-card rounded-lg shadow-lg border p-3 text-sm">
@@ -295,8 +291,7 @@ export default function Pipeline() {
         <button
           type="button"
           onClick={() => setShowCreateDeal(true)}
-          className="min-h-11 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-all hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          style={{ backgroundColor: PRIMARY }}>
+          className="min-h-11 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg transition-all hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <Plus className="w-4 h-4" />
           New Deal
         </button>
@@ -413,12 +408,12 @@ export default function Pipeline() {
             return (
               <div key={key} className="text-center p-3 rounded-lg bg-muted/50">
                 <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                <p className={`text-xl font-bold ${rate >= 50 ? 'text-emerald-700 dark:text-emerald-400' : rate >= 25 ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'}`}>
+                <p className={`text-xl font-bold ${rate >= 50 ? 'text-success' : rate >= 25 ? 'text-warning' : 'text-destructive'}`}>
                   {rate}%
                 </p>
                 <div className="w-full h-1.5 bg-muted rounded-full mt-2 overflow-hidden">
                   <div
-                    className={`h-full rounded-full ${rate >= 50 ? 'bg-emerald-500' : rate >= 25 ? 'bg-amber-500' : 'bg-red-400'}`}
+                    className={`h-full rounded-full ${rate >= 50 ? 'bg-success' : rate >= 25 ? 'bg-warning' : 'bg-destructive'}`}
                     style={{ width: `${Math.min(rate, 100)}%` }}
                   />
                 </div>
@@ -529,9 +524,9 @@ function StageDetail({ stage, stages, config, onClose }) {
                         onMove={(id, stageId) => moveMutation.mutate({ id, stageId })} />
                       <AIScoreButton deal={item} stageLabel={stage.label || stage.name} />
                       <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(item); }}
-                        className="p-1.5 rounded-md hover:bg-red-50 hover:text-red-500 transition-colors"
+                        className="p-1.5 rounded-md hover:bg-destructive/5 hover:text-destructive transition-colors"
                         title="Delete deal">
-                        <Trash2 className="w-4 h-4 text-muted-foreground hover:text-red-500" />
+                        <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
                       </button>
                     </div>
                   )}
