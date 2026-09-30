@@ -323,7 +323,7 @@ export default function InvoiceDetail() {
           </a>
           {invoice.stripePaymentLink ? (
             <div className="flex items-center gap-1">
-              <span className="inline-flex items-center gap-1 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1 text-xs font-medium bg-success/10 text-success px-2 py-1 rounded-full">
                 <CheckCircle className="w-3 h-3" /> Payment Link Active
               </span>
               <button
@@ -401,11 +401,11 @@ export default function InvoiceDetail() {
 
       {/* Alert: Overdue */}
       {invoice.isOverdue && (
-        <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+        <div className="flex items-center gap-3 p-4 bg-destructive/5 border border-destructive/30 rounded-lg">
+          <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0" />
           <div>
-            <p className="font-medium text-red-700 dark:text-red-400">Invoice Overdue</p>
-            <p className="text-sm text-red-600 dark:text-red-500">
+            <p className="font-medium text-destructive">Invoice Overdue</p>
+            <p className="text-sm text-destructive">
               Was due {formatDate(invoice.dueDate)} · {getDaysOverdue(invoice.dueDate)} days overdue
             </p>
           </div>
@@ -630,7 +630,7 @@ export default function InvoiceDetail() {
             {/* Total preview */}
             <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
               <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(editSubtotal, editForm.currency)}</span></div>
-              {editDiscount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-{fmt(editDiscount, editForm.currency)}</span></div>}
+              {editDiscount > 0 && <div className="flex justify-between text-success"><span>Discount</span><span>-{fmt(editDiscount, editForm.currency)}</span></div>}
               <div className="flex justify-between text-muted-foreground"><span>{editForm.taxType} ({editForm.taxRate}%)</span><span>{fmt(editTax, editForm.currency)}</span></div>
               <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>{fmt(editTotal, editForm.currency)}</span></div>
             </div>
@@ -663,7 +663,7 @@ export default function InvoiceDetail() {
                     <p className="font-mono font-bold text-xl">{invoice.invoiceNumber}</p>
                     <p className="text-sm text-muted-foreground mt-1">Issued: {formatDate(invoice.issueDate || invoice.createdAt)}</p>
                     {invoice.dueDate && (
-                      <p className={`text-sm mt-0.5 ${invoice.isOverdue ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
+                      <p className={`text-sm mt-0.5 ${invoice.isOverdue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
                         Due: {formatDate(invoice.dueDate)}
                       </p>
                     )}
@@ -724,7 +724,7 @@ export default function InvoiceDetail() {
                       <span>Subtotal</span><span>{fmt(invoice.subtotal, invoice.currency)}</span>
                     </div>
                     {invoice.discountAmount > 0 && (
-                      <div className="flex justify-between text-green-600">
+                      <div className="flex justify-between text-success">
                         <span>Discount</span><span>-{fmt(invoice.discountAmount, invoice.currency)}</span>
                       </div>
                     )}
@@ -735,7 +735,7 @@ export default function InvoiceDetail() {
                       <span>Total</span><span>{fmt(invoice.total, invoice.currency)}</span>
                     </div>
                     {isPaid && (
-                      <div className="flex justify-between text-green-600 text-sm">
+                      <div className="flex justify-between text-success text-sm">
                         <span className="flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" />Paid</span>
                         <span>{formatDate(invoice.paidAt)}</span>
                       </div>
@@ -765,10 +765,10 @@ export default function InvoiceDetail() {
 
               {/* Payment Method (if paid) */}
               {isPaid && (
-                <Card className="p-4 border-green-200 dark:border-green-800">
+                <Card className="p-4 border-success/30">
                   <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                    <p className="text-sm font-semibold text-green-700 dark:text-green-400">Payment Received</p>
+                    <CheckCircle className="w-4 h-4 text-success" />
+                    <p className="text-sm font-semibold text-success">Payment Received</p>
                   </div>
                   <p className="text-xs text-muted-foreground">{formatDate(invoice.paidAt)}</p>
                   {invoice.paymentMethod && (
@@ -801,7 +801,7 @@ export default function InvoiceDetail() {
                             {p.transactionId && <p className="text-xs text-muted-foreground font-mono">{p.transactionId}</p>}
                             {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
                           </div>
-                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <CheckCircle className="w-4 h-4 text-success" />
                         </div>
                       ))}
                     </div>
@@ -892,7 +892,7 @@ export default function InvoiceDetail() {
             />
           </div>
           {markPaidMutation.error && (
-            <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+            <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
               {markPaidMutation.error.message || 'Payment could not be recorded. Your entries are still available; review them and try again.'}
             </p>
           )}

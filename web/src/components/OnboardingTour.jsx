@@ -190,7 +190,7 @@ export default function OnboardingTour() {
                   <li key={task.id} className="rounded-xl border border-border bg-background p-4">
                     <div className="flex items-start gap-3">
                       {resolved
-                        ? <Check className="mt-0.5 h-5 w-5 shrink-0 text-green-700 dark:text-green-300" aria-hidden="true" />
+                        ? <Check className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
                         : <Circle className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />}
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center justify-between gap-2">

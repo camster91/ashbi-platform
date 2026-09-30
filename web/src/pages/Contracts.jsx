@@ -230,7 +230,6 @@ export default function Contracts() {
             onClick={handleAiRefine}
             loading={aiLoading}
             disabled={!aiInstruction.trim()}
-            style={{ backgroundColor: '#2e2958' }}
             leftIcon={<Wand2 className="w-4 h-4" />}
           >
             Refine
@@ -249,8 +248,7 @@ export default function Contracts() {
                 type="button"
                 onClick={() => navigator.clipboard.writeText(aiResult)}
                 aria-label="Copy AI result to clipboard"
-                className="min-h-11 inline-flex items-center mt-1 text-xs underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                style={{ color: '#2e2958' }}
+                className="min-h-11 inline-flex items-center mt-1 text-xs underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-primary"
               >
                 Copy to clipboard
               </button>
@@ -389,7 +387,7 @@ export default function Contracts() {
                       title="AI Refine"
                       style={{ '--tw-text-opacity': 1 }}
                     >
-                      <Wand2 className="w-4 h-4" style={{ color: '#2e2958' }} />
+                      <Wand2 className="w-4 h-4 text-primary" />
                     </button>
                     {(contract.status === 'SENT' || contract.status === 'SIGNED') && (
                       <button
@@ -412,7 +410,7 @@ export default function Contracts() {
                   </div>
                 </div>
                 {contract.status === 'SIGNED' && contract.clientSigName && (
-                  <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
+                  <div className="mt-2 flex items-center gap-1 text-xs text-success">
                     <CheckCircle className="w-3 h-3" />
                     Signed by {contract.clientSigName} on {new Date(contract.signedAt).toLocaleDateString('en-CA')}
                   </div>

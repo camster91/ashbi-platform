@@ -50,12 +50,50 @@ SlowMessage, page skeletons), `hover-lift` (interactive Card), `glass-card`
 (Card `glass`), `skeleton-shimmer` (Skeleton) and `stagger-children`
 (AnimatedList).
 
-Known token gaps:
+`glass-card` is `bg-card/70` in light mode and the fixed `brand-indigo` at
+70% in dark mode.
 
-- Alert's `warning`, `success` and `info` variants use raw Tailwind palette
-  colours (`amber-*`, `green-*`, `blue-*`) with explicit `dark:` overrides
-  instead of the `--warning`, `--success` and `--info` tokens.
-- `glass-card` hardcodes the brand indigo `#2e2958` for dark mode.
+<a id="raw-colours"></a>**Raw colours and exceptions (#315, #118)**
+
+Use the semantic tokens above, not Tailwind palette classes. Common
+replacements (the ones `scripts/codemods/raw-colors-to-tokens.mjs` applies):
+
+| Instead of | Use |
+|---|---|
+| `bg-white` | `bg-card` (or `bg-background` for a page) |
+| `text-gray-900`/`-800`/`-700` | `text-foreground` |
+| `text-gray-600`/`-500`/`-400` | `text-muted-foreground` |
+| `bg-gray-50` / `bg-gray-100` / `bg-gray-200` | `bg-muted/50` / `bg-muted` / `bg-border/30` |
+| `border-gray-100` / `-200` / `-300` | `border-border/25` / `border-border/40` / `border-border/60` |
+| `focus:ring-gray-500`, `ring-slate-800` | `ring-ring` |
+| `text-red-600`, `bg-red-100`, `bg-red-50`, `border-red-200` | `text-destructive`, `bg-destructive/10`, `bg-destructive/5`, `border-destructive/30` |
+| green / emerald | `success` in the same pattern |
+| amber / yellow / orange | `warning` |
+| blue / sky / cyan | `info` |
+| indigo / violet / purple | `primary` |
+| `bg-blue-600 text-white hover:bg-blue-700` | `bg-info text-info-foreground hover:bg-info/90` (use the fill's `-foreground`, never `text-white`, because `primary` turns lime in dark mode) |
+| any `dark:` palette override | nothing: tokens already switch under `.dark` |
+
+Deliberate exceptions:
+
+- **Brand surfaces.** The staff sidebar, the top-bar quick-add button and the
+  login brand panel are fixed brand colours in both themes. They use the
+  `brand-indigo`, `brand-indigo-soft`, `brand-lime`, `brand-sage` and
+  `brand-cream` colours from `web/tailwind.config.js` (never hex arbitrary
+  values) and translucent white tints (`bg-white/10`, `text-white/60`).
+  Use `brand-*` only on these fixed surfaces; everywhere else use tokens.
+- **Light-only client pages.** The client portal and the public `Portal*`
+  token pages call `usePortalLightTheme()` (`web/src/hooks`), so their tokens
+  always resolve to the light set.
+- **Allowlisted files.** `web/src/tests/raw-color-guard.test.js` fails on any
+  raw palette class, opaque `bg-white` or hex colour in `web/src` outside
+  `web/src/tests/raw-color-allowlist.json`. Each allowlist entry has a reason
+  (categorical colours, colours stored as data, canvas drawing, the dark
+  intake form) and an exact count that can only go down.
+- **Emails.** Email clients need inline hex, so `src/emails/*.html` reference
+  `{{theme.<name>}}` placeholders that `loadTemplate` fills from the single
+  email theme in `src/emails/theme.js`, whose brand values match the web
+  brand colours (`src/tests/unit/email-theme.test.js`).
 
 Shared accessibility conventions:
 
@@ -611,8 +649,9 @@ Accessibility:
 - The icon is `aria-hidden`, and the entrance animation respects
   `motion-reduce`.
 
-Tokens: `destructive` for `error`, raw `amber` / `green` / `blue` for the
-others (see Known token gaps), plus `foreground`, `muted-foreground` and `ring`.
+Tokens: `destructive`, `warning`, `success` and `info` for the four variants
+(border at 30%, fill at 5%, 10% in dark mode, icon at full strength), plus
+`foreground`, `muted-foreground` and `ring`.
 
 ```jsx
 <Alert variant="error" title="Could not save" onDismiss={clearError}
@@ -808,11 +847,15 @@ where a primitive exists.
 
 `main.jsx` applies the visitor's stored or OS theme to `<html>` before React
 renders. The portal is client-facing and light-only, so `usePortalLightTheme`
-(in `client-portal/shared.jsx`) removes `.dark` while the portal is mounted
-and restores it on unmount. Every portal colour is a token, so this one
-switch keeps the whole route, including `ConfirmDialog`, on the light token
-set. The other public portal pages (`Portal*.jsx`) still use a hardcoded
-light slate palette; see `portal-text-contrast-guard.test.js`.
+(in `web/src/hooks/usePortalLightTheme.js`, re-exported from
+`client-portal/shared.jsx`) removes `.dark` while the portal is mounted and
+restores it on unmount. Every portal colour is a token, so this one switch
+keeps the whole route, including `ConfirmDialog`, on the light token set. The
+public token pages (`Portal.jsx`, `PortalBooking`, `PortalContract`,
+`PortalEstimate`, `PortalInvoice`, `PortalProposal`) now use tokens and the
+same hook; `portal-text-contrast-guard.test.js` checks both.
+`PortalIntakeForm` is a deliberately dark page and stays on the raw-colour
+allowlist.
 
 #### Converged
 

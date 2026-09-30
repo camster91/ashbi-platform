@@ -229,7 +229,7 @@ export default function Thread() {
       </div>
 
       {gmailDraftMutation.error && (
-        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+        <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {gmailDraftMutation.error.message || 'The Gmail draft could not be prepared. Try again without leaving this conversation.'}
         </p>
       )}
@@ -275,7 +275,7 @@ export default function Thread() {
                 />
               </div>
               {gmailSendMutation.error && (
-                <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+                <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
                   {gmailSendMutation.error.message || 'Email could not be sent.'} Your draft is still available.
                 </p>
               )}
@@ -361,12 +361,12 @@ export default function Thread() {
                 const upworkUrl = extracted.upworkUrl;
 
                 return (
-                  <div key={message.id} className={cn('p-5', message.direction === 'OUTBOUND' && 'bg-primary/[0.02]', isUpwork && 'border-l-4 border-l-green-500 bg-green-50/30')}>
+                  <div key={message.id} className={cn('p-5', message.direction === 'OUTBOUND' && 'bg-primary/[0.02]', isUpwork && 'border-l-4 border-l-success bg-success/30')}>
                     <div className="flex items-center gap-3 mb-3">
                       <div className={cn(
                         'w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold',
                         message.direction === 'INBOUND' ? 'bg-secondary text-foreground' : 'bg-primary text-primary-foreground',
-                        isUpwork && 'bg-green-100 text-green-700'
+                        isUpwork && 'bg-success/10 text-success'
                       )}>
                         {isUpwork ? '🏢' : (message.senderName?.[0]?.toUpperCase() || 'U')}
                       </div>
@@ -374,7 +374,7 @@ export default function Thread() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm">{message.senderName || message.senderEmail}</span>
                           {isUpwork && (
-                            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">Upwork</span>
+                            <span className="text-xs bg-success/10 text-success px-1.5 py-0.5 rounded font-medium">Upwork</span>
                           )}
                           {!isUpwork && message.direction === 'INBOUND' && (
                             <span className="text-xs bg-secondary text-muted-foreground px-1.5 py-0.5 rounded">Client</span>
@@ -390,7 +390,7 @@ export default function Thread() {
                           href={upworkUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex-shrink-0"
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-success text-success-foreground rounded-lg hover:bg-success/90 transition-colors flex-shrink-0"
                         >
                           <ExternalLink className="w-3 h-3" />
                           Reply on Upwork
@@ -431,7 +431,7 @@ export default function Thread() {
                 <h2 className="font-heading font-semibold flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-muted-foreground" />
                   Internal Notes
-                  <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Team only</span>
+                  <span className="text-xs bg-warning/10 text-warning px-1.5 py-0.5 rounded">Team only</span>
                 </h2>
               </div>
               <div className="divide-y divide-border">
@@ -562,9 +562,9 @@ export default function Thread() {
                     <div className="flex items-center justify-between mb-1.5">
                       <span className={cn(
                         'px-2 py-0.5 text-xs font-medium rounded',
-                        response.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
-                        response.status === 'PENDING_APPROVAL' ? 'bg-amber-100 text-amber-700' :
-                        response.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
+                        response.status === 'APPROVED' ? 'bg-success/10 text-success' :
+                        response.status === 'PENDING_APPROVAL' ? 'bg-warning/10 text-warning' :
+                        response.status === 'REJECTED' ? 'bg-destructive/10 text-destructive' :
                         'bg-secondary text-muted-foreground'
                       )}>
                         {response.status?.replace(/_/g, ' ')}

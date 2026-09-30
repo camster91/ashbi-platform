@@ -363,7 +363,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
   const displayStatus = invoice.isOverdue ? 'OVERDUE' : invoice.status;
 
   return (
-    <Card className={`p-4 hover:shadow-sm transition-shadow cursor-pointer ${invoice.isOverdue ? 'border-red-500/30' : ''}`}>
+    <Card className={`p-4 hover:shadow-sm transition-shadow cursor-pointer ${invoice.isOverdue ? 'border-destructive/30' : ''}`}>
       {/* Mobile Layout */}
       <div className="sm:hidden" onClick={onView}>
         <div className="flex items-start justify-between gap-2 mb-2">
@@ -384,13 +384,13 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           {invoice.dueDate && (
-            <span className={`flex items-center gap-1 ${invoice.isOverdue ? 'text-red-500' : ''}`}>
+            <span className={`flex items-center gap-1 ${invoice.isOverdue ? 'text-destructive' : ''}`}>
               <Clock className="w-3 h-3" />
               {invoice.isOverdue ? `${getDaysOverdue(invoice.dueDate)}d overdue` : `Due ${formatDate(invoice.dueDate)}`}
             </span>
           )}
           {invoice.paidAt && (
-            <span className="flex items-center gap-1 text-green-600">
+            <span className="flex items-center gap-1 text-success">
               <CheckCircle className="w-3 h-3" />
               Paid {formatDate(invoice.paidAt)}
             </span>
@@ -407,7 +407,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
             <Button size="sm" variant="outline" onClick={onMarkPaid} leftIcon={<DollarSign className="w-3 h-3" />}>Mark Paid</Button>
           )}
           {isAdmin && invoice.status !== 'PAID' && (
-            <Button size="sm" variant="ghost" onClick={onDelete} leftIcon={<Trash2 className="w-3 h-3" />} className="text-red-700 hover:text-red-800 dark:text-red-300 dark:hover:text-red-200">Void</Button>
+            <Button size="sm" variant="ghost" onClick={onDelete} leftIcon={<Trash2 className="w-3 h-3" />} className="text-destructive hover:text-destructive/80">Void</Button>
           )}
         </div>
       </div>
@@ -430,13 +430,13 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
             <span className="font-semibold text-foreground text-sm">{fmt(invoice.total, invoice.currency)}</span>
             {invoice.dueDate && (
-              <span className={`flex items-center gap-1 ${invoice.isOverdue ? 'text-red-500' : ''}`}>
+              <span className={`flex items-center gap-1 ${invoice.isOverdue ? 'text-destructive' : ''}`}>
                 <Clock className="w-3 h-3" />
                 {invoice.isOverdue ? `${getDaysOverdue(invoice.dueDate)}d overdue` : `Due ${formatDate(invoice.dueDate)}`}
               </span>
             )}
             {invoice.paidAt && (
-              <span className="flex items-center gap-1 text-green-600">
+              <span className="flex items-center gap-1 text-success">
                 <CheckCircle className="w-3 h-3" />
                 Paid {formatDate(invoice.paidAt)}
               </span>
@@ -744,7 +744,7 @@ function InvoiceCreateForm({
             <span>{fmt(formSubtotal, form.currency)}</span>
           </div>
           {formDiscount > 0 && (
-            <div className="flex justify-between text-green-600">
+            <div className="flex justify-between text-success">
               <span>Discount</span>
               <span>-{fmt(formDiscount, form.currency)}</span>
             </div>
@@ -793,12 +793,12 @@ function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
       {overdue.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-red-500" />
+            <AlertTriangle className="w-5 h-5 text-destructive" />
             Overdue Invoices ({overdue.length})
           </h2>
           <div className="space-y-2">
             {overdue.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(inv => (
-              <Card key={inv.id} className="p-4 border-red-200 dark:border-red-900/30">
+              <Card key={inv.id} className="p-4 border-destructive/30">
                 <div className="flex items-center gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
@@ -806,7 +806,7 @@ function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
                       <span className="text-muted-foreground">·</span>
                       <span className="text-sm">{inv.client?.name}</span>
                     </div>
-                    <div className="text-xs text-red-500 mt-0.5">
+                    <div className="text-xs text-destructive mt-0.5">
                       {getDaysOverdue(inv.dueDate)} days overdue · Due {formatDate(inv.dueDate)}
                     </div>
                   </div>
@@ -824,7 +824,7 @@ function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
 
       {overdue.length === 0 && (
         <Card className="p-8 text-center">
-          <CheckCircle className="w-10 h-10 text-green-500 mx-auto mb-3" />
+          <CheckCircle className="w-10 h-10 text-success mx-auto mb-3" />
           <p className="font-medium">All clear!</p>
           <p className="text-sm text-muted-foreground mt-1">No overdue invoices. 🎉</p>
         </Card>
@@ -835,9 +835,9 @@ function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
 
 // ─── Stat Cards ───────────────────────────────────────────────────────────────
 const COLOR_MAP = {
-  blue: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30',
-  green: 'bg-green-100 text-green-600 dark:bg-green-900/30',
-  red: 'bg-red-100 text-red-600 dark:bg-red-900/30',
+  blue: 'bg-info/10 text-info',
+  green: 'bg-success/10 text-success',
+  red: 'bg-destructive/10 text-destructive',
   gray: 'bg-muted text-muted-foreground',
 };
 
@@ -860,9 +860,9 @@ function StatCard({ label, value, sub, icon: Icon, color }) {
 
 function BigStat({ label, value, sub, color, urgent }) {
   return (
-    <Card className={`p-5 ${urgent ? 'border-red-400/40 dark:border-red-700/40' : ''}`}>
+    <Card className={`p-5 ${urgent ? 'border-destructive/40' : ''}`}>
       <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${urgent ? 'text-red-500' : ''}`}>{value}</p>
+      <p className={`text-2xl font-bold mt-1 ${urgent ? 'text-destructive' : ''}`}>{value}</p>
       {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
     </Card>
   );

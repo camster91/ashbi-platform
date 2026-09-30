@@ -16,13 +16,13 @@ const STATUS_META = {
   PENDING: { label: 'To Do', headerColor: 'text-muted-foreground border-muted-foreground/30' },
   TODO: { label: 'To Do (legacy)', headerColor: 'text-muted-foreground border-muted-foreground/30' },
   UPCOMING: { label: 'Upcoming', headerColor: 'text-muted-foreground border-muted-foreground/30' },
-  IMMEDIATE: { label: 'Immediate', headerColor: 'text-orange-800 dark:text-orange-300 border-orange-400' },
-  IN_PROGRESS: { label: 'In Progress', headerColor: 'text-blue-700 dark:text-blue-300 border-blue-400' },
-  WAITING_US: { label: 'Waiting on us', headerColor: 'text-purple-700 dark:text-purple-300 border-purple-400' },
-  WAITING_CLIENT: { label: 'Waiting on client', headerColor: 'text-purple-700 dark:text-purple-300 border-purple-400' },
-  REVIEW: { label: 'In Review', headerColor: 'text-sky-800 dark:text-sky-300 border-sky-400' },
-  BLOCKED: { label: 'Blocked', headerColor: 'text-yellow-800 dark:text-yellow-300 border-yellow-400' },
-  COMPLETED: { label: 'Done', headerColor: 'text-green-800 dark:text-green-300 border-green-400' },
+  IMMEDIATE: { label: 'Immediate', headerColor: 'text-warning border-warning' },
+  IN_PROGRESS: { label: 'In Progress', headerColor: 'text-info border-info' },
+  WAITING_US: { label: 'Waiting on us', headerColor: 'text-primary border-primary' },
+  WAITING_CLIENT: { label: 'Waiting on client', headerColor: 'text-primary border-primary' },
+  REVIEW: { label: 'In Review', headerColor: 'text-info border-info' },
+  BLOCKED: { label: 'Blocked', headerColor: 'text-warning border-warning' },
+  COMPLETED: { label: 'Done', headerColor: 'text-success border-success' },
 };
 const STATUS_ORDER = ['PENDING', 'TODO', 'UPCOMING', 'IMMEDIATE', 'IN_PROGRESS', 'WAITING_US', 'WAITING_CLIENT', 'REVIEW', 'BLOCKED', 'COMPLETED'];
 
@@ -47,10 +47,10 @@ export function buildKanbanColumns(board = {}) {
 
 // Keyed by the shared API priority list (src/shared/task-priority.js).
 const PRIORITY_COLORS = {
-  LOW: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  NORMAL: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-  HIGH: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  CRITICAL: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  LOW: 'bg-success/10 text-success',
+  NORMAL: 'bg-warning/10 text-warning',
+  HIGH: 'bg-warning/10 text-warning',
+  CRITICAL: 'bg-destructive/10 text-destructive',
 };
 
 export default function TaskKanban() {
@@ -179,7 +179,7 @@ export default function TaskKanban() {
         )}
         <h1 className="text-2xl font-heading font-bold text-foreground">Kanban Board</h1>
       </div>
-      {moveError && <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"><span>Task move was not saved. Try again.</span><button type="button" onClick={() => moveMutation.mutate(moveError)} disabled={moveMutation.isPending} className="underline">Try again</button></div>}
+      {moveError && <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"><span>Task move was not saved. Try again.</span><button type="button" onClick={() => moveMutation.mutate(moveError)} disabled={moveMutation.isPending} className="underline">Try again</button></div>}
 
       <p className="sr-only" aria-live="polite" role="status">{announcement}</p>
       <p id="kanban-keyboard-help" className="sr-only">
@@ -281,7 +281,7 @@ export default function TaskKanban() {
                       Cancel
                     </button>
                   </div>
-                  {createError && createError.status === key && <div role="alert" className="flex items-center justify-between gap-2 text-xs text-red-600"><span>Task was not created. Try again.</span><button type="button" onClick={() => createMutation.mutate(createError)} disabled={createMutation.isPending} className="underline">Try again</button></div>}
+                  {createError && createError.status === key && <div role="alert" className="flex items-center justify-between gap-2 text-xs text-destructive"><span>Task was not created. Try again.</span><button type="button" onClick={() => createMutation.mutate(createError)} disabled={createMutation.isPending} className="underline">Try again</button></div>}
                 </div>
               ) : (
                 <button

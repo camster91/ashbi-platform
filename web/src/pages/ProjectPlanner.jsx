@@ -12,9 +12,9 @@ const PROJECT_TYPES = [
 ];
 
 const PRIORITY_COLORS = {
-  CRITICAL: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800',
-  HIGH: 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800',
-  NORMAL: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800',
+  CRITICAL: 'bg-destructive/10 text-destructive border-destructive/30',
+  HIGH: 'bg-warning/10 text-warning border-warning/30',
+  NORMAL: 'bg-info/10 text-info border-info/30',
   LOW: 'bg-muted text-muted-foreground border-border',
 };
 
@@ -68,7 +68,7 @@ export default function ProjectPlanner() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-purple-600" />
+            <Sparkles className="w-6 h-6 text-primary" />
             AI Project Planner
           </h1>
           <p className="text-sm text-muted-foreground mt-1">Generate structured project plans with AI from a brief</p>
@@ -110,7 +110,7 @@ export default function ProjectPlanner() {
                 onClick={() => setProjectType(type.value)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
                   projectType === type.value
-                    ? 'bg-purple-100 border-purple-300 text-purple-700 dark:bg-purple-900/30 dark:border-purple-700 dark:text-purple-400'
+                    ? 'bg-primary/10 border-primary/40 text-primary'
                     : 'bg-background border-border text-muted-foreground hover:bg-muted'
                 }`}
               >
@@ -134,7 +134,7 @@ export default function ProjectPlanner() {
         <button
           onClick={handleGenerate}
           disabled={!selectedProjectId || !brief.trim() || generatePlan.isPending}
-          className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {generatePlan.isPending ? (
             <><Loader2 className="w-5 h-5 animate-spin" /> Generating Plan...</>
@@ -144,7 +144,7 @@ export default function ProjectPlanner() {
         </button>
 
         {generatePlan.isError && (
-          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
+          <div className="p-3 bg-destructive/5 border border-destructive/30 rounded-lg text-destructive text-sm">
             {generatePlan.error?.message || 'Failed to generate plan. Please try again.'}
           </div>
         )}
@@ -154,12 +154,12 @@ export default function ProjectPlanner() {
       {generatedPlan && (
         <div className="space-y-6">
           {/* Success banner */}
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 flex items-center justify-between">
+          <div className="bg-success/5 border border-success/30 rounded-xl p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <CheckCircle className="w-5 h-5 text-green-600" />
+              <CheckCircle className="w-5 h-5 text-success" />
               <div>
-                <p className="font-medium text-green-800 dark:text-green-400">Plan Generated Successfully</p>
-                <p className="text-sm text-green-600 dark:text-green-500">
+                <p className="font-medium text-success">Plan Generated Successfully</p>
+                <p className="text-sm text-success">
                   {generatedPlan.milestones?.length || 0} milestones and{' '}
                   {generatedPlan.tasks?.length || 0} tasks created
                   {generatedPlan.plan?.timeline?.estimatedWeeks && (
@@ -171,14 +171,14 @@ export default function ProjectPlanner() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowSaveDialog(true)}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/50"
+                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-primary bg-primary/5 border border-primary/30 rounded-lg hover:bg-primary/10"
               >
                 <Save className="w-4 h-4" /> Save as Template
               </button>
               {selectedProjectId && (
                 <button
                   onClick={() => navigate(`/project/${selectedProjectId}`)}
-                  className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700"
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90"
                 >
                   View Project <ArrowRight className="w-4 h-4" />
                 </button>
@@ -201,7 +201,7 @@ export default function ProjectPlanner() {
                 <button
                   onClick={handleSaveAsTemplate}
                   disabled={!saveTemplateName.trim() || saveTemplate.isPending}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50"
                 >
                   {saveTemplate.isPending ? 'Saving...' : 'Save'}
                 </button>
@@ -212,9 +212,9 @@ export default function ProjectPlanner() {
                   Cancel
                 </button>
               </div>
-              {saveTemplate.isSuccess && <p className="text-sm text-green-600">Template saved!</p>}
+              {saveTemplate.isSuccess && <p className="text-sm text-success">Template saved!</p>}
               {saveTemplate.isError && (
-                <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                <p role="alert" className="text-sm text-destructive">
                   {saveTemplate.error?.message || 'Failed to save template. Please try again.'}
                 </p>
               )}
@@ -224,15 +224,15 @@ export default function ProjectPlanner() {
           {/* Milestones */}
           <div className="bg-card rounded-xl border border-border p-6">
             <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-blue-600" /> Milestones
+              <Clock className="w-5 h-5 text-info" /> Milestones
             </h2>
             <div className="relative">
               <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
               <div className="space-y-4">
                 {(generatedPlan.milestones || []).map((ms, i) => (
                   <div key={ms.id || i} className="relative flex items-start gap-4 pl-10">
-                    <div className="absolute left-2.5 top-1.5 w-3 h-3 rounded-full bg-blue-500 border-2 border-card shadow" />
-                    <div className="flex-1 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg p-3">
+                    <div className="absolute left-2.5 top-1.5 w-3 h-3 rounded-full bg-info border-2 border-card shadow" />
+                    <div className="flex-1 bg-info/5 border border-info/30 rounded-lg p-3">
                       <div className="flex items-center justify-between">
                         <h3 className="font-medium text-foreground">{ms.name}</h3>
                         <span className="text-xs text-muted-foreground">
@@ -250,7 +250,7 @@ export default function ProjectPlanner() {
           {/* Tasks */}
           <div className="bg-card rounded-xl border border-border p-6">
             <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-              <ListTodo className="w-5 h-5 text-green-600" /> Tasks ({generatedPlan.tasks?.length || 0})
+              <ListTodo className="w-5 h-5 text-success" /> Tasks ({generatedPlan.tasks?.length || 0})
             </h2>
 
             {(generatedPlan.milestones || []).map((ms, msIdx) => {
@@ -298,9 +298,9 @@ function TaskList({ tasks }) {
               </span>
             )}
             <span className={`text-xs px-2 py-0.5 rounded-full border ${
-              { CRITICAL: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800',
-                HIGH: 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800',
-                NORMAL: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800',
+              { CRITICAL: 'bg-destructive/10 text-destructive border-destructive/30',
+                HIGH: 'bg-warning/10 text-warning border-warning/30',
+                NORMAL: 'bg-info/10 text-info border-info/30',
                 LOW: 'bg-muted text-muted-foreground border-border' }[task.priority] || 'bg-muted text-muted-foreground border-border'
             }`}>
               {task.priority}

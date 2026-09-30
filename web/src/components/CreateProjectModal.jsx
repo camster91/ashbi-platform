@@ -99,14 +99,14 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
           </div>
         )}
         {error && (
-          <div id="create-project-error" role="alert" className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-lg">
+          <div id="create-project-error" role="alert" className="mb-4 p-3 text-sm text-destructive bg-destructive/5 rounded-lg">
             {error}
           </div>
         )}
 
         <div className="space-y-4">
           <div>
-            <label htmlFor="create-project-name" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="create-project-name" className="block text-sm font-medium text-foreground mb-1">
               Project Name *
             </label>
             <input
@@ -122,7 +122,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
           </div>
 
           <div>
-            <label htmlFor="create-project-client" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="create-project-client" className="block text-sm font-medium text-foreground mb-1">
               Client *
             </label>
             <select
@@ -143,7 +143,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
           </div>
 
           <div>
-            <label htmlFor="create-project-description" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="create-project-description" className="block text-sm font-medium text-foreground mb-1">
               Description
             </label>
             <textarea
@@ -158,7 +158,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
           </div>
 
           <div>
-            <label htmlFor="create-project-owner" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="create-project-owner" className="block text-sm font-medium text-foreground mb-1">
               Default Owner
             </label>
             <select
@@ -175,7 +175,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               New threads for this project will be assigned to this person by default
             </p>
           </div>
@@ -185,14 +185,14 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
+            className="px-4 py-2 text-sm text-foreground hover:bg-muted rounded-lg"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={mutation.isPending}
-            className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
+            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
           >
             {mutation.isPending ? 'Creating...' : 'Create Project'}
           </button>

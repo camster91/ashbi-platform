@@ -55,11 +55,11 @@ function Section({ icon: Icon, title, description, children }) {
 }
 
 const TAG_COLORS = {
-  vision:   'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  tools:    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  thinking: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  audio:    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  cloud:    'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+  vision:   'bg-primary/10 text-primary',
+  tools:    'bg-info/10 text-info',
+  thinking: 'bg-warning/10 text-warning',
+  audio:    'bg-success/10 text-success',
+  cloud:    'bg-info/10 text-info',
 };
 
 export function NotificationPreferences() {
@@ -336,7 +336,7 @@ function AIModelSection() {
               Apply Model
             </Button>
             {saved && (
-              <span className="text-sm text-green-600 flex items-center gap-1">
+              <span className="text-sm text-success flex items-center gap-1">
                 <CheckCircle className="w-4 h-4" /> Saved for this server until it restarts
               </span>
             )}
@@ -484,12 +484,12 @@ export function ApiKeysSection() {
 
       {/* Show newly created key (only shown once) */}
       {createdKey && (
-        <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-          <p className="text-sm font-medium text-green-700 dark:text-green-400 mb-1">
+        <div className="p-3 bg-success/5 border border-success/30 rounded-lg">
+          <p className="text-sm font-medium text-success mb-1">
             API key created! Copy it now — you won't see it again.
           </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 text-xs bg-white dark:bg-card p-2 rounded font-mono break-all select-all">
+            <code className="flex-1 text-xs bg-card dark:bg-card p-2 rounded font-mono break-all select-all">
               {createdKey}
             </code>
             <button
@@ -529,7 +529,7 @@ export function ApiKeysSection() {
                 <p className="text-sm font-medium">
                   {key.name}
                   {!key.expiresAt && (
-                    <span className="ml-2 inline-flex rounded bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
+                    <span className="ml-2 inline-flex rounded bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning">
                       No expiry
                     </span>
                   )}
@@ -580,8 +580,8 @@ export function ApiKeysSection() {
 
 export function IntegrationsSection() {
   const providers = [
-    { type: 'QUICKBOOKS', name: 'QuickBooks Online', color: 'bg-green-700' },
-    { type: 'XERO', name: 'Xero', color: 'bg-blue-600' },
+    { type: 'QUICKBOOKS', name: 'QuickBooks Online', color: 'bg-success' },
+    { type: 'XERO', name: 'Xero', color: 'bg-info' },
   ];
 
   return (
@@ -827,7 +827,7 @@ export default function Settings() {
               Save Profile
             </Button>
             {profileSaved && (
-              <span className="text-sm text-green-600 flex items-center gap-1">
+              <span className="text-sm text-success flex items-center gap-1">
                 <CheckCircle className="w-4 h-4" /> Saved
               </span>
             )}
@@ -892,7 +892,7 @@ export default function Settings() {
               Change Password
             </Button>
             {pwSaved && (
-              <span className="text-sm text-green-600 flex items-center gap-1">
+              <span className="text-sm text-success flex items-center gap-1">
                 <CheckCircle className="w-4 h-4" /> Password updated
               </span>
             )}

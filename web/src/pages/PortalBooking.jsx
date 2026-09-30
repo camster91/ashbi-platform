@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import usePortalLightTheme from '../hooks/usePortalLightTheme';
 
 function getDateString(date) {
   const y = date.getFullYear();
@@ -127,11 +128,11 @@ function MiniCalendar({ selectedDate, onSelect }) {
         data-date={dateStr}
         onClick={() => onSelect(dateStr)}
         className={cn(
-          'min-h-11 min-w-11 w-10 h-10 rounded-lg text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2',
-          isPast && 'text-slate-500 line-through cursor-not-allowed',
-          !isPast && !isSelected && 'text-slate-700 hover:bg-slate-100',
-          isSelected && 'bg-slate-800 text-white shadow-sm',
-          isToday && !isSelected && 'ring-1 ring-amber-400'
+          'min-h-11 min-w-11 w-10 h-10 rounded-lg text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          isPast && 'text-muted-foreground line-through cursor-not-allowed',
+          !isPast && !isSelected && 'text-foreground hover:bg-muted',
+          isSelected && 'bg-primary text-primary-foreground shadow-sm',
+          isToday && !isSelected && 'ring-1 ring-warning'
         )}
       >
         {d}
@@ -146,23 +147,23 @@ function MiniCalendar({ selectedDate, onSelect }) {
           type="button"
           onClick={prevMonth}
           aria-label={`Previous month, ${new Date(year, month - 1, 1).toLocaleDateString({ month: 'long', year: 'numeric' })}`}
-          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
+          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <span className="text-sm font-semibold text-slate-800" aria-live="polite">{monthLabel}</span>
+        <span className="text-sm font-semibold text-foreground" aria-live="polite">{monthLabel}</span>
         <button
           type="button"
           onClick={nextMonth}
           aria-label={`Next month, ${new Date(year, month + 1, 1).toLocaleDateString({ month: 'long', year: 'numeric' })}`}
-          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
+          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center mb-2" role="row">
         {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
-          <div key={day} role="columnheader" className="text-xs font-medium text-slate-500 py-1">{day}</div>
+          <div key={day} role="columnheader" className="text-xs font-medium text-muted-foreground py-1">{day}</div>
         ))}
       </div>
       <div
@@ -192,6 +193,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
 }
 
 export default function PortalBooking() {
+  usePortalLightTheme();
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [name, setName] = useState('');
@@ -231,28 +233,28 @@ export default function PortalBooking() {
 
   if (booked) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-        <header className="bg-white border-b border-slate-200 shadow-sm">
+      <div className="min-h-screen bg-background">
+        <header className="bg-card border-b border-border/40 shadow-sm">
           <div className="max-w-3xl mx-auto px-6 py-6">
             <div className="flex items-center gap-3 mb-1">
-              <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-amber-400" />
+              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-warning" />
               </div>
-              <span className="text-sm font-medium text-slate-500">Ashbi Design</span>
+              <span className="text-sm font-medium text-muted-foreground">Ashbi Design</span>
             </div>
-            <h1 className="text-2xl font-bold text-slate-800 mt-3">Book a Call</h1>
+            <h1 className="text-2xl font-bold text-foreground mt-3">Book a Call</h1>
           </div>
         </header>
         <main className="max-w-3xl mx-auto px-6 py-8">
-          <div role="status" aria-live="polite" className="rounded-xl border border-green-200 bg-green-50 p-8 text-center">
-            <CheckCircle className="w-14 h-14 text-green-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-green-800 mb-2">Booking Confirmed</h2>
-            <p className="text-green-600 mb-4">
+          <div role="status" aria-live="polite" className="rounded-xl border border-success/30 bg-success/5 p-8 text-center">
+            <CheckCircle className="w-14 h-14 text-success mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-success mb-2">Booking Confirmed</h2>
+            <p className="text-success mb-4">
               Your call has been scheduled. We will send a confirmation to your email.
             </p>
-            <div className="inline-flex flex-col items-center gap-2 bg-white rounded-lg border border-green-200 px-6 py-4 mt-2">
-              <div className="flex items-center gap-2 text-slate-700">
-                <Calendar className="w-4 h-4 text-slate-500" />
+            <div className="inline-flex flex-col items-center gap-2 bg-card rounded-lg border border-success/30 px-6 py-4 mt-2">
+              <div className="flex items-center gap-2 text-foreground">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm font-medium">
                   {new Date(selectedDate + 'T00:00:00').toLocaleDateString({
                     weekday: 'long',
@@ -262,14 +264,14 @@ export default function PortalBooking() {
                   })}
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-slate-700">
-                <Clock className="w-4 h-4 text-slate-500" />
+              <div className="flex items-center gap-2 text-foreground">
+                <Clock className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm font-medium">{selectedSlot}</span>
               </div>
             </div>
           </div>
           <div className="text-center py-6">
-            <p className="text-xs text-slate-600">Powered by Ashbi Design</p>
+            <p className="text-xs text-muted-foreground">Powered by Ashbi Design</p>
           </div>
         </main>
       </div>
@@ -277,26 +279,26 @@ export default function PortalBooking() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 shadow-sm">
+      <header className="bg-card border-b border-border/40 shadow-sm">
         <div className="max-w-3xl mx-auto px-6 py-6">
           <div className="flex items-center gap-3 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-amber-400" />
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-warning" />
             </div>
-            <span className="text-sm font-medium text-slate-500">Ashbi Design</span>
+            <span className="text-sm font-medium text-muted-foreground">Ashbi Design</span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-800 mt-3">Book a Call</h1>
-          <p className="text-slate-500 mt-1">Schedule a consultation with our team</p>
+          <h1 className="text-2xl font-bold text-foreground mt-3">Book a Call</h1>
+          <p className="text-muted-foreground mt-1">Schedule a consultation with our team</p>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         <div className="grid md:grid-cols-2 gap-6">
           {/* Calendar */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+          <div className="bg-card rounded-xl border border-border/40 p-6">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
               <Calendar className="w-4 h-4" />
               Select a Date
             </h3>
@@ -304,24 +306,24 @@ export default function PortalBooking() {
           </div>
 
           {/* Time Slots */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+          <div className="bg-card rounded-xl border border-border/40 p-6">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
               <Clock className="w-4 h-4" />
               Available Times
             </h3>
 
             {!selectedDate ? (
-              <div className="flex flex-col items-center justify-center h-48 text-slate-500">
-                <Calendar className="w-8 h-8 mb-2 text-slate-500" />
+              <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
+                <Calendar className="w-8 h-8 mb-2 text-muted-foreground" />
                 <p className="text-sm">Pick a date to see available times</p>
               </div>
             ) : slotsLoading ? (
               <div className="flex items-center justify-center h-48">
-                <Loader2 className="w-6 h-6 animate-spin text-slate-500" />
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
             ) : slots.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 text-slate-500">
-                <Clock className="w-8 h-8 mb-2 text-slate-500" />
+              <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
+                <Clock className="w-8 h-8 mb-2 text-muted-foreground" />
                 <p className="text-sm">No available slots for this date</p>
                 <p className="text-xs mt-1">Try a different day</p>
               </div>
@@ -337,10 +339,10 @@ export default function PortalBooking() {
                       disabled={!available}
                       onClick={() => setSelectedSlot(time)}
                       className={cn(
-                        'min-h-11 px-3 py-2.5 rounded-lg text-sm font-medium border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2',
-                        !available && 'cursor-not-allowed bg-slate-50 border-slate-100 text-slate-500 line-through',
-                        available && selectedSlot !== time && 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50',
-                        selectedSlot === time && 'bg-slate-800 border-slate-800 text-white shadow-sm'
+                        'min-h-11 px-3 py-2.5 rounded-lg text-sm font-medium border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                        !available && 'cursor-not-allowed bg-muted/50 border-border/25 text-muted-foreground line-through',
+                        available && selectedSlot !== time && 'bg-card border-border/40 text-foreground hover:border-border/60 hover:bg-muted/50',
+                        selectedSlot === time && 'bg-primary border-primary text-primary-foreground shadow-sm'
                       )}
                     >
                       {time}
@@ -354,12 +356,12 @@ export default function PortalBooking() {
 
         {/* Booking Form */}
         {selectedSlot && (
-          <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
-            <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-2">Your Details</h3>
+          <form onSubmit={handleSubmit} className="bg-card rounded-xl border border-border/40 p-6 space-y-4">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">Your Details</h3>
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="booking-name" className="block text-sm font-medium text-slate-700 mb-1.5">
+                <label htmlFor="booking-name" className="block text-sm font-medium text-foreground mb-1.5">
                   <span className="flex items-center gap-1"><User className="w-3.5 h-3.5" /> Name</span>
                 </label>
                 <input
@@ -369,11 +371,11 @@ export default function PortalBooking() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Your full name"
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  className="w-full px-4 py-2.5 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-warning/20 focus:border-warning"
                 />
               </div>
               <div>
-                <label htmlFor="booking-email" className="block text-sm font-medium text-slate-700 mb-1.5">
+                <label htmlFor="booking-email" className="block text-sm font-medium text-foreground mb-1.5">
                   <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" /> Email</span>
                 </label>
                 <input
@@ -383,13 +385,13 @@ export default function PortalBooking() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  className="w-full px-4 py-2.5 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-warning/20 focus:border-warning"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="booking-topic" className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label htmlFor="booking-topic" className="block text-sm font-medium text-foreground mb-1.5">
                 <span className="flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" /> What would you like to discuss?</span>
               </label>
               <textarea
@@ -398,14 +400,14 @@ export default function PortalBooking() {
                 onChange={(e) => setTopic(e.target.value)}
                 placeholder="Brief description of what you need help with (optional)"
                 rows={3}
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 resize-none"
+                className="w-full px-4 py-2.5 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-warning/20 focus:border-warning resize-none"
               />
             </div>
 
             {/* Selected summary */}
-            <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-slate-50 border border-slate-100 text-sm text-slate-600">
+            <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-muted/50 border border-border/25 text-sm text-muted-foreground">
               <div className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-slate-500" />
+                <Calendar className="w-4 h-4 text-muted-foreground" />
                 {new Date(selectedDate + 'T00:00:00').toLocaleDateString({
                   weekday: 'short',
                   month: 'short',
@@ -413,7 +415,7 @@ export default function PortalBooking() {
                 })}
               </div>
               <div className="flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-slate-500" />
+                <Clock className="w-4 h-4 text-muted-foreground" />
                 {selectedSlot}
               </div>
             </div>
@@ -422,7 +424,7 @@ export default function PortalBooking() {
               type="submit"
               disabled={!name.trim() || !email.trim() || bookMutation.isPending}
               aria-busy={bookMutation.isPending}
-              className="min-h-11 w-full px-6 py-3 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2"
+              className="min-h-11 w-full px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               {bookMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -436,7 +438,7 @@ export default function PortalBooking() {
               <p
                 role="alert"
                 aria-live="assertive"
-                className="text-sm text-red-600 text-center"
+                className="text-sm text-destructive text-center"
               >
                 {bookMutation.error?.message || 'Something went wrong. Please try again.'}
               </p>
@@ -446,7 +448,7 @@ export default function PortalBooking() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-slate-600">Powered by Ashbi Design</p>
+          <p className="text-xs text-muted-foreground">Powered by Ashbi Design</p>
         </div>
       </main>
     </div>

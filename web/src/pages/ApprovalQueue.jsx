@@ -12,12 +12,12 @@ const TYPE_ICONS = {
 };
 
 const TYPE_COLORS = {
-  EMAIL: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  PROPOSAL: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  CONTRACT: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  DEPLOY: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  POST: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  INVOICE: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  EMAIL: 'bg-info/10 text-info',
+  PROPOSAL: 'bg-primary/10 text-primary',
+  CONTRACT: 'bg-warning/10 text-warning',
+  DEPLOY: 'bg-destructive/10 text-destructive',
+  POST: 'bg-success/10 text-success',
+  INVOICE: 'bg-warning/10 text-warning',
   COPY: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
   OTHER: 'bg-muted text-muted-foreground',
 };
@@ -130,7 +130,7 @@ export default function ApprovalQueue() {
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-lg font-bold text-foreground">Approvals</h1>
             {filterStatus === 'PENDING' && pendingCount > 0 && (
-              <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full">{pendingCount}</span>
+              <span className="px-2 py-0.5 bg-destructive text-destructive-foreground text-xs font-bold rounded-full">{pendingCount}</span>
             )}
           </div>
           <div className="flex gap-2">
@@ -191,7 +191,7 @@ export default function ApprovalQueue() {
                       <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${TYPE_COLORS[a.type] || TYPE_COLORS.OTHER}`}>
                         {a.type}
                       </span>
-                      {a.status === 'PENDING' && <span className="flex-shrink-0 w-2 h-2 bg-yellow-400 rounded-full" />}
+                      {a.status === 'PENDING' && <span className="flex-shrink-0 w-2 h-2 bg-warning rounded-full" />}
                     </div>
                     <ChevronRight size={14} className="flex-shrink-0 text-muted-foreground mt-0.5" />
                   </div>
@@ -222,7 +222,7 @@ export default function ApprovalQueue() {
         ) : (
           <div className="p-6 max-w-3xl space-y-4">
             {actionError && (
-              <div role="alert" className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-red-600 text-sm">{actionError}</div>
+              <div role="alert" className="p-3 bg-destructive/5 border border-destructive/30 rounded text-destructive text-sm">{actionError}</div>
             )}
 
             {/* Header */}
@@ -244,7 +244,7 @@ export default function ApprovalQueue() {
                 </div>
               </div>
               {selected.reviewNote && (
-                <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-sm text-amber-800 dark:text-amber-300">
+                <div className="mt-3 p-3 bg-warning/5 border border-warning/30 rounded text-sm text-warning">
                   <strong>Note:</strong> {selected.reviewNote}
                 </div>
               )}

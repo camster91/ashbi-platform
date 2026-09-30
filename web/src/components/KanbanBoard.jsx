@@ -5,17 +5,17 @@ import LoadingState from './ui/LoadingState';
 import { QueryErrorState } from './QueryErrorState';
 
 const COLUMNS = [
-  { id: 'PENDING', title: 'To Do', color: 'bg-gray-100', description: 'Tasks waiting to be started' },
-  { id: 'IN_PROGRESS', title: 'In Progress', color: 'bg-blue-100', description: 'Tasks currently being worked on' },
-  { id: 'BLOCKED', title: 'Blocked', color: 'bg-red-100', description: 'Tasks blocked by dependencies or issues' },
-  { id: 'COMPLETED', title: 'Done', color: 'bg-green-100', description: 'Completed tasks' }
+  { id: 'PENDING', title: 'To Do', color: 'bg-muted', description: 'Tasks waiting to be started' },
+  { id: 'IN_PROGRESS', title: 'In Progress', color: 'bg-info/10', description: 'Tasks currently being worked on' },
+  { id: 'BLOCKED', title: 'Blocked', color: 'bg-destructive/10', description: 'Tasks blocked by dependencies or issues' },
+  { id: 'COMPLETED', title: 'Done', color: 'bg-success/10', description: 'Completed tasks' }
 ];
 
 const PRIORITY_COLORS = {
-  CRITICAL: 'border-l-red-500',
-  HIGH: 'border-l-orange-500',
-  NORMAL: 'border-l-blue-500',
-  LOW: 'border-l-gray-400'
+  CRITICAL: 'border-l-destructive',
+  HIGH: 'border-l-warning',
+  NORMAL: 'border-l-info',
+  LOW: 'border-l-border'
 };
 
 // Context Menu Component for Mobile Move functionality
@@ -39,12 +39,12 @@ function MoveToMenu({ task, columns, onMove, onClose, position }) {
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 py-2 min-w-[150px]"
+      className="fixed z-50 bg-card rounded-lg shadow-xl border border-border/40 py-2 min-w-[150px]"
       style={{ left: position.x, top: position.y }}
       role="menu"
       aria-label={`Move "${task.title}" to column`}
     >
-      <div className="px-3 py-2 text-sm font-semibold text-gray-700 border-b border-gray-100">
+      <div className="px-3 py-2 text-sm font-semibold text-foreground border-b border-border/25">
         Move to:
       </div>
       {columns.map((col) => (
@@ -55,8 +55,8 @@ function MoveToMenu({ task, columns, onMove, onClose, position }) {
             onClose();
           }}
           disabled={task.status === col.id}
-          className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors ${
-            task.status === col.id ? 'text-gray-500 cursor-not-allowed' : 'text-gray-700'
+          className={`w-full text-left px-3 py-2 text-sm hover:bg-info/5 transition-colors ${
+            task.status === col.id ? 'text-muted-foreground cursor-not-allowed' : 'text-foreground'
           }`}
           role="menuitem"
           aria-label={`Move "${task.title}" to ${col.title}${task.status === col.id ? ' (current column)' : ''}`}
@@ -284,7 +284,7 @@ export default function KanbanBoard({ projectId }) {
   };
 
   if (isLoading) {
-    return <LoadingState label="Loading tasks…" compact className="h-64" spinnerClassName="border-blue-200 border-t-blue-600" />;
+    return <LoadingState label="Loading tasks…" compact className="h-64" spinnerClassName="border-info/30 border-t-info" />;
   }
 
   if (isError) {
@@ -304,10 +304,10 @@ export default function KanbanBoard({ projectId }) {
         >
           {/* Column Header */}
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-800" id={`column-header-${column.id}`}>
+            <h3 className="font-semibold text-foreground" id={`column-header-${column.id}`}>
               {column.title}
             </h3>
-            <span className="text-sm text-gray-500 bg-white rounded-full px-2 py-0.5" aria-label={`${tasksByStatus[column.id].length} tasks`}>
+            <span className="text-sm text-muted-foreground bg-card rounded-full px-2 py-0.5" aria-label={`${tasksByStatus[column.id].length} tasks`}>
               {tasksByStatus[column.id].length}
             </span>
           </div>
@@ -329,11 +329,11 @@ export default function KanbanBoard({ projectId }) {
                 aria-grabbed={draggedTask?.id === task.id}
                 aria-selected={selectedTaskId === task.id}
                 aria-label={`${task.title}. Priority: ${task.priority}. Status: ${column.title}${task.assignee ? `. Assigned to: ${task.assignee.name}` : ''}${task.dueDate ? `. Due: ${new Date(task.dueDate).toLocaleDateString('en-CA')}` : ''}`}
-                className={`bg-white rounded-lg p-3 shadow-sm border-l-4 ${PRIORITY_COLORS[task.priority]} transition-all ${
+                className={`bg-card rounded-lg p-3 shadow-sm border-l-4 ${PRIORITY_COLORS[task.priority]} transition-all ${
                   draggedTask?.id === task.id ? 'opacity-50 scale-95' : ''
                 } ${
                   selectedTaskId === task.id
-                    ? 'ring-2 ring-blue-500 ring-offset-2'
+                    ? 'ring-2 ring-info ring-offset-2'
                     : 'hover:shadow-md'
                 }`}
               >
@@ -344,7 +344,7 @@ export default function KanbanBoard({ projectId }) {
                     aria-hidden="true"
                   >
                     <svg
-                      className="w-5 h-5 text-gray-500"
+                      className="w-5 h-5 text-muted-foreground"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -358,25 +358,25 @@ export default function KanbanBoard({ projectId }) {
                     </svg>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-gray-900 text-sm">{task.title}</h4>
+                    <h4 className="font-medium text-foreground text-sm">{task.title}</h4>
                     {task.description && (
-                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">{task.description}</p>
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
                     )}
                     <div className="flex items-center justify-between mt-2 flex-wrap gap-1">
                       <span className={`text-xs px-2 py-0.5 rounded ${
-                        task.priority === 'CRITICAL' ? 'bg-red-100 text-red-700' :
-                        task.priority === 'HIGH' ? 'bg-orange-100 text-orange-700' :
-                        task.priority === 'NORMAL' ? 'bg-blue-100 text-blue-700' :
-                        'bg-gray-100 text-gray-700'
+                        task.priority === 'CRITICAL' ? 'bg-destructive/10 text-destructive' :
+                        task.priority === 'HIGH' ? 'bg-warning/10 text-warning' :
+                        task.priority === 'NORMAL' ? 'bg-info/10 text-info' :
+                        'bg-muted text-foreground'
                       }`}>
                         {task.priority}
                       </span>
                       {task.assignee && (
-                        <span className="text-xs text-gray-500">{task.assignee.name}</span>
+                        <span className="text-xs text-muted-foreground">{task.assignee.name}</span>
                       )}
                     </div>
                     {task.dueDate && (
-                      <div className="mt-2 text-xs text-gray-500">
+                      <div className="mt-2 text-xs text-muted-foreground">
                         Due: {new Date(task.dueDate).toLocaleDateString('en-CA')}
                       </div>
                     )}
@@ -393,7 +393,7 @@ export default function KanbanBoard({ projectId }) {
                           }
                         });
                       }}
-                      className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline touch-target-py-2"
+                      className="mt-2 text-xs text-info hover:text-info/80 underline touch-target-py-2"
                       aria-label={`Move ${task.title} to another column`}
                     >
                       Move to...
@@ -403,7 +403,7 @@ export default function KanbanBoard({ projectId }) {
               </div>
             ))}
             {tasksByStatus[column.id].length === 0 && (
-              <div className="text-center py-8 text-gray-600 text-sm" role="status">
+              <div className="text-center py-8 text-muted-foreground text-sm" role="status">
                 No tasks
               </div>
             )}

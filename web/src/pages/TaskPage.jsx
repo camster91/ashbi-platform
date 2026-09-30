@@ -445,7 +445,7 @@ function CommentsSection({ comments, taskId }) {
           </Button>
         </div>
         {commentError && (
-          <div role="alert" className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div role="alert" className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
             <span>Comment was not posted. Try again.</span>
             <button type="button" onClick={() => addCommentMutation.mutate(commentError)} disabled={addCommentMutation.isPending} className="underline">Try again</button>
           </div>
@@ -611,7 +611,7 @@ export default function TaskPage() {
           projectId={task.project?.id}
         />
       </div>
-      {contentSaveError && <div role="alert" className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"><span>Content was not saved. Try again.</span><button type="button" onClick={() => updateMutation.mutate({ content: contentSaveError })} disabled={updateMutation.isPending} className="underline">Try again</button></div>}
+      {contentSaveError && <div role="alert" className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"><span>Content was not saved. Try again.</span><button type="button" onClick={() => updateMutation.mutate({ content: contentSaveError })} disabled={updateMutation.isPending} className="underline">Try again</button></div>}
 
       {/* Subpages */}
       <SubpagesList 

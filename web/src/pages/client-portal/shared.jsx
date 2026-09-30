@@ -1,12 +1,13 @@
 // Helpers, brand tokens, icons and chat primitives shared by the client
 // portal route and its lazily loaded sections.
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { Badge, Button, Card, Input } from '../../components/ui';
 import { inputStyles } from '../../components/ui/Input';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
 import { formatInvoiceMoney } from '../../lib/format';
 import { cn } from '../../lib/utils';
+import usePortalLightTheme from '../../hooks/usePortalLightTheme';
 import { statusColor, statusLabel } from '../../lib/status';
 import { uploadFileWithProgress } from '../../lib/upload';
 import MessageAttachments from '../../components/media/MessageAttachments';
@@ -77,16 +78,7 @@ export async function deletePortalDocument(token, documentId) {
 // removing `.dark`, and restores the previous theme when it unmounts. Every
 // portal colour is a design token (`bg-primary`, `text-muted-foreground`,
 // `border-border`, …), so this one switch keeps the whole route light.
-export function usePortalLightTheme() {
-  useLayoutEffect(() => {
-    const root = document.documentElement;
-    const wasDark = root.classList.contains('dark');
-    root.classList.remove('dark');
-    return () => {
-      if (wasDark) root.classList.add('dark');
-    };
-  }, []);
-}
+export { usePortalLightTheme };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // Invoice amounts always carry their own currency code ("$1,250.00 CAD"); a

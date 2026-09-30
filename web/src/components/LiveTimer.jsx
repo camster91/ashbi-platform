@@ -159,7 +159,7 @@ export default function LiveTimer({ socket }) {
       {timerState.isRunning && (
         <span className={cn(
           'font-mono text-xs font-semibold tabular-nums',
-          'text-green-600 dark:text-green-400'
+          'text-success'
         )}>
           {formatElapsed(timerState.elapsed)}
         </span>
@@ -173,8 +173,8 @@ export default function LiveTimer({ socket }) {
           'flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg transition-all',
           'hover:shadow-sm active:scale-95',
           timerState.isRunning
-            ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50'
-            : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50',
+            ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
+            : 'bg-success/10 text-success hover:bg-success/20',
           isLoading && 'opacity-50 cursor-not-allowed'
         )}
         title={timerState.isRunning ? 'Stop timer' : 'Start timer'}

@@ -27,26 +27,26 @@ export default function RevenueSparklineWidget({ data = [] }) {
     <Card>
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-emerald-500" />
+          <TrendingUp className="w-4 h-4 text-success" />
           <h2 className="font-semibold text-foreground">Revenue Trend</h2>
         </div>
-        <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">${total.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+        <span className="text-xs font-bold text-success">${total.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
       </div>
       <div className="p-4">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-16 overflow-visible">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-16 overflow-visible text-success">
           <defs>
             <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#10B981" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
+              <stop offset="0%" stopColor="currentColor" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
             </linearGradient>
           </defs>
           {/* Area fill */}
           <polygon fill="url(#revenueGrad)" points={areaPoints} />
           {/* Line */}
-          <polyline fill="none" stroke="#10B981" strokeWidth="2" points={linePoints} />
+          <polyline fill="none" stroke="currentColor" strokeWidth="2" points={linePoints} />
           {/* Dots */}
           {points.map((p, i) => (
-            <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="#10B981" />
+            <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="currentColor" />
           ))}
         </svg>
 

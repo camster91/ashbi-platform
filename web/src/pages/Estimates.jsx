@@ -400,7 +400,7 @@ function EstimateCard({ estimate, onEdit, onSend, onConvert, onDelete, sendLoadi
             <Button size="sm" variant="outline" leftIcon={<ArrowRightLeft className="w-3 h-3" />} onClick={onConvert} loading={convertLoading}>Convert</Button>
           )}
           {isDraft && (
-            <Button size="sm" variant="ghost" onClick={onDelete} className="text-destructive hover:text-destructive" leftIcon={<Trash2 className="w-3 h-3" />}>Delete</Button>
+            <Button size="sm" variant="ghost" onClick={onDelete} className="text-destructive hover:text-destructive/80" leftIcon={<Trash2 className="w-3 h-3" />}>Delete</Button>
           )}
         </div>
       </div>
@@ -460,7 +460,7 @@ function EstimateCard({ estimate, onEdit, onSend, onConvert, onDelete, sendLoadi
             </span>
           )}
           {isConverted && (
-            <span className="text-xs text-purple-600 dark:text-purple-400 flex items-center gap-1">
+            <span className="text-xs text-primary flex items-center gap-1">
               <ArrowRightLeft className="w-3 h-3" /> Converted
             </span>
           )}

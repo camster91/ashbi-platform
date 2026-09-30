@@ -6,6 +6,7 @@ import { useToast } from '../hooks/useToast';
 import ConfirmDialog from './ConfirmDialog';
 import Skeleton from './ui/Skeleton';
 import QueryErrorState from './QueryErrorState';
+import { DEFAULT_EVENT_COLOR } from '../lib/data-colors';
 
 export default function Milestones({ projectId }) {
   const queryClient = useQueryClient();
@@ -114,7 +115,7 @@ export default function Milestones({ projectId }) {
         <h3 className="text-lg font-semibold text-foreground">Milestones</h3>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          className="bg-info text-info-foreground px-4 py-2 rounded-lg hover:bg-info/90"
         >
           + Add Milestone
         </button>
@@ -153,11 +154,11 @@ export default function Milestones({ projectId }) {
                   <div
                     className={`absolute left-2 w-4 h-4 rounded-full border-2 ${
                       milestone.status === 'COMPLETED'
-                        ? 'bg-green-500 border-green-500'
+                        ? 'bg-success border-success'
                         : isOverdue
-                        ? 'bg-red-500 border-red-500'
+                        ? 'bg-destructive border-destructive'
                         : isUpcoming
-                        ? 'bg-yellow-500 border-yellow-500'
+                        ? 'bg-warning border-warning'
                         : 'bg-card border-border'
                     }`}
                     style={{ top: '1rem' }}
@@ -169,7 +170,7 @@ export default function Milestones({ projectId }) {
                     onClick={() => setSelectedMilestone(milestone)}
                     aria-label={`Open milestone ${milestone.name}`}
                     aria-pressed={selectedMilestone?.id === milestone.id}
-                    className={`w-full min-h-11 bg-card rounded-lg border p-4 text-left cursor-pointer hover:shadow-md active:bg-muted transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
+                    className={`w-full min-h-11 bg-card rounded-lg border p-4 text-left cursor-pointer hover:shadow-md active:bg-muted transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-offset-2 ${
                       milestone.status === 'COMPLETED' ? 'opacity-75' : ''
                     }`}
                     style={{ borderLeftColor: milestone.color, borderLeftWidth: '4px' }}
@@ -183,9 +184,9 @@ export default function Milestones({ projectId }) {
                       </div>
                       <div className="text-right">
                         <span className={`text-sm font-medium ${
-                          milestone.status === 'COMPLETED' ? 'text-green-700 dark:text-green-400' :
-                          isOverdue ? 'text-red-700 dark:text-red-400' :
-                          isUpcoming ? 'text-yellow-700 dark:text-yellow-400' :
+                          milestone.status === 'COMPLETED' ? 'text-success' :
+                          isOverdue ? 'text-destructive' :
+                          isUpcoming ? 'text-warning' :
                           'text-muted-foreground'
                         }`}>
                           {milestone.status === 'COMPLETED'
@@ -268,7 +269,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
       ? new Date(milestone.dueDate).toISOString().split('T')[0]
       : '',
     status: milestone?.status || 'PENDING',
-    color: milestone?.color || '#3B82F6'
+    color: milestone?.color || DEFAULT_EVENT_COLOR
   });
 
   const handleSubmit = (e) => {
@@ -356,8 +357,8 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
                     {task.title}
                   </span>
                   <span className={`text-xs px-2 py-0.5 rounded ${
-                    task.status === 'COMPLETED' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
-                    task.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' :
+                    task.status === 'COMPLETED' ? 'bg-success/10 text-success' :
+                    task.status === 'IN_PROGRESS' ? 'bg-info/10 text-info' :
                     'bg-muted text-foreground'
                   }`}>
                     {task.status}
@@ -375,7 +376,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
                 type="button"
                 onClick={onDelete}
                 disabled={isDeleting}
-                className="text-red-700 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                className="text-destructive hover:text-destructive/80"
               >
                 {isDeleting ? 'Deleting…' : 'Delete'}
               </button>
@@ -392,7 +393,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
             <button
               type="submit"
               disabled={isLoading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-info text-info-foreground rounded-lg hover:bg-info/90 disabled:opacity-50"
             >
               {isLoading ? 'Saving...' : 'Save'}
             </button>

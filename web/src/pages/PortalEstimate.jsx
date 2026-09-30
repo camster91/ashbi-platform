@@ -16,9 +16,11 @@ import {
 import { api } from '../lib/api';
 import { cn, formatDate } from '../lib/utils';
 import LoadingState from '../components/ui/LoadingState';
+import usePortalLightTheme from '../hooks/usePortalLightTheme';
 import StatusBadge from '../components/ui/StatusBadge';
 
 export default function PortalEstimate() {
+  usePortalLightTheme();
   const { viewToken } = useParams();
   const [action, setAction] = useState(null);
   const [declineReason, setDeclineReason] = useState('');
@@ -52,16 +54,16 @@ export default function PortalEstimate() {
   };
 
   if (isLoading) {
-    return <LoadingState label="Loading estimate…" size="lg" className="min-h-screen text-[#2e2958]" spinnerClassName="border-[#dedbd0] border-t-[#2e2958]" style={{ backgroundColor: '#faf9f2' }} />;
+    return <LoadingState label="Loading estimate…" size="lg" className="bg-background min-h-screen text-primary" spinnerClassName="border-border/40 border-t-primary" />;
   }
 
   if (error || !estimate) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#faf9f2' }}>
+      <div className="bg-background min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <FileText className="w-12 h-12 mx-auto mb-4" style={{ color: '#2e2958', opacity: 0.3 }} />
-          <h1 className="text-2xl font-bold mb-2" style={{ color: '#2e2958' }}>Estimate Not Found</h1>
-          <p className="text-slate-500">This link may be invalid or expired.</p>
+          <FileText className="text-primary opacity-30 w-12 h-12 mx-auto mb-4" />
+          <h1 className="text-primary text-2xl font-bold mb-2">Estimate Not Found</h1>
+          <p className="text-muted-foreground">This link may be invalid or expired.</p>
         </div>
       </div>
     );
@@ -83,16 +85,16 @@ export default function PortalEstimate() {
   const canRespond = estimate.status === 'SENT' && !completed;
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#faf9f2' }}>
+    <div className="bg-background min-h-screen">
       {/* Header */}
-      <header className="shadow-sm" style={{ backgroundColor: '#2e2958' }}>
+      <header className="bg-primary shadow-sm">
         <div className="max-w-3xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#e6f354' }}>
+              <p className="text-accent text-xs font-semibold uppercase tracking-widest mb-1">
                 Estimate
               </p>
-              <h1 className="text-2xl font-bold text-white">
+              <h1 className="text-2xl font-bold text-primary-foreground">
                 {estimate.title || estimate.estimateNumber || `EST-${estimate.id || ''}`}
               </h1>
             </div>
@@ -112,67 +114,67 @@ export default function PortalEstimate() {
         {(completed || alreadyResponded) && (
           <div role="status" aria-live="polite" className={cn(
             'rounded-xl border p-6 text-center',
-            isApproved ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+            isApproved ? 'bg-success/5 border-success/30' : 'bg-destructive/5 border-destructive/30'
           )}>
             {isApproved ? (
               <>
-                <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                <h2 className="text-xl font-bold text-green-800 mb-1">Estimate Approved</h2>
-                <p className="text-green-600">Thank you for approving this estimate. We will be in touch shortly to get started.</p>
+                <CheckCircle className="w-12 h-12 text-success mx-auto mb-3" />
+                <h2 className="text-xl font-bold text-success mb-1">Estimate Approved</h2>
+                <p className="text-success">Thank you for approving this estimate. We will be in touch shortly to get started.</p>
               </>
             ) : (
               <>
-                <XCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
-                <h2 className="text-xl font-bold text-red-800 mb-1">Estimate Declined</h2>
-                <p className="text-red-600">Thank you for your feedback. We appreciate your time and will follow up if needed.</p>
+                <XCircle className="w-12 h-12 text-destructive mx-auto mb-3" />
+                <h2 className="text-xl font-bold text-destructive mb-1">Estimate Declined</h2>
+                <p className="text-destructive">Thank you for your feedback. We appreciate your time and will follow up if needed.</p>
               </>
             )}
           </div>
         )}
 
         {/* From / To / Details */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-card rounded-xl border border-border/40 p-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* From */}
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">From</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">From</p>
               <div className="flex items-center gap-2">
-                <Building2 className="w-4 h-4" style={{ color: '#2e2958' }} />
-                <span className="text-sm font-semibold" style={{ color: '#2e2958' }}>
+                <Building2 className="text-primary w-4 h-4" />
+                <span className="text-primary text-sm font-semibold">
                   {estimate.agencyName || estimate.fromName || 'Ashbi Design'}
                 </span>
               </div>
               {estimate.agencyEmail && (
-                <p className="text-xs text-slate-500 mt-1 ml-6">{estimate.agencyEmail}</p>
+                <p className="text-xs text-muted-foreground mt-1 ml-6">{estimate.agencyEmail}</p>
               )}
             </div>
 
             {/* To */}
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Prepared For</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Prepared For</p>
               <div className="flex items-center gap-2">
-                <User className="w-4 h-4" style={{ color: '#2e2958' }} />
-                <span className="text-sm font-semibold" style={{ color: '#2e2958' }}>
+                <User className="text-primary w-4 h-4" />
+                <span className="text-primary text-sm font-semibold">
                   {estimate.clientName || estimate.toName || 'Client'}
                 </span>
               </div>
               {estimate.clientEmail && (
-                <p className="text-xs text-slate-500 mt-1 ml-6">{estimate.clientEmail}</p>
+                <p className="text-xs text-muted-foreground mt-1 ml-6">{estimate.clientEmail}</p>
               )}
             </div>
           </div>
 
           {/* Dates row */}
           {(estimate.createdAt || estimate.validUntil || estimate.validUntilDate) && (
-            <div className="flex flex-wrap gap-4 mt-5 pt-5 border-t border-slate-100">
+            <div className="flex flex-wrap gap-4 mt-5 pt-5 border-t border-border/25">
               {estimate.createdAt && (
-                <div className="flex items-center gap-1.5 text-sm text-slate-500">
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <Calendar className="w-3.5 h-3.5" />
                   <span>Created {formatDate(estimate.createdAt)}</span>
                 </div>
               )}
               {(estimate.validUntil || estimate.validUntilDate) && (
-                <div className="flex items-center gap-1.5 text-sm" style={{ color: '#2e2958' }}>
+                <div className="text-primary flex items-center gap-1.5 text-sm">
                   <Clock className="w-3.5 h-3.5" />
                   <span>Valid until {formatDate(estimate.validUntil || estimate.validUntilDate)}</span>
                 </div>
@@ -181,38 +183,38 @@ export default function PortalEstimate() {
           )}
 
           {estimate.description && (
-            <p className="text-slate-600 mt-4 text-sm leading-relaxed border-t border-slate-100 pt-4">
+            <p className="text-muted-foreground mt-4 text-sm leading-relaxed border-t border-border/25 pt-4">
               {estimate.description}
             </p>
           )}
         </div>
 
         {/* Line Items */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Line Items</h3>
+        <div className="bg-card rounded-xl border border-border/40 overflow-hidden">
+          <div className="px-6 py-4 border-b border-border/25">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Line Items</h3>
           </div>
           <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" tabIndex={0} role="region" aria-label="Estimate line items">
             <table className="w-full">
               <thead>
-                <tr style={{ backgroundColor: '#2e2958' }}>
-                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-left" style={{ color: '#e6f354' }}>Description</th>
-                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-right" style={{ color: '#e6f354' }}>Qty</th>
-                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-right" style={{ color: '#e6f354' }}>Rate</th>
-                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-right" style={{ color: '#e6f354' }}>Amount</th>
+                <tr className="bg-primary">
+                  <th className="text-accent px-6 py-3 text-xs font-semibold uppercase tracking-wider text-left">Description</th>
+                  <th className="text-accent px-6 py-3 text-xs font-semibold uppercase tracking-wider text-right">Qty</th>
+                  <th className="text-accent px-6 py-3 text-xs font-semibold uppercase tracking-wider text-right">Rate</th>
+                  <th className="text-accent px-6 py-3 text-xs font-semibold uppercase tracking-wider text-right">Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-border/25">
                 {lineItems.map((item, i) => {
                   const qty = Number(item.quantity || 1);
                   const rate = Number(item.rate || item.unitPrice || 0);
                   const amount = Number(item.amount || item.total || qty * rate);
                   return (
-                    <tr key={i} className="hover:bg-slate-50/50">
-                      <td className="px-6 py-4 text-sm text-slate-700">{item.description}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600 text-right">{qty}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600 text-right">${rate.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-slate-800 text-right">${amount.toFixed(2)}</td>
+                    <tr key={i} className="hover:bg-muted/50">
+                      <td className="px-6 py-4 text-sm text-foreground">{item.description}</td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground text-right">{qty}</td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground text-right">${rate.toFixed(2)}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-foreground text-right">${amount.toFixed(2)}</td>
                     </tr>
                   );
                 })}
@@ -221,20 +223,20 @@ export default function PortalEstimate() {
           </div>
 
           {/* Totals */}
-          <div className="border-t border-slate-200 px-6 py-4 space-y-2 bg-slate-50">
+          <div className="border-t border-border/40 px-6 py-4 space-y-2 bg-muted/50">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-500">Subtotal</span>
-              <span className="text-slate-700">${subtotal.toFixed(2)}</span>
+              <span className="text-muted-foreground">Subtotal</span>
+              <span className="text-foreground">${subtotal.toFixed(2)}</span>
             </div>
             {tax > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500">Tax</span>
-                <span className="text-slate-700">${tax.toFixed(2)}</span>
+                <span className="text-muted-foreground">Tax</span>
+                <span className="text-foreground">${tax.toFixed(2)}</span>
               </div>
             )}
-            <div className="flex items-center justify-between pt-3 border-t border-slate-200">
-              <span className="text-sm font-bold" style={{ color: '#2e2958' }}>Total</span>
-              <span className="text-2xl font-bold flex items-center gap-1" style={{ color: '#2e2958' }}>
+            <div className="flex items-center justify-between pt-3 border-t border-border/40">
+              <span className="text-primary text-sm font-bold">Total</span>
+              <span className="text-primary text-2xl font-bold flex items-center gap-1">
                 <DollarSign className="w-5 h-5" />
                 {total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </span>
@@ -244,10 +246,10 @@ export default function PortalEstimate() {
 
         {/* Action Buttons */}
         {canRespond && (
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="bg-card rounded-xl border border-border/40 p-6">
             {action === 'decline' ? (
               <div className="space-y-4">
-                <h3 className="text-sm font-medium text-slate-700">Please let us know why you are declining:</h3>
+                <h3 className="text-sm font-medium text-foreground">Please let us know why you are declining:</h3>
                 <label htmlFor="estimate-decline-reason" className="sr-only">Reason for declining estimate</label>
                 <textarea
                   id="estimate-decline-reason"
@@ -256,17 +258,17 @@ export default function PortalEstimate() {
                   aria-invalid={Boolean(declineError)}
                   aria-describedby={declineError ? 'estimate-decline-reason-error' : undefined}
                   placeholder="Your feedback helps us improve our estimates..."
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none"
+                  className="w-full px-4 py-3 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
                   rows={4}
                 />
-                {declineError && <p id="estimate-decline-reason-error" role="alert" className="text-sm text-red-600">{declineError}</p>}
+                {declineError && <p id="estimate-decline-reason-error" role="alert" className="text-sm text-destructive">{declineError}</p>}
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
                     onClick={handleDecline}
                     disabled={!declineReason.trim() || respondMutation.isPending}
                     aria-busy={respondMutation.isPending}
-                    className="min-h-11 px-5 py-2.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2"
+                    className="min-h-11 px-5 py-2.5 bg-destructive text-destructive-foreground text-sm font-medium rounded-lg hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive focus-visible:ring-offset-2"
                   >
                     {respondMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                     Submit Decline
@@ -274,13 +276,13 @@ export default function PortalEstimate() {
                   <button
                     type="button"
                     onClick={() => { setAction(null); setDeclineReason(''); setDeclineError(''); }}
-                    className="min-h-11 px-5 py-2.5 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
+                    className="min-h-11 px-5 py-2.5 text-muted-foreground text-sm font-medium rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     Cancel
                   </button>
                 </div>
                 {respondMutation.isError && (
-                  <p role="alert" className="text-sm text-red-600">Something went wrong. Please try again.</p>
+                  <p role="alert" className="text-sm text-destructive">Something went wrong. Please try again.</p>
                 )}
               </div>
             ) : (
@@ -290,8 +292,7 @@ export default function PortalEstimate() {
                   onClick={handleApprove}
                   disabled={respondMutation.isPending}
                   aria-busy={respondMutation.isPending}
-                  className="min-h-11 w-full sm:w-auto px-6 py-3 text-white text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2e2958] focus-visible:ring-offset-2"
-                  style={{ backgroundColor: '#2e2958' }}
+                  className="min-h-11 w-full sm:w-auto px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   {respondMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                   <ShieldCheck className="w-4 h-4" />
@@ -301,7 +302,7 @@ export default function PortalEstimate() {
                   type="button"
                   onClick={() => setAction('decline')}
                   disabled={respondMutation.isPending}
-                  className="min-h-11 w-full sm:w-auto px-6 py-3 border border-slate-200 text-slate-600 text-sm font-semibold rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
+                  className="min-h-11 w-full sm:w-auto px-6 py-3 border border-border/40 text-muted-foreground text-sm font-semibold rounded-lg hover:bg-muted/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   <XCircle className="w-4 h-4" />
                   Decline
@@ -313,7 +314,7 @@ export default function PortalEstimate() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-slate-600">Powered by Ashbi Design</p>
+          <p className="text-xs text-muted-foreground">Powered by Ashbi Design</p>
         </div>
       </main>
     </div>

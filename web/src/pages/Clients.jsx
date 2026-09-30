@@ -194,9 +194,9 @@ export default function Clients() {
 
           {onboardResult ? (
             <div className="space-y-4">
-              <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4">
-                <h3 className="font-semibold text-green-800 dark:text-green-300 mb-2">Client onboarded!</h3>
-                <ul className="text-sm text-green-700 dark:text-green-400 space-y-1">
+              <div className="rounded-lg bg-success/5 border border-success/30 p-4">
+                <h3 className="font-semibold text-success mb-2">Client onboarded!</h3>
+                <ul className="text-sm text-success space-y-1">
                   <li>✓ Client created: {onboardResult.client?.name}</li>
                   <li>✓ Contact added: {onboardResult.contact?.name}</li>
                   <li>✓ Retainer plan set ({onboardResult.retainerPlan?.tier})</li>
@@ -306,9 +306,9 @@ export default function Clients() {
               {healthData.clients.map((client) => {
                 const color = client.score >= 80 ? 'green' : client.score >= 50 ? 'yellow' : 'red';
                 const classes = {
-                  green: { border: 'border-green-500/30 bg-green-50 dark:bg-green-950/20', score: 'text-green-700 dark:text-green-400' },
-                  yellow: { border: 'border-yellow-500/30 bg-yellow-50 dark:bg-yellow-950/20', score: 'text-yellow-700 dark:text-yellow-400' },
-                  red: { border: 'border-red-500/30 bg-red-50 dark:bg-red-950/20', score: 'text-red-700 dark:text-red-400' },
+                  green: { border: 'border-success/30 bg-success/5', score: 'text-success' },
+                  yellow: { border: 'border-warning/30 bg-warning/5', score: 'text-warning' },
+                  red: { border: 'border-destructive/30 bg-destructive/5', score: 'text-destructive' },
                 }[color];
                 return (
                   <button
@@ -328,7 +328,7 @@ export default function Clients() {
                       )}
                       <div>Open tasks: {client.openTasks}</div>
                       {client.overdueTasks > 0 && (
-                        <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
+                        <div className="flex items-center gap-1 text-destructive">
                           <AlertTriangle className="w-3 h-3" />
                           {client.overdueTasks} overdue
                         </div>
@@ -405,7 +405,7 @@ export default function Clients() {
                   <>
                     <tr key={client.id} className={cn(
                       'hover:bg-muted/30 transition-colors',
-                      isAtRisk && 'bg-red-50/30 dark:bg-red-950/10'
+                      isAtRisk && 'bg-destructive/30'
                     )}>
                       <td className="px-4 py-3">
                         <button
@@ -417,7 +417,7 @@ export default function Clients() {
                           <div className={cn(
                             'w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold shrink-0',
                             isAtRisk
-                              ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+                              ? 'bg-destructive/10 text-destructive'
                               : 'bg-primary/10 text-primary'
                           )}>
                             {client.name[0]?.toUpperCase()}
@@ -475,9 +475,9 @@ export default function Clients() {
                         <span className={cn(
                           'inline-flex px-2 py-0.5 text-xs font-medium rounded-full',
                           isAtRisk
-                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                            ? 'bg-destructive/10 text-destructive'
                             : client.status === 'ACTIVE'
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            ? 'bg-success/10 text-success'
                             : 'bg-muted text-muted-foreground'
                         )}>
                           {isAtRisk ? 'AT RISK' : client.status === 'ACTIVE' ? 'Active' : client.status}

@@ -180,25 +180,6 @@
   .font-display {
     font-family: 'Instrument Serif', serif;
   }
-
-  /* Accent text */
-  .text-brand-lime {
-    color: #e6f354;
-  }
-  .text-brand-sage {
-    color: #d0dd9a;
-  }
-  .text-brand-indigo {
-    color: #2e2958;
-  }
-
-  /* Gradient backgrounds */
-  .bg-gradient-brand {
-    background: linear-gradient(135deg, #2e2958 0%, #4a4294 100%);
-  }
-  .bg-gradient-accent {
-    background: linear-gradient(135deg, #e6f354 0%, #d0dd9a 100%);
-  }
 }
 
 @layer utilities {
@@ -234,21 +215,11 @@
 
   /* Glassmorphism */
   .glass-card {
-    @apply bg-white/70 dark:bg-[#2e2958]/70 backdrop-blur-md border border-white/20 dark:border-white/5 shadow-xl;
+    @apply bg-card/70 dark:bg-brand-indigo/70 backdrop-blur-md border border-white/20 dark:border-white/5 shadow-xl;
   }
 
   .glass-header {
     @apply bg-background/80 backdrop-blur-lg border-b border-border/50 sticky top-0 z-40;
-  }
-
-  /* Text Masking */
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-br from-primary to-indigo-400;
-  }
-
-  /* Refined Focus */
-  .focus-ring-premium {
-    @apply focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all duration-200;
   }
 
   /* Skeleton shimmer */
@@ -256,11 +227,6 @@
     background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--border)) 50%, hsl(var(--muted)) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
-  }
-
-  /* Focus ring brand color */
-  .focus-ring-brand {
-    @apply focus:ring-2 focus:ring-[#e6f354] focus:ring-offset-2 focus:ring-offset-background;
   }
 }
 

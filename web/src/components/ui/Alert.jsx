@@ -9,18 +9,18 @@ const VARIANTS = {
     Icon: AlertCircle,
   },
   warning: {
-    container: 'border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/10',
-    icon: 'text-amber-600 dark:text-amber-400',
+    container: 'border-warning/30 bg-warning/5 dark:bg-warning/10',
+    icon: 'text-warning',
     Icon: AlertTriangle,
   },
   success: {
-    container: 'border-green-600/30 bg-green-500/5 dark:bg-green-500/10',
-    icon: 'text-green-700 dark:text-green-400',
+    container: 'border-success/30 bg-success/5 dark:bg-success/10',
+    icon: 'text-success',
     Icon: CheckCircle2,
   },
   info: {
-    container: 'border-blue-500/30 bg-blue-500/5 dark:bg-blue-500/10',
-    icon: 'text-blue-700 dark:text-blue-400',
+    container: 'border-info/30 bg-info/5 dark:bg-info/10',
+    icon: 'text-info',
     Icon: Info,
   },
 };

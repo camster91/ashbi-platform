@@ -59,6 +59,8 @@ export default {
         // Brand colors
         brand: {
           indigo: "#2e2958",
+          // Lighter brand indigo for decorative glows on brand surfaces.
+          "indigo-soft": "#4a4294",
           lime: "#e6f354",
           sage: "#d0dd9a",
           cream: "#faf9f2",

@@ -14,6 +14,7 @@ import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { formatInvoiceMoney, formatInvoiceDate } from '../lib/format';
 import LoadingState from '../components/ui/LoadingState';
+import usePortalLightTheme from '../hooks/usePortalLightTheme';
 import StatusBadge from '../components/ui/StatusBadge';
 
 function formatDate(date) {
@@ -33,6 +34,7 @@ export function invoiceAmounts(invoice) {
 }
 
 export default function PortalInvoice() {
+  usePortalLightTheme();
   const { token } = useParams();
 
   const { data: invoice, isLoading, error } = useQuery({
@@ -51,16 +53,16 @@ export default function PortalInvoice() {
   });
 
   if (isLoading) {
-    return <LoadingState label="Loading invoice…" className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 text-slate-700" spinnerClassName="border-slate-300 border-t-slate-800" />;
+    return <LoadingState label="Loading invoice…" className="min-h-screen bg-background text-foreground" spinnerClassName="border-border/60 border-t-primary" />;
   }
 
   if (error || !invoice) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <FileText className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-slate-800 mb-2">Invoice Not Found</h1>
-          <p className="text-slate-500">This link may be invalid or expired.</p>
+          <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-foreground mb-2">Invoice Not Found</h1>
+          <p className="text-muted-foreground">This link may be invalid or expired.</p>
         </div>
       </div>
     );
@@ -76,27 +78,27 @@ export default function PortalInvoice() {
     : 'Tax';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 shadow-sm">
+      <header className="bg-card border-b border-border/40 shadow-sm">
         <div className="max-w-3xl mx-auto px-6 py-6">
           <div className="flex items-center gap-3 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-amber-400" />
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-warning" />
             </div>
-            <span className="text-sm font-medium text-slate-500">Ashbi Design</span>
+            <span className="text-sm font-medium text-muted-foreground">Ashbi Design</span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-800 mt-3">Invoice</h1>
+          <h1 className="text-2xl font-bold text-foreground mt-3">Invoice</h1>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         {/* Paid confirmation */}
         {isPaid && (
-          <div role="status" aria-live="polite" className="rounded-xl border border-green-200 bg-green-50 p-6 text-center">
-            <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
-            <h2 className="text-xl font-bold text-green-800 mb-1">Payment Received</h2>
-            <p className="text-green-600">
+          <div role="status" aria-live="polite" className="rounded-xl border border-success/30 bg-success/5 p-6 text-center">
+            <CheckCircle className="w-12 h-12 text-success mx-auto mb-3" />
+            <h2 className="text-xl font-bold text-success mb-1">Payment Received</h2>
+            <p className="text-success">
               {invoice.paidAt
                 ? `Paid on ${formatDate(invoice.paidAt)}`
                 : 'This invoice has been paid. Thank you!'}
@@ -105,22 +107,22 @@ export default function PortalInvoice() {
         )}
 
         {/* Invoice Details */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-card rounded-xl border border-border/40 p-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-slate-800">
+                <h2 className="text-lg font-bold text-foreground">
                   {invoice.invoiceNumber || invoice.number || `INV-${invoice.id}`}
                 </h2>
                 <StatusBadge domain="invoice" status={invoice.status} audience="client" className="px-2.5 font-semibold" />
               </div>
               {invoice.clientName && (
-                <p className="text-sm text-slate-500 mt-1">For: {invoice.clientName}</p>
+                <p className="text-sm text-muted-foreground mt-1">For: {invoice.clientName}</p>
               )}
             </div>
             <div className="text-right text-sm space-y-1">
               {invoice.issueDate && (
-                <div className="flex items-center gap-1.5 text-slate-500 justify-end">
+                <div className="flex items-center gap-1.5 text-muted-foreground justify-end">
                   <Calendar className="w-3.5 h-3.5" />
                   <span>Issued: {formatDate(invoice.issueDate || invoice.createdAt)}</span>
                 </div>
@@ -128,7 +130,7 @@ export default function PortalInvoice() {
               {invoice.dueDate && (
                 <div className={cn(
                   'flex items-center gap-1.5 justify-end',
-                  invoice.status === 'OVERDUE' ? 'text-red-600 font-medium' : 'text-slate-500'
+                  invoice.status === 'OVERDUE' ? 'text-destructive font-medium' : 'text-muted-foreground'
                 )}>
                   <Clock className="w-3.5 h-3.5" />
                   <span>Due: {formatDate(invoice.dueDate)}</span>
@@ -138,35 +140,35 @@ export default function PortalInvoice() {
           </div>
 
           {invoice.description && (
-            <p className="text-slate-600 mt-4 text-sm leading-relaxed border-t border-slate-100 pt-4">
+            <p className="text-muted-foreground mt-4 text-sm leading-relaxed border-t border-border/25 pt-4">
               {invoice.description}
             </p>
           )}
         </div>
 
         {/* Line Items */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-card rounded-xl border border-border/40 overflow-hidden">
           <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" tabIndex={0} role="region" aria-label="Invoice line items">
             <table className="w-full">
               <thead>
-                <tr className="bg-slate-50 text-left">
-                  <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Description</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Qty</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Rate</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Amount</th>
+                <tr className="bg-muted/50 text-left">
+                  <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description</th>
+                  <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Qty</th>
+                  <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Rate</th>
+                  <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-border/25">
                 {invoice.lineItems?.map((item, i) => {
                   const rate = Number(item.rate || item.unitPrice || 0);
                   const qty = Number(item.quantity || 1);
                   const amount = Number(item.amount || item.total || (qty * rate));
                   return (
-                    <tr key={i} className="hover:bg-slate-50/50">
-                      <td className="px-6 py-4 text-sm text-slate-700">{item.description}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600 text-right">{qty}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600 text-right">{formatInvoiceMoney(rate, currency)}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-slate-800 text-right">{formatInvoiceMoney(amount, currency)}</td>
+                    <tr key={i} className="hover:bg-muted/50">
+                      <td className="px-6 py-4 text-sm text-foreground">{item.description}</td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground text-right">{qty}</td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground text-right">{formatInvoiceMoney(rate, currency)}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-foreground text-right">{formatInvoiceMoney(amount, currency)}</td>
                     </tr>
                   );
                 })}
@@ -175,37 +177,37 @@ export default function PortalInvoice() {
           </div>
 
           {/* Totals */}
-          <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 space-y-2">
+          <div className="border-t border-border/40 bg-muted/50 px-6 py-4 space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-500">Subtotal</span>
-              <span className="text-slate-700">{formatInvoiceMoney(subtotal, currency)}</span>
+              <span className="text-muted-foreground">Subtotal</span>
+              <span className="text-foreground">{formatInvoiceMoney(subtotal, currency)}</span>
             </div>
             {discount > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500">Discount</span>
-                <span className="text-green-700">-{formatInvoiceMoney(discount, currency)}</span>
+                <span className="text-muted-foreground">Discount</span>
+                <span className="text-success">-{formatInvoiceMoney(discount, currency)}</span>
               </div>
             )}
             {tax > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500">{taxLabel}</span>
-                <span className="text-slate-700">{formatInvoiceMoney(tax, currency)}</span>
+                <span className="text-muted-foreground">{taxLabel}</span>
+                <span className="text-foreground">{formatInvoiceMoney(tax, currency)}</span>
               </div>
             )}
-            <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-              <span className="text-sm font-semibold text-slate-700">Total</span>
-              <span className="text-xl font-bold text-slate-800">{formatInvoiceMoney(total, currency)}</span>
+            <div className="flex items-center justify-between pt-2 border-t border-border/40">
+              <span className="text-sm font-semibold text-foreground">Total</span>
+              <span className="text-xl font-bold text-foreground">{formatInvoiceMoney(total, currency)}</span>
             </div>
           </div>
         </div>
 
         {/* Pay Button */}
         {showPayButton && (
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="bg-card rounded-xl border border-border/40 p-6">
             {invoice.status === 'OVERDUE' && (
-              <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-red-50 border border-red-100">
-                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                <p className="text-sm text-red-600">This invoice is past due. Please make your payment as soon as possible.</p>
+              <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-destructive/5 border border-destructive/30">
+                <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
+                <p className="text-sm text-destructive">This invoice is past due. Please make your payment as soon as possible.</p>
               </div>
             )}
             <button
@@ -213,7 +215,7 @@ export default function PortalInvoice() {
               onClick={() => payMutation.mutate()}
               disabled={payMutation.isPending}
               aria-busy={payMutation.isPending}
-              className="min-h-11 w-full px-6 py-3.5 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2"
+              className="min-h-11 w-full px-6 py-3.5 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               {payMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -223,9 +225,9 @@ export default function PortalInvoice() {
               Pay Now - {formatInvoiceMoney(total, currency)}
             </button>
             {payMutation.isError && (
-              <p role="alert" className="text-sm text-red-600 text-center mt-3">Payment initiation failed. Please try again.</p>
+              <p role="alert" className="text-sm text-destructive text-center mt-3">Payment initiation failed. Please try again.</p>
             )}
-            <p className="text-xs text-slate-500 text-center mt-3">
+            <p className="text-xs text-muted-foreground text-center mt-3">
               Secure payment powered by Stripe
             </p>
           </div>
@@ -233,7 +235,7 @@ export default function PortalInvoice() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-slate-600">Powered by Ashbi Design</p>
+          <p className="text-xs text-muted-foreground">Powered by Ashbi Design</p>
         </div>
       </main>
     </div>
