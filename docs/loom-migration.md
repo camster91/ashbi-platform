@@ -169,7 +169,14 @@ and, after the transaction commits, the stored files) and its reconciliation
 records, marks the run `ROLLED_BACK`, and writes a
 `migration_import.rolled_back` audit event. It is refused while any review
 session uses one of the files (a reviewed file is kept as evidence); remove
-those reviews first. A rolled-back manifest can be imported again.
+those reviews first. The files are locked before that check, so a review
+started while the rollback runs waits for it instead of losing its file. A rolled-back manifest can be imported again.
+
+If a stored file cannot be removed after the commit (a filesystem error or
+a stopped process), the run stays `ROLLED_BACK` with the remaining paths
+recorded in its summary (`pendingFileCleanup`) and the command exits with
+an error. Rerun the same `--rollback <runId>` to retry them; once every file
+is gone a further rerun reports that the run was already rolled back.
 
 ## Known limits
 

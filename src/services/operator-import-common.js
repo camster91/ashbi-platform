@@ -151,9 +151,13 @@ const ISO_WITH_OFFSET = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\
 export function parseIsoTimestamp(value) {
   const match = ISO_WITH_OFFSET.exec(String(value ?? '').trim());
   if (!match) return null;
-  const [, , month, day, hour, minute, second = '0'] = match;
+  const [, year, month, day, hour, minute, second = '0'] = match;
   if (Number(month) < 1 || Number(month) > 12 || Number(day) < 1 || Number(day) > 31
     || Number(hour) > 23 || Number(minute) > 59 || Number(second) > 59) return null;
+  // Date() rolls an impossible day forward (2025-02-31 becomes March 3), so
+  // check the day against the month's length, leap years included.
+  const daysInMonth = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate();
+  if (Number(day) > daysInMonth) return null;
   const date = new Date(value.trim());
   return Number.isNaN(date.getTime()) ? null : date;
 }
@@ -252,4 +256,63 @@ export function countBy(findings) {
   const counts = {};
   for (const finding of findings) counts[finding.code] = (counts[finding.code] ?? 0) + 1;
   return counts;
+}
+
+/**
+ * Lock rows by id for the rest of the transaction, in id order (a stable
+ * order cannot deadlock against another rollback). FOR UPDATE conflicts with
+ * the key-share lock every foreign-key insert takes on its parent, and with
+ * the row updates the review routes use (lockOpenSession, decisions,
+ * versioning), so no dependent row can appear between a rollback's
+ * dependency checks and its deletes.
+ * @param {any} tx
+ * @param {'review_sessions' | 'attachments'} table
+ * @param {string[]} ids
+ */
+export async function lockRowsForUpdate(tx, table, ids) {
+  if (table !== 'review_sessions' && table !== 'attachments') throw new Error(`Unsupported lock table: ${table}`);
+  const sorted = [...new Set(ids)].sort();
+  await findInChunks(sorted, (chunk) => (table === 'review_sessions'
+    ? tx.$queryRaw`SELECT id FROM "review_sessions" WHERE id = ANY(${chunk}::text[]) ORDER BY id FOR UPDATE`
+    : tx.$queryRaw`SELECT id FROM "attachments" WHERE id = ANY(${chunk}::text[]) ORDER BY id FOR UPDATE`));
+}
+
+const PENDING_FILES_KEY = 'pendingFileCleanup';
+
+/** Stored-file paths a rollback committed but has not yet removed. */
+export function pendingRollbackFiles(run) {
+  const list = run?.summary && typeof run.summary === 'object' ? run.summary[PENDING_FILES_KEY] : null;
+  return Array.isArray(list) ? list.filter((item) => typeof item === 'string') : [];
+}
+
+/** The run summary recording `paths` as still to be removed. */
+export function summaryWithPendingFiles(summary, paths) {
+  const base = summary && typeof summary === 'object' && !Array.isArray(summary) ? { ...summary } : {};
+  delete base[PENDING_FILES_KEY];
+  return paths.length ? { ...base, [PENDING_FILES_KEY]: paths } : base;
+}
+
+/**
+ * Remove a rolled-back run's stored files after its database transaction
+ * committed. The paths were recorded on the run in that transaction, so a
+ * failure (or a crash) here leaves them durable: each removed file is dropped
+ * from the list, and rerunning the rollback retries the rest.
+ * @returns {Promise<number>} files removed
+ */
+export async function removeRolledBackFiles(db, { runId, summary, paths, unlink }) {
+  let removed = 0;
+  const failed = [];
+  for (const storedPath of paths) {
+    try {
+      await unlink(storedPath);
+      removed++;
+    } catch {
+      failed.push(storedPath);
+    }
+  }
+  await db.importRun.update({ where: { id: runId }, data: { summary: summaryWithPendingFiles(summary, failed) } });
+  if (failed.length) {
+    throw new OperatorImportError('FILE_CLEANUP_INCOMPLETE', `${failed.length} stored file(s) could not be removed; rerun the rollback for run ${runId} to retry`);
+  }
+  return removed;
 }

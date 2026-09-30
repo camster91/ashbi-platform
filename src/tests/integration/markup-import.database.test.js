@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -33,6 +33,20 @@ function runCli(args, workDir, { summary = true } = {}) {
   });
   const report = fs.existsSync(summaryFile) ? JSON.parse(fs.readFileSync(summaryFile, 'utf8')) : null;
   return { status: result.status, stderr: result.stderr, report };
+}
+
+// The same CLI run without blocking the event loop, so a concurrent writer
+// transaction in this process can make progress while it runs.
+function runCliAsync(args, workDir) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [importer, ...args], {
+      cwd: workDir,
+      env: { ...process.env, DATABASE_URL: databaseUrl, NODE_ENV: 'development' },
+    });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('close', (status) => resolve({ status, stderr }));
+  });
 }
 
 const sha256 = (file) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -235,6 +249,34 @@ test('MarkUp.io import plans, creates reviews, reruns idempotently, reports conf
     const rollbackSecond = runCli(['--organization-id', ids.orgA, '--rollback', secondRunId], workDir);
     assert.equal(rollbackSecond.status, 0, rollbackSecond.stderr);
     assert.deepEqual(rollbackSecond.report.deleted, { sessions: 0, comments: 1, attachments: 0, files: 0, records: 1 });
+
+    // The rollback locks the imported sessions before its dependency checks.
+    // A comment whose transaction is still open when the rollback starts is
+    // waited for, and then blocks the rollback instead of being cascaded away.
+    let releaseWriter;
+    const writerHeld = new Promise((resolve) => { releaseWriter = resolve; });
+    let raceComment = null;
+    const writer = raw.$transaction(async (tx) => {
+      // What the review routes do: lockOpenSession, then insert.
+      await tx.reviewSession.updateMany({ where: { id: sessions[0].id, status: { not: 'closed' } }, data: { updatedAt: new Date() } });
+      raceComment = await tx.reviewAnnotation.create({ data: {
+        sessionId: sessions[0].id, authorType: 'staff', authorUserId: ids.operator, authorName: 'Operator', body: 'Written during the rollback',
+      } });
+      await writerHeld;
+    }, { timeout: 60_000 });
+    while (!raceComment) await new Promise((resolve) => setTimeout(resolve, 10));
+    let racingDone = false;
+    const racing = runCliAsync(['--organization-id', ids.orgA, '--rollback', runId], workDir).then((result) => { racingDone = true; return result; });
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    assert.equal(racingDone, false, 'the rollback waits for the open comment transaction');
+    releaseWriter();
+    await writer;
+    const raced = await racing;
+    assert.equal(raced.status, 1, 'the rollback is refused once the comment commits');
+    assert.match(raced.stderr, /Later work depends on this run/);
+    assert.ok(await raw.reviewAnnotation.findUnique({ where: { id: raceComment.id } }), 'the concurrent comment survives');
+    assert.equal((await raw.importRun.findUnique({ where: { id: runId } })).status, 'APPLIED');
+    await raw.reviewAnnotation.delete({ where: { id: raceComment.id } });
 
     // A staff comment added in the Hub also blocks the rollback.
     const hubComment = await raw.reviewAnnotation.create({ data: {

@@ -9,8 +9,11 @@ import {
   normalizeEmail,
   parseCsv,
   parseIsoTimestamp,
+  pendingRollbackFiles,
   readCsvTable,
+  removeRolledBackFiles,
   safeFileName,
+  summaryWithPendingFiles,
 } from '../../services/operator-import-common.js';
 import {
   LOOM_FILE_TYPES,
@@ -76,6 +79,13 @@ test('timestamps must be ISO 8601 with an offset; emails and file names are norm
   for (const bad of ['2025-03-04T10:15:00', '2025-03-04', '2025-13-01T00:00:00Z', '2025-03-04 10:15:00Z', 'yesterday', '', null]) {
     assert.equal(parseIsoTimestamp(bad), null, String(bad));
   }
+  // Impossible calendar days are rejected instead of rolled into next month.
+  for (const bad of ['2025-02-31T10:00:00Z', '2025-02-29T10:00:00Z', '1900-02-29T00:00:00Z', '2025-04-31T00:00:00+02:00', '2025-06-31T23:59:59-05:00']) {
+    assert.equal(parseIsoTimestamp(bad), null, bad);
+  }
+  assert.equal(parseIsoTimestamp('2024-02-29T10:00:00Z').toISOString(), '2024-02-29T10:00:00.000Z', 'leap day');
+  assert.equal(parseIsoTimestamp('2000-02-29T00:00:00Z').toISOString(), '2000-02-29T00:00:00.000Z', 'leap century');
+  assert.equal(parseIsoTimestamp('2025-12-31T23:30:00-05:00').toISOString(), '2026-01-01T04:30:00.000Z', 'the offset may cross a month boundary');
   assert.equal(normalizeEmail(' Alice@Example.TEST '), 'alice@example.test');
   assert.equal(normalizeEmail('not-an-email'), null);
   assert.equal(normalizeEmail(''), null);
@@ -260,6 +270,9 @@ test('parseMarkupCommentRow validates status, page, text and ids', () => {
   assert.match(invalid({ parent_comment_id: 'c1' }).error, /itself/);
   assert.match(invalid({ created_at: '2025-06-01' }).error, /created_at/);
   assert.equal(invalid({ file_name: '../home.png' }).code, 'UNSAFE_PATH');
+  // markup_project is part of the session identity, so it is never truncated.
+  assert.equal(parseMarkupCommentRow({ ...row, markup_project: 'p'.repeat(200) }).comment.markupProject, 'p'.repeat(200));
+  assert.match(invalid({ markup_project: `${'p'.repeat(200)}A` }).error, /markup_project is longer than 200/);
 });
 
 test('MarkUp source keys are unambiguous for names containing separators', () => {
@@ -358,4 +371,25 @@ test('Loom and MarkUp ledgers are tenant scoped, unique per source, and migrated
     assert.match(cli, /flag: 'wx', mode: 0o600/);
     assert.match(cli, /const apply = process\.argv\.includes\('--apply'\)/, 'live runs need an explicit --apply');
   }
+});
+
+test('rollback file cleanup keeps unremoved paths on the run so a rerun can retry them', async () => {
+  const updates = [];
+  const db = { importRun: { update: async (args) => { updates.push(args); } } };
+  const summary = summaryWithPendingFiles({ created: 2 }, ['/uploads/a.mp4', '/uploads/b.mp4']);
+  assert.deepEqual(summary, { created: 2, pendingFileCleanup: ['/uploads/a.mp4', '/uploads/b.mp4'] });
+  assert.deepEqual(pendingRollbackFiles({ summary }), ['/uploads/a.mp4', '/uploads/b.mp4']);
+  assert.deepEqual(pendingRollbackFiles({ summary: null }), []);
+  assert.deepEqual(pendingRollbackFiles({ summary: { pendingFileCleanup: 'nope' } }), []);
+
+  const unlinkFailingB = async (storedPath) => { if (storedPath.endsWith('b.mp4')) throw Object.assign(new Error('busy'), { code: 'EBUSY' }); };
+  await assert.rejects(
+    removeRolledBackFiles(db, { runId: 'run1', summary, paths: pendingRollbackFiles({ summary }), unlink: unlinkFailingB }),
+    (error) => error.code === 'FILE_CLEANUP_INCOMPLETE' && /run1/.test(error.message),
+  );
+  assert.deepEqual(updates.at(-1), { where: { id: 'run1' }, data: { summary: { created: 2, pendingFileCleanup: ['/uploads/b.mp4'] } } });
+
+  const removed = await removeRolledBackFiles(db, { runId: 'run1', summary: updates.at(-1).data.summary, paths: ['/uploads/b.mp4'], unlink: async () => {} });
+  assert.equal(removed, 1);
+  assert.deepEqual(updates.at(-1).data.summary, { created: 2 }, 'the pending list is cleared once every file is gone');
 });

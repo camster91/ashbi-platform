@@ -198,6 +198,17 @@ or by a later import run), approval decisions, share links, or a newer
 version of an imported session. Roll back later runs first, newest first. A
 rolled-back export can be imported again.
 
+The rollback locks the run's review sessions and files before it checks for
+later work, so a comment, decision, share link or new version written while
+it runs is either finished first (and then blocks the rollback) or waits
+and fails because the review is gone; it is never deleted silently.
+
+If a stored file cannot be removed after the commit (a filesystem error or
+a stopped process), the run stays `ROLLED_BACK` with the remaining paths
+recorded in its summary (`pendingFileCleanup`) and the command exits with
+an error. Rerun the same `--rollback <runId>` to retry them; once every file
+is gone a further rerun reports that the run was already rolled back.
+
 ## Known limits
 
 - The CSV is operator-prepared; Ashbi cannot verify it against MarkUp.io.

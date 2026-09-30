@@ -228,7 +228,38 @@ test('Loom manifest import plans, stores files, reruns idempotently, reports con
     const reimport = runCli([...base, '--apply'], workDir);
     assert.equal(reimport.status, 0, reimport.stderr);
     assert.equal(reimport.report.totals.created, 2);
-    const reimported = await raw.loomImportRecord.findFirst({ where: { runId: reimport.report.run.id, fileName: 'homepage.webm' } });
+
+    // File cleanup stays retryable after the database commit: a stored file
+    // that cannot be removed leaves the run rolled back with its path
+    // recorded, and rerunning the rollback removes it.
+    const reimportRunId = reimport.report.run.id;
+    const [stuckName, otherName] = storedFiles().sort();
+    const stuckPath = path.join(uploadsDir, stuckName);
+    fs.rmSync(stuckPath);
+    fs.mkdirSync(stuckPath);
+    fs.writeFileSync(path.join(stuckPath, 'keep'), 'not removable by unlink');
+    const partial = runCli(['--organization-id', ids.orgA, '--rollback', reimportRunId], workDir);
+    assert.equal(partial.status, 1);
+    assert.match(partial.stderr, /1 stored file\(s\) could not be removed; rerun the rollback/);
+    const partialRun = await raw.importRun.findUnique({ where: { id: reimportRunId } });
+    assert.equal(partialRun.status, 'ROLLED_BACK');
+    assert.equal(partialRun.summary.pendingFileCleanup.length, 1);
+    assert.ok(partialRun.summary.pendingFileCleanup[0].endsWith(stuckName));
+    assert.equal(await raw.attachment.count({ where: { organizationId: ids.orgA } }), 0);
+    assert.deepEqual(storedFiles(), [stuckName], `${otherName} was removed; only the stuck file is left`);
+    fs.rmSync(stuckPath, { recursive: true });
+    fs.writeFileSync(stuckPath, 'removable again');
+    const retried = runCli(['--organization-id', ids.orgA, '--rollback', reimportRunId], workDir);
+    assert.equal(retried.status, 0, retried.stderr);
+    assert.deepEqual(retried.report.deleted, { attachments: 0, files: 1, records: 0 });
+    assert.deepEqual(storedFiles(), []);
+    assert.equal((await raw.importRun.findUnique({ where: { id: reimportRunId } })).summary.pendingFileCleanup, undefined);
+    assert.equal(runCli(['--organization-id', ids.orgA, '--rollback', reimportRunId], workDir).status, 1, 'nothing left to retry');
+
+    const reimportAgain = runCli([...base, '--apply'], workDir);
+    assert.equal(reimportAgain.status, 0, reimportAgain.stderr);
+    assert.equal(reimportAgain.report.totals.created, 2);
+    const reimported = await raw.loomImportRecord.findFirst({ where: { runId: reimportAgain.report.run.id, fileName: 'homepage.webm' } });
     await raw.attachment.delete({ where: { id: reimported.attachmentId } });
     const afterDelete = runCli([...base, '--apply'], workDir);
     assert.equal(afterDelete.status, 0, afterDelete.stderr);

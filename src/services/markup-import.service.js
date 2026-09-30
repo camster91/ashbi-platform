@@ -38,6 +38,10 @@ import {
   TRANSACTION_OPTIONS,
   countBy,
   findInChunks,
+  lockRowsForUpdate,
+  pendingRollbackFiles,
+  removeRolledBackFiles,
+  summaryWithPendingFiles,
   inspectMediaFile,
   insertInChunks,
   normalizeEmail,
@@ -127,8 +131,11 @@ function contentSha256(comment) {
  */
 export function parseMarkupCommentRow(row) {
   const problems = [];
-  const markupProject = sanitizeDisplayText(row.markup_project, MARKUP_PROJECT_MAX);
+  // Never truncate: markup_project is part of the session identity, so two
+  // long names sharing a prefix would collapse into one session.
+  const markupProject = sanitizeDisplayText(row.markup_project, Infinity);
   if (!markupProject) problems.push('markup_project is required');
+  else if ([...markupProject].length > MARKUP_PROJECT_MAX) problems.push(`markup_project is longer than ${MARKUP_PROJECT_MAX} characters`);
   const fileName = safeFileName(row.file_name);
   if (!fileName) return { error: { code: 'UNSAFE_PATH', row: row.__line, error: 'file_name must name a file directly inside the input directory' } };
   const commentId = sourceId(row.comment_id);
@@ -657,7 +664,11 @@ export async function rollbackMarkupImportRun(db, { organizationId, runId }) {
   const result = await db.$transaction(async (transaction) => {
     const run = await transaction.importRun.findFirst({ where: { id: runId, organizationId, source: MARKUP_IMPORT_SOURCE } });
     if (!run) throw new OperatorImportError('RUN_NOT_FOUND', 'Import run was not found in this organization');
-    if (run.status === 'ROLLED_BACK') throw new OperatorImportError('ALREADY_ROLLED_BACK', 'Import run was already rolled back');
+    if (run.status === 'ROLLED_BACK') {
+      const pending = pendingRollbackFiles(run);
+      if (!pending.length) throw new OperatorImportError('ALREADY_ROLLED_BACK', 'Import run was already rolled back');
+      return { retry: true, comments: 0, sessions: 0, attachments: 0, records: 0, paths: pending, summary: run.summary };
+    }
     const records = await transaction.markupImportRecord.findMany({
       where: { organizationId, runId }, select: { kind: true, reviewSessionId: true, annotationId: true, attachmentId: true },
     });
@@ -665,6 +676,11 @@ export async function rollbackMarkupImportRun(db, { organizationId, runId }) {
     const annotationIds = records.filter((record) => record.kind === 'ANNOTATION').map((record) => record.annotationId).filter(Boolean);
     const attachmentIds = records.filter((record) => record.kind === 'SESSION').map((record) => record.attachmentId).filter(Boolean);
     const runAnnotations = new Set(annotationIds);
+    // Hold the sessions (and their files) until the deletes: every comment,
+    // decision, share link or version written to them takes a conflicting
+    // lock, so nothing can be added between these checks and the cascade.
+    await lockRowsForUpdate(transaction, 'review_sessions', sessionIds);
+    await lockRowsForUpdate(transaction, 'attachments', attachmentIds);
 
     const blockers = [];
     const foreignInSessions = (await findInChunks(sessionIds, (ids) => transaction.reviewAnnotation.findMany({
@@ -695,25 +711,29 @@ export async function rollbackMarkupImportRun(db, { organizationId, runId }) {
     const attachments = await findInChunks(attachmentIds, (ids) => transaction.attachment.findMany({ where: { id: { in: ids }, organizationId }, select: { id: true, path: true } }));
     const attachmentOutcomes = await findInChunks(attachmentIds, async (ids) => [await transaction.attachment.deleteMany({ where: { id: { in: ids }, organizationId } })]);
     const removedRecords = await transaction.markupImportRecord.deleteMany({ where: { organizationId, runId } });
-    await transaction.importRun.update({ where: { id: runId }, data: { status: 'ROLLED_BACK', rolledBackAt: new Date() } });
+    const paths = attachments.map((attachment) => attachment.path);
+    // The paths are recorded with the ROLLED_BACK status, so file cleanup
+    // stays retryable after this commit (removeRolledBackFiles).
+    const summary = summaryWithPendingFiles(run.summary, paths);
+    await transaction.importRun.update({ where: { id: runId }, data: { status: 'ROLLED_BACK', rolledBackAt: new Date(), summary } });
     return {
+      retry: false,
       comments,
       sessions: sessionOutcomes.reduce((sum, outcome) => sum + outcome.count, 0),
       attachments: attachmentOutcomes.reduce((sum, outcome) => sum + outcome.count, 0),
       records: removedRecords.count,
-      paths: attachments.map((attachment) => attachment.path),
+      paths,
+      summary,
     };
   }, TRANSACTION_OPTIONS);
-  // Files go only after the database commit, so a failed rollback keeps them.
-  let files = 0;
-  for (const storedPath of result.paths) {
-    await unlinkStoredUpload(storedPath);
-    files++;
+  if (!result.retry) {
+    await recordAuditEvent(db, {
+      organizationId, actorType: 'SYSTEM', action: 'migration_import.rolled_back', entityId: runId,
+      metadata: { source: MARKUP_IMPORT_SOURCE, deletedSessions: result.sessions, deletedComments: result.comments, deletedRecords: result.records },
+    });
   }
-  await recordAuditEvent(db, {
-    organizationId, actorType: 'SYSTEM', action: 'migration_import.rolled_back', entityId: runId,
-    metadata: { source: MARKUP_IMPORT_SOURCE, deletedSessions: result.sessions, deletedComments: result.comments, deletedRecords: result.records },
-  });
+  // Files go only after the database commit, so a failed rollback keeps them.
+  const files = await removeRolledBackFiles(db, { runId, summary: result.summary, paths: result.paths, unlink: unlinkStoredUpload });
   return {
     format: 'ashbi-markup-import-report', version: 1, generatedAt: new Date().toISOString(),
     mode: 'rollback', organization: { id: organizationId }, run: { id: runId },
