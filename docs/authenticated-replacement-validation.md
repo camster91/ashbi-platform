@@ -155,7 +155,10 @@ are approved.
 For an Ashbi workspace export, run the offline verifier before retaining the
 artifact: `node scripts/verify-workspace-export.js --input <workspace-export.json>`.
 It verifies the deterministic per-collection manifest and exported relationship
-references without connecting to the database.
+references without connecting to the database. For a directory (offboarding)
+export, use `--input-dir <export-directory>`, which re-hashes every data file
+and copied file against `manifest.json`; see
+[workspace-export.md](workspace-export.md).
 
 ## Closure decision
 
