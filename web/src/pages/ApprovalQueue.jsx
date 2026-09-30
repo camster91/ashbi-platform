@@ -4,7 +4,7 @@ import { safeHtml } from '../lib/safeHtml';
 import { api } from '../lib/api';
 import QueryErrorState from '../components/QueryErrorState';
 import Modal, { ModalFooter } from '../components/Modal';
-import { Button, LoadingState } from '../components/ui';
+import { Button, LoadingState, StatusBadge } from '../components/ui';
 
 const TYPE_ICONS = {
   EMAIL: Mail, PROPOSAL: FileText, CONTRACT: FileText,
@@ -20,13 +20,6 @@ const TYPE_COLORS = {
   INVOICE: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
   COPY: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
   OTHER: 'bg-muted text-muted-foreground',
-};
-
-const STATUS_COLORS = {
-  PENDING: 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800',
-  APPROVED: 'text-green-600 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800',
-  REJECTED: 'text-red-600 bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800',
-  EXPIRED: 'text-muted-foreground bg-muted border-border',
 };
 
 function parseContent(raw) {
@@ -240,9 +233,7 @@ export default function ApprovalQueue() {
                     <span className={`px-2 py-0.5 rounded text-xs font-semibold ${TYPE_COLORS[selected.type] || TYPE_COLORS.OTHER}`}>
                       {selected.type}
                     </span>
-                    <span className={`px-2 py-0.5 rounded border text-xs font-semibold ${STATUS_COLORS[selected.status] || STATUS_COLORS.EXPIRED}`}>
-                      {selected.status}
-                    </span>
+                    <StatusBadge domain="approval" status={selected.status} className="font-semibold" />
                   </div>
                   <h2 className="text-xl font-bold text-foreground">{selected.title}</h2>
                   {selected.clientName && <p className="text-sm text-muted-foreground mt-0.5">Client: {selected.clientName}</p>}

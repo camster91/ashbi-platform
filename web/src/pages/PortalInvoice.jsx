@@ -14,15 +14,7 @@ import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { formatInvoiceMoney, formatInvoiceDate } from '../lib/format';
 import LoadingState from '../components/ui/LoadingState';
-
-const statusConfig = {
-  DRAFT: { label: 'Draft', color: 'bg-slate-100 text-slate-600', icon: FileText },
-  SENT: { label: 'Awaiting Payment', color: 'bg-blue-100 text-blue-700', icon: Clock },
-  OVERDUE: { label: 'Overdue', color: 'bg-red-100 text-red-700', icon: AlertCircle },
-  PAID: { label: 'Paid', color: 'bg-green-100 text-green-700', icon: CheckCircle },
-  VOID: { label: 'Void', color: 'bg-slate-100 text-slate-500', icon: FileText },
-  CANCELLED: { label: 'Cancelled', color: 'bg-slate-100 text-slate-500', icon: FileText },
-};
+import StatusBadge from '../components/ui/StatusBadge';
 
 function formatDate(date) {
   return formatInvoiceDate(date, { month: 'long' });
@@ -74,8 +66,6 @@ export default function PortalInvoice() {
     );
   }
 
-  const status = statusConfig[invoice.status] || statusConfig.DRAFT;
-  const StatusIcon = status.icon;
   const isPaid = invoice.status === 'PAID';
   const { subtotal, discount, tax, total } = invoiceAmounts(invoice);
   // Nothing to collect on a zero (or negative) total.
@@ -122,10 +112,7 @@ export default function PortalInvoice() {
                 <h2 className="text-lg font-bold text-slate-800">
                   {invoice.invoiceNumber || invoice.number || `INV-${invoice.id}`}
                 </h2>
-                <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-semibold inline-flex items-center gap-1', status.color)}>
-                  <StatusIcon className="w-3 h-3" />
-                  {status.label}
-                </span>
+                <StatusBadge domain="invoice" status={invoice.status} audience="client" className="px-2.5 font-semibold" />
               </div>
               {invoice.clientName && (
                 <p className="text-sm text-slate-500 mt-1">For: {invoice.clientName}</p>

@@ -1,26 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  FileText, Plus, Send, CheckCircle, XCircle, ArrowRightLeft,
-  Trash2, Eye, Search, Pencil, CalendarDays, DollarSign, Clock,
-} from 'lucide-react';
+import { Plus, Send, ArrowRightLeft, Trash2, Search, Pencil, CalendarDays, Clock } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, EmptyState, LoadingState } from '../components/ui';
+import { Button, Card, EmptyState, LoadingState, StatusBadge } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-
-const STATUS_CONFIG = {
-  DRAFT:    { label: 'Draft',    color: 'bg-gray-100 text-gray-700 dark:bg-gray-800/40 dark:text-gray-400',        icon: FileText },
-  SENT:     { label: 'Sent',     color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',       icon: Send },
-  APPROVED: { label: 'Approved', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',   icon: CheckCircle },
-  DECLINED: { label: 'Declined', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',           icon: XCircle },
-  CONVERTED:{ label: 'Converted',color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',icon: ArrowRightLeft },
-};
 
 const FILTERS = ['', 'DRAFT', 'SENT', 'APPROVED', 'DECLINED', 'CONVERTED'];
 
@@ -370,8 +359,6 @@ export default function Estimates() {
 // ─── Estimate Card ────────────────────────────────────────────────────────────
 
 function EstimateCard({ estimate, onEdit, onSend, onConvert, onDelete, sendLoading, convertLoading }) {
-  const config = STATUS_CONFIG[estimate.status] || STATUS_CONFIG.DRAFT;
-  const StatusIcon = config.icon;
   const isDraft = estimate.status === 'DRAFT';
   const isApproved = estimate.status === 'APPROVED';
   const isSent = estimate.status === 'SENT';
@@ -385,10 +372,7 @@ function EstimateCard({ estimate, onEdit, onSend, onConvert, onDelete, sendLoadi
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-foreground truncate">{estimate.title || 'Untitled'}</span>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${config.color}`}>
-                <StatusIcon className="w-3 h-3" />
-                {config.label}
-              </span>
+              <StatusBadge domain="estimate" status={estimate.status} />
             </div>
             <p className="text-sm text-muted-foreground">{estimate.client?.name || 'No client'}</p>
           </div>
@@ -443,10 +427,7 @@ function EstimateCard({ estimate, onEdit, onSend, onConvert, onDelete, sendLoadi
           </div>
         </div>
 
-        <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full ${config.color}`}>
-          <StatusIcon className="w-3 h-3" />
-          {config.label}
-        </span>
+        <StatusBadge domain="estimate" status={estimate.status} className="px-2.5 py-1" />
 
         <div className="flex items-center gap-1">
           {isDraft && (

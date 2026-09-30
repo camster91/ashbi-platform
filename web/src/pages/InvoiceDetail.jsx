@@ -2,16 +2,15 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, Send, DollarSign, Printer, FileText, CheckCircle,
-  AlertTriangle, Edit2, Save, Plus, Clock, CreditCard,
-  Trash2, ExternalLink, RefreshCw, Receipt,
+  ArrowLeft, Send, DollarSign, Printer, FileText, CheckCircle, AlertTriangle,
+  Edit2, Save, CreditCard, Trash2, ExternalLink, RefreshCw,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, LoadingState } from '../components/ui';
+import { Button, Card, LoadingState, StatusBadge } from '../components/ui';
 import Modal, { ModalFooter } from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
@@ -38,14 +37,6 @@ const PAYMENT_METHOD_LABELS = {
 export function paymentMethodLabel(method) {
   return PAYMENT_METHOD_LABELS[method] || method;
 }
-
-const STATUS_CONFIG = {
-  DRAFT:   { label: 'Draft',   color: 'bg-muted text-muted-foreground' },
-  SENT:    { label: 'Sent',    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-  PAID:    { label: 'Paid',    color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-  OVERDUE: { label: 'Overdue', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
-  VOID:    { label: 'Void',    color: 'bg-muted text-muted-foreground' },
-};
 
 function fmt(n, currency) {
   return formatInvoiceMoney(n, currency);
@@ -252,7 +243,6 @@ export default function InvoiceDetail() {
   }
 
   const displayStatus = invoice.isOverdue ? 'OVERDUE' : invoice.status;
-  const statusCfg = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.DRAFT;
   const isDraft = invoice.status === 'DRAFT';
   const isSent = invoice.status === 'SENT' || invoice.isOverdue;
   const isPaid = invoice.status === 'PAID';
@@ -286,11 +276,9 @@ export default function InvoiceDetail() {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold font-mono">{invoice.invoiceNumber}</h1>
-              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${statusCfg.color}`}>
-                {statusCfg.label}
-              </span>
+              <StatusBadge domain="invoice" status={displayStatus} className="px-2.5 py-1 font-semibold" />
               {invoice.isRecurring && (
-                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary">
                   <RefreshCw className="w-3 h-3 inline mr-1" />
                   {invoice.recurringInterval}
                 </span>

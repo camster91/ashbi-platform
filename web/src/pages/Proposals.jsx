@@ -2,37 +2,16 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  FileText,
-  Plus,
-  Send,
-  Copy,
-  Trash2,
-  Eye,
-  Clock,
-  CheckCircle,
-  XCircle,
-  ExternalLink,
-  Sparkles,
-  Clipboard,
-  Save,
-  RefreshCw,
-  Pencil,
+  Plus, Copy, Trash2, Clock, XCircle, ExternalLink, Sparkles, Clipboard,
+  Save, RefreshCw, Pencil,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { Button, Card, EmptyState, LoadingState, SlowNotice } from '../components/ui';
+import { Button, Card, EmptyState, LoadingState, SlowNotice, StatusBadge } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
-
-const statusConfig = {
-  DRAFT: { label: 'Draft', color: 'bg-muted text-muted-foreground', icon: FileText },
-  SENT: { label: 'Sent', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', icon: Send },
-  VIEWED: { label: 'Viewed', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', icon: Eye },
-  APPROVED: { label: 'Approved', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: CheckCircle },
-  DECLINED: { label: 'Declined', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', icon: XCircle },
-};
 
 export default function Proposals() {
   const navigate = useNavigate();
@@ -263,8 +242,6 @@ export default function Proposals() {
       ) : (
         <div className="space-y-3">
           {proposals.map((proposal) => {
-            const config = statusConfig[proposal.status] || statusConfig.DRAFT;
-            const StatusIcon = config.icon;
             return (
               <Card key={proposal.id} className="p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-4">
@@ -286,10 +263,7 @@ export default function Proposals() {
                       )}
                     </div>
                   </div>
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full ${config.color}`}>
-                    <StatusIcon className="w-3 h-3" />
-                    {config.label}
-                  </span>
+                  <StatusBadge domain="proposal" status={proposal.status} className="px-2.5 py-1" />
                   <div className="flex items-center gap-1">
                     {proposal.status === 'SENT' && proposal.viewToken && (
                       <button

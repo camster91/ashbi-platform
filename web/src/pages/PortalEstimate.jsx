@@ -16,14 +16,7 @@ import {
 import { api } from '../lib/api';
 import { cn, formatDate } from '../lib/utils';
 import LoadingState from '../components/ui/LoadingState';
-
-const statusConfig = {
-  DRAFT: { label: 'Draft', color: 'bg-slate-100 text-slate-600' },
-  SENT: { label: 'Pending Review', color: 'bg-indigo-100 text-indigo-700' },
-  APPROVED: { label: 'Approved', color: 'bg-green-100 text-green-700' },
-  DECLINED: { label: 'Declined', color: 'bg-red-100 text-red-700' },
-  EXPIRED: { label: 'Expired', color: 'bg-amber-100 text-amber-700' },
-};
+import StatusBadge from '../components/ui/StatusBadge';
 
 export default function PortalEstimate() {
   const { viewToken } = useParams();
@@ -89,8 +82,6 @@ export default function PortalEstimate() {
   const alreadyResponded = isApproved || isDeclined;
   const canRespond = estimate.status === 'SENT' && !completed;
 
-  const status = statusConfig[estimate.status] || statusConfig.DRAFT;
-
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#faf9f2' }}>
       {/* Header */}
@@ -105,12 +96,13 @@ export default function PortalEstimate() {
                 {estimate.title || estimate.estimateNumber || `EST-${estimate.id || ''}`}
               </h1>
             </div>
-            <span className={cn(
-              'px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap',
-              status.color
-            )}>
-              {status.label}
-            </span>
+            <StatusBadge
+              domain="estimate"
+              status={estimate.status}
+              audience="client"
+              variant="default"
+              className="px-3 py-1.5 font-semibold"
+            />
           </div>
         </div>
       </header>

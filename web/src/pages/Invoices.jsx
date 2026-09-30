@@ -2,14 +2,13 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Receipt, Plus, Send, DollarSign, Clock, CheckCircle, AlertTriangle,
-  ExternalLink, CreditCard, FileText, Filter, Search, Download,
-  TrendingUp, ArrowUpRight, MoreVertical, Trash2, Eye, RefreshCw,
+  Plus, Send, DollarSign, Clock, CheckCircle, AlertTriangle, CreditCard,
+  FileText, Search, Download, Trash2, Eye,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, EmptyState, LoadingState, SlowNotice } from '../components/ui';
+import { Button, Card, EmptyState, LoadingState, SlowNotice, StatusBadge } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -19,13 +18,6 @@ import { formatInvoiceMoney, formatInvoiceDate } from '../lib/format';
 
 const HST_RATE = 13;
 
-const STATUS_CONFIG = {
-  DRAFT:   { label: 'Draft',   color: 'bg-muted text-muted-foreground',                                              icon: Receipt },
-  SENT:    { label: 'Sent',    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',            icon: Send },
-  PAID:    { label: 'Paid',    color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',        icon: CheckCircle },
-  OVERDUE: { label: 'Overdue', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',               icon: AlertTriangle },
-  VOID:    { label: 'Void',    color: 'bg-muted text-muted-foreground',              icon: Receipt },
-};
 
 function fmt(n, currency) {
   return formatInvoiceMoney(n, currency);
@@ -374,8 +366,6 @@ export default function Invoices() {
 // ─── Invoice Row ─────────────────────────────────────────────────────────────
 function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, sendLoading }) {
   const displayStatus = invoice.isOverdue ? 'OVERDUE' : invoice.status;
-  const config = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.DRAFT;
-  const StatusIcon = config.icon;
 
   return (
     <Card className={`p-4 hover:shadow-sm transition-shadow cursor-pointer ${invoice.isOverdue ? 'border-red-500/30' : ''}`}>
@@ -391,10 +381,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
               >
                 {invoice.invoiceNumber}
               </Link>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${config.color}`}>
-                <StatusIcon className="w-3 h-3" />
-                {config.label}
-              </span>
+              <StatusBadge domain="invoice" status={displayStatus} />
             </div>
             <p className="text-sm text-muted-foreground truncate">{invoice.client?.name}</p>
           </div>
@@ -465,10 +452,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
           </div>
         </div>
 
-        <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${config.color}`}>
-          <StatusIcon className="w-3 h-3" />
-          {config.label}
-        </span>
+        <StatusBadge domain="invoice" status={displayStatus} className="py-1" />
 
         <div className="flex items-center gap-1">
           {invoice.status === 'DRAFT' && isAdmin && (

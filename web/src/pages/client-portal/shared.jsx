@@ -7,6 +7,7 @@ import { inputStyles } from '../../components/ui/Input';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
 import { formatInvoiceMoney } from '../../lib/format';
 import { cn } from '../../lib/utils';
+import { statusColor, statusLabel } from '../../lib/status';
 import { uploadFileWithProgress } from '../../lib/upload';
 import MessageAttachments from '../../components/media/MessageAttachments';
 import { AttachmentToolbar, AttachmentTray, useCaptureDialog, useDropAndPaste } from '../../components/media/ComposerAttachments';
@@ -130,43 +131,28 @@ export function StatusBadge({ color, children }) {
 }
 
 export function projectStatusLabel(s) {
-  const map = {
-    STARTING_UP: 'Starting Up', DESIGN_DEV: 'Design & Dev', ADDING_CONTENT: 'Adding Content',
-    FINALIZING: 'Finalizing', LAUNCHED: 'Launched', ON_HOLD: 'On Hold',
-    CANCELLED: 'Cancelled', ACTIVE: 'Active',
-  };
-  return map[s] || s;
+  return statusLabel('project', s, { audience: 'client' });
 }
 
-// Badge `color` for each status (see docs/ui-primitives.md, Badge).
+// Badge `color` for each status, from the shared map in lib/status.js.
 export function projectStatusColor(s) {
-  const map = {
-    STARTING_UP: 'info', DESIGN_DEV: 'primary',
-    ADDING_CONTENT: 'accent', FINALIZING: 'warning',
-    LAUNCHED: 'success', ON_HOLD: 'default',
-    CANCELLED: 'danger', ACTIVE: 'success',
-  };
-  return map[s] || 'default';
+  return statusColor('project', s);
 }
 
 export function taskStatusLabel(s) {
-  const map = { PENDING: 'To Do', UPCOMING: 'To Do', IMMEDIATE: 'To Do', IN_PROGRESS: 'In Progress', COMPLETED: 'Done', BLOCKED: 'Blocked' };
-  return map[s] || s;
+  return statusLabel('task', s, { audience: 'client' });
 }
 
 export function taskStatusColor(s) {
-  const map = { PENDING: 'warning', UPCOMING: 'warning', IMMEDIATE: 'warning', IN_PROGRESS: 'accent', COMPLETED: 'success', BLOCKED: 'danger' };
-  return map[s] || 'default';
+  return statusColor('task', s);
 }
 
 export function priorityLabel(p) {
-  const map = { CRITICAL: 'Critical', HIGH: 'High', NORMAL: 'Normal', LOW: 'Low' };
-  return map[p] || p;
+  return statusLabel('priority', p);
 }
 
 export function priorityColor(p) {
-  const map = { CRITICAL: 'danger', HIGH: 'warning', NORMAL: 'default', LOW: 'default' };
-  return map[p] || 'default';
+  return statusColor('priority', p);
 }
 
 // Portal form fields use the shared Input look. Text is 16px below the `sm`

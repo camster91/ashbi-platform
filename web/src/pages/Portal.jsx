@@ -1,26 +1,11 @@
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import {
-  CheckCircle,
-  Clock,
-  AlertTriangle,
-  Sparkles,
-  FileText,
-  Milestone as MilestoneIcon,
-} from 'lucide-react';
+import { CheckCircle, Clock, AlertTriangle, Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn, formatDate } from '../lib/utils';
 import LoadingState from '../components/ui/LoadingState';
-
-const statusConfig = {
-  STARTING_UP: { label: 'Starting Up', color: 'bg-gray-100 text-gray-700', dotColor: 'bg-gray-400' },
-  DESIGN_DEV: { label: 'Design & Dev', color: 'bg-blue-100 text-blue-700', dotColor: 'bg-blue-500' },
-  ADDING_CONTENT: { label: 'Adding Content', color: 'bg-yellow-100 text-yellow-700', dotColor: 'bg-yellow-500' },
-  FINALIZING: { label: 'Finalizing', color: 'bg-orange-100 text-orange-700', dotColor: 'bg-orange-500' },
-  LAUNCHED: { label: 'Launched', color: 'bg-green-100 text-green-700', dotColor: 'bg-green-500' },
-  ON_HOLD: { label: 'On Hold', color: 'bg-slate-100 text-slate-700', dotColor: 'bg-slate-400' },
-  CANCELLED: { label: 'Cancelled', color: 'bg-red-100 text-red-700', dotColor: 'bg-red-500' },
-};
+import StatusBadge from '../components/ui/StatusBadge';
+import { statusLabel } from '../lib/status';
 
 const phases = ['STARTING_UP', 'DESIGN_DEV', 'ADDING_CONTENT', 'FINALIZING', 'LAUNCHED'];
 
@@ -83,7 +68,6 @@ export default function Portal() {
     );
   }
 
-  const status = statusConfig[project.status] || statusConfig.STARTING_UP;
   const currentPhaseIndex = phases.indexOf(project.status);
 
   return (
@@ -110,10 +94,13 @@ export default function Portal() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Current Status</h2>
-              <span className={cn('inline-flex items-center gap-2 mt-2 px-3 py-1.5 rounded-full text-sm font-semibold', status.color)}>
-                <span className={cn('w-2 h-2 rounded-full', status.dotColor)} />
-                {status.label}
-              </span>
+              <StatusBadge
+                domain="project"
+                status={project.status || 'STARTING_UP'}
+                audience="client"
+                size="md"
+                className="mt-2 gap-2 px-3 py-1.5 font-semibold"
+              />
             </div>
             <p className="text-xs text-slate-500">
               Last updated {formatDate(project.updatedAt)}
@@ -123,7 +110,6 @@ export default function Portal() {
           {/* Phase Progress Bar */}
           <div className="flex items-center gap-1">
             {phases.map((phase, i) => {
-              const phaseConf = statusConfig[phase];
               const isComplete = i < currentPhaseIndex;
               const isCurrent = i === currentPhaseIndex;
               return (
@@ -138,7 +124,7 @@ export default function Portal() {
                     'text-xs mt-1.5 text-center',
                     isCurrent ? 'font-semibold text-slate-800' : 'text-slate-500'
                   )}>
-                    {phaseConf.label}
+                    {statusLabel('project', phase, { audience: 'client' })}
                   </p>
                 </div>
               );

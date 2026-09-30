@@ -404,6 +404,51 @@ Accessibility:
 <Badge color="success" variant="subtle" dot>Paid</Badge>
 ```
 
+### `StatusBadge`
+
+Source: `web/src/components/ui/StatusBadge.jsx`
+
+A `forwardRef` `Badge` for a domain status. Every label, colour and icon comes
+from the shared map in `web/src/lib/status.js`, so a status means the same
+thing on every page (#315, #316). The map replaces the per-page
+`STATUS_CONFIG` objects that Invoices, InvoiceDetail, PortalInvoice, Estimates,
+Proposals, Contracts, PortalEstimate, Portal, ApprovalQueue and the review
+screens used to keep.
+
+Domains in `STATUS_DOMAINS`: `invoice`, `estimate`, `proposal`, `contract`,
+`project`, `task`, `approval`, `priority`, `health`, `thread`, `review`.
+
+| Prop | Type / values | Default | Notes |
+|---|---|---|---|
+| `domain` | a `STATUS_DOMAINS` key | none | An unknown domain throws |
+| `status` | string | none | An unknown status renders its text (underscores as spaces) in the neutral colour. Also set as `data-status` |
+| `audience` | `'staff'` or `'client'` | `'staff'` | `client` uses the entry's `clientLabel` when it has one (for example an invoice `SENT` reads "Awaiting Payment") |
+| `size` | a Badge size | `'sm'` | |
+| `showIcon` | boolean | `true` | |
+| `label` | node | the map's label | Overrides the text only |
+| `variant` | a Badge variant | the map's (`subtle` unless set) | For example `default` on the indigo portal header |
+| `className`, `ref`, `...props` | | | Passed through to `Badge` |
+
+`lib/status.js` also exports `getStatus(domain, status, { audience })`,
+`statusLabel`, `statusColor`, and `statusClasses`, which returns the subtle
+token classes (`bg-success/10 text-success`) for legacy pills that cannot
+render a Badge. `getPriorityColor`, `getHealthColor`, `getStatusColor` and
+`getProjectStatusColor` in `lib/utils.js`, and `projectStatusColor` /
+`taskStatusColor` / `priorityColor` in the client portal, now read from it.
+
+Accessibility:
+
+- The label always states the status and the icon is a second, `aria-hidden`
+  cue, so status is never conveyed by colour alone (WCAG 1.4.1).
+- The root carries the `status-indicator` class, which gives it a
+  `CanvasText` border in forced-colours mode (see
+  [Forced colours](#forced-colours)).
+
+```jsx
+<StatusBadge domain="invoice" status={invoice.isOverdue ? 'OVERDUE' : invoice.status} />
+<StatusBadge domain="invoice" status={invoice.status} audience="client" />
+```
+
 ### `Alert`
 
 Source: `web/src/components/ui/Alert.jsx`
