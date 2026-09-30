@@ -19,6 +19,7 @@ const ALLOWED = {
   'auth.routes.js': [1, 'AccountWithoutOrganizationError has a fixed message (403)'],
   'privileged-access.routes.js': [1, 'BreakGlassError has fixed, caller-safe messages (4xx)'],
   'review.routes.js': [2, 'ReviewSessionClosedError has a fixed message (409); WebCaptureError 4xx messages are fixed strings of the capture service (5xx use a fixed per-code message)'],
+  'settings.routes.js': [1, 'MfaPolicyError has a fixed, caller-safe message (409)'],
   'trash.routes.js': [2, 'only the trash service\'s own 4xx messages are forwarded'],
 };
 

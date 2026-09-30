@@ -78,7 +78,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 60 |
+| [Organization](#model-organization) | `organizations` | no | no | 61 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -1691,6 +1691,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `logo` | String | optional |  |  |  |
 | `plan` | String | required | `"FREE"` |  | FREE, PRO, ENTERPRISE |
 | `aiDisabled` | Boolean | required | `false` |  |  |
+| `mfaRequired` | Boolean | required | `false` |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `users` | User[] | list, required |  | → User |  |

@@ -14,7 +14,7 @@ import { queueInboundEmailDelivery } from '../jobs/queue.js';
 
 export default async function webhookRoutes(fastify) {
   // Email webhook endpoint
-  fastify.post('/email', { config: { skipValidation: true } }, async (request, reply) => {
+  fastify.post('/email', { config: { skipValidation: true, public: true } }, async (request, reply) => {
     // Verify webhook secret (fail closed)
     if (!env.webhookSecret) {
       return reply.status(500).send({ error: 'Webhook secret not configured' });
@@ -112,7 +112,7 @@ export default async function webhookRoutes(fastify) {
   });
 
   // Webhook status check
-  fastify.get('/email/status', async () => {
+  fastify.get('/email/status', { config: { public: true } }, async () => {
     return {
       status: 'active',
       timestamp: new Date().toISOString()
@@ -124,7 +124,8 @@ export default async function webhookRoutes(fastify) {
   // Stripe sends raw body — must configure Fastify to provide it
   fastify.post('/stripe', {
     config: {
-      rawBody: true
+      rawBody: true,
+      public: true,
     }
   }, async (request, reply) => {
     const signature = request.headers['stripe-signature'];
