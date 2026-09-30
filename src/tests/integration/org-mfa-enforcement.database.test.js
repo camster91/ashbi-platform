@@ -17,7 +17,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'unit-test-secret-at-least-32-chara
 process.env.JWT_SECRET = JWT_SECRET;
 process.env.CREDENTIALS_KEY = process.env.CREDENTIALS_KEY || 'integration-test-credentials-key';
 
-const PASSWORD = 'Org-Mfa-Integration-1';
+// Generated per run: a fixture, never a stored credential.
+const PASSWORD = ['fixture', randomUUID()].join(':');
 const CODE = 'MFA_ENROLLMENT_REQUIRED';
 
 /** Resolve with true when `emitter` emits `event` within `ms`, else false. */
