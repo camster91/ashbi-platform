@@ -62,12 +62,12 @@ export function SkeletonStatCard({ className, ...props }) {
       )}
       {...props}
     >
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-8 w-16" />
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 space-y-2">
+          <Skeleton className="h-4 w-24 max-w-full" />
+          <Skeleton className="h-8 w-16 max-w-full" />
         </div>
-        <Skeleton className="w-10 h-10 rounded-lg" />
+        <Skeleton className="w-10 h-10 rounded-lg shrink-0" />
       </div>
     </div>
   );
@@ -101,29 +101,31 @@ export function SkeletonThreadRow({ className, ...props }) {
       )}
       {...props}
     >
-      <Skeleton className="w-1 h-12 rounded-full" />
-      <div className="flex-1 space-y-2">
+      <Skeleton className="w-1 h-12 rounded-full shrink-0" />
+      <div className="flex-1 min-w-0 space-y-2">
         <div className="flex items-center gap-2">
           <Skeleton className="h-5 w-1/3" />
-          <Skeleton className="h-4 w-16 rounded-full" />
+          <Skeleton className="h-4 w-16 min-w-0 rounded-full" />
         </div>
         <div className="flex items-center gap-2">
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-20 min-w-0" />
+          <Skeleton className="h-4 w-24 min-w-0" />
+          <Skeleton className="h-4 w-32 min-w-0" />
         </div>
       </div>
-      <Skeleton className="h-6 w-20 rounded-full" />
+      <Skeleton className="h-6 w-20 min-w-0 rounded-full" />
     </div>
   );
 }
 
-// Skeleton page header
+// Skeleton page header. The bars keep their desktop widths but are capped
+// at the available width, and min-w-0 lets the header shrink when it sits in
+// a flex row beside an action button, so narrow screens never scroll sideways.
 export function SkeletonPageHeader({ className, ...props }) {
   return (
-    <div className={cn('space-y-4', className)} {...props}>
-      <Skeleton className="h-8 w-48" />
-      <Skeleton className="h-4 w-96" />
+    <div className={cn('min-w-0 space-y-4', className)} {...props}>
+      <Skeleton className="h-8 w-48 max-w-full" />
+      <Skeleton className="h-4 w-96 max-w-full" />
     </div>
   );
 }

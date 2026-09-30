@@ -159,6 +159,7 @@ rather than real regressions. To promote it:
    `.github/workflows/release-gates.yml` and update
    `npm run check:release-gates` and `docs/release-gates.md` together.
 
-Known issue captured by the proposed baselines: at 375 px the UI lab's
-skeleton headers are wider than the viewport, so that full-page capture is 568
-px wide. The shared `PageSkeleton` headers overflow on narrow screens.
+The 375 px UI lab captures once showed the shared `PageSkeleton` headers
+overflowing the viewport (a 568 px-wide page). That is fixed, and
+`tests/ui-quality.spec.ts` ("page skeletons do not scroll the page
+horizontally at 375px") guards it in the required browser smoke.
