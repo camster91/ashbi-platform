@@ -1,0 +1,8 @@
+markup_project,file_name,comment_id,page,x_percent,y_percent,author_email,author_name,comment,status,created_at,thread_id,parent_comment_id
+Website redesign,homepage-v1.png,c1,,25,40,alex@your-agency.example,Alex,Make the hero image larger,open,2025-06-01T10:00:00+02:00,t1,
+Website redesign,homepage-v1.png,c2,,,,client@client.example,Casey Client,"Agreed, and a little brighter",open,2025-06-01T11:00:00+02:00,t1,c1
+Website redesign,homepage-v1.png,c3,,80,10,client@client.example,Casey Client,The logo looks blurry,resolved,2025-06-02T09:00:00+02:00,t2,
+Website redesign,homepage-v1.png,c4,,,,alex@your-agency.example,Alex,Replaced with the vector logo,open,2025-06-02T10:00:00+02:00,t2,c3
+Website redesign,brand-brief.pdf,p1,2,50,12.5,sam@your-agency.example,Sam,Typo in the page 2 heading,open,2025-06-04T09:00:00+02:00,t10,
+Website redesign,brand-brief.pdf,p2,,,,client@client.example,Casey Client,"General note on the brief:
+please add the new tagline",open,2025-06-04T10:00:00+02:00,t11,

@@ -64,6 +64,8 @@ model Organization {
   notionImportRecords NotionImportRecord[]
   importRuns      ImportRun[]
   slackImportRecords SlackImportRecord[]
+  loomImportRecords  LoomImportRecord[]
+  markupImportRecords MarkupImportRecord[]
   aiBridgeActions AiBridgeAction[]
   publicInquiries PublicInquiry[]
   auditEvents     AuditEvent[]
@@ -322,6 +324,8 @@ model Project {
   slackChannelMappings SlackChannelMapping[]
   notionImportRecords NotionImportRecord[]
   slackImportRecords SlackImportRecord[]
+  loomImportRecords  LoomImportRecord[]
+  markupImportRecords MarkupImportRecord[]
   reviewSessions ReviewSession[]
 
   @@index([clientId])
@@ -2195,7 +2199,7 @@ model NotionImportRecord {
 model ImportRun {
   id             String    @id @default(cuid())
   organizationId String
-  source         String // SLACK_EXPORT
+  source         String // SLACK_EXPORT, LOOM_MANIFEST, MARKUP_CSV
   status         String    @default("APPLIED") // APPLIED, ROLLED_BACK
   sourceLabel    String? // Export directory basename; never an absolute path
   summary        Json? // Counts only; no message content
@@ -2204,8 +2208,10 @@ model ImportRun {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  slackImportRecords SlackImportRecord[]
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  slackImportRecords  SlackImportRecord[]
+  loomImportRecords   LoomImportRecord[]
+  markupImportRecords MarkupImportRecord[]
 
   @@index([organizationId, source, createdAt])
   @@map("import_runs")
@@ -2241,6 +2247,85 @@ model SlackImportRecord {
   @@index([chatMessageId])
   @@index([projectId])
   @@map("slack_import_records")
+}
+
+// Durable reconciliation record for a Loom recording imported from an
+// operator-prepared manifest (docs/loom-migration.md) as a project media
+// attachment. The source key is the Loom video id from the share URL. The
+// Loom URL and original timestamp are the recording's provenance.
+// attachmentId has no foreign key: a file deleted in the Hub is detected
+// and reported (DELETED_IN_HUB), never re-imported.
+model LoomImportRecord {
+  id              String   @id @default(cuid())
+  organizationId  String
+  projectId       String
+  runId           String
+  attachmentId    String?
+  sourceKey       String // loom:<videoId>
+  loomUrl         String // canonical https://www.loom.com/share/<videoId>
+  title           String
+  sourceCreatedAt DateTime // the recording's original timestamp
+  ownerEmail      String? // manifest owner_email (lowercased)
+  ownerUserId     String? // matched active Ashbi user; null when attributed to the operator
+  fileName        String
+  fileSize        Int
+  fileSha256      String
+  contentSha256   String // manifest row fields + file SHA-256
+  outcome         String   @default("IMPORTED") // IMPORTED (CHECK constraint)
+  importedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  run          ImportRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, sourceKey])
+  @@index([organizationId, projectId])
+  @@index([runId])
+  @@index([attachmentId])
+  @@index([projectId])
+  @@map("loom_import_records")
+}
+
+// Durable reconciliation record for MarkUp.io review data imported from an
+// operator-prepared CSV (docs/markup-migration.md). A SESSION record is one
+// (markup_project, file_name) review with its stored file; an ANNOTATION
+// record is one comment. Target ids have no foreign key: rows deleted in the
+// Hub are detected and reported (DELETED_IN_HUB), never re-imported.
+model MarkupImportRecord {
+  id              String   @id @default(cuid())
+  organizationId  String
+  projectId       String
+  runId           String
+  kind            String // SESSION or ANNOTATION (CHECK constraint)
+  sourceKey       String // markup:<project>/<file>[/<commentId>], each part URI-encoded
+  markupProject   String
+  fileName        String
+  commentId       String? // ANNOTATION only
+  threadId        String? // ANNOTATION only
+  reviewSessionId String?
+  annotationId    String? // ANNOTATION only
+  attachmentId    String? // SESSION only
+  contentSha256   String // SESSION: the file SHA-256; ANNOTATION: the comment row
+  fileSha256      String? // SESSION only
+  outcome         String   @default("IMPORTED") // IMPORTED (CHECK constraint)
+  importedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  run          ImportRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, sourceKey])
+  @@index([organizationId, projectId])
+  @@index([runId])
+  @@index([reviewSessionId])
+  @@index([annotationId])
+  @@index([attachmentId])
+  @@index([projectId])
+  @@map("markup_import_records")
 }
 
 // Slack collaboration integration. Secrets are encrypted at rest; raw Slack

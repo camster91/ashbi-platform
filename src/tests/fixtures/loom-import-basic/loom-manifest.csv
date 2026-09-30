@@ -1,0 +1,5 @@
+loom_url,title,created_at,owner_email,file_name,project_id,description
+https://www.loom.com/share/0123456789abcdef0123456789abcdef,Kickoff walkthrough,2025-03-04T10:15:00-05:00,{{ALICE_EMAIL}},kickoff.mp4,{{PROJECT_ID}},"First look at the brief, with ""quotes"""
+https://www.loom.com/share/Homepage-review-fedcba9876543210fedcba9876543210?sid=abc123,Homepage review,2025-04-01T09:00:00+00:00,someone@not-in-ashbi.test,homepage.webm,{{PROJECT_ID}},
+https://loom.com/share/aaaabbbbccccddddeeeeffff00001111,Old screen capture,2025-05-01T12:00:00Z,{{ALICE_EMAIL}},capture.mov,{{PROJECT_ID}},QuickTime export is not a supported type
+https://www.loom.com/share/11112222333344445555666677778888,Broken download,2025-05-02T12:00:00Z,{{ALICE_EMAIL}},broken.mp4,{{PROJECT_ID}},The download failed and saved an error page
