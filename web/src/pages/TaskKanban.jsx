@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import LoadingState from '../components/ui/LoadingState';
 import QueryErrorState from '../components/QueryErrorState';
 import { formatDate } from '../lib/format';
+import { statusClasses } from '../lib/status';
 import { DEFAULT_TASK_PRIORITY, TASK_PRIORITY_LABELS } from '@shared/task-priority.js';
 
 // Core columns are always shown. Other stored task statuses (the task status
@@ -45,13 +46,6 @@ export function buildKanbanColumns(board = {}) {
   }));
 }
 
-// Keyed by the shared API priority list (src/shared/task-priority.js).
-const PRIORITY_COLORS = {
-  LOW: 'bg-success/10 text-success',
-  NORMAL: 'bg-warning/10 text-warning',
-  HIGH: 'bg-warning/10 text-warning',
-  CRITICAL: 'bg-destructive/10 text-destructive',
-};
 
 export default function TaskKanban() {
   const { projectId } = useParams();
@@ -223,7 +217,7 @@ export default function TaskKanban() {
                       <p className="text-sm font-medium text-foreground leading-snug break-words">{task.title}</p>
                     </Link>
                     <div className="mt-2 flex items-center justify-between flex-wrap gap-1">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS[DEFAULT_TASK_PRIORITY]}`}>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusClasses('priority', task.priority || DEFAULT_TASK_PRIORITY)}`}>
                         {TASK_PRIORITY_LABELS[task.priority] || task.priority}
                       </span>
                       {task.assignee && (

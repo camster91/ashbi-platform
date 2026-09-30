@@ -53,6 +53,39 @@ describe('lib/status', () => {
     expect(() => getStatus('nope', 'X')).toThrow(/Unknown status domain/);
   });
 
+  it('knows every task, project and health status the API accepts', () => {
+    const schemas = readFileSync(resolve(process.cwd(), '../src/validators/schemas.js'), 'utf8');
+    const listed = (name) => {
+      const match = schemas.match(new RegExp(`export const ${name} = \\[([^\\]]*)\\]`));
+      expect(match, name).toBeTruthy();
+      return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
+    };
+    const projectUpdate = schemas.match(/projectUpdateSchema[\s\S]*?status: z\.enum\(\[([^\]]*)\]/);
+    const expected = {
+      task: listed('TASK_STATUS_VALUES'),
+      project: [...listed('PROJECT_STATUS_VALUES'), ...[...projectUpdate[1].matchAll(/'([A-Z_]+)'/g)].map((m) => m[1])],
+      health: listed('PROJECT_HEALTH_VALUES'),
+    };
+    for (const [domain, statuses] of Object.entries(expected)) {
+      expect(statuses.length, domain).toBeGreaterThan(2);
+      for (const status of statuses) {
+        expect(getStatus(domain, status).known, `${domain}.${status}`).toBe(true);
+      }
+    }
+    expect(statusLabel('task', 'WAITING_US')).toBe('Waiting on us');
+    expect(statusLabel('task', 'WAITING_CLIENT')).toBe('Waiting on client');
+    expect(statusLabel('project', 'PAUSED')).toBe('Paused');
+    expect(statusLabel('project', 'DRAFT')).toBe('Draft');
+  });
+
+  it('gives every task priority a distinct tone, used by the Kanban board', () => {
+    const tones = ['CRITICAL', 'HIGH', 'NORMAL', 'LOW'].map((p) => statusClasses('priority', p));
+    expect(new Set(tones).size).toBe(4);
+    const kanban = readFileSync(resolve(process.cwd(), 'src/pages/TaskKanban.jsx'), 'utf8');
+    expect(kanban).not.toMatch(/PRIORITY_COLORS\s*=/);
+    expect(kanban).toContain("statusClasses('priority'");
+  });
+
   it('replaces the duplicated per-page invoice status maps', () => {
     for (const file of ['src/pages/Invoices.jsx', 'src/pages/InvoiceDetail.jsx', 'src/pages/PortalInvoice.jsx']) {
       const source = readFileSync(resolve(process.cwd(), file), 'utf8');

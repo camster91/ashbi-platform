@@ -32,10 +32,10 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const SLOT_HEIGHT = 64; // px per hour slot
 
 const EVENT_TYPES = [
-  { value: 'MEETING', label: 'Meeting', color: 'bg-primary', fg: 'text-primary-foreground', border: 'border-primary', text: 'text-primary', bg: 'bg-primary/20' },
-  { value: 'CALL', label: 'Call', color: 'bg-success', fg: 'text-success-foreground', border: 'border-success', text: 'text-success', bg: 'bg-success/20' },
-  { value: 'DEADLINE', label: 'Deadline', color: 'bg-destructive', fg: 'text-destructive-foreground', border: 'border-destructive', text: 'text-destructive', bg: 'bg-destructive/20' },
-  { value: 'REMINDER', label: 'Reminder', color: 'bg-warning', fg: 'text-warning-foreground', border: 'border-warning', text: 'text-warning', bg: 'bg-warning/20' },
+  { value: 'MEETING', label: 'Meeting', color: 'bg-primary', fg: 'text-primary-foreground', border: 'border-primary', text: 'text-primary', bg: 'bg-primary/10' },
+  { value: 'CALL', label: 'Call', color: 'bg-success', fg: 'text-success-foreground', border: 'border-success', text: 'text-success', bg: 'bg-success/10' },
+  { value: 'DEADLINE', label: 'Deadline', color: 'bg-destructive', fg: 'text-destructive-foreground', border: 'border-destructive', text: 'text-destructive', bg: 'bg-destructive/10' },
+  { value: 'REMINDER', label: 'Reminder', color: 'bg-warning', fg: 'text-warning-foreground', border: 'border-warning', text: 'text-warning', bg: 'bg-warning/10' },
 ];
 
 const TYPE_MAP = Object.fromEntries(EVENT_TYPES.map(t => [t.value, t]));
@@ -1025,7 +1025,7 @@ export default function Schedule() {
                               {event.title}
                             </p>
                             {height > 36 && (
-                              <p className={cn('text-[10px] leading-tight truncate', style.text, 'opacity-75')}>
+                              <p className={cn('text-[10px] leading-tight truncate', style.text)}>
                                 {fmtTime(event.startTime)}
                               </p>
                             )}
