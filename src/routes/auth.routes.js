@@ -1,6 +1,7 @@
 // Authentication routes
 
 import crypto from 'crypto';
+import { revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
@@ -204,6 +205,7 @@ export default async function authRoutes(fastify) {
           where: { userId: request.user.id }
         });
         await revokeUserSessions(request.prisma, request.user.id);
+        if (request.user.role === 'CLIENT') revokeClientSocketsFrom(fastify, { userId: request.user.id }, request.log);
         // Signing out also ends any support view the admin had open (#416).
         await endImpersonationSessions(request.prisma, {
           organizationId: request.user.organizationId,

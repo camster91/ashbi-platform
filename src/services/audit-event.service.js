@@ -74,7 +74,7 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'review.share_link_created': { entityType: 'review_share_link', metadata: ['sessionId', 'expiresAt', 'expiresInDays', 'allowDecision'] },
   'review.share_link_revoked': { entityType: 'review_share_link', metadata: ['sessionId', 'wasExpired'] },
   'review.client_access_changed': { entityType: 'review_session', metadata: ['sharedWithClient', 'clientCanDecide', 'fromSharedWithClient', 'fromClientCanDecide'] },
-  'review.evidence_exported': { entityType: 'review_session', metadata: ['versionCount', 'annotationCount', 'decisionCount', 'shareLinkCount', 'auditEventCount'] },
+  'review.evidence_exported': { entityType: 'review_session', metadata: ['versionCount', 'annotationCount', 'decisionCount', 'shareLinkCount', 'auditEventCount', 'evidenceSha256'] },
   'estimate.approved': { entityType: 'estimate', metadata: ['fromStatus', 'toStatus', 'via', 'total'] },
   'estimate.declined': { entityType: 'estimate', metadata: ['fromStatus', 'toStatus', 'via', 'total'] },
   'estimate.link_revoked': { entityType: 'estimate', metadata: ['alreadyRevoked'] },

@@ -413,8 +413,10 @@ review page) downloads `review-evidence-<title>-<date>.json` with
 `X-Evidence-Sha256` header holding the SHA-256 of the exact body sent. Access
 is the same as viewing the review: ADMIN or TEAM staff of the review's
 organization; another organization's review answers 404 like an unknown id,
-non-staff principals 403. Each export is audited as `review.evidence_exported`
-(counts only). Format `ashbi.review-evidence`, `formatVersion: 1`:
+non-staff principals 403. At most 10 exports per staff user per minute (`429
+REVIEW_EXPORT_RATE_LIMITED`); the route answers GET only (no HEAD). Each
+export is audited as `review.evidence_exported` with counts and the
+`evidenceSha256` of the file sent. The body is compact JSON. Format `ashbi.review-evidence`, `formatVersion: 1`:
 
 | Field | Content |
 | --- | --- |
@@ -425,7 +427,7 @@ non-staff principals 403. Each export is audited as `review.evidence_exported`
 | `decisions` | Every append-only decision with version, decision, actor type, `actorRole`, actor id, name and email, share link used, `comment` and timestamp. |
 | `shareLinks` | Every share link: label, `allowDecision`, creator, created, expiry, revocation (time and by whom), last use and state. Never the token or its hash. |
 | `auditTrail` | The `review.*` audit events of these sessions and links (session creation, client access changes, share link creation and revocation, decisions, earlier exports). |
-| `completeness` | Whether the version chain, annotations (bounded at 2,000 per version) and audit trail (2,000 events) are complete, and how many assets have no checksum. |
+| `completeness` | `versionChainComplete` (false when the chain continues beyond the 500 versions walked), `annotationsTruncated`, `decisionsTruncated`, `shareLinksTruncated` and `auditTrailTruncated` (true only when a list exceeded its bound: 10,000 annotations, 2,000 decisions, 1,000 share links, 5,000 audit events), `assetsWithoutChecksum`, and the `limits` themselves. |
 
 Storage paths and share tokens are never included.
 

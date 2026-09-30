@@ -32,6 +32,7 @@ import {
 } from './auth/impersonation.js';
 import { createJoinProjectHandler, createLeaveProjectHandler } from './auth/project-room-access.js';
 import { createSocketAuthMiddleware, withClientReauthorization } from './auth/socket-auth.js';
+import { clientSocketRooms, disconnectClientSockets, startClientSocketSweep } from './auth/client-socket-revocation.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 
@@ -356,8 +357,14 @@ const realtimeAdapter = attachRedisAdapter(io, realtimeRedisSource());
 const viewSocketRevoker = createViewSocketRevoker({ io, redis: pubSubRedisSource(), logger: fastify.log });
 fastify.decorate('revokeSupportViewSockets', (userId) => viewSocketRevoker.revoke(userId));
 const stopViewSocketSweep = startViewSocketSweep(io, prisma, fastify.log);
+// Client-portal sockets whose access was revoked (#286): dropped at once by
+// the revoking write paths, and within one sweep otherwise
+// (src/auth/client-socket-revocation.js).
+fastify.decorate('revokeClientSockets', (target) => disconnectClientSockets(io, target));
+const stopClientSocketSweep = startClientSocketSweep(io, prisma, fastify.log);
 fastify.addHook('onClose', async () => {
   stopViewSocketSweep();
+  stopClientSocketSweep();
   await viewSocketRevoker.close();
   await new Promise((resolve) => io.close(resolve));
   // After io.close(): closing the server closes the adapter's subscriptions.
@@ -387,6 +394,8 @@ io.on('connection', (socket) => {
   // so notify() reaches it.
   const pendingRoom = `pending-user:${socket.userId}`;
   if (socket.userId) socket.join(pendingRoom);
+  // Client-portal sockets only: the rooms revocation disconnects.
+  for (const room of clientSocketRooms(socket)) socket.join(room);
   const cleared = socket.userId && socket.organizationId
     ? actorHasOpenView(prisma, { id: socket.userId, organizationId: socket.organizationId }).then((open) => !open, () => false)
     : Promise.resolve(true);

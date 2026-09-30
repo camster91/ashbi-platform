@@ -11,6 +11,7 @@ import { CLIENT_SESSION_TOKEN_TYPE, isCurrentUserSession, revokeUserSessions, se
 import { MAGIC_LINK_TOKEN_TYPE, redeemMagicLink } from '../auth/magic-link.js';
 import { accountThrottle } from '../auth/credential-throttle.js';
 import { resolvePortalPrincipal } from '../auth/portal-principal.js';
+import { revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
 import { clearStaleSessionCookie } from '../auth/request-session.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { recordRejectedUpload, sha256Hex } from '../services/upload-integrity.service.js';
@@ -36,6 +37,17 @@ import { sendStoredFile } from '../utils/send-file.js';
 import { validateBody, validateParams, validateQuery, chatMessageListQuerySchema, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
 import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
+
+// The project document fields the client portal returns (docs list, upload).
+const PORTAL_DOCUMENT_SELECT = Object.freeze({
+  id: true,
+  originalName: true,
+  mimeType: true,
+  size: true,
+  checksumSha256: true,
+  createdAt: true,
+  uploadedBy: { select: { id: true, name: true } },
+});
 
 const CLIENT_VISIBLE_INVOICE_STATUSES = [...INVOICE_OPEN_STATUSES, 'PAID'];
 
@@ -303,6 +315,8 @@ export default async function clientPortalRoutes(fastify) {
 
   fastify.post('/logout', { preHandler: clientAuth }, async (request, reply) => {
     await revokeUserSessions(request.prisma, request.clientUser.id);
+    // Signing out ends this user's open portal sockets too.
+    revokeClientSocketsFrom(fastify, { userId: request.clientUser.id }, request.log);
     return reply
       .clearCookie('token', {
         path: '/',
@@ -336,7 +350,7 @@ export default async function clientPortalRoutes(fastify) {
     const { clientId } = request.clientUser;
 
     const projects = await request.prisma.project.findMany({
-      where: { clientId, status: { notIn: ['CANCELLED'] } },
+      where: { clientId, deletedAt: null, status: { notIn: ['CANCELLED'] } },
       select: {
         id: true,
         name: true,
@@ -389,7 +403,7 @@ export default async function clientPortalRoutes(fastify) {
     const { id } = request.params;
 
     const project = await request.prisma.project.findFirst({
-      where: { id, clientId },
+      where: { id, clientId, deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -437,7 +451,7 @@ export default async function clientPortalRoutes(fastify) {
     const { id: projectId, revisionId } = request.params;
     const { action, feedback } = request.body;
     const revision = await request.prisma.revisionRound.findFirst({
-      where: { id: revisionId, projectId, project: { clientId } },
+      where: { id: revisionId, projectId, project: { clientId, deletedAt: null } },
       select: { id: true, roundNumber: true, status: true },
     });
     if (!revision) return reply.status(404).send({ error: 'Revision round not found' });
@@ -487,7 +501,7 @@ export default async function clientPortalRoutes(fastify) {
     const { clientId, contactId, id: userId } = request.clientUser;
     const { id: projectId } = request.params;
     const project = await request.prisma.project.findFirst({
-      where: { id: projectId, clientId },
+      where: { id: projectId, clientId, deletedAt: null },
       select: { id: true, name: true },
     });
     if (!project) return reply.status(404).send({ error: 'Project not found' });
@@ -521,7 +535,7 @@ export default async function clientPortalRoutes(fastify) {
     const { id } = request.params;
 
     // Verify project belongs to client
-    const project = await request.prisma.project.findFirst({ where: { id, clientId } });
+    const project = await request.prisma.project.findFirst({ where: { id, clientId, deletedAt: null } });
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
@@ -568,7 +582,7 @@ export default async function clientPortalRoutes(fastify) {
     const { id } = request.params;
     const { limit, before, after, beforeId, afterId } = request.query;
 
-    const project = await request.prisma.project.findFirst({ where: { id, clientId } });
+    const project = await request.prisma.project.findFirst({ where: { id, clientId, deletedAt: null } });
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
@@ -611,7 +625,7 @@ export default async function clientPortalRoutes(fastify) {
     const { clientId, contactId } = request.clientUser;
     const { id } = request.params;
 
-    const project = await request.prisma.project.findFirst({ where: { id, clientId }, select: { id: true, organizationId: true } });
+    const project = await request.prisma.project.findFirst({ where: { id, clientId, deletedAt: null }, select: { id: true, organizationId: true } });
     if (!project) return reply.status(404).send({ error: 'Project not found' });
 
     const authorUser = await resolveContactAuthor(request.prisma, { contactId, clientId });
@@ -653,7 +667,7 @@ export default async function clientPortalRoutes(fastify) {
   fastify.delete('/projects/:id/chat-uploads/:attachmentId', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId, contactId } = request.clientUser;
     const { id, attachmentId } = request.params;
-    const project = await request.prisma.project.findFirst({ where: { id, clientId }, select: { id: true } });
+    const project = await request.prisma.project.findFirst({ where: { id, clientId, deletedAt: null }, select: { id: true } });
     if (!project) return reply.status(404).send({ error: 'Project not found' });
     const authorUser = await resolveContactAuthor(request.prisma, { contactId, clientId });
     const existing = await request.prisma.attachment.findFirst({
@@ -705,7 +719,7 @@ export default async function clientPortalRoutes(fastify) {
       return sendChatAttachmentError(reply, err);
     }
 
-    const project = await request.prisma.project.findFirst({ where: { id, clientId } });
+    const project = await request.prisma.project.findFirst({ where: { id, clientId, deletedAt: null } });
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
@@ -753,16 +767,16 @@ export default async function clientPortalRoutes(fastify) {
     const { clientId } = request.clientUser;
     const { id } = request.params;
 
-    const project = await request.prisma.project.findFirst({ where: { id, clientId } });
+    const project = await request.prisma.project.findFirst({ where: { id, clientId, deletedAt: null } });
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
+    // Only what the portal shows: never the storage path or file name, the
+    // organization or the uploader's account id.
     const documents = await request.prisma.attachment.findMany({
       where: { entityType: 'PROJECT', entityId: id },
-      include: {
-        uploadedBy: { select: { id: true, name: true } }
-      },
+      select: PORTAL_DOCUMENT_SELECT,
       orderBy: { createdAt: 'desc' }
     });
 
@@ -775,7 +789,7 @@ export default async function clientPortalRoutes(fastify) {
     if (!doc || doc.entityType !== 'PROJECT' || doc.path.startsWith('/uploads/quarantine/')) {
       return reply.status(404).send({ error: 'Document not found' });
     }
-    const project = await request.prisma.project.findFirst({ where: { id: doc.entityId, clientId } });
+    const project = await request.prisma.project.findFirst({ where: { id: doc.entityId, clientId, deletedAt: null } });
     if (!project) return reply.status(404).send({ error: 'Document not found' });
     try {
       const file = await fs.readFile(path.join(process.cwd(), doc.path));
@@ -805,7 +819,7 @@ export default async function clientPortalRoutes(fastify) {
     const { clientId, contactId } = request.clientUser;
     const { id } = request.params;
 
-    const project = await request.prisma.project.findFirst({ where: { id, clientId } });
+    const project = await request.prisma.project.findFirst({ where: { id, clientId, deletedAt: null } });
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
@@ -866,9 +880,7 @@ export default async function clientPortalRoutes(fastify) {
         uploadedById: authorUser.id,
         organizationId: project.organizationId,
       },
-      include: {
-        uploadedBy: { select: { id: true, name: true } }
-      }
+      select: PORTAL_DOCUMENT_SELECT,
     });
 
     return reply.status(201).send(attachment);
@@ -887,7 +899,7 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(404).send({ error: 'Document not found' });
     }
     const project = await request.prisma.project.findFirst({
-      where: { id: doc.entityId, clientId }
+      where: { id: doc.entityId, clientId, deletedAt: null }
     });
     if (!project) {
       return reply.status(404).send({ error: 'Document not found' });
@@ -1040,7 +1052,7 @@ export default async function clientPortalRoutes(fastify) {
     const { id } = request.params;
 
     const invoice = await request.prisma.invoice.findFirst({
-      where: { id, clientId },
+      where: { id, clientId, deletedAt: null },
       include: {
         client: true,
         lineItems: true,
@@ -1097,7 +1109,7 @@ export default async function clientPortalRoutes(fastify) {
 
     // Get all project IDs for this client
     const projects = await request.prisma.project.findMany({
-      where: { clientId, status: { notIn: ['CANCELLED'] } },
+      where: { clientId, deletedAt: null, status: { notIn: ['CANCELLED'] } },
       select: { id: true }
     });
 

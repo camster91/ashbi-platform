@@ -1,6 +1,7 @@
 // Team management routes
 
 import bcrypt from 'bcrypt';
+import { revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
 import { validateBody, teamInviteSchema, teamResetPasswordSchema, teamUpdateSchema } from '../validators/schemas.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { requireRecentAuth } from '../auth/reauth.js';
@@ -222,6 +223,10 @@ export default async function teamRoutes(fastify) {
         entityId: member.id,
         metadata: { fromRole: before.role, toRole: member.role },
       });
+    }
+    // A deactivated client-portal user's open portal sockets are dropped now.
+    if (member.role === 'CLIENT' && member.isActive === false) {
+      revokeClientSocketsFrom(fastify, { userId: member.id }, request.log);
     }
     if (before && isActive !== undefined && before.isActive !== member.isActive) {
       await recordRequestAuditEvent(request.prisma, request, {

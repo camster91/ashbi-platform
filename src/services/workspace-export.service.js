@@ -478,10 +478,10 @@ export async function sha256File(filePath) {
 
 /**
  * Copy one stored file into the export and verify the copy by re-hashing it.
- * @param {{ outputDir: string, uploadsDir: string, source: string, recordId: string, storedPath: unknown, name?: string | null, expectedSize?: number, mimeType?: string | null }} options
+ * @param {{ outputDir: string, uploadsDir: string, source: string, recordId: string, storedPath: unknown, name?: string | null, expectedSize?: number, expectedSha256?: string | null, mimeType?: string | null }} options
  * @returns {Promise<{ entry?: object, exception?: object }>}
  */
-async function copyStoredFile({ outputDir, uploadsDir, source, recordId, storedPath, name, expectedSize, mimeType }) {
+async function copyStoredFile({ outputDir, uploadsDir, source, recordId, storedPath, name, expectedSize, expectedSha256 = null, mimeType }) {
   const resolved = resolveStoredUploadPath(storedPath, uploadsDir);
   const base = { source, recordId, storedPath: typeof storedPath === 'string' ? storedPath : null };
   if ('code' in resolved) return { exception: { ...base, code: resolved.code, detail: resolved.detail } };
@@ -533,9 +533,14 @@ async function copyStoredFile({ outputDir, uploadsDir, source, recordId, storedP
     await fsp.rm(destination, { force: true });
     return { exception: { ...base, code: 'FILE_COPY_MISMATCH', detail: 'The copied file did not match the source SHA-256; it was removed from the export' } };
   }
-  const entry = { source, recordId, exportPath, originalName: name ?? null, mimeType: mimeType ?? null, size: sourceBytes, sha256 };
+  // recordedSha256: the checksum stored at upload (attachments.checksumSha256,
+  // null for files stored before checksums existed).
+  const entry = { source, recordId, exportPath, originalName: name ?? null, mimeType: mimeType ?? null, size: sourceBytes, sha256, recordedSha256: expectedSha256 ?? null };
   if (Number.isInteger(expectedSize) && expectedSize !== sourceBytes) {
     return { entry, exception: { ...base, code: 'FILE_SIZE_MISMATCH', detail: `The recorded size is ${expectedSize} bytes but the stored file has ${sourceBytes} bytes; the stored file was copied as is` } };
+  }
+  if (typeof expectedSha256 === 'string' && expectedSha256 && expectedSha256 !== sha256) {
+    return { entry, exception: { ...base, code: 'FILE_CHECKSUM_MISMATCH', detail: 'The stored file does not match the SHA-256 recorded at upload; the stored file was copied as is' } };
   }
   return { entry };
 }
@@ -649,7 +654,7 @@ export async function exportWorkspace({ prisma, organizationId, outputDir, inclu
           await writer.write(row);
           if (!includeFiles) continue;
           if (entity.name === 'attachments') {
-            record(await copyStoredFile({ outputDir: target, uploadsDir: uploadRoot, source: 'attachment', recordId: row.id, storedPath: row.path, name: row.originalName || row.filename, expectedSize: row.size, mimeType: row.mimeType }));
+            record(await copyStoredFile({ outputDir: target, uploadsDir: uploadRoot, source: 'attachment', recordId: row.id, storedPath: row.path, name: row.originalName || row.filename, expectedSize: row.size, expectedSha256: row.checksumSha256 ?? null, mimeType: row.mimeType }));
           } else if (entity.name === 'expenses' && typeof row.receiptUrl === 'string' && row.receiptUrl.startsWith('/uploads/')) {
             if (RECEIPT_FILE_NAME.test(row.receiptUrl.slice('/uploads/'.length))) {
               record(await copyStoredFile({ outputDir: target, uploadsDir: uploadRoot, source: 'expense_receipt', recordId: row.id, storedPath: row.receiptUrl, name: path.posix.basename(row.receiptUrl) }));

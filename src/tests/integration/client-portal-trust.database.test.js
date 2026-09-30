@@ -218,8 +218,9 @@ test('client portal: revocation, cross-organization isolation and auditable appr
     assert.equal(refused.statusCode, 400);
     const refusedChat = await as(tokenA, 'POST', `/projects/${a.project.id}/chat-uploads`, spoofed.payload, { 'content-type': spoofed.contentType });
     assert.equal(refusedChat.statusCode, 400);
-    const rejections = await raw.auditEvent.findMany({ where: { organizationId: orgA, action: 'upload.rejected' }, orderBy: { createdAt: 'asc' } });
-    assert.deepEqual(rejections.map((event) => event.metadata.surface), ['client_portal_documents', 'client_portal_chat']);
+    const rejections = await raw.auditEvent.findMany({ where: { organizationId: orgA, action: 'upload.rejected' } });
+    // Compared as a set: both rows can share a createdAt.
+    assert.deepEqual(rejections.map((event) => event.metadata.surface).sort(), ['client_portal_chat', 'client_portal_documents']);
     for (const event of rejections) {
       assert.equal(event.actorType, 'CLIENT');
       assert.equal(event.entityType, 'attachment');

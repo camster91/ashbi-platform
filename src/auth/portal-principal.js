@@ -43,3 +43,26 @@ export async function resolvePortalPrincipal(prisma, payload) {
 
   return { user, contact, client };
 }
+
+/**
+ * Whether a CLIENT session (already verified as current by
+ * isCurrentUserSession) still has portal access, for the routes outside
+ * /api/client-portal that accept any session (such as GET /api/auth/me and
+ * change-password). A portal session (with `contactId`) must resolve to a
+ * full principal; a password-login client session (no contact claim) needs
+ * its user's client to be active, not deleted, archived or churned.
+ * Non-client sessions pass.
+ * @param {any} prisma raw client
+ * @param {any} payload verified session claims
+ */
+export async function clientSessionHasPortalAccess(prisma, payload) {
+  if (payload?.role !== 'CLIENT') return true;
+  if (payload.contactId) return Boolean(await resolvePortalPrincipal(prisma, payload));
+  const user = await prisma.user.findUnique({ where: { id: payload.id }, select: { clientId: true } });
+  if (!user?.clientId) return false;
+  const client = await prisma.client.findFirst({
+    where: { id: user.clientId, deletedAt: null, status: 'ACTIVE', relationshipStatus: { notIn: ['ARCHIVED', 'CHURNED'] } },
+    select: { id: true },
+  });
+  return Boolean(client);
+}

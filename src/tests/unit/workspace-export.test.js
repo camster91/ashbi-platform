@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import prismaPkg from '@prisma/client';
 import {
   EXPORT_ENTITIES,
@@ -319,4 +320,26 @@ test('verifyWorkspaceExportDirectory detects tampering with any file, including 
       }
     });
   }
+});
+
+test('exportWorkspace compares each attachment with the SHA-256 recorded at upload', async () => {
+  const sha = (text) => createHash('sha256').update(text).digest('hex');
+  await withExport(({ uploads }) => {
+    fs.writeFileSync(path.join(uploads, 'same.png'), 'same');
+    fs.writeFileSync(path.join(uploads, 'changed.png'), 'changed on disk');
+    fs.writeFileSync(path.join(uploads, 'legacy.png'), 'legacy');
+  }, {
+    Attachment: [
+      { id: 'a1', path: '/uploads/same.png', originalName: 'same.png', size: 4, checksumSha256: sha('same') },
+      { id: 'a2', path: '/uploads/changed.png', originalName: 'changed.png', size: 15, checksumSha256: sha('original bytes') },
+      { id: 'a3', path: '/uploads/legacy.png', originalName: 'legacy.png', size: 6, checksumSha256: null },
+    ],
+  }, async ({ result }) => {
+    assert.deepEqual(codes(result), ['a2:FILE_CHECKSUM_MISMATCH']);
+    const byId = Object.fromEntries(result.manifest.files.map((file) => [file.recordId, file]));
+    assert.deepEqual(Object.keys(byId).sort(), ['a1', 'a2', 'a3'], 'a mismatching file is still copied as is');
+    assert.equal(byId.a1.recordedSha256, byId.a1.sha256);
+    assert.equal(byId.a2.recordedSha256, sha('original bytes'));
+    assert.equal(byId.a3.recordedSha256, null);
+  });
 });
