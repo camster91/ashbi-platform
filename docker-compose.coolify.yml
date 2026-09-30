@@ -1,0 +1,148 @@
+# Ashbi Hub on Coolify ("Docker Compose" build pack).
+#
+# One self-contained stack: API, worker, a one-shot migration runner,
+# PostgreSQL with pgvector, and Redis. Coolify's proxy routes the domain set
+# in the Coolify UI to the `app` service on port 3002; no port is published
+# on the host and the data stores are reachable only on the stack network.
+#
+# Set every variable in Coolify's Environment Variables tab (see
+# docs/coolify-deployment.md). Coolify writes them to .env beside this file at
+# deploy time; no .env is committed.
+# Uploaded files and runtime config live in named volumes shared by the API
+# and the worker, so they survive redeploys.
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_REVISION: ${SOURCE_COMMIT:-unknown}
+    restart: unless-stopped
+    command: ["sh", "scripts/start.sh"]
+    expose:
+      - "3002"
+    # Coolify writes every variable from its Environment Variables tab to
+    # .env next to this file; env_file passes all of them to the container.
+    # The entries below override or require the ones this stack depends on.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - SERVICE_FQDN_APP_3002
+      - NODE_ENV=production
+      - PORT=3002
+      # The proxy reaches this container over the stack network, so the
+      # loopback-only health detail shortcut is off.
+      - HEALTH_DETAILS_LOOPBACK=false
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ashbi}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-ashbi}?schema=public
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - CREDENTIALS_KEY=${CREDENTIALS_KEY:?CREDENTIALS_KEY is required}
+      - ADMIN_INVITE_TOKEN=${ADMIN_INVITE_TOKEN:?ADMIN_INVITE_TOKEN is required}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:?WEBHOOK_SECRET is required}
+      - APP_URL=${APP_URL:?APP_URL is required}
+      - CORS_ORIGIN=${CORS_ORIGIN:?CORS_ORIGIN is required}
+      - TRUST_PROXY=${TRUST_PROXY:-1}
+    volumes:
+      - uploads:/app/uploads
+      - appconfig:/app/config
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3002/api/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_REVISION: ${SOURCE_COMMIT:-unknown}
+    restart: unless-stopped
+    command: ["npm", "run", "start:worker"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ashbi}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-ashbi}?schema=public
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - CREDENTIALS_KEY=${CREDENTIALS_KEY:?CREDENTIALS_KEY is required}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:?WEBHOOK_SECRET is required}
+      - APP_URL=${APP_URL:?APP_URL is required}
+    volumes:
+      - uploads:/app/uploads
+      - appconfig:/app/config
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "npm", "run", "health:worker"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Applies the committed migration chain once per deploy, before the API and
+  # worker start. A failed migration stops the deploy with the old containers
+  # still serving.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ashbi}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-ashbi}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # pgvector image: the baseline migration runs CREATE EXTENSION vector.
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-ashbi}
+      - POSTGRES_USER=${POSTGRES_USER:-ashbi}
+      - POSTGRES_PASSWORD=${SERVICE_PASSWORD_POSTGRES}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
+  appconfig:
