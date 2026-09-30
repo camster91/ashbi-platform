@@ -7,8 +7,6 @@ import { once } from 'node:events';
 import http from 'node:http';
 import test from 'node:test';
 
-import { createAdapter } from '@socket.io/redis-adapter';
-import { Emitter } from '@socket.io/redis-emitter';
 import IORedis from 'ioredis';
 import { Server } from 'socket.io';
 import { io as connectClient } from 'socket.io-client';
@@ -35,15 +33,19 @@ async function redisReachable() {
 
 const skip = (await redisReachable()) ? false : `Redis is not reachable at ${redisUrl}`;
 
-// A unique channel prefix per run, so parallel runs never see each other.
-const key = `ashbi-realtime-test-${process.pid}-${Date.now()}`;
+// A unique channel key per run, so parallel runs never see each other. The
+// production path (REALTIME_CHANNEL_KEY -> realtimeRedisSource().key -> the
+// default adapter and emitter factories) is what these tests exercise.
+const runKey = `test-${process.pid}-${Date.now()}`;
 // The same source the API uses, forced on (unit/integration runs set NODE_ENV=test).
-const source = () => realtimeRedisSource({ env: { NODE_ENV: 'production', REDIS_URL: redisUrl } });
+const source = (channel = runKey) => realtimeRedisSource({
+  env: { NODE_ENV: 'production', REDIS_URL: redisUrl, REALTIME_CHANNEL_KEY: channel },
+});
 
-async function startInstance(cleanup) {
+async function startInstance(cleanup, channel = runKey) {
   const server = http.createServer();
   const io = new Server(server);
-  const adapter = attachRedisAdapter(io, source(), { adapterFactory: (pub, sub) => createAdapter(pub, sub, { key }) });
+  const adapter = attachRedisAdapter(io, source(channel));
   assert.equal(adapter.enabled, true);
   // Stand-in for the auth middleware + connection handler in src/index.js.
   io.on('connection', (socket) => {
@@ -98,10 +100,8 @@ test('a worker notification from the Redis emitter reaches a client on an API in
     let leaked = false;
     other.on('notification:new', () => { leaked = true; });
 
-    const emitter = createRealtimeEmitter({
-      redis: source().duplicate(),
-      createEmitter: (publishClient) => new Emitter(/** @type {any} */ (publishClient), { key }),
-    });
+    const realtime = source();
+    const emitter = createRealtimeEmitter({ redis: realtime.duplicate(), key: realtime.key });
     cleanup.push(() => emitter.close());
     assert.equal(emitter.enabled, true);
 
@@ -152,6 +152,42 @@ test('two API instances share rooms through the Redis adapter', { skip }, async 
     const dropped = once(onA, 'disconnect');
     b.io.in('user:u1').disconnectSockets(true);
     await dropped;
+  } finally {
+    await runCleanup(cleanup);
+  }
+});
+
+test('deployments with different channel keys on one Redis do not see each other', { skip }, async () => {
+  const cleanup = [];
+  try {
+    // Redis Pub/Sub ignores the logical database, so only the key separates
+    // e.g. staging and production sharing one Redis server.
+    const production = await startInstance(cleanup, `${runKey}-production`);
+    const staging = await startInstance(cleanup, `${runKey}-staging`);
+    await waitForServers(production.io, 1);
+    await waitForServers(staging.io, 1);
+    const prodClient = await connect(production.url, { userId: 'u1', projectId: 'p1' }, cleanup);
+    const stagingClient = await connect(staging.url, { userId: 'u1', projectId: 'p1' }, cleanup);
+    let leaked = 0;
+    stagingClient.on('notification:new', () => { leaked += 1; });
+    stagingClient.on('chat', () => { leaked += 1; });
+
+    const workerSource = source(`${runKey}-production`);
+    const emitter = createRealtimeEmitter({ redis: workerSource.duplicate(), key: workerSource.key });
+    cleanup.push(() => emitter.close());
+
+    const fromWorker = nextEvent(prodClient, 'notification:new');
+    emitter.to('user:u1').emit('notification:new', { id: 'n3' });
+    assert.deepEqual(await fromWorker, { id: 'n3' });
+
+    const broadcast = nextEvent(prodClient, 'chat');
+    production.io.emit('chat', { text: 'global' });
+    assert.deepEqual(await broadcast, { text: 'global' });
+
+    // Give a leaked packet time to arrive before asserting it did not.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.equal(leaked, 0, 'the staging deployment received none of production\'s packets');
+    assert.equal(await production.io.of('/').adapter.serverCount(), 1, 'the adapters do not share a request channel');
   } finally {
     await runCleanup(cleanup);
   }

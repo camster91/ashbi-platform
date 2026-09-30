@@ -20,12 +20,12 @@ test('with a Redis source, the Redis adapter is attached on two dedicated connec
     },
   };
   const factoryCalls = [];
-  const adapterFactory = (pub, sub) => { factoryCalls.push([pub.name, sub.name]); return 'redis-adapter'; };
+  const adapterFactory = (pub, sub, opts) => { factoryCalls.push([pub.name, sub.name, opts]); return 'redis-adapter'; };
 
-  const realtime = attachRedisAdapter(io, source, { adapterFactory });
+  const realtime = attachRedisAdapter(io, { ...source, key: 'ashbi-realtime:production:db0' }, { adapterFactory });
 
   assert.equal(realtime.enabled, true);
-  assert.deepEqual(factoryCalls, [['c1', 'c2']], 'publisher and subscriber are separate connections');
+  assert.deepEqual(factoryCalls, [['c1', 'c2', { key: 'ashbi-realtime:production:db0' }]], 'separate publisher and subscriber, deployment channel key');
   assert.deepEqual(io.adapters, ['redis-adapter']);
   await realtime.close();
   assert.deepEqual(connections.map((c) => c.quit), ['closed', 'closed']);
