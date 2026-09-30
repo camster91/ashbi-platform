@@ -135,6 +135,13 @@ function bearerToken(request) {
 export function requestPrincipalId(request, verifySessionToken) {
   if (request.impersonation?.actorUserId) return request.impersonation.actorUserId;
   if (typeof request.user?.id === 'string' && request.user.id) return request.user.id;
+  // Only /api/auth handlers verify a staff session themselves. Elsewhere a
+  // route that set no request.user does not act with staff authority (public
+  // portal, proposal, estimate and share links; the client portal accepts
+  // only client sessions), so a staff cookie that happens to be in the
+  // browser must not put those routes under the staff restriction.
+  const routeUrl = request.routeOptions?.url;
+  if (typeof routeUrl !== 'string' || !routeUrl.startsWith('/api/auth/')) return null;
   const token = bearerToken(request) || request.cookies?.token;
   if (typeof token !== 'string' || !token) return null;
   try {

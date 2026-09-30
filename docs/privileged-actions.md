@@ -404,8 +404,12 @@ one of them):
 Everything else is refused, including `PUT /api/auth/me`, changing the
 password, step-up (`/api/auth/reauth`), starting a support view, creating
 users through `POST /api/auth/register` (whose handler verifies the session
-itself; the guard verifies the session token too), public capability links
-opened with the restricted session's cookie, and every staff and admin API.
+itself; the guard verifies the session token too), and every staff and admin
+API. Public capability links (portal, proposal, estimate and share links) and
+the client portal are not staff routes: they stay usable even when the same
+browser holds a restricted staff session, because the guard only reads a raw
+session cookie on `/api/auth` routes and otherwise uses the identity a route
+guard authenticated.
 Realtime (Socket.IO) handshakes are refused as well. The web app routes the
 person to `/security/two-factor-setup`, which explains the requirement, runs
 the normal enrollment and offers sign-out; any `403 MFA_ENROLLMENT_REQUIRED`

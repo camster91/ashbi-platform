@@ -108,14 +108,24 @@ describe('requestPrincipalId', () => {
     assert.equal(requestPrincipalId({ user: { id: 'staff-1' } }, verify), 'staff-1');
   });
 
-  it('falls back to a verifiable session token for handler-verified routes', () => {
+  it('falls back to a verifiable session token for handler-verified /api/auth routes', () => {
     const session = { typ: 'session', id: 'staff-2', role: 'STAFF', sessionVersion: 0 };
-    assert.equal(requestPrincipalId({ cookies: { token: 't' }, headers: {} }, () => session), 'staff-2');
-    assert.equal(requestPrincipalId({ headers: { authorization: 'Bearer t' } }, () => session), 'staff-2');
+    const authRoute = { url: '/api/auth/register' };
+    assert.equal(requestPrincipalId({ routeOptions: authRoute, cookies: { token: 't' }, headers: {} }, () => session), 'staff-2');
+    assert.equal(requestPrincipalId({ routeOptions: authRoute, headers: { authorization: 'Bearer t' } }, () => session), 'staff-2');
     // Not a session (a magic link or any other token type), or unverifiable.
-    assert.equal(requestPrincipalId({ cookies: { token: 't' }, headers: {} }, () => ({ typ: 'client_magic_link', id: 'x' })), null);
-    assert.equal(requestPrincipalId({ cookies: { token: 't' }, headers: {} }, () => { throw new Error('bad'); }), null);
-    assert.equal(requestPrincipalId({ headers: {} }, verify), null);
+    assert.equal(requestPrincipalId({ routeOptions: authRoute, cookies: { token: 't' }, headers: {} }, () => ({ typ: 'client_magic_link', id: 'x' })), null);
+    assert.equal(requestPrincipalId({ routeOptions: authRoute, cookies: { token: 't' }, headers: {} }, () => { throw new Error('bad'); }), null);
+    assert.equal(requestPrincipalId({ routeOptions: authRoute, headers: {} }, verify), null);
+  });
+
+  it('ignores a staff cookie on public routes that authenticate no staff user', () => {
+    const session = { typ: 'session', id: 'staff-2', role: 'STAFF', sessionVersion: 0 };
+    for (const url of ['/api/portal/:token', '/api/proposals/view/:token', '/api/estimates/view/:viewToken', '/api/client-portal/me']) {
+      assert.equal(requestPrincipalId({ routeOptions: { url }, cookies: { token: 't' }, headers: {} }, () => session), null, url);
+    }
+    // A guarded route still uses the authenticated user.
+    assert.equal(requestPrincipalId({ routeOptions: { url: '/api/projects' }, user: { id: 'staff-3' } }, verify), 'staff-3');
   });
 });
 
@@ -235,6 +245,16 @@ describe('the enforcement hook', () => {
     assert.equal((await app.inject({ method: 'POST', url: '/api/auth/register', payload: {} })).statusCode, 200);
     assert.equal((await app.inject({ method: 'GET', url: '/api/public/thing' })).statusCode, 200);
     assert.equal((await app.inject({ method: 'GET', url: '/not-api', headers: { 'x-user': 'admin-1' } })).statusCode, 200);
+  });
+
+  it('never blocks a public link opened in a browser that holds a restricted staff session', async (t) => {
+    const prisma = fakePrisma([user({ id: 'admin-1', role: 'ADMIN' })]);
+    const app = await buildApp(t, prisma);
+    const token = signUserSession(app.jwt, { ...user({ id: 'admin-1', role: 'ADMIN' }) });
+    // The same cookie restricts a staff route but not a public one.
+    assert.equal((await app.inject({ method: 'GET', url: '/api/clients', headers: { 'x-user': 'admin-1' }, cookies: { token } })).statusCode, 403);
+    assert.equal((await app.inject({ method: 'GET', url: '/api/public/thing', cookies: { token } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'GET', url: '/api/public/thing', headers: { authorization: `Bearer ${token}` } })).statusCode, 200);
   });
 
   it('fails closed when the requirement cannot be read', async (t) => {
