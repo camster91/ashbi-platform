@@ -149,8 +149,11 @@ test('an accepted delivery is queued durably, keyed by its signature, and a repl
   assert.equal(jobs.length, 1);
   assert.equal(jobs[0].opts.jobId, emailWebhookJobId(signature));
   assert.equal(jobs[0].data.organizationId, 'org-bot');
-  // The pipeline is not idempotent: the job runs once and a failure is kept for replay.
-  assert.equal(jobs[0].opts.attempts, 1);
+  // The pipeline is idempotent per delivery key, so a failed attempt is
+  // retried with backoff, and a delivery that exhausts them is kept for replay.
+  assert.equal(jobs[0].data.inboundDeliveryKey, emailWebhookJobId(signature));
+  assert.equal(jobs[0].opts.attempts, 3);
+  assert.deepEqual(jobs[0].opts.backoff, { type: 'exponential', delay: 5000 });
   assert.ok(jobs[0].opts.removeOnFail.age >= 7 * 24 * 60 * 60, 'failed deliveries are retained for replay');
   assert.equal(store.seen.has(signature), true);
 
@@ -188,6 +191,7 @@ test('the route never re-serialises the body and queues before recording the rec
     const emailWorker = worker.slice(worker.indexOf('QUEUES.EMAIL_PROCESSING'), worker.indexOf('// Project Health Worker'));
     assert.match(emailWorker, /try \{\s*await scheduleEscalationCheck/, 'a scheduling failure never fails a processed email job');
     assert.match(emailWorker, /maxStalledCount: 0/, 'a stalled email job is failed for replay, never re-run');
+    assert.match(emailWorker, /hydrateEmailJobData\(job\.data, \{ jobId: job\.id \}\)/, 'the job id is the fallback delivery key');
   });
 });
 

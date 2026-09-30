@@ -103,7 +103,7 @@ const emailWorker = createWorker(
     const result = await runTenantJob(
       prisma,
       job.data?.organizationId,
-      () => processEmailPipeline(hydrateEmailJobData(job.data)),
+      () => processEmailPipeline(hydrateEmailJobData(job.data, { jobId: job.id })),
       backgroundPrisma,
     );
 
@@ -122,9 +122,14 @@ const emailWorker = createWorker(
 
     return result;
   },
-  // The pipeline is not idempotent: a stalled job (its worker died or lost
-  // the lock) is failed and kept for a deliberate replay, never re-run
-  // automatically on another worker, which could duplicate its writes.
+  // The pipeline is idempotent per delivery key (inboundDeliveryKey): a
+  // failed attempt is retried with backoff (INBOUND_EMAIL_JOB_OPTIONS) and
+  // resumes the thread or unmatched email the earlier attempt created. A
+  // stalled job (its worker died or lost the lock) is still failed and kept
+  // for a deliberate replay rather than re-run at once on another worker:
+  // the first run may still be executing, and while the unique key prevents
+  // a duplicate record of one kind, two concurrent runs whose AI match
+  // disagrees could create both a thread and an unmatched email.
   { concurrency: 5, maxStalledCount: 0 }
 );
 

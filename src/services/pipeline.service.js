@@ -8,6 +8,130 @@ import { buildReplanProjectPrompt } from '../ai/prompts/replanProject.js';
 import { buildDraftResponsePrompt } from '../ai/prompts/draftResponse.js';
 import { assignThread } from './assignment.service.js';
 import env from '../config/env.js';
+import { normalizeInboundDeliveryKey } from './inbound-delivery-key.js';
+
+// Idempotency (INTEGRATIONS.md, "Inbound email webhook"): a delivery with an
+// `inboundDeliveryKey` stores it on the record created first (a thread or an
+// unmatched email, both behind a unique index). Running the same delivery
+// again finds that record and resumes it: an unmatched email returns the same
+// result; a thread skips the steps its `inboundPipelineStage` says already
+// committed. Each step's writes commit in one transaction with a
+// compare-and-set of the stage marker (previous stage -> this stage), so a
+// retry, or a concurrent run of the same delivery, never repeats a
+// notification, AI task or draft response.
+const PIPELINE_STAGES = ['CREATED', 'ANALYZED', 'ASSIGNED', 'REPLANNED', 'COMPLETED'];
+const threadInclude = () => ({
+  messages: { orderBy: { receivedAt: 'asc' } },
+  client: true,
+  project: true,
+});
+
+function stageReached(thread, stage) {
+  return PIPELINE_STAGES.indexOf(thread.inboundPipelineStage || 'CREATED') >= PIPELINE_STAGES.indexOf(stage);
+}
+
+/**
+ * Move a thread from the stage before `stage` to `stage` (plus `data`).
+ * Returns false when another run already moved it.
+ */
+async function advanceStage(client, threadId, stage, data = {}) {
+  const previous = PIPELINE_STAGES[PIPELINE_STAGES.indexOf(stage) - 1];
+  const stageWhere = previous === 'CREATED'
+    ? { OR: [{ inboundPipelineStage: 'CREATED' }, { inboundPipelineStage: null }] }
+    : { inboundPipelineStage: previous };
+  const { count } = await client.thread.updateMany({
+    where: { id: threadId, ...stageWhere },
+    data: { ...data, inboundPipelineStage: stage },
+  });
+  return count === 1;
+}
+
+// Thrown inside a step's transaction when another run of the same delivery
+// already committed the step: rolls back this run's duplicate writes.
+class StageAlreadyCommittedError extends Error {
+  constructor(stage) {
+    super(`Inbound email pipeline stage ${stage} was already committed`);
+    this.name = 'StageAlreadyCommittedError';
+    this.code = 'PIPELINE_STAGE_ALREADY_COMMITTED';
+  }
+}
+
+function commitStage(threadId, stage) {
+  return async (tx) => {
+    if (!(await advanceStage(tx, threadId, stage))) throw new StageAlreadyCommittedError(stage);
+  };
+}
+
+const isUniqueViolation = (error) => error?.code === 'P2002';
+
+function parseJson(value, fallback) {
+  if (typeof value !== 'string') return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function findThreadByDeliveryKey(inboundDeliveryKey) {
+  return prisma.thread.findFirst({ where: { inboundDeliveryKey }, include: threadInclude() });
+}
+
+function findUnmatchedByDeliveryKey(inboundDeliveryKey) {
+  return prisma.unmatchedEmail.findFirst({ where: { inboundDeliveryKey } });
+}
+
+function unmatchedResult(unmatched) {
+  return {
+    matched: false,
+    needsTriage: true,
+    suggestions: {
+      clients: parseJson(unmatched.suggestedClients, []),
+      projects: parseJson(unmatched.suggestedProjects, []),
+    },
+  };
+}
+
+/**
+ * Create the delivery's first record (a thread or an unmatched email) at most
+ * once across BOTH tables. Two overlapping runs of one delivery can miss the
+ * initial lookup and then disagree on the AI match (one above the threshold,
+ * one below); the per-table unique indexes cannot see each other, so the
+ * create runs under a transaction-scoped advisory lock on the delivery key
+ * and re-checks both tables first. The unique index stays as the backstop.
+ *
+ * @param {string|null} inboundDeliveryKey
+ * @param {'thread'|'unmatched'} kind what this run would create
+ * @param {(tx: any) => Promise<any>} create
+ * @returns {Promise<{ kind: 'thread'|'unmatched', record: any }>}
+ */
+async function createForDelivery(inboundDeliveryKey, kind, create) {
+  if (!inboundDeliveryKey) return { kind, record: await create(prisma) };
+  try {
+    return await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`inbound-email:${inboundDeliveryKey}`}, 0))`;
+      const thread = await tx.thread.findFirst({ where: { inboundDeliveryKey }, include: threadInclude() });
+      if (thread) return { kind: 'thread', record: thread };
+      const unmatched = await tx.unmatchedEmail.findFirst({ where: { inboundDeliveryKey } });
+      if (unmatched) return { kind: 'unmatched', record: unmatched };
+      return { kind, record: await create(tx) };
+    });
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    // A row with this key exists but is not visible in this tenant (or the
+    // lock was bypassed): resume a visible one, never another organization's.
+    const thread = await findThreadByDeliveryKey(inboundDeliveryKey);
+    if (thread) return { kind: 'thread', record: thread };
+    const unmatched = await findUnmatchedByDeliveryKey(inboundDeliveryKey);
+    if (unmatched) return { kind: 'unmatched', record: unmatched };
+    throw error;
+  }
+}
+
+/** Continue from whichever record the delivery ended up with. */
+function resultFor({ kind, record }) {
+  return kind === 'thread' ? continueThreadPipeline(record) : unmatchedResult(record);
+}
 
 /**
  * Process incoming email through full AI pipeline
@@ -19,12 +143,19 @@ import env from '../config/env.js';
  */
 export async function processEmailPipeline(emailData) {
   console.log('Processing email:', emailData.subject);
+  const inboundDeliveryKey = normalizeInboundDeliveryKey(emailData.inboundDeliveryKey);
+
+  // A retried delivery resumes the record its earlier attempt created. This
+  // runs before the AI match, which could decide differently the second time.
+  if (inboundDeliveryKey) {
+    const existingThread = await findThreadByDeliveryKey(inboundDeliveryKey);
+    if (existingThread) return continueThreadPipeline(existingThread);
+    const existingUnmatched = await findUnmatchedByDeliveryKey(inboundDeliveryKey);
+    if (existingUnmatched) return unmatchedResult(existingUnmatched);
+  }
 
   // Step 1: Parse & Match Email
   const matchResult = await parseAndMatchEmail(emailData);
-
-  let thread;
-  let needsTriage = false;
 
   // Handle matching result
   if (matchResult.isSpamOrIrrelevant?.likely) {
@@ -32,17 +163,23 @@ export async function processEmailPipeline(emailData) {
     return { matched: false, spam: true, reason: matchResult.isSpamOrIrrelevant.reason };
   }
 
-  if (matchResult.matchedClient?.confidence >= env.autoMatchThreshold) {
-    // High confidence match - create thread automatically
-    thread = await prisma.thread.create({
+  const confidence = matchResult.matchedClient?.confidence;
+  if (confidence >= env.suggestMatchThreshold) {
+    // High confidence: create the thread automatically. Medium confidence:
+    // create it too, but flag it for triage.
+    const needsTriage = !(confidence >= env.autoMatchThreshold);
+    return resultFor(await createForDelivery(inboundDeliveryKey, 'thread', (tx) => tx.thread.create({
       data: {
         subject: emailData.subject,
         status: 'AWAITING_RESPONSE',
         priority: 'NORMAL',
         matchConfidence: matchResult.matchedClient.confidence,
         matchReason: matchResult.matchedClient.matchReason,
+        ...(needsTriage ? { needsTriage: true } : {}),
         clientId: matchResult.matchedClient.id,
         projectId: matchResult.matchedProject?.id || null,
+        inboundDeliveryKey,
+        inboundPipelineStage: 'CREATED',
         messages: {
           create: {
             direction: 'INBOUND',
@@ -57,119 +194,116 @@ export async function processEmailPipeline(emailData) {
           }
         }
       },
-      include: {
-        messages: true,
-        client: true,
-        project: true
-      }
-    });
-  } else if (matchResult.matchedClient?.confidence >= env.suggestMatchThreshold) {
-    // Medium confidence - create thread but flag for triage
-    thread = await prisma.thread.create({
-      data: {
-        subject: emailData.subject,
-        status: 'AWAITING_RESPONSE',
-        priority: 'NORMAL',
-        matchConfidence: matchResult.matchedClient.confidence,
-        matchReason: matchResult.matchedClient.matchReason,
-        needsTriage: true,
-        clientId: matchResult.matchedClient.id,
-        projectId: matchResult.matchedProject?.id || null,
-        messages: {
-          create: {
-            direction: 'INBOUND',
-            senderEmail: emailData.senderEmail,
-            senderName: emailData.senderName,
-            subject: emailData.subject,
-            bodyText: emailData.bodyText,
-            bodyHtml: emailData.bodyHtml,
-            rawEmail: emailData.rawEmail,
-            receivedAt: emailData.receivedAt || new Date(),
-            processedAt: new Date()
-          }
-        }
-      },
-      include: {
-        messages: true,
-        client: true,
-        project: true
-      }
-    });
-    needsTriage = true;
-  } else {
-    // Low confidence - add to unmatched queue
-    await prisma.unmatchedEmail.create({
-      data: {
-        senderEmail: emailData.senderEmail,
-        senderName: emailData.senderName,
-        subject: emailData.subject,
-        bodyText: emailData.bodyText,
-        bodyHtml: emailData.bodyHtml,
-        rawEmail: emailData.rawEmail,
-        suggestedClients: JSON.stringify(
-          matchResult.matchedClient ? [matchResult.matchedClient] : []
-        ),
-        suggestedProjects: JSON.stringify(
-          matchResult.matchedProject ? [matchResult.matchedProject] : []
-        )
-      }
-    });
-
-    return {
-      matched: false,
-      needsTriage: true,
-      suggestions: {
-        clients: matchResult.matchedClient ? [matchResult.matchedClient] : [],
-        projects: matchResult.matchedProject ? [matchResult.matchedProject] : []
-      }
-    };
+      include: threadInclude()
+    })));
   }
 
-  // Step 2: Analyze Message
-  const analysis = await analyzeMessage(thread.messages[0], thread, thread.project);
-
-  // Update thread with analysis
-  await prisma.thread.update({
-    where: { id: thread.id },
+  // Low confidence - add to unmatched queue
+  return resultFor(await createForDelivery(inboundDeliveryKey, 'unmatched', (tx) => tx.unmatchedEmail.create({
     data: {
+      senderEmail: emailData.senderEmail,
+      senderName: emailData.senderName,
+      subject: emailData.subject,
+      bodyText: emailData.bodyText,
+      bodyHtml: emailData.bodyHtml,
+      rawEmail: emailData.rawEmail,
+      inboundDeliveryKey,
+      suggestedClients: JSON.stringify(
+        matchResult.matchedClient ? [matchResult.matchedClient] : []
+      ),
+      suggestedProjects: JSON.stringify(
+        matchResult.matchedProject ? [matchResult.matchedProject] : []
+      )
+    }
+  })));
+}
+
+/**
+ * Steps 2-5 for a thread, skipping the steps an earlier attempt of the same
+ * delivery already committed.
+ */
+async function continueThreadPipeline(thread) {
+  const message = thread.messages[0];
+  if (!message) throw new Error(`Thread ${thread.id} has no inbound message to process`);
+
+  // Step 2: Analyze Message
+  let analysis = stageReached(thread, 'ANALYZED') ? parseJson(thread.aiAnalysis, null) : null;
+  if (!stageReached(thread, 'ANALYZED')) {
+    analysis = await analyzeMessage(message, thread, thread.project);
+
+    // Update thread with analysis
+    const analyzed = await advanceStage(prisma, thread.id, 'ANALYZED', {
       aiAnalysis: JSON.stringify(analysis),
       intent: analysis.intent,
       sentiment: analysis.sentiment,
       priority: analysis.urgency,
       urgencyReason: analysis.urgencyReason
-    }
-  });
-
-  // Step 3: Auto-Assign
-  const assignment = await assignThread(thread);
-  if (assignment.userId) {
-    await prisma.thread.update({
-      where: { id: thread.id },
-      data: { assignedToId: assignment.userId }
     });
+    // A concurrent run of this delivery stored its analysis first: use it.
+    if (!analyzed) analysis = (await storedAnalysis(thread.id)) ?? analysis;
+  } else if (!analysis) {
+    analysis = await analyzeMessage(message, thread, thread.project);
+  }
 
-    // Create notification for assigned user
-    await prisma.notification.create({
-      data: {
-        type: 'THREAD_ASSIGNED',
-        title: 'New thread assigned',
-        message: `You have been assigned: ${thread.subject}`,
-        data: JSON.stringify({ threadId: thread.id }),
-        userId: assignment.userId
+  // Step 3: Auto-Assign. The assignment, its notification and the stage
+  // marker commit together, so a retry never notifies twice.
+  let assignment = null;
+  if (!stageReached(thread, 'ASSIGNED')) {
+    const proposed = await assignThread(thread);
+    const committed = await prisma.$transaction(async (tx) => {
+      const advanced = await advanceStage(tx, thread.id, 'ASSIGNED',
+        proposed.userId ? { assignedToId: proposed.userId } : {});
+      if (!advanced) return false;
+      if (proposed.userId) {
+        // Create notification for assigned user
+        await tx.notification.create({
+          data: {
+            type: 'THREAD_ASSIGNED',
+            title: 'New thread assigned',
+            message: `You have been assigned: ${thread.subject}`,
+            data: JSON.stringify({ threadId: thread.id }),
+            userId: proposed.userId
+          }
+        });
       }
+      return true;
     });
+    if (committed) assignment = proposed;
+  }
+  if (!assignment) {
+    const current = await prisma.thread.findUnique({ where: { id: thread.id }, select: { assignedToId: true } });
+    assignment = {
+      userId: current?.assignedToId || null,
+      reason: 'Assigned by an earlier run of this delivery',
+      rule: 'RESUMED'
+    };
   }
 
-  // Step 4: Replan Project (if matched to a project)
-  if (thread.projectId) {
-    await replanProject(thread.projectId, thread.messages[0]);
+  // Step 4: Replan Project (if matched to a project). The plan and its tasks
+  // commit with the stage marker. The second advance is a no-op after a
+  // committed replan; it marks a skipped replan, or one that failed and was
+  // logged (as before), so a retry does not repeat it.
+  if (!stageReached(thread, 'REPLANNED')) {
+    if (thread.projectId) {
+      await replanProject(thread.projectId, message, { onCommit: commitStage(thread.id, 'REPLANNED') });
+    }
+    await advanceStage(prisma, thread.id, 'REPLANNED');
   }
 
-  // Step 5: Draft Response (optional, can be triggered manually)
-  let draftResult = null;
-  if (analysis.urgency === 'CRITICAL' || analysis.urgency === 'HIGH') {
-    draftResult = await draftResponse(thread, analysis);
+  // Step 5: Draft Response (optional, can be triggered manually). A saved
+  // draft commits with the marker; otherwise the pipeline is marked
+  // complete here.
+  if (!stageReached(thread, 'COMPLETED')) {
+    if (analysis.urgency === 'CRITICAL' || analysis.urgency === 'HIGH') {
+      // The draft is attributed to the assignee from step 3 (the thread
+      // record loaded or created above predates the assignment).
+      await draftResponse({ ...thread, assignedToId: assignment.userId }, analysis, {
+        onCommit: commitStage(thread.id, 'COMPLETED')
+      });
+    }
+    await advanceStage(prisma, thread.id, 'COMPLETED');
   }
+  const draftGenerated = (await prisma.response.count({ where: { threadId: thread.id, aiGenerated: true } })) > 0;
 
   return {
     matched: true,
@@ -178,9 +312,14 @@ export async function processEmailPipeline(emailData) {
     projectId: thread.projectId,
     analysis,
     assignment,
-    needsTriage,
-    draftGenerated: !!draftResult
+    needsTriage: !!thread.needsTriage,
+    draftGenerated
   };
+}
+
+async function storedAnalysis(threadId) {
+  const current = await prisma.thread.findUnique({ where: { id: threadId }, select: { aiAnalysis: true } });
+  return parseJson(current?.aiAnalysis, null);
 }
 
 /**
@@ -277,7 +416,7 @@ export async function analyzeMessage(message, thread, project) {
 /**
  * Step 4: Replan project based on new message
  */
-async function replanProject(projectId, newMessage) {
+async function replanProject(projectId, newMessage, { onCommit } = {}) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: {
@@ -299,38 +438,46 @@ async function replanProject(projectId, newMessage) {
   try {
     const result = await aiClient.chatJSON({ system, prompt, temperature });
 
-    // Update project with new plan
-    await prisma.project.update({
-      where: { id: projectId },
-      data: {
-        aiSummary: result.projectSummary,
-        aiPlan: JSON.stringify(result.plan),
-        health: result.overallHealth,
-        healthScore: result.healthScore,
-        risks: JSON.stringify(result.risks)
-      }
-    });
+    // The plan, its tasks and the caller's marker (onCommit) commit together,
+    // so a retried email never creates the tasks twice.
+    await prisma.$transaction(async (tx) => {
+      // Update project with new plan
+      await tx.project.update({
+        where: { id: projectId },
+        data: {
+          aiSummary: result.projectSummary,
+          aiPlan: JSON.stringify(result.plan),
+          health: result.overallHealth,
+          healthScore: result.healthScore,
+          risks: JSON.stringify(result.risks)
+        }
+      });
 
-    // Create tasks from immediate items
-    if (result.plan.immediate?.length > 0) {
-      for (const item of result.plan.immediate) {
-        await prisma.task.create({
-          data: {
-            title: item.task,
-            description: item.reason,
-            priority: 'HIGH',
-            category: 'IMMEDIATE',
-            estimatedTime: item.estimatedTime,
-            blockedBy: item.blockedBy,
-            aiGenerated: true,
-            projectId
-          }
-        });
+      // Create tasks from immediate items
+      if (result.plan.immediate?.length > 0) {
+        for (const item of result.plan.immediate) {
+          await tx.task.create({
+            data: {
+              title: item.task,
+              description: item.reason,
+              priority: 'HIGH',
+              category: 'IMMEDIATE',
+              estimatedTime: item.estimatedTime,
+              blockedBy: item.blockedBy,
+              aiGenerated: true,
+              projectId
+            }
+          });
+        }
       }
-    }
+
+      if (onCommit) await onCommit(tx);
+    });
 
     return result;
   } catch (error) {
+    // Another run of the same email already replanned: nothing to report.
+    if (error instanceof StageAlreadyCommittedError) return null;
     console.error('Replan project AI error:', error);
     return null;
   }
@@ -339,7 +486,7 @@ async function replanProject(projectId, newMessage) {
 /**
  * Step 5: Draft response options
  */
-async function draftResponse(thread, analysis) {
+async function draftResponse(thread, analysis, { onCommit } = {}) {
   const { system, prompt, temperature } = buildDraftResponsePrompt({
     message: thread.messages[0],
     thread,
@@ -351,24 +498,30 @@ async function draftResponse(thread, analysis) {
   try {
     const result = await aiClient.chatJSON({ system, prompt, temperature });
 
-    // Save draft response
+    // Save draft response, together with the caller's marker (onCommit), so
+    // a retried email never drafts twice.
     if (result.options?.length > 0) {
-      await prisma.response.create({
-        data: {
-          subject: result.options[0].subject,
-          body: result.options[0].body,
-          tone: result.options[0].tone,
-          aiGenerated: true,
-          aiOptions: JSON.stringify(result),
-          status: 'DRAFT',
-          threadId: thread.id,
-          draftedById: thread.assignedToId // Will be null if unassigned
-        }
+      await prisma.$transaction(async (tx) => {
+        await tx.response.create({
+          data: {
+            subject: result.options[0].subject,
+            body: result.options[0].body,
+            tone: result.options[0].tone,
+            aiGenerated: true,
+            aiOptions: JSON.stringify(result),
+            status: 'DRAFT',
+            threadId: thread.id,
+            draftedById: thread.assignedToId // Will be null if unassigned
+          }
+        });
+        if (onCommit) await onCommit(tx);
       });
     }
 
     return result;
   } catch (error) {
+    // Another run of the same email already saved its draft.
+    if (error instanceof StageAlreadyCommittedError) return null;
     console.error('Draft response AI error:', error);
     return null;
   }
