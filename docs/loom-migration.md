@@ -182,6 +182,10 @@ Live imports and rollbacks of this source in one organization run one at a
 time (a database advisory lock): a second operator's `--apply` or
 `--rollback` waits for the first to commit and then works from its result.
 
+If a live run is refused or fails, the files it already stored are removed
+again. Any file that cannot be removed then (a filesystem or permission
+error) is listed by path in the command's error message; delete it by hand.
+
 ## Known limits
 
 - The manifest is operator-prepared; Ashbi cannot verify that a file is the

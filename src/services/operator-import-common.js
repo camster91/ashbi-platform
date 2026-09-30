@@ -361,3 +361,33 @@ export function truncateCodePoints(text, max) {
   const points = [...String(text ?? '')];
   return points.length > max ? points.slice(0, max).join('') : String(text ?? '');
 }
+
+/**
+ * Remove the files a live run stored after its transaction rolled back.
+ * Returns the paths that could not be removed: once the run's rows are gone
+ * nothing else records them, so the caller must report them (see
+ * withOrphanedFiles) rather than swallow the failure.
+ * @param {string[]} paths
+ * @param {(storedPath: string) => Promise<void>} unlink
+ * @returns {Promise<string[]>}
+ */
+export async function removeUncommittedFiles(paths, unlink) {
+  const orphaned = [];
+  for (const storedPath of paths) {
+    try {
+      await unlink(storedPath);
+    } catch {
+      orphaned.push(storedPath);
+    }
+  }
+  return orphaned;
+}
+
+/** The run's error, naming any stored files left behind for manual removal. */
+export function withOrphanedFiles(error, orphaned) {
+  if (!orphaned.length) return error;
+  const target = error instanceof Error ? error : new Error(String(error));
+  target.orphanedFiles = orphaned;
+  target.message = `${target.message}; ${orphaned.length} stored file(s) from the rolled-back run could not be removed and must be deleted manually: ${orphaned.join(', ')}`;
+  return target;
+}

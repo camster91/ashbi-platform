@@ -12,9 +12,11 @@ import {
   pendingRollbackFiles,
   readCsvTable,
   removeRolledBackFiles,
+  removeUncommittedFiles,
   safeFileName,
   summaryWithPendingFiles,
   truncateCodePoints,
+  withOrphanedFiles,
 } from '../../services/operator-import-common.js';
 import {
   LOOM_FILE_TYPES,
@@ -436,4 +438,23 @@ test('truncateCodePoints never splits a surrogate pair', () => {
   assert.equal(truncateCodePoints(`${'a'.repeat(200)}😀`, 200), 'a'.repeat(200));
   assert.equal(truncateCodePoints(null, 5), '');
   assert.ok(!/[\uD800-\uDFFF]$/.test(truncateCodePoints(`${'a'.repeat(199)}😀😀`, 200).slice(-1)) || truncateCodePoints(`${'a'.repeat(199)}😀😀`, 200).endsWith('😀'));
+});
+
+test('files a rolled-back live run could not remove are named in its error, never swallowed', async () => {
+  const removed = [];
+  const unlink = async (storedPath) => {
+    if (storedPath.includes('stuck')) throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    removed.push(storedPath);
+  };
+  const orphaned = await removeUncommittedFiles(['/uploads/a.png', '/uploads/stuck.pdf', '/uploads/b.png'], unlink);
+  assert.deepEqual(removed, ['/uploads/a.png', '/uploads/b.png'], 'one failure does not stop the others');
+  assert.deepEqual(orphaned, ['/uploads/stuck.pdf']);
+
+  const original = new Error('Live import cannot complete with unresolved reconciliation findings');
+  const reported = withOrphanedFiles(original, orphaned);
+  assert.equal(reported, original, 'the original error (and its type) is kept');
+  assert.deepEqual(reported.orphanedFiles, ['/uploads/stuck.pdf']);
+  assert.match(reported.message, /^Live import cannot complete.*; 1 stored file\(s\) .* must be deleted manually: \/uploads\/stuck\.pdf$/);
+  const untouched = new Error('x');
+  assert.equal(withOrphanedFiles(untouched, []).message, 'x');
 });

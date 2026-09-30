@@ -31,8 +31,10 @@ import {
   lockRowsForUpdate,
   pendingRollbackFiles,
   removeRolledBackFiles,
+  removeUncommittedFiles,
   summaryWithPendingFiles,
   truncateCodePoints,
+  withOrphanedFiles,
   insertInChunks,
   normalizeEmail,
   parseIsoTimestamp,
@@ -405,9 +407,10 @@ export async function runLoomImport(db, { organizationId, importData, operatorEm
       });
     }, TRANSACTION_OPTIONS);
   } catch (error) {
-    // The transaction rolled back: remove every file this run stored.
-    for (const storedPath of context.written) await unlinkStoredUpload(storedPath).catch(() => {});
-    throw error;
+    // The transaction rolled back: remove every file this run stored, and
+    // name any that could not be removed (nothing else records them now).
+    const orphaned = await removeUncommittedFiles(context.written, unlinkStoredUpload);
+    throw withOrphanedFiles(error, orphaned);
   }
   report.run = { id: context.run.id };
   report.complete = true;
