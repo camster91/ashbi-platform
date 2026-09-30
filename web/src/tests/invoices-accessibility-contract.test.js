@@ -6,9 +6,11 @@ const source = readFileSync(resolve(process.cwd(), 'src/pages/Invoices.jsx'), 'u
 
 describe('invoices accessibility contract', () => {
   it('keeps tabs and status filters native and state-announced', () => {
-    expect(source).toContain('role="tablist"');
-    expect(source).toContain('role="tab"');
-    expect(source).toContain('aria-selected={activeTab === tab}');
+    // The views use the Tabs primitive (tablist/tab/tabpanel roles, arrow keys).
+    expect(source).toContain('<Tabs value={activeTab} onValueChange={setActiveTab}');
+    expect(source).toContain('<TabList aria-label="Invoice views">');
+    expect(source).toContain('<TabPanel value="list"');
+    expect(source).toContain('<TabPanel value="collections"');
     expect(source).toContain('aria-pressed={filterStatus === s}');
     expect(source).toContain('type="button"');
   });

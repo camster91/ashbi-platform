@@ -8,7 +8,9 @@ import {
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, EmptyState, LoadingState, SlowNotice, StatusBadge } from '../components/ui';
+import {
+  Button, Card, EmptyState, LoadingState, SlowNotice, StatusBadge, Tab, TabList, TabPanel, Tabs,
+} from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -239,23 +241,16 @@ export default function Invoices() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border" role="tablist" aria-label="Invoice views">
-        {[['list', 'All Invoices'], ['collections', 'Collections Dashboard']].map(([tab, label]) => (
-          <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabList aria-label="Invoice views">
+          <Tab value="list">All Invoices</Tab>
+          <Tab value="collections">Collections Dashboard</Tab>
+        </TabList>
 
-      {activeTab === 'collections' ? (
-        <CollectionsDashboard stats={stats} invoices={invoices} onMarkPaid={(id) => markPaidMutation.mutate({ id })} />
-      ) : (
-        <>
+        <TabPanel value="collections">
+          <CollectionsDashboard stats={stats} invoices={invoices} onMarkPaid={(id) => markPaidMutation.mutate({ id })} />
+        </TabPanel>
+        <TabPanel value="list" className="space-y-6">
           {/* Stats Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <StatCard label="Outstanding" value={statMoney(stats, 'totalOutstanding')} icon={DollarSign} color="blue" />
@@ -357,8 +352,8 @@ export default function Invoices() {
             pending={deleteMutation.isPending}
             error={deleteMutation.error?.message}
           />
-        </>
-      )}
+        </TabPanel>
+      </Tabs>
     </div>
   );
 }

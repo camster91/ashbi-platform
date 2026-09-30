@@ -189,14 +189,143 @@ Accessibility:
   `aria-label`.
 - Focus shows `focus:ring-2 focus:ring-ring` with a 1px offset. `disabled`
   lowers the opacity and uses a `not-allowed` cursor.
-- Pass `aria-invalid` and `aria-describedby` yourself for errors. They are
-  forwarded unchanged.
+- Wrap it in [`Field`](#field) to get the label, hint, error,
+  `aria-describedby` and `aria-invalid` wired for you. Without Field, pass
+  `aria-invalid` and `aria-describedby` yourself; they are forwarded unchanged.
+- `aria-invalid="true"` switches the border and focus ring to `destructive`
+  (`aria-[invalid=true]:` utilities in `inputStyles`), so Input, Select and
+  Textarea all show the error state the same way.
 
-Tokens: `border`, `background`, `muted-foreground` (placeholder), `ring`.
+Tokens: `border`, `background`, `muted-foreground` (placeholder), `ring`,
+`destructive` (invalid).
 
 ```jsx
 <label htmlFor="client-name" className="text-sm font-medium">Name</label>
 <Input id="client-name" value={name} onChange={(e) => setName(e.target.value)} />
+```
+
+<a id="field"></a>
+
+### `Field`
+
+Source: `web/src/components/ui/Field.jsx`
+
+A labelled form field: `<label>`, the control, an optional hint and an
+optional error. It wires them to its single child control.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `label` | node | none | Rendered in a `<label htmlFor>` |
+| `hint` | node | none | Muted help text under the control, linked through `aria-describedby` |
+| `error` | node | none | Destructive text with an `aria-hidden` icon, linked through `aria-describedby`; also sets `aria-invalid="true"` on the control |
+| `required` | boolean | `false` | Sets `required` on the control and shows an `aria-hidden` asterisk |
+| `id` | string | generated (`useId`) | The control's id; hint and error ids are `${id}-hint` / `${id}-error` |
+| `className`, `labelClassName` | string | none | Root (`space-y-1.5`) and label classes |
+| `children` | one element, or `(controlProps) => node` | none | An element is cloned with `id`, `aria-describedby`, `aria-invalid` and `required`. A function receives those props to spread |
+
+Accessibility:
+
+- The control's accessible name is the label, and its description is the hint
+  followed by the error. A child's own `aria-describedby` is kept and put first.
+- The error text is not a live region, so it is not announced as the user
+  types. On submit, move focus to the first invalid control so its
+  description is read.
+- The asterisk is visual only; `required` carries the meaning.
+
+Tokens: `foreground` (label), `muted-foreground` (hint), `destructive` (error).
+
+```jsx
+<Field label="Email" hint="We send invoices here." error={errors.email} required>
+  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+</Field>
+```
+
+### `Select`
+
+Source: `web/src/components/ui/Select.jsx`
+
+A `forwardRef` native `<select>` with the Input look (`inputStyles`) and a
+44px minimum height.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `options` | `{ value, label, disabled }[]` | none | Rendered as `<option>`s. Without it, `children` are rendered |
+| `placeholder` | string | none | Adds a first, disabled `<option value="">` |
+| `className`, `ref`, `...props` | | | Passed through to `<select>` |
+
+Accessibility: a native select, so keyboard and screen-reader behaviour is the
+platform's. Label it with `Field`, a `<label htmlFor>` or `aria-label`.
+
+```jsx
+<Field label="Currency">
+  <Select value={currency} onChange={(e) => setCurrency(e.target.value)} options={INVOICE_CURRENCY_OPTIONS} />
+</Field>
+```
+
+### `Textarea`
+
+Source: `web/src/components/ui/Textarea.jsx`
+
+A `forwardRef` native `<textarea>` with the Input look, `rows={4}` by default,
+`min-h-20` and vertical resize. `className`, `ref` and other props are passed
+through.
+
+```jsx
+<Field label="Notes" hint="Shown on the invoice.">
+  <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
+</Field>
+```
+
+---
+
+## Navigation
+
+### `Tabs`, `TabList`, `Tab`, `TabPanel`
+
+Source: `web/src/components/ui/Tabs.jsx`
+
+The [WAI-ARIA tabs pattern](https://www.w3.org/WAI/ARIA/apg/patterns/tabs/)
+with automatic activation. First adopted by the Invoices "All Invoices" /
+"Collections Dashboard" views.
+
+- `Tabs({ value, defaultValue, onValueChange, orientation = 'horizontal', id })`:
+  the root `<div>`. Controlled with `value` + `onValueChange`, or uncontrolled
+  with `defaultValue`. `id` seeds the tab and panel ids (generated otherwise).
+- `TabList`: the `role="tablist"` row with `aria-orientation`. Give it an
+  `aria-label` or `aria-labelledby`. Horizontal lists have a bottom
+  `border-border` rule and scroll sideways when they overflow.
+- `Tab({ value, disabled })`: a `type="button"` `role="tab"` with
+  `aria-selected`, `aria-controls` (while selected) and a roving `tabIndex`
+  (only the selected tab is in the Tab order).
+- `TabPanel({ value, forceMount = false })`: `role="tabpanel"`,
+  `aria-labelledby` its tab, `tabIndex={0}`. Inactive panels unmount unless
+  `forceMount`, which keeps them in the DOM with `hidden`.
+
+All four forward `ref`, `className` and other props. `Tab`, `TabList` and
+`TabPanel` throw if rendered outside `Tabs`.
+
+Accessibility:
+
+- Left/Right (Up/Down when `orientation="vertical"`) move focus to the
+  previous/next enabled tab and select it, wrapping at the ends. Home and End
+  jump to the first and last enabled tab. Disabled tabs are skipped.
+- Tabs are at least 44px tall (`min-h-11`) with a `focus-visible:ring-2
+  ring-ring` focus ring; the selected tab has a `primary` underline and text,
+  so selection is shown by more than colour (the underline) and exposed via
+  `aria-selected`.
+- The colour transition carries `motion-reduce:transition-none`.
+
+Tokens: `border`, `primary`, `muted-foreground`, `foreground`, `ring`.
+
+```jsx
+<Tabs value={view} onValueChange={setView}>
+  <TabList aria-label="Invoice views">
+    <Tab value="list">All Invoices</Tab>
+    <Tab value="collections">Collections Dashboard</Tab>
+  </TabList>
+  <TabPanel value="list">…</TabPanel>
+  <TabPanel value="collections">…</TabPanel>
+</Tabs>
 ```
 
 ---
@@ -746,7 +875,7 @@ primitive covers them yet. Remove each one when its primitive lands.
 |---|---|
 | `.cp-root` | Scopes the portal focus contract: a 3px solid `--ring` outline on every focusable control, stronger than the primitives' `ring-4` at 20% opacity. Aligning `Button`'s own focus ring is follow-up work |
 | `.cp-header` | Switches that outline to `--accent` on the indigo header, where the ring colour would be invisible |
-| `.cp-tab` | No Tabs primitive. Native `role="tab"` buttons; selected styling follows `aria-selected` |
+| `.cp-tab` | Native `role="tab"` buttons; selected styling follows `aria-selected`. The shared `Tabs` primitive now exists; moving the portal tab bar onto it is follow-up work |
 | `.cp-kanban` | No kanban primitive for read-only client boards (`KanbanBoard` is the staff drag-and-drop board) |
 | `.cp-kanban-col` | Kanban column surface |
 | `.cp-kanban-col-header` | Kanban column header row |

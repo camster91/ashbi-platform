@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Modal, { ModalFooter } from './Modal';
+import { Alert, Button, Field, Input, Select } from './ui';
 import { api } from '../lib/api';
 
 const AVAILABLE_SKILLS = [
@@ -84,131 +85,99 @@ export default function CreateTeamMemberModal({ isOpen, onClose }) {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Add Team Member" size="lg">
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         {error && (
-          <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-lg">
+          <Alert variant="error" className="mb-4">
             {error}
-          </div>
+          </Alert>
         )}
 
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Full Name *
-            </label>
-            <input
+          <Field label="Full Name" required>
+            <Input
               type="text"
               name="name"
               value={formData.name}
               onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="John Doe"
+              autoComplete="name"
               autoFocus
             />
-          </div>
+          </Field>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email *
-            </label>
-            <input
+          <Field label="Email" required>
+            <Input
               type="email"
               name="email"
               value={formData.email}
               onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="john@agency.com"
+              autoComplete="email"
             />
-          </div>
+          </Field>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password *
-            </label>
-            <input
+          <Field label="Password" hint="At least 6 characters" required>
+            <Input
               type="password"
               name="password"
               value={formData.password}
               onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
-              placeholder="Min 6 characters"
+              autoComplete="new-password"
             />
-          </div>
+          </Field>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Role
-            </label>
-            <select
-              name="role"
-              value={formData.role}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
-            >
+          <Field label="Role">
+            <Select name="role" value={formData.role} onChange={handleChange}>
               <option value="TEAM">Team Member</option>
               <option value="ADMIN">Admin</option>
-            </select>
-          </div>
+            </Select>
+          </Field>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Capacity (%)
-            </label>
-            <input
+          <Field label="Capacity (%)" hint="100% = full-time availability">
+            <Input
               type="number"
               name="capacity"
               value={formData.capacity}
               onChange={handleChange}
               min="0"
               max="100"
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
-            <p className="mt-1 text-xs text-gray-500">
-              100% = full-time availability
-            </p>
-          </div>
+          </Field>
         </div>
 
-        <div className="mt-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+        <fieldset className="mt-4">
+          <legend className="block text-sm font-medium text-foreground mb-2">
             Skills
-          </label>
+          </legend>
           <div className="flex flex-wrap gap-2">
             {AVAILABLE_SKILLS.map((skill) => (
               <button
                 key={skill}
                 type="button"
+                aria-pressed={formData.skills.includes(skill)}
                 onClick={() => toggleSkill(skill)}
-                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                className={`min-h-11 px-3 py-1.5 text-sm rounded-lg border transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   formData.skills.includes(skill)
-                    ? 'bg-primary text-white border-primary'
-                    : 'bg-white text-gray-700 border-gray-300 hover:border-primary'
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-card text-foreground border-border/60 hover:border-primary'
                 }`}
               >
                 {skill.replace(/_/g, ' ')}
               </button>
             ))}
           </div>
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-2 text-xs text-muted-foreground">
             Skills are used for intelligent thread routing
           </p>
-        </div>
+        </fieldset>
 
         <ModalFooter>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
-          >
+          <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={mutation.isPending}
-            className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
-          >
+          </Button>
+          <Button type="submit" loading={mutation.isPending}>
             {mutation.isPending ? 'Creating...' : 'Add Team Member'}
-          </button>
+          </Button>
         </ModalFooter>
       </form>
     </Modal>
