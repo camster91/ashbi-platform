@@ -43,3 +43,15 @@ test('oversized entry and missing public route fail closed', () => {
     assert.ok(failures.some((failure) => failure.includes('Login is not an independent')));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test('worker bundles outside the manifest have their own budget', () => {
+  const root = fixture();
+  try {
+    const worker = path.join(root, 'assets', 'pdf-render.worker-AbC123.js');
+    fs.writeFileSync(worker, Buffer.alloc(BUDGETS.workerJs));
+    assert.deepEqual(validateFrontendBudgets(root), [], 'a worker at the budget passes');
+    fs.writeFileSync(worker, Buffer.alloc(BUDGETS.workerJs + 1));
+    const failures = validateFrontendBudgets(root);
+    assert.ok(failures.some((failure) => failure.includes('worker assets/pdf-render.worker-AbC123.js')), failures.join('; '));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
