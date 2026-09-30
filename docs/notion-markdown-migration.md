@@ -29,6 +29,25 @@ another note.
 These conditions are reconciliation findings, not automatic overwrites. The
 report remains incomplete until they are reviewed and resolved.
 
+### Findings by code
+
+Each finding is an entry in the report's `errors` (`{ sourceKey, code, error }`).
+All of them are **blocking**: they make the report incomplete, and a live run
+rolls back if any is present.
+
+| Code | Meaning | Counted in |
+| --- | --- | --- |
+| `EMPTY_PAGE` | The Markdown page is empty or only whitespace | `notes.skipped` |
+| `SOURCE_CHANGED` | The page changed after its prior controlled import | `notes.conflicts` |
+| `MISSING_DESTINATION` | The page was imported before, but its note has since been deleted or is unavailable | `notes.conflicts` |
+| `PARENT_UNRESOLVED` | The page's exported parent page is not available in this import | `notes.conflicts`, `hierarchy.unresolved` |
+| `DESTINATION_CONFLICT` | An existing, unmapped Ashbi note already has the same title and parent | `notes.conflicts` |
+
+Non-Markdown files carry no code. They are listed in
+`input.unsupportedFiles`, and any entry there also makes the report incomplete
+and blocks a live run. Remove them from a copy of the export, or accept that
+they are not migrated, and record that decision.
+
 ## Pilot procedure
 
 1. Export a sanitized, representative project from Notion and retain the
@@ -51,3 +70,14 @@ report remains incomplete until they are reviewed and resolved.
 
 The report file is created once with owner-only permissions. Do not reuse or
 overwrite a prior report; retain it with the related backup evidence.
+
+## Rollback (no run id)
+
+The Notion importer has no `--rollback` flag, no `import_runs` row and no
+audit event. A committed live import can be undone only by hand. Delete the
+notes named by the `noteId` column of `notion_import_records` for the project
+and import window. Delete those `notion_import_records` rows too: a record
+whose note is gone makes the next run report `MISSING_DESTINATION` instead of
+importing the page again. The alternative is to restore the approved
+pre-import backup inside the cutover freeze window; see the
+[migration cutover runbook](migration-cutover-runbook.md).
