@@ -374,22 +374,33 @@ test('Loom and MarkUp ledgers are tenant scoped, unique per source, and migrated
 });
 
 test('rollback file cleanup keeps unremoved paths on the run so a rerun can retry them', async () => {
-  const updates = [];
-  const db = { importRun: { update: async (args) => { updates.push(args); } } };
-  const summary = summaryWithPendingFiles({ created: 2 }, ['/uploads/a.mp4', '/uploads/b.mp4']);
-  assert.deepEqual(summary, { created: 2, pendingFileCleanup: ['/uploads/a.mp4', '/uploads/b.mp4'] });
-  assert.deepEqual(pendingRollbackFiles({ summary }), ['/uploads/a.mp4', '/uploads/b.mp4']);
+  // A fake client: the run row, with the lock and read/update the helper uses.
+  const run = { summary: summaryWithPendingFiles({ created: 2 }, ['/uploads/a.mp4', '/uploads/b.mp4', '/uploads/c.mp4']) };
+  const locks = [];
+  const tx = {
+    $queryRaw: async (strings, ...values) => { locks.push([strings.join('?'), values]); return []; },
+    importRun: {
+      findUnique: async () => ({ summary: run.summary }),
+      update: async ({ data }) => { run.summary = data.summary; },
+    },
+  };
+  const db = { $transaction: async (work) => work(tx) };
+  assert.deepEqual(run.summary, { created: 2, pendingFileCleanup: ['/uploads/a.mp4', '/uploads/b.mp4', '/uploads/c.mp4'] });
   assert.deepEqual(pendingRollbackFiles({ summary: null }), []);
   assert.deepEqual(pendingRollbackFiles({ summary: { pendingFileCleanup: 'nope' } }), []);
 
+  // This call tries a and b; b fails. c belongs to a concurrent attempt and
+  // must survive: only the paths this call removed are subtracted.
   const unlinkFailingB = async (storedPath) => { if (storedPath.endsWith('b.mp4')) throw Object.assign(new Error('busy'), { code: 'EBUSY' }); };
   await assert.rejects(
-    removeRolledBackFiles(db, { runId: 'run1', summary, paths: pendingRollbackFiles({ summary }), unlink: unlinkFailingB }),
+    removeRolledBackFiles(db, { runId: 'run1', paths: ['/uploads/a.mp4', '/uploads/b.mp4'], unlink: unlinkFailingB }),
     (error) => error.code === 'FILE_CLEANUP_INCOMPLETE' && /run1/.test(error.message),
   );
-  assert.deepEqual(updates.at(-1), { where: { id: 'run1' }, data: { summary: { created: 2, pendingFileCleanup: ['/uploads/b.mp4'] } } });
+  assert.match(locks[0][0], /FROM "import_runs" WHERE id = \? FOR UPDATE/);
+  assert.deepEqual(locks[0][1], ['run1']);
+  assert.deepEqual(run.summary, { created: 2, pendingFileCleanup: ['/uploads/b.mp4', '/uploads/c.mp4'] });
 
-  const removed = await removeRolledBackFiles(db, { runId: 'run1', summary: updates.at(-1).data.summary, paths: ['/uploads/b.mp4'], unlink: async () => {} });
-  assert.equal(removed, 1);
-  assert.deepEqual(updates.at(-1).data.summary, { created: 2 }, 'the pending list is cleared once every file is gone');
+  const removed = await removeRolledBackFiles(db, { runId: 'run1', paths: pendingRollbackFiles(run), unlink: async () => {} });
+  assert.equal(removed, 2);
+  assert.deepEqual(run.summary, { created: 2 }, 'the pending list is cleared once every file is gone');
 });

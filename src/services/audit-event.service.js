@@ -60,8 +60,11 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'ai.tool_expired': { entityType: 'ai_action', metadata: ['tool', 'toolClass', 'source', 'requesterUserId', 'correlationId'] },
   'ai.tool_denied': { entityType: 'ai_action', metadata: ['tool', 'reason', 'source', 'correlationId'] },
   'ai.tool_session_run': { entityType: 'ai_session', metadata: ['turns', 'toolCalls', 'readCount', 'pendingCount', 'deniedCount', 'stoppedReason', 'answered', 'correlationId'] },
-  'migration_import.applied': { entityType: 'import_run', metadata: ['source', 'created', 'unchanged', 'alreadyPresent', 'channels'] },
-  'migration_import.rolled_back': { entityType: 'import_run', metadata: ['source', 'deletedMessages', 'deletedRecords'] },
+  // Slack: created, unchanged, alreadyPresent, channels; Loom: created,
+  // unchanged, skipped; MarkUp.io: projectId, sessionsCreated,
+  // commentsCreated, commentsUnchanged (docs/audit-events.md).
+  'migration_import.applied': { entityType: 'import_run', metadata: ['source', 'created', 'unchanged', 'alreadyPresent', 'channels', 'skipped', 'projectId', 'sessionsCreated', 'commentsCreated', 'commentsUnchanged'] },
+  'migration_import.rolled_back': { entityType: 'import_run', metadata: ['source', 'deletedRecords', 'deletedMessages', 'deletedAttachments', 'deletedSessions', 'deletedComments'] },
   'review.session_created': { entityType: 'review_session', metadata: ['projectId', 'attachmentId', 'version', 'previousSessionId', 'mediaKind', 'sourceHost', 'captureViewport', 'captureTruncated'] },
   'review.decision_recorded': { entityType: 'review_session', metadata: ['decisionId', 'decision', 'fromStatus', 'toStatus', 'via', 'shareLinkId'] },
   'review.share_link_created': { entityType: 'review_share_link', metadata: ['sessionId', 'expiresAt', 'expiresInDays', 'allowDecision'] },

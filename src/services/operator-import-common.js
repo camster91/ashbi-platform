@@ -277,6 +277,17 @@ export async function lockRowsForUpdate(tx, table, ids) {
     : tx.$queryRaw`SELECT id FROM "attachments" WHERE id = ANY(${chunk}::text[]) ORDER BY id FOR UPDATE`));
 }
 
+/**
+ * Lock one import run's row for the rest of the transaction, before its
+ * status and summary are read. Two rollbacks of the same run (or a rollback
+ * and a file-cleanup retry) then run one after the other, and the second
+ * sees the first one's committed status and pending-file list instead of a
+ * stale copy it could overwrite.
+ */
+export async function lockImportRun(tx, runId) {
+  await tx.$queryRaw`SELECT id FROM "import_runs" WHERE id = ${runId} FOR UPDATE`;
+}
+
 const PENDING_FILES_KEY = 'pendingFileCleanup';
 
 /** Stored-file paths a rollback committed but has not yet removed. */
@@ -299,18 +310,26 @@ export function summaryWithPendingFiles(summary, paths) {
  * from the list, and rerunning the rollback retries the rest.
  * @returns {Promise<number>} files removed
  */
-export async function removeRolledBackFiles(db, { runId, summary, paths, unlink }) {
-  let removed = 0;
+export async function removeRolledBackFiles(db, { runId, paths, unlink }) {
+  const removedPaths = new Set();
   const failed = [];
   for (const storedPath of paths) {
     try {
       await unlink(storedPath);
-      removed++;
+      removedPaths.add(storedPath);
     } catch {
       failed.push(storedPath);
     }
   }
-  await db.importRun.update({ where: { id: runId }, data: { summary: summaryWithPendingFiles(summary, failed) } });
+  // Subtract what this call removed from the run's current list under the
+  // run lock, so a concurrent retry's result is never overwritten.
+  await db.$transaction(async (transaction) => {
+    await lockImportRun(transaction, runId);
+    const current = await transaction.importRun.findUnique({ where: { id: runId }, select: { summary: true } });
+    const remaining = pendingRollbackFiles(current).filter((storedPath) => !removedPaths.has(storedPath));
+    await transaction.importRun.update({ where: { id: runId }, data: { summary: summaryWithPendingFiles(current?.summary, remaining) } });
+  });
+  const removed = removedPaths.size;
   if (failed.length) {
     throw new OperatorImportError('FILE_CLEANUP_INCOMPLETE', `${failed.length} stored file(s) could not be removed; rerun the rollback for run ${runId} to retry`);
   }

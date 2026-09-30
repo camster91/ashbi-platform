@@ -215,6 +215,11 @@ test('Loom manifest import plans, stores files, reruns idempotently, reports con
     const rollback = runCli(['--organization-id', ids.orgA, '--rollback', runId], workDir);
     assert.equal(rollback.status, 0, rollback.stderr);
     assert.deepEqual(rollback.report.deleted, { attachments: 2, files: 2, records: 2 });
+    // The audit events keep the Loom-specific reconciliation fields.
+    const audit = await raw.auditEvent.findMany({ where: { organizationId: ids.orgA, entityId: runId }, orderBy: { createdAt: 'asc' } });
+    assert.deepEqual(audit.map((event) => event.action), ['migration_import.applied', 'migration_import.rolled_back']);
+    assert.deepEqual(Object.keys(audit[0].metadata).sort(), ['created', 'skipped', 'source', 'unchanged']);
+    assert.deepEqual(audit[1].metadata, { source: 'LOOM_MANIFEST', deletedAttachments: 2, deletedRecords: 2 });
     assert.equal(await raw.attachment.count({ where: { organizationId: ids.orgA } }), 0);
     assert.deepEqual(storedFiles(), []);
     assert.equal((await raw.importRun.findUnique({ where: { id: runId } })).status, 'ROLLED_BACK');

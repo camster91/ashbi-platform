@@ -26,6 +26,7 @@ import {
   countBy,
   findInChunks,
   inspectMediaFile,
+  lockImportRun,
   lockRowsForUpdate,
   pendingRollbackFiles,
   removeRolledBackFiles,
@@ -417,12 +418,15 @@ export async function runLoomImport(db, { organizationId, importData, operatorEm
 export async function rollbackLoomImportRun(db, { organizationId, runId }) {
   if (!organizationId || !runId) throw new OperatorImportError('MISSING_ARGUMENT', 'organizationId and runId are required');
   const result = await db.$transaction(async (transaction) => {
+    // Serialise rollbacks (and cleanup retries) of this run: the status and
+    // pending-file list below are read under the lock.
+    await lockImportRun(transaction, runId);
     const run = await transaction.importRun.findFirst({ where: { id: runId, organizationId, source: LOOM_IMPORT_SOURCE } });
     if (!run) throw new OperatorImportError('RUN_NOT_FOUND', 'Import run was not found in this organization');
     if (run.status === 'ROLLED_BACK') {
       const pending = pendingRollbackFiles(run);
       if (!pending.length) throw new OperatorImportError('ALREADY_ROLLED_BACK', 'Import run was already rolled back');
-      return { retry: true, attachments: 0, records: 0, paths: pending, summary: run.summary };
+      return { retry: true, attachments: 0, records: 0, paths: pending };
     }
     const records = await transaction.loomImportRecord.findMany({ where: { organizationId, runId }, select: { attachmentId: true } });
     const attachmentIds = records.map((record) => record.attachmentId).filter(Boolean);
@@ -443,14 +447,15 @@ export async function rollbackLoomImportRun(db, { organizationId, runId }) {
     const paths = attachments.map((attachment) => attachment.path);
     // The paths are recorded with the ROLLED_BACK status, so file cleanup
     // stays retryable after this commit (removeRolledBackFiles).
-    const summary = summaryWithPendingFiles(run.summary, paths);
-    await transaction.importRun.update({ where: { id: runId }, data: { status: 'ROLLED_BACK', rolledBackAt: new Date(), summary } });
+    await transaction.importRun.update({
+      where: { id: runId },
+      data: { status: 'ROLLED_BACK', rolledBackAt: new Date(), summary: summaryWithPendingFiles(run.summary, paths) },
+    });
     return {
       retry: false,
       attachments: removed.reduce((sum, outcome) => sum + outcome.count, 0),
       records: removedRecords.count,
       paths,
-      summary,
     };
   }, TRANSACTION_OPTIONS);
   if (!result.retry) {
@@ -460,7 +465,7 @@ export async function rollbackLoomImportRun(db, { organizationId, runId }) {
     });
   }
   // Files go only after the database commit, so a failed rollback keeps them.
-  const files = await removeRolledBackFiles(db, { runId, summary: result.summary, paths: result.paths, unlink: unlinkStoredUpload });
+  const files = await removeRolledBackFiles(db, { runId, paths: result.paths, unlink: unlinkStoredUpload });
   return {
     format: 'ashbi-loom-import-report', version: 1, generatedAt: new Date().toISOString(),
     mode: 'rollback', organization: { id: organizationId }, run: { id: runId },

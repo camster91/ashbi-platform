@@ -38,14 +38,17 @@ function runCli(args, workDir, { summary = true } = {}) {
 // The same CLI run without blocking the event loop, so a concurrent writer
 // transaction in this process can make progress while it runs.
 function runCliAsync(args, workDir) {
+  const summaryFile = path.join(workDir, `report-${randomUUID()}.json`);
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [importer, ...args], {
+    const child = spawn(process.execPath, [importer, ...args, '--summary-file', summaryFile], {
       cwd: workDir,
       env: { ...process.env, DATABASE_URL: databaseUrl, NODE_ENV: 'development' },
     });
     let stderr = '';
     child.stderr.on('data', (chunk) => { stderr += chunk; });
-    child.on('close', (status) => resolve({ status, stderr }));
+    child.on('close', (status) => resolve({
+      status, stderr, report: fs.existsSync(summaryFile) ? JSON.parse(fs.readFileSync(summaryFile, 'utf8')) : null,
+    }));
   });
 }
 
@@ -285,9 +288,31 @@ test('MarkUp.io import plans, creates reviews, reruns idempotently, reports conf
     assert.equal(runCli(['--organization-id', ids.orgA, '--rollback', runId], workDir).status, 1);
     await raw.reviewAnnotation.delete({ where: { id: hubComment.id } });
 
-    const rollback = runCli(['--organization-id', ids.orgA, '--rollback', runId], workDir);
-    assert.equal(rollback.status, 0, rollback.stderr);
+    // Two operators roll the same run back at once. The run row lock makes
+    // them run one after the other: exactly one deletes the rows; the other
+    // sees the committed ROLLED_BACK status and either finds nothing left or
+    // retries the (idempotent) file cleanup, deleting no rows.
+    const concurrent = await Promise.all([
+      runCliAsync(['--organization-id', ids.orgA, '--rollback', runId], workDir),
+      runCliAsync(['--organization-id', ids.orgA, '--rollback', runId], workDir),
+    ]);
+    const deleting = concurrent.filter((outcome) => outcome.status === 0 && outcome.report.deleted.records > 0);
+    assert.equal(deleting.length, 1, concurrent.map((outcome) => outcome.stderr).join('\n'));
+    const rollback = deleting[0];
+    const other = concurrent.find((outcome) => outcome !== rollback);
+    if (other.status === 0) {
+      assert.deepEqual({ ...other.report.deleted, files: 0 }, { sessions: 0, comments: 0, attachments: 0, files: 0, records: 0 });
+    } else {
+      assert.match(other.stderr, /already rolled back/);
+    }
     assert.deepEqual(rollback.report.deleted, { sessions: 2, comments: 9, attachments: 2, files: 2, records: 11 });
+    assert.equal((await raw.importRun.findUnique({ where: { id: runId } })).summary.pendingFileCleanup, undefined);
+
+    // The audit events keep the MarkUp-specific reconciliation fields.
+    const audit = await raw.auditEvent.findMany({ where: { organizationId: ids.orgA, entityId: runId }, orderBy: { createdAt: 'asc' } });
+    assert.deepEqual(audit.map((event) => event.action), ['migration_import.applied', 'migration_import.rolled_back']);
+    assert.deepEqual(audit[0].metadata, { source: 'MARKUP_CSV', projectId: ids.projectA, sessionsCreated: 2, commentsCreated: 9, commentsUnchanged: 0 });
+    assert.deepEqual(audit[1].metadata, { source: 'MARKUP_CSV', deletedSessions: 2, deletedComments: 9, deletedRecords: 11 });
     assert.equal(await raw.reviewSession.count({ where: { projectId: ids.projectA } }), 0);
     assert.equal(await raw.attachment.count({ where: { organizationId: ids.orgA } }), 0);
     assert.deepEqual(storedFiles(), []);
