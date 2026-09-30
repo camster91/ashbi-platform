@@ -7,7 +7,7 @@ import { safeParse } from '../utils/safeParse.js';
 /**
  * Calculate project health score
  */
-export function calculateHealthScore(project, threads) {
+export function calculateHealthScore(project, threads, { now = new Date() } = {}) {
   let score = 100;
 
   const criticalThreads = threads.filter(t =>
@@ -18,7 +18,6 @@ export function calculateHealthScore(project, threads) {
   const needsResponse = threads.filter(t => t.status === 'AWAITING_RESPONSE');
   if (needsResponse.length > 2) score -= 15;
 
-  const now = new Date();
   const staleThreads = threads.filter(t => {
     const daysSinceActivity = (now - new Date(t.lastActivityAt)) / (1000 * 60 * 60 * 24);
     return daysSinceActivity >= 3 && t.status !== 'RESOLVED';
@@ -250,7 +249,7 @@ export async function updateAllProjectHealth(prismaClient, { now = new Date() } 
 
   const writes = [];
   for (const project of projects) {
-    const score = calculateHealthScore(project, project.threads);
+    const score = calculateHealthScore(project, project.threads, { now });
     const health = getHealthStatus(score);
     const history = nextHealthHistory(
       project.healthHistory,
