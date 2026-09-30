@@ -136,6 +136,29 @@ No primitive conveys state only through motion: a spinner always has a text
 label or an `aria-busy` container, and a fade never hides content once it
 has ended.
 
+<a id="forced-colours"></a>**Forced colours**
+
+In forced-colours mode (Windows contrast themes; `@media (forced-colors:
+active)`) the browser swaps author colours for the user's system palette and
+drops box-shadows and most background fills. Tailwind's `ring-*` focus
+indicators are box-shadows and many controls are drawn only by their fill, so
+a block at the end of `web/src/index.css` restores each cue with CSS system
+colours (#317). `web/src/tests/forced-colors.test.js` checks it.
+
+| Cue | Forced-colours rule |
+|---|---|
+| Focus on any `a`, `button`, `input`, `select`, `textarea`, `summary`, `[tabindex]`, `[contenteditable]` | `outline: 3px solid Highlight` with a 2px offset (`!important`, so it beats `focus-visible:outline-none`) |
+| `Button`, native buttons, `[role="button"]`, `Tab`, `[role="menuitem"]` | `1px solid ButtonText` border, so the control keeps its boundary without its fill; disabled ones use `GrayText` for border and text |
+| Selected `Tab` (`aria-selected`), pressed toggles (`aria-pressed`), current nav item (`aria-current="page"`/`"step"`) | `Highlight` border plus a 2px inset `Highlight` outline |
+| `Badge` / `StatusBadge` (and any element with `status-indicator`) | `1px solid CanvasText` border; the label text carries the meaning, as it must in every mode |
+| Fields with `aria-invalid="true"` (Input, Select, Textarea via `Field`) | `Mark` border and outline |
+| Spinners (`animate-spin`) | `Highlight` top border, so the moving segment stays visible |
+| Skeletons (`skeleton-shimmer`) | `1px solid GrayText` outline |
+
+Icons use `currentColor`, so they follow the forced text colour. Status dots
+and progress fills are decorative (`aria-hidden`) and may disappear; they
+always sit next to text that states the same thing.
+
 ---
 
 ## Actions

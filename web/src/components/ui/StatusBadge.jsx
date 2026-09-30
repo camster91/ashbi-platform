@@ -27,7 +27,7 @@ const StatusBadge = forwardRef(({
       variant={entry.variant}
       size={size}
       data-status={status}
-      className={cn('whitespace-nowrap status-indicator', className)}
+      className={cn('whitespace-nowrap', className)}
       {...props}
     >
       {showIcon && Icon && <Icon className="w-3 h-3 flex-shrink-0" aria-hidden="true" />}

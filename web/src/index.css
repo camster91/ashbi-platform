@@ -313,6 +313,63 @@
   }
 }
 
+/*
+ * Forced colours (Windows High Contrast / contrast themes, #317).
+ * The browser replaces author colours with the user's system palette and
+ * drops box-shadows and most background fills. That removes Tailwind focus
+ * rings (box-shadows), button fills and tinted badge backgrounds, so this
+ * block restores each cue with CSS system colours. Documented in
+ * docs/ui-primitives.md (Forced colours); checked by
+ * web/src/tests/forced-colors.test.js.
+ */
+@media (forced-colors: active) {
+  /* 1. Focus: a real outline in the system highlight colour, always. */
+  :where(a, button, input, select, textarea, summary, [tabindex], [contenteditable]):focus-visible {
+    outline: 3px solid Highlight !important;
+    outline-offset: 2px !important;
+  }
+
+  /* 2. Buttons and tabs: fills are dropped, so draw a boundary. */
+  :where(button, [role='button'], [role='tab'], [role='menuitem']) {
+    border: 1px solid ButtonText;
+  }
+  :where(button, [role='button'], [role='tab'], [role='menuitem']):is(:disabled, [aria-disabled='true']) {
+    border-color: GrayText;
+    color: GrayText;
+  }
+
+  /* 3. Selected / pressed / current states are otherwise colour-only. */
+  [role='tab'][aria-selected='true'],
+  [aria-pressed='true'],
+  [aria-current='page'],
+  [aria-current='step'] {
+    border-color: Highlight;
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  /* 4. Badges and status pills: keep their shape; the text states the status. */
+  .status-indicator {
+    border: 1px solid CanvasText;
+  }
+
+  /* 5. Invalid fields keep a distinct boundary. */
+  [aria-invalid='true'] {
+    border-color: Mark;
+    outline: 1px solid Mark;
+  }
+
+  /* 6. Spinners are coloured borders; keep the moving segment visible. */
+  .animate-spin {
+    border-top-color: Highlight;
+  }
+
+  /* 7. Skeleton placeholders read as plain boxes instead of disappearing. */
+  .skeleton-shimmer {
+    outline: 1px solid GrayText;
+  }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
