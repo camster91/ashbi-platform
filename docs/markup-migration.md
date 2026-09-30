@@ -122,6 +122,8 @@ code.
 | Imported into a different project than `--project-id` (`PROJECT_MAPPING_CHANGED`) | `errors` | yes |
 | More than 2,000 comments in one session (`TOO_MANY_COMMENTS`) | `errors` | yes |
 | Media scanner still scanning the file (`MEDIA_SCAN_PENDING`, live run only) | `errors` | yes |
+| File changed between inspection and storage (`FILE_CHANGED_DURING_IMPORT`, live run only) | `errors` | yes |
+| Comment position rejected by the review API's own rules (`INVALID_POSITION`, from `annotationPositionError`) | `errors` | yes |
 | Coordinates outside 0–100 (`COORDINATES_OUT_OF_RANGE`) or not a pair of numbers (`INVALID_COORDINATES`) | `warnings` | no: imported **without a pin** |
 | Reply whose parent is not in the CSV or the Hub (`PARENT_MISSING`) | `warnings` | no: imported as a top-level comment without a pin |
 | Reply with a page or coordinates (`REPLY_POSITION_IGNORED`) | `warnings` | no: imported as a reply |
@@ -131,6 +133,31 @@ code.
 | Imported session or comment deleted in the Hub (`DELETED_IN_HUB`; it stays deleted) | `totals.deletedInHub`, `warnings` | no |
 | Imported session closed in the Hub by a newer version (`SESSION_CLOSED`) | `warnings` | no: new comments are not added |
 | Column not in the template (`UNKNOWN_COLUMN`) | `warnings` | no |
+
+### Command failures
+
+These stop the command (exit status `1`, message on stderr). They are thrown
+errors; the code in parentheses is the error's `code`, and no report file is
+written.
+
+| Failure | Code |
+| --- | --- |
+| `--input-dir` does not exist | `MISSING_INPUT` |
+| `--input-dir` is an archive (`.zip`) | `ZIP_NOT_SUPPORTED` |
+| `--input-dir` is not a directory | `NOT_A_DIRECTORY` |
+| `markup-comments.csv` is missing | `MISSING_FILE` |
+| `markup-comments.csv` is a link or a directory | `UNSAFE_PATH` |
+| `markup-comments.csv` is over 16 MiB | `FILE_TOO_LARGE` |
+| `markup-comments.csv` is empty, has a stray or unterminated quote, or repeats a header | `INVALID_CSV` |
+| The header lacks a required column | `MISSING_COLUMNS` |
+| `--operator-email` is not an active ADMIN or TEAM user of the organization | `UNKNOWN_OPERATOR` |
+| No organization or project id reached the service | `MISSING_ORGANIZATION`, `MISSING_PROJECT` |
+| A live run found blocking findings; everything was rolled back, stored files removed, and the errors are printed | `IMPORT_BLOCKED` |
+| `--rollback` without an organization or run id reaching the service | `MISSING_ARGUMENT` |
+| `--rollback` names a run that is not in this organization | `RUN_NOT_FOUND` |
+| `--rollback` names a run that is already rolled back with no files left to remove | `ALREADY_ROLLED_BACK` |
+| Rollback refused because later work depends on the run (see *Rollback*) | `ROLLBACK_BLOCKED` |
+| Rollback committed but some stored files could not be removed (see *Rollback*) | `FILE_CLEANUP_INCOMPLETE` |
 
 ## Dry run
 
