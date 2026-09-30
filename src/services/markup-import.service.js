@@ -587,7 +587,7 @@ async function planAndWrite(db, context) {
       await db.attachment.create({
         data: {
           id: attachmentId, organizationId, filename: stored.filename, originalName: session.fileName,
-          mimeType: stored.mimeType, size: stored.size, path: stored.path,
+          mimeType: stored.mimeType, size: stored.size, path: stored.path, checksumSha256: stored.checksumSha256,
           entityType: 'PROJECT', entityId: projectId, uploadedById: operatorId,
         },
       });

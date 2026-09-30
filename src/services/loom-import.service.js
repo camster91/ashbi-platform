@@ -343,6 +343,7 @@ async function planAndWrite(db, context) {
       mimeType: stored.mimeType,
       size: stored.size,
       path: stored.path,
+      checksumSha256: stored.checksumSha256,
       entityType: 'PROJECT',
       entityId: item.projectId,
       uploadedById: ownerUserId ?? operatorId,

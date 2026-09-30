@@ -14,6 +14,7 @@ vi.mock('../lib/api', () => ({
     recordPortalReviewDecision: vi.fn(),
     getReviewSession: vi.fn(),
     attachmentFileUrl: (filename) => `/api/attachments/uploads/${filename}`,
+    reviewEvidenceExportUrl: (id) => `/api/reviews/${id}/export`,
     addReviewAnnotation: vi.fn(),
     resolveReviewAnnotation: vi.fn(),
     recordReviewDecision: vi.fn(),
@@ -256,6 +257,16 @@ describe('staff review page', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Revoke share link?' });
     await user.click(within(dialog).getByRole('button', { name: 'Revoke link' }));
     await waitFor(() => expect(api.revokeReviewShareLink).toHaveBeenCalledWith('rs-1', 'link-1'));
+  });
+
+  it('offers the evidence export as a download link', async () => {
+    api.getReviewSession.mockResolvedValue(staffData);
+    withProviders('/review/rs-1', '/review/:id', <ReviewSession />);
+    await screen.findByRole('heading', { name: 'Homepage v1', level: 1 });
+    const exportLink = screen.getByRole('link', { name: 'Export evidence' });
+    expect(exportLink).toHaveAttribute('href', '/api/reviews/rs-1/export');
+    expect(exportLink).toHaveAttribute('download');
+    expect(exportLink).toHaveAccessibleDescription(/every version, checksum, comment, decision and share link/);
   });
 
   it('makes a closed session read-only', async () => {

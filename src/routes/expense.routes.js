@@ -5,6 +5,7 @@ import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { validateBody, createExpenseSchema, fileUpload, expenseUpdateSchema } from '../validators/schemas.js';
 import { softDelete } from '../services/trash.service.js';
+import { recordRejectedUpload, sha256Hex } from '../services/upload-integrity.service.js';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 
@@ -138,6 +139,9 @@ export default async function expenseRoutes(fastify) {
     const buffer = await data.toBuffer();
     const validation = fileUpload.validate(data.filename, data.mimetype, buffer);
     if (!validation.valid) {
+      await recordRejectedUpload(request.prisma, request, {
+        surface: 'expense_receipt', validation, filename: data.filename, mimeType: data.mimetype, size: buffer.length,
+      });
       return reply.status(400).send({ error: validation.error });
     }
 
@@ -145,7 +149,9 @@ export default async function expenseRoutes(fastify) {
     const filepath = path.join(UPLOAD_DIR, filename);
     await fs.writeFile(filepath, buffer);
 
-    return { url: `/uploads/${filename}` };
+    // A receipt is referenced by URL from the expense (no attachment row), so
+    // its SHA-256 is returned for the caller to keep with the expense.
+    return { url: `/uploads/${filename}`, checksumSha256: sha256Hex(buffer) };
   });
 
   // ─── PUT /:id — update expense ─────────────────────────────────────────────
