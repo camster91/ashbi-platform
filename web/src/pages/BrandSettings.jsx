@@ -96,7 +96,7 @@ export default function BrandSettings() {
     );
   }
 
-  const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
+  const logoSrc = api.brandLogoSrc(form.logoUrl);
 
   return (
     <div className="space-y-6">
@@ -197,8 +197,8 @@ export default function BrandSettings() {
             </h2>
             <div className="flex items-center gap-6">
               <div className="w-32 h-32 rounded-xl border-2 border-dashed border-border flex items-center justify-center bg-muted/30 overflow-hidden">
-                {form.logoUrl ? (
-                  <img src={`${apiBase}${form.logoUrl}`} alt="Logo" className="w-full h-full object-contain p-2" />
+                {logoSrc ? (
+                  <img src={logoSrc} alt="Logo" className="w-full h-full object-contain p-2" />
                 ) : (
                   <div className="text-center">
                     <Image className="w-8 h-8 text-muted-foreground mx-auto mb-1" />
@@ -320,8 +320,8 @@ export default function BrandSettings() {
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  {form.logoUrl ? (
-                    <img src={`${apiBase}${form.logoUrl}`} alt="Logo" className="h-10 w-auto mb-2" />
+                  {logoSrc ? (
+                    <img src={logoSrc} alt="Logo" className="h-10 w-auto mb-2" />
                   ) : (
                     <div
                       className="w-10 h-10 rounded-lg flex items-center justify-center mb-2 text-white font-bold"

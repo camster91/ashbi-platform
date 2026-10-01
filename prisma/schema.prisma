@@ -78,6 +78,7 @@ model Organization {
   aiUsageRecords  AiUsageRecord[]
   reviewSessions  ReviewSession[]
   invoices        Invoice[]
+  expenses        Expense[]
   documentNumberSequences DocumentNumberSequence[]
   domainEvents    DomainEvent[]
   impersonationSessions ImpersonationSession[]
@@ -1529,19 +1530,32 @@ model Expense {
   billable    Boolean  @default(false)
   invoiced    Boolean  @default(false)
   receiptUrl  String?
+  // Lowercase hex SHA-256 of the stored receipt file named by receiptUrl,
+  // computed by the server when the receipt is attached (never taken from
+  // the client). Null without a receipt and for receipts attached before
+  // migration 20261001130000_expense_organization (CHECK constraint).
+  receiptChecksumSha256 String?
   notes       String?
+  // Owning organization (migration 20261001130000_expense_organization).
+  // The client and project are optional; when set they must belong to this
+  // organization (tenant proxy and the expenses_tenant_guard trigger).
+  organizationId String
   clientId    String?
   projectId   String?
   invoiceId   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client    Client?   @relation(fields: [clientId], references: [id])
   project   Project?  @relation(fields: [projectId], references: [id])
   invoice   Invoice?  @relation(fields: [invoiceId], references: [id])
   // Soft delete
   deletedAt DateTime?
 
+  @@index([organizationId, date])
+  // Receipt ownership check in the expenses_tenant_guard trigger.
+  @@index([receiptUrl])
   @@index([clientId])
   @@index([projectId])
   @@index([invoiceId])

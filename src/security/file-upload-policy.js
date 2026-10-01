@@ -22,6 +22,17 @@ export const ALLOWED_UPLOAD_EXTENSIONS = Object.freeze([...FILE_TYPES.keys()]);
 export const ALLOWED_UPLOAD_MIMETYPES = Object.freeze([...new Set([...FILE_TYPES.values()].flat())]);
 export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 
+/**
+ * The canonical MIME type of an allowlisted extension (`.png` -> `image/png`),
+ * or null. Used to serve stored files that keep no MIME type of their own
+ * (expense receipts, brand logos): the extension was checked against the
+ * content when the file was stored.
+ * @param {string} ext
+ */
+export function mimeTypeForExtension(ext) {
+  return FILE_TYPES.get(String(ext || '').toLowerCase())?.[0] ?? null;
+}
+
 const startsWith = (buffer, bytes) => bytes.every((byte, index) => buffer[index] === byte);
 
 export function validateUploadMetadata(filename, mimetype) {

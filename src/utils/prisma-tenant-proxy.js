@@ -43,7 +43,10 @@ const DIRECT_SCOPED_MODELS = new Set([
   // Per-organization invoice number counters (docs/invoicing.md).
   'documentnumbersequence',
   // Support impersonation and break-glass grants (#416).
-  'impersonationsession', 'breakglassgrant'
+  'impersonationsession', 'breakglassgrant',
+  // Expenses: the client and project are optional, so the organization is a
+  // column of its own (migration 20261001130000_expense_organization).
+  'expense'
 ]);
 
 // Evidence tables that may only ever be appended to. Request-scoped code gets
@@ -98,6 +101,11 @@ const DIRECT_PARENT_RELATIONS = {
   wpreport: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite', required: true }],
   wpalert: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite' }],
   wpbridgenonce: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite', required: true }],
+  expense: [
+    { relation: 'client', field: 'clientId', model: 'client', delegate: 'client' },
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project' },
+    { relation: 'invoice', field: 'invoiceId', model: 'invoice', delegate: 'invoice' },
+  ],
   credential: [
     { relation: 'client', field: 'clientId', model: 'client', delegate: 'client' },
     { relation: 'project', field: 'projectId', model: 'project', delegate: 'project' },
@@ -161,7 +169,6 @@ const TENANT_PATHS = {
   contract:         ['client'],
   retainerplan:     ['client'],
   pipelinedeal:     ['client'],
-  expense:          ['client'],
   clientembedding:  ['client'],
   report:           ['client'],
   aiteammessage:    ['client'],

@@ -507,8 +507,8 @@ export default function Expenses() {
                       onChange={(e) => setReceiptFile(e.target.files[0] || null)}
                     />
                   </label>
-                  {form.receiptUrl && !receiptFile && (
-                    <a href={form.receiptUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                  {editingId && form.receiptUrl && !receiptFile && (
+                    <a href={api.expenseReceiptUrl(editingId)} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
                       View
                     </a>
                   )}
@@ -600,7 +600,7 @@ export default function Expenses() {
                         <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-[300px]">{expense.notes}</div>
                       )}
                       {expense.receiptUrl && (
-                        <a href={expense.receiptUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+                        <a href={api.expenseReceiptUrl(expense.id)} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
                           View receipt
                         </a>
                       )}

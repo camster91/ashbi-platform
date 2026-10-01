@@ -169,7 +169,7 @@ instead of failing the run silently:
 | `FILE_NOT_REGULAR` | The path is not a regular file, or reaches outside the upload directory through a symbolic link |
 | `FILE_UNREADABLE` | The file could not be opened or read (for example permissions); any partial copy is removed and the export continues |
 | `FILE_SIZE_MISMATCH` | Copied, but its size differs from the size recorded at upload |
-| `FILE_CHECKSUM_MISMATCH` | Copied, but its SHA-256 differs from the `checksumSha256` recorded at upload (attachments stored since migration `20261001090000_attachment_checksum`; each `files` entry carries `recordedSha256`) |
+| `FILE_CHECKSUM_MISMATCH` | Copied, but its SHA-256 differs from the checksum recorded with the record: `attachments.checksumSha256` (attachments stored since migration `20261001090000_attachment_checksum`) or `expenses.receiptChecksumSha256` (receipts attached since migration `20261001130000_expense_organization`); each `files` entry carries `recordedSha256` |
 | `FILE_COPY_MISMATCH` | The copy did not match the source hash; removed from the export |
 
 ### Scale

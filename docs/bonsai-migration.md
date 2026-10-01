@@ -96,7 +96,7 @@ compared case-insensitively.
 | `contractor_project_name` | `Invoice.title`, and the project link when a project with that client and title was matched or created earlier in the same run |
 | each new invoice with a total above 0 | one `InvoiceLineItem` (quantity 1, unit price = subtotal) |
 | time entry | `TimeEntry` with `source = BONSAI_IMPORT`, `duration` in minutes, `billable` when `billing_status` is `billed`, `hourlyRate` = `rate`, `description` = `notes` (else "`<project> work`"). A row repeating an earlier row of the same export (same project, user, date and duration) is imported once and counted in `stats.timeEntries.duplicates` |
-| expense | `Expense` with `category` from `tags` (advertising → `MARKETING`, professional services/subcontractors → `SUBCONTRACTOR`, software/subscriptions/work devices → `SOFTWARE`, meals, entertainment and travel → `TRAVEL`, electronics/furniture → `SUPPLIES`, else `OTHER`), `billable` when `billable` is `true`. The `client` must resolve to a client of this import: that client is the expense's only link to the organization (`Expense` has no `organizationId`). The project is linked when it resolves for that client. An expense whose client is blank or does not resolve is **not imported**; it is counted in `stats.expenses.skipped` and reported as `EXPENSE_NO_CLIENT` |
+| expense | `Expense` with `category` from `tags` (advertising → `MARKETING`, professional services/subcontractors → `SUBCONTRACTOR`, software/subscriptions/work devices → `SOFTWARE`, meals, entertainment and travel → `TRAVEL`, electronics/furniture → `SUPPLIES`, else `OTHER`), `billable` when `billable` is `true`. The `client` must resolve to a client of this import (the expense is created with this organization's `organizationId`). The project is linked when it resolves for that client. An expense whose client is blank or does not resolve is **not imported**; it is counted in `stats.expenses.skipped` and reported as `EXPENSE_NO_CLIENT` |
 
 ### Deliberately skipped
 
@@ -313,7 +313,7 @@ a disposition before `--confirm`:
 | Code | Report entry | Meaning | Category |
 | --- | --- | --- | --- |
 | `CLIENT_DOMAIN_TAKEN` | `{ code, client, domain }` | The client's `Website` is already the `domain` of another client, in this or **another** organization, or of an earlier client of the same export (`Client.domain` is unique across all organizations). A domain an earlier row moves a matched client off does not count as taken, in either mode. The client is imported without it: a new client gets no domain, a matched client keeps its current one. Nothing about the other client or its organization is read or reported | warning |
-| `EXPENSE_NO_CLIENT` | `{ code, description, date, amount, currency, client }` | The expense's `client` is blank or did not resolve to a client of this import. `Expense` has no `organizationId`, so without a client it would belong to no organization; it is **not imported** and counted in `stats.expenses.skipped`. `client` is the name from the CSV, or `null` when blank. To import it, give it a client in a copy of `expenses.csv` or enter it by hand | unsupported |
+| `EXPENSE_NO_CLIENT` | `{ code, description, date, amount, currency, client }` | The expense's `client` is blank or did not resolve to a client of this import. It is **not imported** (expenses carry `organizationId` since migration `20261001130000_expense_organization`, so importing client-less expenses is possible but not yet implemented) and counted in `stats.expenses.skipped`. `client` is the name from the CSV, or `null` when blank. To import it, give it a client in a copy of `expenses.csv` or enter it by hand | unsupported |
 
 These are not in `stats.errors` or `stats.warnings`:
 
@@ -368,11 +368,11 @@ failed live command, check the database before assuming nothing changed.
   "Import failed: …" (often a follow-on "current transaction is aborted"
   error) instead of listing the message in `stats.errors`.
 - The run does not use the tenant job context (`runTenantJob`). It scopes its
-  queries with explicit `organizationId` filters instead. `Expense` has no
-  `organizationId` column, so an expense can belong to an organization only
-  through its client: **expenses without a resolvable client (typically
-  overhead such as software subscriptions) are not imported** and are
-  reported as `EXPENSE_NO_CLIENT`. Importing them would need a schema change.
+  queries with explicit `organizationId` filters instead. **Expenses without
+  a resolvable client (typically overhead such as software subscriptions)
+  are not imported** and are reported as `EXPENSE_NO_CLIENT`. Expenses carry
+  `organizationId` since migration `20261001130000_expense_organization`, so
+  importing them is now possible but not yet implemented.
 - The domain check reads every organization's clients to find out whether a
   domain is taken. It reads only whether a holder exists, and the report
   says only that the domain is taken.

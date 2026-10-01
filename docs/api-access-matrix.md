@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 4 |
-| staff | 367 |
+| staff | 369 |
 | staff (inline) | 1 |
-| **total** | 550 |
+| **total** | 552 |
 
 ## Routes by prefix
 
@@ -278,6 +278,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | --- | --- | --- | --- | --- |
 | GET | `/api/brand` | staff | scoped |  |
 | PUT | `/api/brand` | admin | scoped |  |
+| GET | `/api/brand/logo` | staff | scoped |  |
 | POST | `/api/brand/logo` | admin | scoped |  |
 
 ### /api/calendar
@@ -475,6 +476,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | DELETE | `/api/expenses/:id` | staff | scoped |  |
 | GET | `/api/expenses/:id` | staff | scoped |  |
 | PUT | `/api/expenses/:id` | staff | scoped |  |
+| GET | `/api/expenses/:id/receipt` | staff | scoped |  |
 | GET | `/api/expenses/summary` | staff | scoped |  |
 | POST | `/api/expenses/upload-receipt` | staff | scoped |  |
 

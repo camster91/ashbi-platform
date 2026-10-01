@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-107 models, 0 enums, 52 tenant-scoped, 13 soft-deletable.
+107 models, 0 enums, 53 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -56,7 +56,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [EmailWebhookReceipt](#model-emailwebhookreceipt) | `email_webhook_receipts` | no | no | 3 |
 | [Estimate](#model-estimate) | `estimates` | no | yes | 23 |
 | [EventAttendee](#model-eventattendee) | `event_attendees` | no | no | 7 |
-| [Expense](#model-expense) | `expenses` | no | yes | 19 |
+| [Expense](#model-expense) | `expenses` | yes | yes | 22 |
 | [FormDraft](#model-formdraft) | `form_drafts` | yes | no | 13 |
 | [GoogleCalendarConnection](#model-googlecalendarconnection) | `google_calendar_connections` | yes | no | 14 |
 | [ImpersonationSession](#model-impersonationsession) | `impersonation_sessions` | yes | no | 13 |
@@ -78,7 +78,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 61 |
+| [Organization](#model-organization) | `organizations` | no | no | 62 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -1083,9 +1083,11 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 ### Model Expense
 
 - Table: `expenses`
-- Tenant-scoped: no
+- Tenant-scoped: yes (`organizationId`)
 - Soft-deletable: yes (`deletedAt`)
 - Constraints and indexes:
+  - `@@index([organizationId, date])`
+  - `@@index([receiptUrl])`
   - `@@index([clientId])`
   - `@@index([projectId])`
   - `@@index([invoiceId])`
@@ -1101,12 +1103,15 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `billable` | Boolean | required | `false` |  |  |
 | `invoiced` | Boolean | required | `false` |  |  |
 | `receiptUrl` | String | optional |  |  |  |
+| `receiptChecksumSha256` | String | optional |  |  |  |
 | `notes` | String | optional |  |  |  |
+| `organizationId` | String | required |  |  |  |
 | `clientId` | String | optional |  |  |  |
 | `projectId` | String | optional |  |  |  |
 | `invoiceId` | String | optional |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `client` | Client | optional |  | → Client, via (clientId) → (id) |  |
 | `project` | Project | optional |  | → Project, via (projectId) → (id) |  |
 | `invoice` | Invoice | optional |  | → Invoice, via (invoiceId) → (id) |  |
@@ -1743,6 +1748,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `aiUsageRecords` | AiUsageRecord[] | list, required |  | → AiUsageRecord |  |
 | `reviewSessions` | ReviewSession[] | list, required |  | → ReviewSession |  |
 | `invoices` | Invoice[] | list, required |  | → Invoice |  |
+| `expenses` | Expense[] | list, required |  | → Expense |  |
 | `documentNumberSequences` | DocumentNumberSequence[] | list, required |  | → DocumentNumberSequence |  |
 | `domainEvents` | DomainEvent[] | list, required |  | → DomainEvent |  |
 | `impersonationSessions` | ImpersonationSession[] | list, required |  | → ImpersonationSession |  |

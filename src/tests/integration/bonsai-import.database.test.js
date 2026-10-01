@@ -126,8 +126,8 @@ test('Bonsai import reports findings in the dry run, stays inside its tenant and
       { id: ids.oldestAdmin, organizationId: ids.orgA, email: `zed+${suffix}@example.test`, password: 'test', name: 'Zed Oldest', role: 'ADMIN', createdAt: new Date('2020-01-01T00:00:00Z') },
       { id: ids.userB, organizationId: ids.orgB, email: `b+${suffix}@example.test`, password: 'test', name: 'Tenant B user', role: 'ADMIN' },
     ] });
-    await raw.expense.create({ data: { id: ids.expenseB, clientId: ids.clientB, description: hosting, amount: 20, date: new Date('2025-02-05'), category: 'SOFTWARE' } });
-    await raw.expense.create({ data: { clientId: ids.clientB, description: figma, amount: 15, date: new Date('2025-02-06'), category: 'SOFTWARE' } });
+    await raw.expense.create({ data: { organizationId: ids.orgB, id: ids.expenseB, clientId: ids.clientB, description: hosting, amount: 20, date: new Date('2025-02-05'), category: 'SOFTWARE' } });
+    await raw.expense.create({ data: { organizationId: ids.orgB, clientId: ids.clientB, description: figma, amount: 15, date: new Date('2025-02-06'), category: 'SOFTWARE' } });
 
     const orgBSnapshot = async () => ({
       clients: await raw.client.findMany({ where: { organizationId: ids.orgB }, orderBy: { id: 'asc' } }),

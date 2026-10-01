@@ -441,9 +441,15 @@ client-portal chat uploads, client-portal document uploads, web page
 captures, and Loom and MarkUp.io imports. Review asset versions are
 attachments, so every new version carries its checksum into the evidence
 export. Rows stored earlier keep `NULL` (no backfill). Expense receipts are
-referenced by URL rather than an attachment row; `POST
-/api/expenses/upload-receipt` returns the checksum with the URL but nothing
-stores it yet.
+referenced by URL rather than an attachment row: when an expense is created or
+updated with a `receiptUrl`, the server accepts only a receipt it stored
+(`/uploads/receipt-<uuid>.<ext>` returned by `POST
+/api/expenses/upload-receipt`, present in the upload directory), hashes that
+stored file itself and keeps the result in `expenses.receiptChecksumSha256`
+(CHECK-constrained, migration `20261001130000_expense_organization`); the
+checksum the upload route returns is informational. Receipts are downloaded
+through `GET /api/expenses/:id/receipt` (tenant-scoped through the expense)
+and brand logos through `GET /api/brand/logo`.
 
 A file the upload policy refuses on any of those HTTP upload routes (and the
 expense receipt route) is recorded as an `upload.rejected` audit event with
