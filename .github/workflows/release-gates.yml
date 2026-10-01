@@ -59,7 +59,9 @@ jobs:
       - name: Release gate contract
         run: npm run check:release-gates
       - name: Coolify release safety checks
-        run: node --test src/tests/unit/coolify-release.test.mjs src/tests/unit/coolify-workflow-gates.test.mjs
+        run: |
+          node --test src/tests/unit/coolify-release.test.mjs src/tests/unit/coolify-workflow-gates.test.mjs src/tests/unit/production-backup.test.mjs src/tests/unit/coolify-migration-floor.test.mjs
+          python3 scripts/deploy/test-backup-ssh-command.py
       - name: Install locked dependencies
         run: |
           npm ci --no-audit --no-fund

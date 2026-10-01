@@ -3,12 +3,12 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import pg from 'pg';
 
 export const FLOOR_MIGRATIONS = ['20260927030000_chat_message_visibility'];
 const validName = name => /^[0-9]{14}_[a-z0-9_]+$/.test(name);
 
 async function appliedMigrations() {
+  const { default: pg } = await import('pg');
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 8000, query_timeout: 8000 });
   try {
     await client.connect();
