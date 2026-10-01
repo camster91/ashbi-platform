@@ -86,9 +86,14 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: 'no'
-    command: ["npx", "prisma", "migrate", "deploy"]
+    # Root only for the one-shot host rollback-floor record. API/worker retain
+    # the image's unprivileged node user and cannot write release history.
+    user: '0:0'
+    command: ["node", "scripts/deploy/migrate-with-floor.mjs"]
     environment:
       DATABASE_URL: '${DATABASE_URL:?}'
+    volumes:
+      - /opt/ashbi-platform/releases:/release-state
     networks: [production-data]
 
 networks:

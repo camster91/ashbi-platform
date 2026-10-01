@@ -86,6 +86,11 @@ test('production adoption preserves existing stores and files without creating f
   assert.equal(networks['production-data'].external, true);
   assert.equal(networks['production-data'].name, 'ashbi-hub-src_default');
   assert.equal(services.app.environment.ADMIN_INVITE_TOKEN, '${ADMIN_INVITE_TOKEN:-}', 'adoption must not enable previously disabled bootstrap registration');
+  assert.deepEqual(services.migrate.command, ['node', 'scripts/deploy/migrate-with-floor.mjs']);
+  assert.equal(services.migrate.user, '0:0');
+  assert.deepEqual(services.migrate.volumes, ['/opt/ashbi-platform/releases:/release-state']);
+  assert.equal(services.app.user, undefined);
+  assert.equal(services.worker.user, undefined);
   for (const service of Object.values(services)) {
     assert.equal(service.ports, undefined);
     assert.equal(service.environment.DATABASE_URL, '${DATABASE_URL:?}');

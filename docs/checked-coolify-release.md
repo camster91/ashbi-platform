@@ -52,6 +52,15 @@ does not approve a release. Public probes never carry the Coolify token.
    is running, so that command alone cannot enforce a backup before the first
    adoption or after an outage. The release controller must verify a successful
    fresh backup before queueing a deployment, including those cases.
+   The production migration runner checks the host's recorded rollback floor
+   and applied database security migrations before running Prisma. It persists
+   applied floors even if a later migration fails. Its one-shot root user can
+   write only the mounted release-state directory; API/worker keep the image's
+   unprivileged user. Backup proof includes recorded/applied floors, and the
+   release controller rejects checked source missing any required migration.
+   The first handoff must stop legacy API/worker before migrations: c81024e lacks
+   `20260927030000_chat_message_visibility` and cannot be restarted afterward.
+   Previous-image data compatibility does not override this security floor.
    The checked workflow now runs `scripts/deploy/production-backup.mjs` over
    strict host-key-pinned SSH. Its root-side verifier accepts only the reviewed
    backup script checksum, generates a new encrypted archive, decrypts it into

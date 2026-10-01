@@ -39,6 +39,7 @@ export function validateBackupProof(proof, sha, nonce, now = Date.now()) {
     || proof.manifestVerified !== true || proof.databaseCatalogVerified !== true
     || !/^\/opt\/ashbi-platform\/backups\/encrypted\/ashbi-full-\d{8}_\d{6}-[a-z0-9]{7}\.tar\.age$/.test(proof.archive || '')
     || !/^[a-f0-9]{64}$/.test(proof.sha256 || '') || !Number.isSafeInteger(proof.bytes) || proof.bytes <= 0
+    || !Array.isArray(proof.rollbackFloorMigrations) || proof.rollbackFloorMigrations.some(name => !/^[0-9]{14}_[a-z0-9_]+$/.test(name))
     || !Number.isFinite(age) || age < -60000 || age > 300000) {
     throw new Error('Production backup proof is missing, stale or mismatched');
   }
@@ -83,6 +84,12 @@ export async function verifiedProductionBackup(env) {
   if (!/^[a-f0-9]{32}$/.test(proof.nonce || '') || proof.workflowRunId !== env.GITHUB_RUN_ID || proof.offServerCopyVerified !== true) throw new Error('Backup is not from this release workflow');
   const bytes = await fs.readFile(path.join(directory, path.basename(proof.archive)));
   if (bytes.length !== proof.bytes || createHash('sha256').update(bytes).digest('hex') !== proof.sha256) throw new Error('Verified backup copy changed');
+  if (!Array.isArray(proof.rollbackFloorMigrations)) throw new Error('Missing database rollback-floor proof');
+  for (const name of proof.rollbackFloorMigrations) {
+    if (!/^[0-9]{14}_[a-z0-9_]+$/.test(name)) throw new Error('Invalid database rollback floor');
+    try { await fs.access(new URL(`../../prisma/migrations/${name}/migration.sql`, import.meta.url)); }
+    catch { throw new Error('Verified candidate is below the database rollback floor'); }
+  }
   return proof;
 }
 

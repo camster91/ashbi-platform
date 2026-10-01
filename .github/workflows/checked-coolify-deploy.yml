@@ -49,7 +49,7 @@ jobs:
       - name: Test release safety checks
         if: steps.source.outputs.current == 'true'
         run: |
-          node --test src/tests/unit/coolify-release.test.mjs src/tests/unit/production-backup.test.mjs
+          node --test src/tests/unit/coolify-release.test.mjs src/tests/unit/production-backup.test.mjs src/tests/unit/coolify-migration-floor.test.mjs
           python3 scripts/deploy/test-backup-ssh-command.py
       - name: Create and verify encrypted production backup
         if: steps.source.outputs.current == 'true'
