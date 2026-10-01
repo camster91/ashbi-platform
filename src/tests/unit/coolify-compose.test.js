@@ -78,3 +78,23 @@ test('the local compose stack also persists uploads and runtime config', () => {
   }
   assert.ok('uploads' in volumes && 'appconfig' in volumes);
 });
+
+test('production adoption preserves existing stores and files without creating fresh databases', () => {
+  const { services, networks, volumes } = load('docker-compose.coolify-production.yml');
+  assert.deepEqual(Object.keys(services).sort(), ['app', 'migrate', 'worker']);
+  assert.equal(volumes, undefined);
+  assert.equal(networks['production-data'].external, true);
+  assert.equal(networks['production-data'].name, 'ashbi-hub-src_default');
+  for (const service of Object.values(services)) {
+    assert.equal(service.ports, undefined);
+    assert.equal(service.environment.DATABASE_URL, '${DATABASE_URL:?}');
+    assert.ok(service.networks.includes('production-data'));
+    assert.equal(Array.isArray(service.environment), false);
+  }
+  for (const name of ['app', 'worker']) {
+    assert.equal(services[name].environment.REDIS_URL, '${REDIS_URL:?}');
+    assert.deepEqual(services[name].volumes, ['/opt/ashbi-platform/data/uploads:/app/uploads', '/opt/ashbi-platform/data/config:/app/config']);
+    assert.equal(services[name].depends_on.migrate.condition, 'service_completed_successfully');
+    assert.equal(services[name].build.args.APP_REVISION, '${SOURCE_COMMIT:-unknown}');
+  }
+});

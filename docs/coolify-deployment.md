@@ -1,5 +1,11 @@
 # Deploying Ashbi Hub with Coolify
 
+Existing VPS production adoption uses `docker-compose.coolify-production.yml`
+and the preserved external database, Redis and `/opt/ashbi-platform/data`
+directories. Follow [checked-coolify-release.md](checked-coolify-release.md)
+for its ownership transfer and required backup gate. The production release
+controller rejects the fresh-database staging file.
+
 `docker-compose.coolify.yml` is a complete Ashbi Hub stack for Coolify's
 **Docker Compose** build pack. It contains the API, the background worker, a
 one-shot migration runner, PostgreSQL 16 with pgvector, and Redis 7.

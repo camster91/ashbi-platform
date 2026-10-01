@@ -24,11 +24,20 @@ does not approve a release. Public probes never carry the Coolify token.
    `CREDENTIALS_KEY` when copying existing production data. Do not create an
    empty production database or rotate these keys as part of adoption.
 3. Configure a Coolify Docker Compose application for
-   `camster91/ashbi-platform`, `main`, `/docker-compose.coolify.yml`, with
+   `camster91/ashbi-platform`, `main`, `/docker-compose.coolify-production.yml`, with
    source-commit build metadata enabled and direct Git auto-deploy disabled.
    Reconcile routing with the existing Traefik owner before cutover. The API
    service `app` must own `https://hub.ashbi.ca` with port override 3002;
    the worker, migration runner and stores have no public route.
+   This production file runs only API, worker and migrations. It joins the
+   existing external `ashbi-hub-src_default` network, uses the preserved
+   `DATABASE_URL` and `REDIS_URL`, and binds the existing
+   `/opt/ashbi-platform/data/uploads` and `data/config` directories. It does
+   not create a database, Redis instance or empty data volumes. The five-service
+   `docker-compose.coolify.yml` remains for isolated staging/new installations.
+   Verify both connection URLs against the live containers before configuration.
+   Stop the old worker during the handoff before the new worker starts; their
+   shared Redis heartbeat cannot represent two source revisions simultaneously.
 4. Rehearse database/upload/configuration backups and rollback for this exact
    resource. Configure a fail-closed pre-deployment backup hook before
    automated migrations; the direct script's backup and rollback-floor
@@ -36,6 +45,10 @@ does not approve a release. Public probes never carry the Coolify token.
    on both successful and failed backup attempts. Keep provider test/sending
    restrictions from the live environment. Coolify Compose migrations can
    cause downtime, and failed migrations can leave services unavailable.
+   Coolify's built-in pre-deployment command skips when no application container
+   is running, so that command alone cannot enforce a backup before the first
+   adoption or after an outage. The release controller must verify a successful
+   fresh backup before queueing a deployment, including those cases.
 5. Confirm existing `production` GitHub environment policy. Configure
    `COOLIFY_URL`, `COOLIFY_TOKEN`, `COOLIFY_APP_UUID` securely; existing secret
    names do not prove correct values. Use the normal authorized Coolify API,

@@ -27,7 +27,7 @@ export async function release(env, { fetchImpl = fetch, sleep = ms => new Promis
   function validateResource(app) {
     const repository = (app.git_repository || '').replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '');
     if (app.uuid !== uuid || repository.toLowerCase() !== 'camster91/ashbi-platform' || app.git_branch !== branch || app.build_pack !== 'dockercompose'
-      || app.docker_compose_location !== '/docker-compose.coolify.yml') {
+      || app.docker_compose_location !== '/docker-compose.coolify-production.yml') {
       throw new Error('Coolify resource does not match the approved application');
     }
     const domainMap = typeof app.docker_compose_domains === 'string' ? JSON.parse(app.docker_compose_domains) : app.docker_compose_domains;
