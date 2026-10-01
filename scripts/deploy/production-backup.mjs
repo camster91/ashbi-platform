@@ -10,13 +10,22 @@ function command(file, args, input) {
     const child = spawn(file, args, { stdio: ['pipe', 'pipe', 'pipe'] });
     let output = '';
     child.stdout.on('data', chunk => { output += chunk; });
-    // Never forward raw remote errors or authentication diagnostics.
-    child.stderr.resume();
+    // Classify diagnostics into fixed messages; never forward raw remote text.
+    let diagnostic = '';
+    child.stderr.on('data', chunk => { diagnostic = (diagnostic + chunk).slice(-8192); });
     const timer = setTimeout(() => child.kill('SIGKILL'), 900000);
     child.on('error', () => { clearTimeout(timer); reject(new Error('Backup transport failed')); });
     child.on('close', code => {
       clearTimeout(timer);
-      if (code !== 0) reject(new Error('Production backup gate failed'));
+      if (code !== 0) {
+        const error = new Error('Production backup gate failed');
+        error.safeReason = /Permission denied/.test(diagnostic) ? 'SSH authentication rejected'
+          : /Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED/.test(diagnostic) ? 'SSH host identity rejected'
+            : /invalid format|error in libcrypto/.test(diagnostic) ? 'Stored SSH key format rejected'
+              : /Connection timed out|Connection refused|No route to host/.test(diagnostic) ? 'SSH connection unavailable'
+                : `${file === 'scp' ? 'Encrypted backup transfer' : 'Remote backup verification'} failed`;
+        reject(error);
+      }
       else resolve(output);
     });
     child.stdin.on('error', () => {});
@@ -36,7 +45,11 @@ export function validateBackupProof(proof, sha, nonce, now = Date.now()) {
 }
 
 export async function productionBackup(env) {
-  if (!env.VPS_SSH_KEY || !env.ASHBI_VPS_KNOWN_HOSTS || !env.RUNNER_TEMP) throw new Error('Missing verified backup SSH configuration');
+  if (!env.VPS_SSH_KEY || !env.ASHBI_VPS_KNOWN_HOSTS || !env.RUNNER_TEMP) {
+    const error = new Error('Missing verified backup SSH configuration');
+    error.safeReason = 'Required backup SSH configuration missing';
+    throw error;
+  }
   const sha = env.RELEASE_SHA;
   if (!/^[a-f0-9]{40}$/.test(sha || '')) throw new Error('Backup requires a full release SHA');
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'ashbi-backup-ssh-'));
@@ -75,7 +88,7 @@ export async function verifiedProductionBackup(env) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  productionBackup(process.env).then(() => console.log('Encrypted production backup and off-server copy verified')).catch(() => {
-    console.error('Production backup gate failed'); process.exitCode = 1;
+  productionBackup(process.env).then(() => console.log('Encrypted production backup and off-server copy verified')).catch(error => {
+    console.error(`Production backup gate failed: ${error.safeReason || 'proof or copy verification failed'}`); process.exitCode = 1;
   });
 }
