@@ -13,8 +13,12 @@ import env from '../config/env.js';
 // Per-IP limits for the unauthenticated capability-link routes that still use
 // the legacy never-expiring project and intake-form view tokens (security
 // audit M1; moving those to expiring, revocable links is tracked separately).
-const LEGACY_LINK_VIEW_RATE_LIMIT = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
-const LEGACY_LINK_SUBMIT_RATE_LIMIT = { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } };
+// Every route here is public: addressed by a capability token in the URL or
+// a public intake form, never acting with a staff member's authority
+// (`config.public`, see src/auth/mfa-enforcement.js).
+const PUBLIC = { config: { public: true } };
+const LEGACY_LINK_VIEW_RATE_LIMIT = { config: { public: true, rateLimit: { max: 30, timeWindow: '1 minute' } } };
+const LEGACY_LINK_SUBMIT_RATE_LIMIT = { config: { public: true, rateLimit: { max: 10, timeWindow: '15 minutes' } } };
 
 export default async function portalRoutes(fastify) {
   // ==================== PROJECT PORTAL ====================
@@ -96,7 +100,7 @@ export default async function portalRoutes(fastify) {
   // ==================== PROPOSALS ====================
 
   // View proposal by token
-  fastify.get('/proposal/:viewToken', async (request, reply) => {
+  fastify.get('/proposal/:viewToken', PUBLIC, async (request, reply) => {
     const { viewToken } = request.params;
 
     const proposal = await request.prisma.proposal.findUnique({
@@ -155,7 +159,7 @@ export default async function portalRoutes(fastify) {
   });
 
   // Approve proposal
-  fastify.post('/proposal/:viewToken/approve', async (request, reply) => {
+  fastify.post('/proposal/:viewToken/approve', PUBLIC, async (request, reply) => {
     const { viewToken } = request.params;
 
     const proposal = await request.prisma.proposal.findUnique({ where: { viewToken } });
@@ -216,7 +220,7 @@ export default async function portalRoutes(fastify) {
   });
 
   // Decline proposal
-  fastify.post('/proposal/:viewToken/decline', { preHandler: [validateBody(proposalDeclineSchema)] }, async (request, reply) => {
+  fastify.post('/proposal/:viewToken/decline', { ...PUBLIC, preHandler: [validateBody(proposalDeclineSchema)] }, async (request, reply) => {
     const { viewToken } = request.params;
     const { reason } = request.body;
 
@@ -252,7 +256,7 @@ export default async function portalRoutes(fastify) {
   // ==================== CONTRACTS ====================
 
   // View contract by sign token
-  fastify.get('/contract/:signToken', async (request, reply) => {
+  fastify.get('/contract/:signToken', PUBLIC, async (request, reply) => {
     const { signToken } = request.params;
 
     const contract = await request.prisma.contract.findUnique({
@@ -292,7 +296,7 @@ export default async function portalRoutes(fastify) {
   });
 
   // Sign contract
-  fastify.post('/contract/:signToken/sign', { preHandler: [validateBody(contractSignSchema)] }, async (request, reply) => {
+  fastify.post('/contract/:signToken/sign', { ...PUBLIC, preHandler: [validateBody(contractSignSchema)] }, async (request, reply) => {
     const { signToken } = request.params;
     const { signerName, signatureType, signatureImage, agreement } = request.body;
 
@@ -378,7 +382,7 @@ export default async function portalRoutes(fastify) {
   // ==================== INVOICES ====================
 
   // View invoice by token
-  fastify.get('/invoice/:viewToken', async (request, reply) => {
+  fastify.get('/invoice/:viewToken', PUBLIC, async (request, reply) => {
     const { viewToken } = request.params;
 
     const invoice = await request.prisma.invoice.findUnique({
@@ -440,7 +444,7 @@ export default async function portalRoutes(fastify) {
   });
 
   // Pay invoice — creates Stripe checkout session
-  fastify.post('/invoice/:viewToken/pay', async (request, reply) => {
+  fastify.post('/invoice/:viewToken/pay', PUBLIC, async (request, reply) => {
     const { viewToken } = request.params;
 
     const invoice = await request.prisma.invoice.findUnique({ where: { viewToken } });
@@ -560,7 +564,7 @@ export default async function portalRoutes(fastify) {
   }
 
   // Get available time slots for a given date
-  fastify.get('/booking/availability', async (request, reply) => {
+  fastify.get('/booking/availability', PUBLIC, async (request, reply) => {
     const { date } = request.query;
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return reply.status(400).send({ error: 'Date parameter required (YYYY-MM-DD)' });
@@ -634,7 +638,7 @@ export default async function portalRoutes(fastify) {
   });
 
   // Book a time slot
-  fastify.post('/booking', { preHandler: [validateBody(bookingSchema)] }, async (request, reply) => {
+  fastify.post('/booking', { ...PUBLIC, preHandler: [validateBody(bookingSchema)] }, async (request, reply) => {
     const { name, email, date, time, notes, phone } = request.body;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return reply.status(400).send({ error: 'Invalid date format (YYYY-MM-DD)' });

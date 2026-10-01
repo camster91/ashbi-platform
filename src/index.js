@@ -31,6 +31,7 @@ import {
   startViewSocketSweep,
 } from './auth/impersonation.js';
 import { createJoinProjectHandler, createLeaveProjectHandler } from './auth/project-room-access.js';
+import { createMfaEnforcementHook, disconnectUserSockets, isMfaEnrollmentRequired } from './auth/mfa-enforcement.js';
 import { createSocketAuthMiddleware } from './auth/socket-auth.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
@@ -269,6 +270,10 @@ fastify.decorate('prisma', new Proxy({}, {
   },
 }));
 fastify.decorate('auth', getAuthProvider(fastify));
+// Organization MFA requirement (docs/privileged-actions.md): a staff identity
+// that must still enroll reaches only the enrollment endpoints. A preHandler,
+// so it runs after every route's own session / API key guard.
+fastify.addHook('preHandler', createMfaEnforcementHook({ prisma, verifySessionToken: (token) => fastify.jwt.verify(token) }));
 fastify.addHook('preHandler', tenancyMiddleware);
 fastify.decorate('authenticateWithApiKey', authenticateApiKey);
 
@@ -291,7 +296,7 @@ await registerClientCommunicationRoutes(fastify);
 // Hub-Hermes bridge initialization
 if (initializeRuntime) initHermesBridge(fastify);
 
-fastify.get('/api/live', async () => ({
+fastify.get('/api/live', { config: { public: true } }, async () => ({
   status: 'ok',
   timestamp: new Date().toISOString(),
   revision: process.env.APP_REVISION || 'unknown',
@@ -299,7 +304,7 @@ fastify.get('/api/live', async () => ({
 
 // Public readiness: database + Redis decide the status code; a stale worker
 // is reported as degraded (still 200). `?strict=1` also requires the worker.
-fastify.get('/api/health', async (request, reply) => {
+fastify.get('/api/health', { config: { public: true } }, async (request, reply) => {
   const report = await checkRuntimeHealth();
   const strict = isStrictHealthQuery(request.query);
   return reply.code(healthStatusCode(report, { strict })).send(publicHealthView(report));
@@ -355,6 +360,13 @@ const realtimeAdapter = attachRedisAdapter(io, realtimeRedisSource());
 // fails fast and would drop the SUBSCRIBE issued before Redis is ready).
 const viewSocketRevoker = createViewSocketRevoker({ io, redis: pubSubRedisSource(), logger: fastify.log });
 fastify.decorate('revokeSupportViewSockets', (userId) => viewSocketRevoker.revoke(userId));
+// The same revoker drops a person's sockets when the organization MFA
+// requirement starts to apply to them (requirement turned on, two-factor
+// reset by an admin or turned off by the person): the requirement is checked
+// at the handshake and on join-project, and this ends realtime already open.
+// Best effort: the requirement itself is in the database already, so a failed
+// publish is logged, never surfaced (the view sweep does not cover this case).
+fastify.decorate('disconnectUserSockets', (userIds) => disconnectUserSockets(viewSocketRevoker, userIds, fastify.log));
 const stopViewSocketSweep = startViewSocketSweep(io, prisma, fastify.log);
 fastify.addHook('onClose', async () => {
   stopViewSocketSweep();
@@ -367,13 +379,19 @@ fastify.addHook('onClose', async () => {
 // Handshake: sessions only (src/auth/socket-auth.js). Realtime is paused
 // during a support view (#416): a handshake carrying the view cookie is
 // refused before verification, and an admin with an open view is refused
-// after the session is verified.
+// after the session is verified. A staff member whose organization requires
+// two-factor authentication is refused until they enroll.
 io.use(createSocketAuthMiddleware({
   verifyToken: (token) => fastify.jwt.verify(token),
   parseCookie: (header) => fastify.parseCookie(header),
   prisma,
   refuseBeforeVerify: (cookies) => (socketHandshakeDuringView(cookies) ? 'Realtime is paused during a support view' : null),
-  refuseAfterVerify: async (decoded) => ((await actorHasOpenView(prisma, decoded)) ? 'Realtime is paused during a support view' : null),
+  refuseAfterVerify: async (decoded) => {
+    if (await actorHasOpenView(prisma, decoded)) return 'Realtime is paused during a support view';
+    // Organization MFA requirement: no realtime until the person enrolls.
+    if (await isMfaEnrollmentRequired(prisma, decoded.id)) return 'Two-factor authentication setup is required';
+    return null;
+  },
 }));
 
 // Socket.IO connection handling. Without this, the client-emitted `join` /
@@ -387,8 +405,14 @@ io.on('connection', (socket) => {
   // so notify() reaches it.
   const pendingRoom = `pending-user:${socket.userId}`;
   if (socket.userId) socket.join(pendingRoom);
+  // The MFA requirement is re-checked here too: it may have been turned on
+  // between the handshake check and this point, after the disconnect for
+  // that change had already been sent.
   const cleared = socket.userId && socket.organizationId
-    ? actorHasOpenView(prisma, { id: socket.userId, organizationId: socket.organizationId }).then((open) => !open, () => false)
+    ? Promise.all([
+      actorHasOpenView(prisma, { id: socket.userId, organizationId: socket.organizationId }),
+      isMfaEnrollmentRequired(prisma, socket.userId),
+    ]).then(([open, mustEnroll]) => !open && !mustEnroll, () => false)
     : Promise.resolve(true);
   socket.use((_packet, next) => {
     cleared.then((ok) => (ok ? next() : next(new Error('Realtime is paused during a support view'))));
@@ -416,6 +440,9 @@ io.on('connection', (socket) => {
       where: { id: projectId },
       select: { clientId: true, client: { select: { organizationId: true } } },
     }),
+    // Organization MFA requirement: a staff socket whose person must now
+    // enroll is refused and disconnected (docs/privileged-actions.md).
+    mustEnrollMfa: () => isMfaEnrollmentRequired(prisma, socket.userId),
     logger,
   }));
 

@@ -30,6 +30,7 @@ import QueryErrorState from '../components/QueryErrorState';
 import { Button, Card, LoadingState } from '../components/ui';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TwoFactorSettings from '../components/TwoFactorSettings';
+import OrganizationMfaPolicy from '../components/OrganizationMfaPolicy';
 import ActivityLog from '../components/ActivityLog';
 import AiByokSettings from '../components/AiByokSettings';
 import AiApprovals from '../components/AiApprovals';
@@ -903,6 +904,13 @@ export default function Settings() {
       {user && user.role !== 'CLIENT' && user.role !== 'BOT' && (
         <Section icon={ShieldCheck} title="Security" description="Protect your account with two-factor authentication">
           <TwoFactorSettings />
+        </Section>
+      )}
+
+      {/* Organization MFA requirement — admin only (the API also enforces this) */}
+      {isAdmin && (
+        <Section icon={ShieldCheck} title="Organization security" description="Require two-factor authentication for every staff account in this workspace">
+          <OrganizationMfaPolicy />
         </Section>
       )}
 

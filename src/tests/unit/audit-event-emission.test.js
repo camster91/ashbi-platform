@@ -535,6 +535,36 @@ test('a platform operator switching the AI provider is audited', async (t) => {
   assert.equal(audit.events[0].metadata.toProvider, target);
 });
 
+test('changing the organization MFA requirement is audited once per real change', async (t) => {
+  const audit = auditStore();
+  const org = { id: 'org-1', mfaRequired: false };
+  const admin = { id: 'admin-1', role: 'ADMIN', isActive: true, mfaEnabled: true, mfaSecret: 'encrypted' };
+  const app = await buildApp(t, settingsRoutes, {
+    auditEvent: audit,
+    user: { findUnique: async () => ({ ...admin }), count: async () => 2 },
+    organization: {
+      findUnique: async () => ({ mfaRequired: org.mfaRequired }),
+      updateMany: async ({ where, data }) => {
+        if (where.id !== org.id || where.mfaRequired !== org.mfaRequired) return { count: 0 };
+        org.mfaRequired = data.mfaRequired;
+        return { count: 1 };
+      },
+    },
+  });
+  const put = (required) => app.inject({
+    method: 'PUT', url: '/mfa-requirement', cookies: reauthCookies(ADMIN), payload: { required },
+  });
+  const on = await put(true);
+  assert.equal(on.statusCode, 200, on.body);
+  assert.equal(on.json().required, true);
+  assert.equal((await put(true)).json().changed, false, 'a repeated request is a no-op');
+  assert.equal(audit.events.length, 1);
+  assert.equal(audit.events[0].action, 'organization.mfa_requirement_changed');
+  assert.equal(audit.events[0].entityType, 'organization');
+  assert.equal(audit.events[0].entityId, 'org-1');
+  assert.deepEqual(audit.events[0].metadata, { fromRequired: false, toRequired: true, staffWithoutMfa: 2 });
+});
+
 test('a client deleting a portal document is audited as a CLIENT actor', async (t) => {
   const audit = auditStore();
   const portalUser = { id: 'portal-user', email: 'c@x.test', name: 'C', role: 'CLIENT', clientId: 'client-a', organizationId: 'org-a', isActive: true, sessionVersion: 1 };

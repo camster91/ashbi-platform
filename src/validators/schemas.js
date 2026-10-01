@@ -833,6 +833,9 @@ export const aiConnectionSettingsSchema = z.object({
 
 export const aiKillSwitchSchema = z.object({ disabled: z.boolean() }).strict();
 
+// Organization MFA requirement (#416 follow-up, docs/privileged-actions.md).
+export const mfaRequirementSchema = z.object({ required: z.boolean() }).strict();
+
 // ── Proposals (Bonsai replacement) ──────────────────────────────────────────
 const proposalLineItemInput = z.object({
   // Description of what the line item is for (e.g. "Design — 5 hours")

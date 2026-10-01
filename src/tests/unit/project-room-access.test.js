@@ -172,3 +172,39 @@ test('join-project without an acknowledgement callback still joins', async () =>
   assert.ok(socket.rooms.has('project:p1'));
   assert.equal(socket.rooms.has('project:p1:client'), false);
 });
+
+// Organization MFA requirement (#416 follow-up): a socket opened before the
+// requirement applied to its person must not keep joining rooms.
+test('join-project re-checks the organization MFA requirement and drops the socket', async () => {
+  const socket = { ...roomSocket({ userRole: 'TEAM', organizationId: 'org-1' }), dropped: false, disconnect(close) { this.dropped = close; } };
+  let mustEnroll = false;
+  const handler = createJoinProjectHandler(socket, { findProject: async () => projectOfA, mustEnrollMfa: async () => mustEnroll });
+  const acks = [];
+  await handler('p1', (result) => acks.push(result));
+  assert.deepEqual(acks, [{ joined: true, room: 'internal' }]);
+  assert.equal(socket.dropped, false);
+
+  socket.rooms.clear();
+  mustEnroll = true;
+  await handler('p1', (result) => acks.push(result));
+  assert.deepEqual(acks[1], { joined: false, code: 'MFA_ENROLLMENT_REQUIRED' });
+  assert.equal(socket.rooms.size, 0, 'no room joined');
+  assert.equal(socket.dropped, true, 'the socket is disconnected');
+
+  // A failing check refuses the join (fail closed).
+  const failing = roomSocket({ userRole: 'TEAM', organizationId: 'org-1' });
+  const failedAcks = [];
+  await createJoinProjectHandler(failing, {
+    findProject: async () => projectOfA,
+    mustEnrollMfa: async () => { throw new Error('database down'); },
+    logger: { error() {} },
+  })('p1', (result) => failedAcks.push(result));
+  assert.deepEqual(failedAcks, [{ joined: false }]);
+  assert.equal(failing.rooms.size, 0);
+});
+
+test('the Socket.IO join-project handler passes the MFA re-check', () => {
+  const server = readFileSync(new URL('../../index.js', import.meta.url), 'utf8');
+  const handler = server.slice(server.indexOf("socket.on('join-project'"), server.indexOf("socket.on('leave-project'"));
+  assert.match(handler, /mustEnrollMfa: \(\) => isMfaEnrollmentRequired\(prisma, socket\.userId\)/);
+});

@@ -4,6 +4,8 @@ import { useAuth, AuthProvider } from './hooks/useAuth';
 import RateLimitNotice from './components/RateLimitNotice';
 import ErrorBoundary from './components/ErrorBoundary';
 import ImpersonationBanner from './components/ImpersonationBanner';
+import MfaEnrollmentGate from './components/MfaEnrollmentGate';
+import { MFA_ENROLLMENT_PATH } from './lib/mfa-enrollment';
 import { getPreloadedLogin } from './lib/initial-route';
 import { ToastProvider, useToast } from './hooks/useToast';
 import { apiErrorToast } from './lib/apiErrorToast';
@@ -31,6 +33,7 @@ const PortalEstimate = lazy(() => import('./pages/PortalEstimate'));
 const PortalReview = lazy(() => import('./pages/PortalReview'));
 const ClientPortal = lazy(() => import('./pages/ClientPortal'));
 const ClientInvite = lazy(() => import('./pages/ClientInvite'));
+const MfaEnrollmentRequired = lazy(() => import('./pages/MfaEnrollmentRequired'));
 const Layout = lazy(() => import('./components/Layout'));
 const QueryProvider = lazy(() => import('./components/QueryProvider'));
 
@@ -213,10 +216,14 @@ function AppRoutes() {
           <Route path="/client/login" element={<ClientPortal />} />
           <Route path="/client/dashboard" element={<ClientPortal />} />
           <Route path="/" element={<RootRedirect />} />
+          {/* Organization MFA requirement: outside Layout, whose requests the API refuses until setup. */}
+          <Route path={MFA_ENROLLMENT_PATH} element={<PrivateRoute><QueryRoute><MfaEnrollmentRequired /></QueryRoute></PrivateRoute>} />
       <Route
         path="/*"
         element={
           <PrivateRoute>
+            {/* Organization MFA requirement: a session that must set up two-factor sees only the setup page. */}
+            <MfaEnrollmentGate>
             <QueryRoute>
               <Layout>
                 <ErrorBoundary>
@@ -272,6 +279,7 @@ function AppRoutes() {
                 </ErrorBoundary>
               </Layout>
             </QueryRoute>
+            </MfaEnrollmentGate>
           </PrivateRoute>
         }
       />

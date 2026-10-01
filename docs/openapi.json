@@ -2943,6 +2943,18 @@
         ],
         "type": "object"
       },
+      "MfaRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "required": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "required"
+        ],
+        "type": "object"
+      },
       "MilestoneCreate": {
         "properties": {
           "color": {
@@ -8950,11 +8962,11 @@
                 "proposal",
                 "contract",
                 "user",
+                "organization",
                 "api_key",
                 "settings",
                 "attachment",
                 "ai_provider_connection",
-                "organization",
                 "ai_action",
                 "ai_session",
                 "import_run",
@@ -9002,6 +9014,7 @@
                 "auth.mfa_failed",
                 "auth.reauthenticated",
                 "auth.reauth_failed",
+                "organization.mfa_requirement_changed",
                 "api_key.created",
                 "api_key.revoked",
                 "settings.ai_provider_changed",
@@ -28104,6 +28117,90 @@
           "settings"
         ],
         "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/settings/mfa-requirement": {
+      "get": {
+        "operationId": "get_api_settings_mfa_requirement",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/settings/mfa-requirement",
+        "tags": [
+          "settings"
+        ],
+        "x-access": "admin",
+        "x-tenancy": "scoped"
+      },
+      "put": {
+        "operationId": "put_api_settings_mfa_requirement",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaRequirement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PUT /api/settings/mfa-requirement",
+        "tags": [
+          "settings"
+        ],
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
         "x-tenancy": "scoped"
       }
     },
