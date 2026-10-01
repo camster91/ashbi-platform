@@ -13,7 +13,7 @@ import globals from 'globals';
 
 export default [
   {
-    ignores: ['dist', 'node_modules', 'dev-dist', 'coverage', 'public'],
+    ignores: ['dist', 'dist-visual', 'node_modules', 'dev-dist', 'coverage', 'public'],
   },
   {
     files: ['**/*.{js,jsx,mjs}'],

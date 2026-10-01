@@ -42,7 +42,7 @@ enough to review (roughly 40-60 images).
   and `caret: 'hide'` on every screenshot.
 - It builds the SPA with `VITE_ENABLE_UI_LAB=true` into `web/dist-visual`
   (gitignored; the production `web/dist` is not touched) and serves it with
-  `vite preview` on port 4189 (`PLAYWRIGHT_VISUAL_PORT` overrides). The flag
+  `vite preview` on port 4191 (`PLAYWRIGHT_VISUAL_PORT` overrides). The flag
   only adds the dev-only `/ui-lab` route; production builds never set it.
 - Specs: `tests/visual/screens.spec.ts`, helpers in
   `tests/visual/visual-helpers.ts`.
@@ -106,6 +106,11 @@ the CI runner** (for example, a manual workflow run of
 `npm run test:visual:update` that uploads `tests/visual/__screenshots__` as an
 artifact), review them, and commit that set. Upgrading Playwright or Chromium
 later is also a deliberate baseline update.
+
+The config uses full Chromium (`channel: 'chromium'`, new headless mode), not
+Playwright's headless shell: with the same Chromium version the shell renders
+the heading face in a fallback and leaves notification permission decided,
+which failed 14 of 39 captures. Keep the channel when regenerating on CI.
 
 ## Thresholds
 

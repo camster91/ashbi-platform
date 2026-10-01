@@ -106,6 +106,12 @@ export async function prepare(page: Page, theme: Theme, viewport: ViewportName, 
     await page.addInitScript(() => {
       try { window.localStorage.setItem('push-prompt-snoozed:user-admin', 'true'); } catch { /* storage blocked */ }
     });
+  } else {
+    // The prompt only shows while permission is undecided; pin that so the
+    // capture does not depend on the browser build's default permission.
+    await page.addInitScript(() => {
+      try { Object.defineProperty(Notification, 'permission', { get: () => 'default' }); } catch { /* no Notification API */ }
+    });
   }
 }
 

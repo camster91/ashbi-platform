@@ -8,7 +8,7 @@ import { defineConfig, devices } from '@playwright/test';
 // reduced motion and disabled animations. The build sets VITE_ENABLE_UI_LAB so
 // the dev-only /ui-lab gallery is available; it goes to web/dist-visual so the
 // production web/dist is never touched.
-const port = Number(process.env.PLAYWRIGHT_VISUAL_PORT || 4189);
+const port = Number(process.env.PLAYWRIGHT_VISUAL_PORT || 4191);
 const baseURL = `http://127.0.0.1:${port}`;
 // Optional override for sandboxes that ship their own Chromium build. Baselines
 // are only comparable against the same Chromium revision; see the docs.
@@ -53,6 +53,10 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
+        // Full Chromium (new headless), never the headless shell: the shell
+        // renders some faces and the push prompt differently from the build
+        // the baselines were made with (docs/visual-baselines.md).
+        channel: 'chromium',
         deviceScaleFactor: 1,
         ...(executablePath ? { launchOptions: { executablePath } } : {}),
       },
