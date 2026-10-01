@@ -3,6 +3,9 @@
 import { safeParse } from '../utils/safeParse.js';
 import { clientStateRevokesPortal, revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
 import { validateBody, createClientSchema, updateClientSchema, clientContactSchema, clientNoteCreateSchema } from '../validators/schemas.js';
+import { normalizeClientDomain, normalizeContactEmail } from '../utils/client-identity.js';
+
+const DUPLICATE_DOMAIN_ERROR = 'Client with this domain already exists';
 
 export default async function clientRoutes(fastify) {
   // List all clients
@@ -58,15 +61,20 @@ export default async function clientRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: [validateBody(createClientSchema)],
   }, async (request, reply) => {
-    const { name, domain, status, contacts } = request.body;
+    const { name, status, contacts } = request.body;
+    const domain = normalizeClientDomain(request.body.domain);
+    const contactRows = contacts?.map((contact) => ({ ...contact, email: normalizeContactEmail(contact.email) }));
 
-    // Check for duplicate domain
+    // Domains are unique per organization: the scoped client delegate only
+    // sees this organization's clients, so another tenant's domain is never
+    // reported (or refused). The unique index settles a concurrent create (409).
     if (domain) {
-      const existing = await request.prisma.client.findUnique({
-        where: { domain }
+      const existing = await request.prisma.client.findFirst({
+        where: { domain },
+        select: { id: true }
       });
       if (existing) {
-        return reply.status(400).send({ error: 'Client with this domain already exists' });
+        return reply.status(409).send({ error: DUPLICATE_DOMAIN_ERROR });
       }
     }
 
@@ -75,9 +83,9 @@ export default async function clientRoutes(fastify) {
         name,
         domain,
         status,
-        contacts: contacts?.length ? { create: contacts } : undefined
+        contacts: contactRows?.length ? { create: contactRows } : undefined
       },
-      include: contacts?.length ? { contacts: true } : undefined
+      include: contactRows?.length ? { contacts: true } : undefined
     });
 
     return reply.status(201).send(client);
@@ -164,7 +172,18 @@ export default async function clientRoutes(fastify) {
 
     const data = {};
     if (name) data.name = name;
-    if (domain !== undefined) data.domain = domain;
+    if (domain !== undefined) {
+      data.domain = normalizeClientDomain(domain);
+      if (data.domain) {
+        const existing = await request.prisma.client.findFirst({
+          where: { domain: data.domain, id: { not: id } },
+          select: { id: true }
+        });
+        if (existing) {
+          return reply.status(409).send({ error: DUPLICATE_DOMAIN_ERROR });
+        }
+      }
+    }
     if (status) data.status = status;
     if (communicationPrefs) data.communicationPrefs = JSON.stringify(communicationPrefs);
     if (knowledgeBase) data.knowledgeBase = JSON.stringify(knowledgeBase);
@@ -228,7 +247,7 @@ export default async function clientRoutes(fastify) {
 
     const contact = await request.prisma.contact.create({
       data: {
-        email,
+        email: normalizeContactEmail(email),
         name,
         role,
         isPrimary,

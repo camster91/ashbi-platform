@@ -856,7 +856,8 @@ export const proposalCreateSchema = z.object({
   lineItems: z.array(proposalLineItemInput).min(1).max(100),
   // Flat amount off the subtotal; the server clamps the total at zero.
   discount: proposalDiscount.optional(),
-  notes: z.string().max(10_000).optional(),
+  // Proposal.notes is TEXT; AI-generated proposal text runs past 10k chars.
+  notes: z.string().max(50_000).optional(),
   validUntil: z.string().datetime().optional(),
   projectId: cuidId.optional(),
 });
@@ -865,7 +866,7 @@ export const proposalUpdateSchema = z.object({
   // Partial — every field optional so PUT can be a no-op
   clientId: cuidId.optional(),
   title: z.string().min(1).max(200).optional(),
-  notes: z.string().max(10_000).optional(),
+  notes: z.string().max(50_000).optional(),
   validUntil: z.string().datetime().optional(),
   projectId: cuidId.optional(),
   status: z.enum(['DRAFT', 'SENT', 'VIEWED', 'APPROVED', 'DECLINED']).optional(),

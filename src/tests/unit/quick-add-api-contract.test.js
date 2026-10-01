@@ -17,8 +17,8 @@ test('quick client schema preserves a bounded primary contact', () => {
 });
 
 test('client creation persists contacts atomically instead of discarding email', () => {
-  assert.match(clientRoutes, /const \{ name, domain, status, contacts \} = request\.body/);
-  assert.match(clientRoutes, /contacts:\s*contacts\?\.length\s*\?[\s\S]*create:/);
+  assert.match(clientRoutes, /const \{ name, status, contacts \} = request\.body/);
+  assert.match(clientRoutes, /contacts:\s*contactRows\?\.length\s*\?[\s\S]*create:/);
 });
 
 test('quick tasks accept canonical Kanban status and never write NOT_STARTED', () => {

@@ -39,6 +39,7 @@ describe('Client Routes (Unit)', () => {
         findMany: async () => [],
         count: async () => 0,
         findUnique: async () => null,
+        findFirst: async () => null,
         create: async ({ data }) => ({ id: 'new-client', ...data }),
         update: async ({ where, data }) => ({ id: where.id, ...data }),
         updateMany: async () => ({ count: 0 })
@@ -145,5 +146,60 @@ describe('Client Routes (Unit)', () => {
 
     assert.equal(res.statusCode, 201);
     assert.ok(updateManyCalled, 'Should have unset other primary contacts');
+  });
+
+  test('POST / stores an empty or blank domain as null and skips the duplicate check', async () => {
+    let lookups = 0;
+    mockPrisma.client.findFirst = async () => { lookups += 1; return { id: 'other' }; };
+    for (const domain of ['', '   ']) {
+      const res = await fastify.inject({ method: 'POST', url: '/', payload: { name: 'No Domain', domain } });
+      assert.equal(res.statusCode, 201, res.body);
+      assert.equal(JSON.parse(res.body).domain, null);
+    }
+    assert.equal(lookups, 0);
+  });
+
+  test('POST / trims and lowercases the domain and lowercases contact emails', async () => {
+    let lookedUp;
+    mockPrisma.client.findFirst = async ({ where }) => { lookedUp = where; return null; };
+    mockPrisma.client.create = async ({ data }) => ({ id: 'new-client', ...data, contacts: data.contacts?.create });
+    const res = await fastify.inject({
+      method: 'POST',
+      url: '/',
+      payload: { name: 'Acme', domain: '  Acme.COM ', contacts: [{ name: 'Jane', email: 'Jane.Doe@Acme.COM' }] },
+    });
+    assert.equal(res.statusCode, 201, res.body);
+    const body = JSON.parse(res.body);
+    assert.equal(body.domain, 'acme.com');
+    assert.deepEqual(lookedUp, { domain: 'acme.com' });
+    assert.equal(body.contacts[0].email, 'jane.doe@acme.com');
+  });
+
+  test('POST / answers 409 for a domain the organization already uses', async () => {
+    mockPrisma.client.findFirst = async () => ({ id: 'existing' });
+    const res = await fastify.inject({ method: 'POST', url: '/', payload: { name: 'Dup', domain: 'acme.com' } });
+    assert.equal(res.statusCode, 409);
+  });
+
+  test('PUT /:id clears a blank domain to null and refuses a duplicate with 409', async () => {
+    const cleared = await fastify.inject({ method: 'PUT', url: '/client-1', payload: { domain: ' ' } });
+    assert.equal(cleared.statusCode, 200, cleared.body);
+    assert.equal(JSON.parse(cleared.body).domain, null);
+
+    let lookedUp;
+    mockPrisma.client.findFirst = async ({ where }) => { lookedUp = where; return { id: 'client-2' }; };
+    const dup = await fastify.inject({ method: 'PUT', url: '/client-1', payload: { domain: 'Acme.com' } });
+    assert.equal(dup.statusCode, 409);
+    assert.deepEqual(lookedUp, { domain: 'acme.com', id: { not: 'client-1' } });
+  });
+
+  test('POST /:id/contacts stores the email trimmed and lowercased', async () => {
+    const res = await fastify.inject({
+      method: 'POST',
+      url: '/client-1/contacts',
+      payload: { name: 'Jane', email: 'Jane.Doe@Example.COM' },
+    });
+    assert.equal(res.statusCode, 201, res.body);
+    assert.equal(JSON.parse(res.body).email, 'jane.doe@example.com');
   });
 });

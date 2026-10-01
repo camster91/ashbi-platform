@@ -111,6 +111,11 @@ const env = {
   // the orchestrator without a volume mount.
   gmailTokensPath: process.env.GMAIL_TOKENS_PATH,
   gmailTokensJson: process.env.GMAIL_TOKENS_JSON,
+  // The organization that owns the connected Gmail mailbox. The sync
+  // (scripts/gmail-sync.js) files mail only under this organization's clients
+  // and refuses to run without it; POST /api/gmail/sync-now is limited to its
+  // admins.
+  gmailSyncOrganizationId: (process.env.GMAIL_SYNC_ORGANIZATION_ID || '').trim() || undefined,
 
   // Credentials vault encryption key
   credentialsKey: process.env.CREDENTIALS_KEY,

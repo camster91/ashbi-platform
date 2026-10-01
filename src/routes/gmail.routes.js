@@ -300,11 +300,20 @@ Write a helpful, professional reply that addresses the client's needs. Be concis
 
   // ==================== POST /api/gmail/sync-now ====================
   /**
-   * Trigger a manual Gmail sync
+   * Trigger a manual Gmail sync. The synced mailbox belongs to one
+   * organization (GMAIL_SYNC_ORGANIZATION_ID), so only that organization's
+   * admins may run it; unconfigured, it is refused.
    */
   fastify.post('/sync-now', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.adminOnly]
   }, async (request, reply) => {
+    const organizationId = env.gmailSyncOrganizationId;
+    if (!organizationId) {
+      return reply.status(503).send({ error: 'Gmail sync is not configured' });
+    }
+    if (request.user?.organizationId !== organizationId) {
+      return reply.status(403).send({ error: 'Gmail sync belongs to another organization' });
+    }
     // SECURITY: run the sync script with execFile (no shell) instead of exec.
     // The previous shell string interpolated the resolved script path, so any
     // future change that let a caller influence the path or arguments would
@@ -313,7 +322,10 @@ Write a helpful, professional reply that addresses the client's needs. Be concis
     const scriptPath = path.resolve(__dirname, '../../scripts/gmail-sync.js');
 
     return new Promise((resolve) => {
-      execFile(process.execPath, [scriptPath], { timeout: 120000 }, (error, stdout, stderr) => {
+      execFile(process.execPath, [scriptPath], {
+        timeout: 120000,
+        env: { ...process.env, GMAIL_SYNC_ORGANIZATION_ID: organizationId },
+      }, (error, stdout, stderr) => {
         if (error) {
           resolve({ success: false, error: 'Command failed', output: stderr });
         } else {

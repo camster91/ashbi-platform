@@ -195,7 +195,7 @@ model Client {
   organization        Organization @relation(fields: [organizationId], references: [id])
   name                String
   email               String?
-  domain              String?      @unique
+  domain              String? // lowercase, trimmed; unique per organization
   status              String       @default("ACTIVE") // ACTIVE, PAUSED, CHURNED
   communicationPrefs  String       @default("{}") // JSON: tone, frequency, etc.
   satisfactionSignals String       @default("{}") // JSON: sentiment trends
@@ -249,6 +249,7 @@ model Client {
   estimates        Estimate[]
   rateCards        RateCard[]
 
+  @@unique([organizationId, domain])
   @@index([status])
   @@index([organizationId])
   @@map("clients")

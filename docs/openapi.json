@@ -3674,7 +3674,7 @@
             "type": "array"
           },
           "notes": {
-            "maxLength": 10000,
+            "maxLength": 50000,
             "type": "string"
           },
           "projectId": {
@@ -3761,7 +3761,7 @@
             "type": "array"
           },
           "notes": {
-            "maxLength": 10000,
+            "maxLength": 50000,
             "type": "string"
           },
           "projectId": {
@@ -17999,7 +17999,7 @@
         "tags": [
           "gmail"
         ],
-        "x-access": "staff",
+        "x-access": "admin",
         "x-tenancy": "scoped"
       }
     },
