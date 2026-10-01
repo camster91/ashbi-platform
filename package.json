@@ -139,19 +139,19 @@
   "overrides": {
     "eslint": {
       "minimatch": "3.1.5",
-      "brace-expansion": "1.1.18"
+      "brace-expansion": "1.1.21"
     },
     "@eslint/config-array": {
       "minimatch": "3.1.5",
-      "brace-expansion": "1.1.18"
+      "brace-expansion": "1.1.21"
     },
     "@eslint/eslintrc": {
       "minimatch": "3.1.5",
-      "brace-expansion": "1.1.18"
+      "brace-expansion": "1.1.21"
     },
     "eslint-plugin-react": {
       "minimatch": "3.1.5",
-      "brace-expansion": "1.1.18"
+      "brace-expansion": "1.1.21"
     },
     "tmp": "^0.2.6",
     "uuid": "^11.1.1",
