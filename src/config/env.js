@@ -261,6 +261,12 @@ if (env.requiresDeploymentSecrets) {
     HUNTER_API_KEY: 'your-hunter-api-key',
     NOTION_TOKEN: 'your-notion-integration-token',
   };
+  // HITL reply addresses are HMAC tokens; a short dedicated key would make
+  // them guessable. Unset is fine (a key derived from JWT_SECRET is used).
+  if (process.env.HITL_REPLY_SECRET && Buffer.byteLength(process.env.HITL_REPLY_SECRET) < 32) {
+    throw new Error('HITL_REPLY_SECRET must be at least 32 bytes when set (or leave it unset to derive the key from JWT_SECRET)');
+  }
+
   const placeholderHits = Object.entries(placeholders)
     .filter(([key, placeholder]) => process.env[key] === placeholder)
     .map(([key]) => key);

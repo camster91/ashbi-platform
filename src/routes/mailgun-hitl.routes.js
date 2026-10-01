@@ -11,8 +11,12 @@
 //     body, Mailgun's SPF/DKIM results) was posted twice;
 //   - the reply address carries a valid token for the notification;
 //   - message-headers is present, In-Reply-To or References names the
-//     recorded Message-Id, and the single Date header is not older than the
-//     notification (an old signed email cannot be replayed into it);
+//     recorded Message-Id, and the single Date header (and the time of
+//     receipt) falls within 30 days of the notification (an old signed
+//     email cannot be replayed into it);
+//   - the reply carries exactly one Message-Id, and that reply has not been
+//     applied to this notification before (a claim made in the same
+//     transaction as the writes, so a re-injected copy is refused);
 //   - the From header names exactly one address, and that address is the Hub
 //     user the notification was created for, or an active admin of that
 //     user's organization (case-insensitive);
@@ -28,18 +32,21 @@
 // token is released only when that transaction did not commit, so a retry
 // never duplicates a note or comment.
 
+import crypto from 'node:crypto';
 import env from '../config/env.js';
 import { releaseWebhookToken } from '../services/mailgun-delivery.service.js';
 import {
   addMailgunFormParser,
   authenticateMailgunWebhook,
+  HITL_REPLY_WINDOW_MS,
   MAILGUN_WEBHOOK_BODY_LIMIT,
   mailgunSenderAuthentication,
   parseEmailAddress,
   parseMessageHeaders,
   readMailgunWebhookRequest,
-  replyDateIsAfter,
+  replyDateInWindow,
   replyReferencesMessage,
+  singleMessageId,
 } from '../services/mailgun-webhook-request.js';
 import { verifyHitlReplyRecipient } from '../services/hitl-reply-address.js';
 import { parseNotificationData, stripQuotedReply, sendDiscordCamNotification } from '../utils/hitl-email.service.js';
@@ -47,10 +54,36 @@ import { parseNotificationData, stripQuotedReply, sendDiscordCamNotification } f
 const STAFF_ROLES = new Set(['ADMIN', 'TEAM']);
 const USER_FIELDS = { id: true, email: true, role: true, isActive: true, organizationId: true };
 
+const REJECTION_MESSAGES = Object.freeze({
+  not_pending: 'Approval is no longer pending',
+  duplicate: 'This reply was already applied',
+});
+
 class ReplyRejected extends Error {
-  constructor(message) {
-    super(message);
+  /** @param {keyof typeof REJECTION_MESSAGES} code */
+  constructor(code) {
+    super(REJECTION_MESSAGES[code]);
     this.name = 'ReplyRejected';
+    this.code = code;
+  }
+}
+
+/**
+ * Claim `hitl-reply:<notificationId>:<sha256(reply Message-Id)>` in the
+ * Mailgun webhook claim table (unique `token`). The row is dated at the end
+ * of the notification's reply window: claimWebhookToken prunes rows older
+ * than now - 30 minutes, so the claim outlives every reply that could still
+ * be accepted for the notification.
+ */
+async function claimHitlReply(tx, notificationId, replyMessageId, windowEnd) {
+  const digest = crypto.createHash('sha256').update(replyMessageId).digest('hex');
+  try {
+    await tx.mailgunWebhookReceipt.create({
+      data: { token: `hitl-reply:${notificationId}:${digest}`, receivedAt: windowEnd },
+    });
+  } catch (err) {
+    if (err?.code === 'P2002') throw new ReplyRejected('duplicate');
+    throw err;
   }
 }
 
@@ -144,9 +177,16 @@ async function applyHitlReply({ prisma, log, body, onCommit }) {
     return { status: 406, payload: { error: 'Reply does not answer this notification email' } };
   }
   const createdAt = notification.createdAt instanceof Date ? notification.createdAt : new Date(notification.createdAt);
-  if (!replyDateIsAfter(headers, createdAt)) {
-    log.warn({ notificationId }, '[hitl-reply] Reply Date is missing or older than the notification');
-    return { status: 406, payload: { error: 'Reply is older than this notification' } };
+  const windowEnd = createdAt.getTime() + HITL_REPLY_WINDOW_MS;
+  if (!replyDateInWindow(headers, createdAt) || !(Date.now() <= windowEnd)) {
+    log.warn({ notificationId }, '[hitl-reply] Reply Date is missing or outside the notification reply window');
+    return { status: 406, payload: { error: 'Reply is outside this notification reply window' } };
+  }
+  // The reply's own Message-Id makes it single-use per notification.
+  const replyMessageId = singleMessageId(headers);
+  if (!replyMessageId) {
+    log.warn({ notificationId }, '[hitl-reply] Reply needs exactly one Message-Id header');
+    return { status: 406, payload: { error: 'Reply must carry exactly one Message-Id' } };
   }
 
   // Defence in depth: Mailgun's SPF/DKIM verdicts must vouch for the From domain.
@@ -171,6 +211,10 @@ async function applyHitlReply({ prisma, log, body, onCommit }) {
 
   try {
     await prisma.$transaction(async (tx) => {
+      // Claim this reply for this notification first: re-injecting the same
+      // signed reply through Mailgun (new delivery token) is refused, and the
+      // claim rolls back with the writes if anything below fails.
+      await claimHitlReply(tx, notificationId, replyMessageId, new Date(windowEnd));
       if (approval) await applyApprovalReply(tx, approval, replyText, replier);
       if (task) await applyTaskReply(tx, task, replyText, replier);
       await tx.notification.update({
@@ -180,8 +224,8 @@ async function applyHitlReply({ prisma, log, body, onCommit }) {
     });
   } catch (err) {
     if (err instanceof ReplyRejected) {
-      log.warn({ notificationId }, `[hitl-reply] ${err.message}`);
-      return { status: 406, payload: { error: 'Approval is no longer pending' } };
+      log.warn({ notificationId, reason: err.code }, '[hitl-reply] Reply rejected');
+      return { status: 406, payload: { error: REJECTION_MESSAGES[err.code] } };
     }
     throw err;
   }
@@ -213,7 +257,7 @@ async function applyApprovalReply(tx, approval, replyText, replier) {
         reviewedAt: new Date(),
       },
     });
-    if (updated.count !== 1) throw new ReplyRejected('Approval is no longer pending');
+    if (updated.count !== 1) throw new ReplyRejected('not_pending');
   }
   // Keep the reply as a project note (notes belong to a project).
   if (approval.projectId) {

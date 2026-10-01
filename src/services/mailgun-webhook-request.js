@@ -350,15 +350,31 @@ export function replyReferencesMessage(headers, messageId) {
 // Tolerated clock difference between the replier's mail server and ours.
 export const HITL_REPLY_DATE_SKEW_MS = 5 * 60 * 1000;
 
+// HITL replies are accepted for this long after the notification is created
+// (both the reply's Date and the time it reaches Hub).
+export const HITL_REPLY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
 /**
- * Whether the reply's single Date header is not older than the notification
- * (with a small clock-skew allowance). A missing, repeated or unparseable
- * Date fails.
+ * Whether the reply's single Date header falls inside the notification's
+ * reply window: not older than the notification (with a small clock-skew
+ * allowance) and not more than HITL_REPLY_WINDOW_MS after it. A missing,
+ * repeated or unparseable Date fails.
  */
-export function replyDateIsAfter(headers, notBefore) {
-  if (!headers || !(notBefore instanceof Date)) return false;
+export function replyDateInWindow(headers, createdAt) {
+  if (!headers || !(createdAt instanceof Date) || Number.isNaN(createdAt.getTime())) return false;
   const dates = headerValues(headers, 'Date');
   if (dates.length !== 1) return false;
   const sentAt = Date.parse(dates[0]);
-  return Number.isFinite(sentAt) && sentAt >= notBefore.getTime() - HITL_REPLY_DATE_SKEW_MS;
+  return Number.isFinite(sentAt)
+    && sentAt >= createdAt.getTime() - HITL_REPLY_DATE_SKEW_MS
+    && sentAt <= createdAt.getTime() + HITL_REPLY_WINDOW_MS;
+}
+
+/** The reply's own Message-Id when message-headers has exactly one, else null. */
+export function singleMessageId(headers) {
+  if (!headers) return null;
+  const values = headerValues(headers, 'Message-Id');
+  if (values.length !== 1) return null;
+  const ids = values[0].match(/<[^<>\s]+>/g) || [];
+  return ids.length === 1 ? ids[0] : null;
 }

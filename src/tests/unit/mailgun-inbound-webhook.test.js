@@ -68,6 +68,7 @@ function mailgunHeaders({
   inReplyTo = HITL_MESSAGE_ID,
   references,
   date = new Date().toUTCString(),
+  messageId = `<reply-${crypto.randomUUID()}@mail.agency.example>`,
   extra = [],
 } = {}) {
   const headers = [['X-Mailgun-Incoming', 'Yes']];
@@ -76,6 +77,7 @@ function mailgunHeaders({
   headers.push(['Received', 'by mxa.mailgun.example with SMTP']);
   if (from) headers.push(['From', from]);
   if (date) headers.push(['Date', date]);
+  if (messageId) headers.push(['Message-Id', messageId]);
   if (inReplyTo) headers.push(['In-Reply-To', inReplyTo]);
   if (references) headers.push(['References', references]);
   for (const sig of dkimSignatures || dkimDomains.map(d => `v=1; a=rsa-sha256; d=${d}; s=sel; b=abc`)) {
@@ -165,6 +167,7 @@ function fakePrisma({ users = [], notifications = [], approvals = [], tasks = []
       tasks: structuredClone(state.tasks),
       notes: structuredClone(state.notes),
       comments: structuredClone(state.comments),
+      receipts: structuredClone(state.receipts),
     };
     try {
       return await fn(client);
@@ -208,7 +211,7 @@ async function buildApp(prisma, processed) {
 before(() => {
   env.mailgunSigningKey = KEY;
   env.botOrganizationId = 'org-1';
-  env.hitlReplySecret = 'test-hitl-reply-secret';
+  env.hitlReplySecret = 'test-hitl-reply-secret-0123456789abcdef';
 });
 
 after(() => {
@@ -517,13 +520,49 @@ describe('POST /api/mailgun-hitl/hitl-reply', () => {
     const owner = 'owner@agency.example';
     const cases = [
       ['missing token', 'reply+n-approval@mg.agency.example'],
-      ['forged token', `reply+n-approval.${'x'.repeat(22)}@mg.agency.example`],
+      ['forged token', `reply+n-approval.${'f'.repeat(32)}@mg.agency.example`],
       ['token of another notification', `reply+n-approval.${hitlReplyToken('n-task')}@mg.agency.example`],
     ];
     for (const [label, recipient] of cases) {
       const response = await post({ ...replyFields(owner), recipient });
       assert.equal(response.statusCode, 406, label);
     }
+    assert.equal(approvalStatus(), 'PENDING');
+  });
+
+  it('accepts a reply address whose case was folded in transit', async () => {
+    const upper = replyFields('owner@agency.example', 'n-task', 'Go ahead');
+    upper.recipient = upper.recipient.toUpperCase();
+    assert.equal((await post(upper)).statusCode, 200, 'uppercased');
+    const lower = replyFields('owner@agency.example', 'n-approval', 'APPROVED');
+    lower.recipient = lower.recipient.toLowerCase();
+    assert.equal((await post(lower)).statusCode, 200, 'lowercased');
+    assert.equal(approvalStatus(), 'APPROVED');
+  });
+
+  it('applies a reply once per notification, even when re-injected with a new delivery token', async () => {
+    const messageId = '<reply-once@mail.agency.example>';
+    const first = replyFields('owner@agency.example', 'n-task', 'Use the blue logo', { messageId });
+    assert.equal((await post(first)).statusCode, 200);
+    prisma.state.tasks.get('t-1').status = 'BLOCKED';
+    // Same reply (same Message-Id), fresh Mailgun signature/token.
+    const again = { ...first, ...signed() };
+    assert.equal((await post(again)).statusCode, 406);
+    assert.equal(prisma.state.comments.length, 1);
+    assert.equal(prisma.state.tasks.get('t-1').status, 'BLOCKED', 'not flipped back to IN_PROGRESS');
+    // A reply without exactly one Message-Id cannot be made single-use.
+    assert.equal((await post(replyFields('owner@agency.example', 'n-task', 'x', { messageId: null }))).statusCode, 406);
+    const twoIds = replyFields('owner@agency.example', 'n-task', 'x', { extra: [['Message-Id', '<other@mail.agency.example>']] });
+    assert.equal((await post(twoIds)).statusCode, 406);
+    assert.equal(prisma.state.comments.length, 1);
+  });
+
+  it('refuses a reply more than 30 days after the notification was created', async () => {
+    prisma.state.notifications.get('n-approval').createdAt = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+    assert.equal((await post(replyFields('owner@agency.example'))).statusCode, 406);
+    // Even with a Date inside the window, a reply reaching Hub after it is refused.
+    const insideWindow = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toUTCString();
+    assert.equal((await post(replyFields('owner@agency.example', 'n-approval', 'APPROVED', { date: insideWindow }))).statusCode, 406);
     assert.equal(approvalStatus(), 'PENDING');
   });
 
@@ -697,17 +736,27 @@ test('DKIM alignment: one d= tag, equal to or a subdomain of the From domain', (
 
 test('reply addresses carry an HMAC token bound to the notification', () => {
   const address = hitlReplyAddress('n-approval', 'mg.agency.example');
-  assert.match(address, /^reply\+n-approval\.[A-Za-z0-9_-]{22}@mg\.agency\.example$/);
+  assert.match(address, /^reply\+n-approval\.[0-9a-f]{32}@mg\.agency\.example$/);
   assert.equal(verifyHitlReplyRecipient(address), 'n-approval');
   assert.equal(verifyHitlReplyRecipient('reply+n-approval@mg.agency.example'), null, 'missing token');
   assert.equal(verifyHitlReplyRecipient(`reply+n-task.${hitlReplyToken('n-approval')}@mg.agency.example`), null, 'token of another notification');
-  assert.equal(verifyHitlReplyRecipient(`reply+n-approval.${'A'.repeat(22)}@mg.agency.example`), null, 'forged token');
-  const original = env.hitlReplySecret;
-  env.hitlReplySecret = 'another-secret';
+  assert.equal(verifyHitlReplyRecipient(`reply+n-approval.${'0'.repeat(32)}@mg.agency.example`), null, 'forged token');
+  // Case folding by an MTA, forwarder or client does not break the address.
+  assert.equal(verifyHitlReplyRecipient(address.toUpperCase()), 'n-approval');
+  assert.equal(verifyHitlReplyRecipient(address.toLowerCase()), 'n-approval');
+  const original = { secret: env.hitlReplySecret, jwt: env.jwtSecret };
   try {
+    env.hitlReplySecret = 'another-secret-for-hitl-reply-addresses';
     assert.equal(verifyHitlReplyRecipient(address), null, 'a different server secret');
+    // A dedicated secret under 32 bytes is ignored for the JWT-derived key.
+    env.jwtSecret = 'jwt-secret-for-this-test-0123456789';
+    env.hitlReplySecret = 'short';
+    const fromShort = hitlReplyToken('n-approval');
+    env.hitlReplySecret = null;
+    assert.equal(hitlReplyToken('n-approval'), fromShort);
   } finally {
-    env.hitlReplySecret = original;
+    env.hitlReplySecret = original.secret;
+    env.jwtSecret = original.jwt;
   }
 });
 

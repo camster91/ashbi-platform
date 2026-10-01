@@ -107,17 +107,21 @@ stack for staging or a new environment, and to rehearse that move.
 ## Email approvals (HITL replies)
 
 Human-in-the-loop emails go to `HITL_APPROVER_EMAIL` with a Reply-To of
-`reply+<notificationId>.<token>@<MAILGUN_DOMAIN>`. The token is an HMAC of
-the notification id (key derived from `HITL_REPLY_SECRET`, or `JWT_SECRET`
-when unset), and the sent Message-Id is stored on the notification. A reply
-posted to `/api/mailgun-hitl/hitl-reply` is applied only when all of these
-hold, and is otherwise answered 406 (Mailgun does not retry):
+`reply+<notificationId>.<token>@<MAILGUN_DOMAIN>`. The token is 32
+lowercase hex characters of an HMAC of the notification id (key derived from
+`HITL_REPLY_SECRET`, which must be at least 32 bytes when set, or from
+`JWT_SECRET` when unset); the whole address is case-insensitive. The sent
+Message-Id is stored on the notification. A reply posted to
+`/api/mailgun-hitl/hitl-reply` is applied only when all of these hold, and
+is otherwise answered 406 (Mailgun does not retry):
 
 - the Mailgun signature, timestamp window and single-use token are valid;
 - the reply address token matches the notification;
 - `message-headers` is present, `In-Reply-To` or `References` names the
-  stored Message-Id, and the `Date` header is not older than the
-  notification;
+  stored Message-Id, and the `Date` header (and the time the reply reaches
+  Hub) is within 30 days of the notification, and not before it;
+- the reply has exactly one `Message-Id`, and that reply has not already
+  been applied to the notification (a re-injected copy is refused);
 - the From header is one mailbox: the notified user or an active admin of
   that user's organization;
 - Mailgun's verdicts, read only from the `X-Mailgun-*` headers that come
