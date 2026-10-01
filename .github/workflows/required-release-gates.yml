@@ -6,6 +6,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      verify_production_backup:
+        description: 'Verify encrypted VPS backup and off-server artifact without deploying'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -17,6 +23,35 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  backup-rehearsal:
+    name: Production backup rehearsal (no deployment)
+    if: github.event_name == 'workflow_dispatch' && inputs.verify_production_backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - name: Checkout requested revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify encrypted production backup and off-server copy
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          ASHBI_VPS_KNOWN_HOSTS: ${{ vars.ASHBI_VPS_KNOWN_HOSTS }}
+        run: node scripts/deploy/production-backup.mjs
+      - name: Retain encrypted recovery artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ashbi-backup-rehearsal-${{ github.run_id }}
+          path: ${{ runner.temp }}/ashbi-release-backup/
+          if-no-files-found: error
+          retention-days: 30
   release-gates:
     name: Required release gates
     uses: ./.github/workflows/release-gates.yml

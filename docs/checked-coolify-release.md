@@ -70,6 +70,9 @@ does not approve a release. Public probes never carry the Coolify token.
    `ASHBI_VPS_KNOWN_HOSTS` repository variable, pinned from a trusted existing
    SSH host record for `187.77.26.99`. Do not use runtime `ssh-keyscan` trust.
    Prove this runner's actual access and artifact persistence before enabling.
+   Run `Required release gates` manually on the preparation branch with
+   `verify_production_backup=true` to exercise that exact transport and retain
+   an encrypted artifact. Manual checks cannot trigger a production release.
 6. Perform and verify the first cutover: exact serving SHA, strict readiness,
    API/worker parity, sign-in, files and representative workflows. Record the
    controller transfer and retained rollback procedure in the deployment
