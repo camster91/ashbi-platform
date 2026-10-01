@@ -32,12 +32,17 @@ test('failed or mismatched backup blocks every configuration write and deploymen
   }
 });
 test('wrong application or direct Git trigger is rejected before a write', async () => {
-  for (const resource of [{ ...app, git_repository: 'camster91/other' }, { ...app, settings: { is_auto_deploy_enabled: true } }, { ...app, docker_compose_domains: '{}' }, { ...app, domain_port_overrides: {} }, { ...app, docker_compose_location: '/docker-compose.yml' }, { ...app, docker_compose_location: '/docker-compose.coolify.yml' }, { ...app, settings: { is_auto_deploy_enabled: false, include_source_commit_in_build: false } }]) {
+  for (const resource of [{ ...app, git_repository: 'camster91/other' }, { ...app, settings: { is_auto_deploy_enabled: true } }, { ...app, docker_compose_domains: '{}' }, { ...app, domain_port_overrides: { 'https://hub.ashbi.ca': 3000 } }, { ...app, docker_compose_location: '/docker-compose.yml' }, { ...app, docker_compose_location: '/docker-compose.coolify.yml' }, { ...app, settings: { is_auto_deploy_enabled: false, include_source_commit_in_build: false } }]) {
     const h = harness({ resource });
     await assert.rejects(release(env, h));
     assert.equal(h.calls.length, 1);
     assert.equal(h.calls[0].method, 'GET');
   }
+});
+test('an omitted port override uses the verified Compose port contract', async () => {
+  const resource = { ...app };
+  delete resource.domain_port_overrides;
+  assert.deepEqual(await release(env, harness({ resource })), { sha, deploymentUuid: 'release123' });
 });
 test('partial SHA and unsafe API origins are rejected before sending credentials', async () => {
   for (const settings of [{ RELEASE_SHA: 'abc123' }, { COOLIFY_URL: 'http://coolify.example.test' }, { COOLIFY_URL: 'https://coolify.example.test/?token=x' }]) {

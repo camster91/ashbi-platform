@@ -82,6 +82,11 @@ does not approve a release. Public probes never carry the Coolify token.
    `COOLIFY_URL`, `COOLIFY_TOKEN`, `COOLIFY_APP_UUID` securely; existing secret
    names do not prove correct values. Use the normal authorized Coolify API,
    never database edits to create access or alter resources.
+   The release token needs `read`, `read:sensitive`, `write` and `deploy`:
+   the installed API hides raw Compose without `read:sensitive`. Response
+   bodies must never be logged. Unset port overrides may be omitted; exact
+   checked Compose establishes port 3002 and any explicit conflicting override
+   is rejected. Verify the actual installed API contract before activation.
    The backup transport requires a dedicated `ASHBI_BACKUP_SSH_KEY` and the
    `ASHBI_VPS_KNOWN_HOSTS` repository variable, pinned from a trusted existing
    SSH host record for `187.77.26.99`. Do not use runtime `ssh-keyscan` trust.

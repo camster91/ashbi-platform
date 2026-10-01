@@ -38,7 +38,10 @@ export async function release(env, { fetchImpl = fetch, sleep = ms => new Promis
     if (normalize(app.docker_compose_raw) !== approvedCompose) throw new Error('Configured Compose differs from the verified production source');
     const domainMap = typeof app.docker_compose_domains === 'string' ? JSON.parse(app.docker_compose_domains) : app.docker_compose_domains;
     const domains = (domainMap?.app?.domain || '').split(',').map(value => value.trim());
-    if (!domains.includes('https://hub.ashbi.ca') || Number(app.domain_port_overrides?.['https://hub.ashbi.ca']) !== 3002) {
+    const override = app.domain_port_overrides?.['https://hub.ashbi.ca'];
+    // Unset overrides are omitted by the installed API. Exact Compose source
+    // fixes the app's exposed and loopback-published port at 3002.
+    if (!domains.includes('https://hub.ashbi.ca') || (override !== undefined && Number(override) !== 3002)) {
       throw new Error('Coolify resource does not own the expected production domain and API port');
     }
     const automatic = app.is_auto_deploy_enabled ?? app.settings?.is_auto_deploy_enabled;
