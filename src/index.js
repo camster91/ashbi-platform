@@ -22,7 +22,7 @@ import { realtimeRedisSource } from './realtime/redis.js';
 import { apiRateLimitKey, createApiRateLimitMax, createRateLimitRedis, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { clearStaleSessionCookie, resolveRequestSession } from './auth/request-session.js';
-import { requestTimeoutMs } from './config/http.js';
+import { canonicalRequestUrl, requestTimeoutMs } from './config/http.js';
 import { spaStaticOptions } from './config/static-cache.js';
 import { isCurrentUserSession } from './auth/session.js';
 import { createNotifier } from './services/notification.service.js';
@@ -97,6 +97,10 @@ const requestLogSettings = resolveLoggerSettings(env);
 const fastify = Fastify({
   // Bound slow request bodies (see src/config/http.js); handler time is not limited.
   requestTimeout: requestTimeoutMs(),
+  // Decode escaped unreserved characters before routing so every
+  // request.url prefix check (tenancy, session, rate limit) sees the path the
+  // router dispatches: /%61pi/clients must be treated as /api/clients.
+  rewriteUrl: (req) => canonicalRequestUrl(req.url),
   // Off by default; TRUST_PROXY=1 behind Traefik so per-IP rate limits and
   // audit IP prefixes see the client, not the proxy.
   trustProxy: typeof trustProxy === 'number' ? trustHops(trustProxy) : trustProxy,
