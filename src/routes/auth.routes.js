@@ -1,6 +1,7 @@
 // Authentication routes
 
 import crypto from 'crypto';
+import { revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
@@ -10,6 +11,8 @@ import { recordAuditEvent, recordRequestAuditEvent } from '../services/audit-eve
 import { clearReauthCookieOptions, REAUTH_COOKIE, recentAuthProblem, sendReauthRequired } from '../auth/reauth.js';
 import { dummyPasswordCheck, hashPassword, upgradeLegacyHash, verifyPassword, warmDummyPasswordHash } from '../auth/password.js';
 import { accountThrottle } from '../auth/credential-throttle.js';
+import { isMfaEnrollmentRequired } from '../auth/mfa-enforcement.js';
+import { resolveRequestSession } from '../auth/request-session.js';
 import { AccountWithoutOrganizationError } from '../auth/providers/local.provider.js';
 import {
   IMPERSONATION_COOKIE,
@@ -180,10 +183,15 @@ export default async function authRoutes(fastify) {
         });
       }
       const { user, token } = result;
+      // The session is issued either way; when the organization requires
+      // two-factor and this person has not enrolled, it reaches only the
+      // enrollment endpoints (src/auth/mfa-enforcement.js) and the web app
+      // goes straight to setup.
+      const mfaEnrollmentRequired = await isMfaEnrollmentRequired(request.prisma, user.id);
 
       reply
         .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
-        .send({ user });
+        .send({ user: { ...user, mfaEnrollmentRequired } });
     } catch (err) {
       if (err instanceof AccountWithoutOrganizationError) {
         // The password was right; say what is wrong instead of guessing a
@@ -204,6 +212,7 @@ export default async function authRoutes(fastify) {
           where: { userId: request.user.id }
         });
         await revokeUserSessions(request.prisma, request.user.id);
+        revokeClientSocketsFrom(fastify, { userId: request.user.id }, request.log);
         // Signing out also ends any support view the admin had open (#416).
         await endImpersonationSessions(request.prisma, {
           organizationId: request.user.organizationId,
@@ -248,8 +257,15 @@ export default async function authRoutes(fastify) {
     }
 
     const impersonation = describeImpersonation(request.impersonation);
+    // Whether the signed-in person (the admin during a support view) must
+    // enroll in two-factor before using anything else.
+    const mfaEnrollmentRequired = await isMfaEnrollmentRequired(
+      request.prisma,
+      request.impersonation?.actorUserId ?? request.user.id,
+    );
     return {
       ...user,
+      mfaEnrollmentRequired,
       skills: typeof user.skills === 'string' ? JSON.parse(user.skills || '[]') : (user.skills || []),
       // Present only while an admin views as this person (#416).
       ...(impersonation ? { impersonation } : {}),
@@ -259,6 +275,17 @@ export default async function authRoutes(fastify) {
   // Register (admin only, or first user with ADMIN_INVITE_TOKEN)
   fastify.post('/register', {
     ...authRateLimit,
+    // /api/auth is exempt from the global session hook, so identify the
+    // caller here, before the organization MFA requirement preHandler runs:
+    // an admin who must still enroll is refused like on any other route,
+    // whatever spelling of the Authorization scheme @fastify/jwt accepts.
+    // Never refuses by itself: without a current session the request is
+    // anonymous, and the handler decides (first-admin bootstrap with the
+    // invite token, otherwise 401).
+    onRequest: [async function registerSessionGuard(request) {
+      if (request.impersonation) return;
+      await resolveRequestSession(request, fastify.prisma);
+    }],
     preHandler: [validateBody(registerSchema)],
   }, async (request, reply) => {
     const { email, password, name, role = 'TEAM', adminInviteToken, organizationName } = request.body;
@@ -413,6 +440,9 @@ export default async function authRoutes(fastify) {
       metadata: { method: 'self_service', sessionsRevoked: true },
     });
     await revokeImpersonationsForUser(request.prisma, request, request.user.id, 'revoked_password_change');
+    // Every session just ended: so do this user's client-portal sockets
+    // (none for staff, who never join those rooms).
+    revokeClientSocketsFrom(fastify, { userId: request.user.id }, request.log);
 
     return { success: true };
   });
@@ -715,6 +745,7 @@ export default async function authRoutes(fastify) {
         requestId: request.id,
         ip: request.ip,
       });
+      revokeClientSocketsFrom(fastify, { userId: user.id }, request.log);
 
       return { success: true };
     } catch (err) {

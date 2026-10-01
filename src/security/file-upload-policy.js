@@ -1,5 +1,9 @@
 import path from 'node:path';
 
+// Every refusal carries a stable `code` (DOUBLE_EXTENSION, EXTENSION_NOT_ALLOWED,
+// MIME_MISMATCH, EMPTY_FILE, TOO_LARGE, CONTENT_MISMATCH) for the
+// `upload.rejected` audit event, next to the caller-facing `error` message.
+
 const FILE_TYPES = new Map([
   ['.jpg', ['image/jpeg']], ['.jpeg', ['image/jpeg']], ['.png', ['image/png']],
   ['.gif', ['image/gif']], ['.webp', ['image/webp']], ['.pdf', ['application/pdf']],
@@ -22,17 +26,17 @@ const startsWith = (buffer, bytes) => bytes.every((byte, index) => buffer[index]
 
 export function validateUploadMetadata(filename, mimetype) {
   const safeName = path.basename(filename || '');
-  if ((safeName.match(/\./g) || []).length > 1) return { valid: false, error: 'Double extensions are not allowed' };
+  if ((safeName.match(/\./g) || []).length > 1) return { valid: false, code: 'DOUBLE_EXTENSION', error: 'Double extensions are not allowed' };
   const ext = path.extname(safeName).toLowerCase();
   const allowedMimes = FILE_TYPES.get(ext);
-  if (!allowedMimes) return { valid: false, error: `File extension "${ext || '(none)'}" is not allowed` };
-  if (!allowedMimes.includes((mimetype || '').toLowerCase())) return { valid: false, error: `File MIME type does not match extension "${ext}"` };
+  if (!allowedMimes) return { valid: false, code: 'EXTENSION_NOT_ALLOWED', error: `File extension "${ext || '(none)'}" is not allowed` };
+  if (!allowedMimes.includes((mimetype || '').toLowerCase())) return { valid: false, code: 'MIME_MISMATCH', error: `File MIME type does not match extension "${ext}"` };
   return { valid: true, ext, mimetype: mimetype.toLowerCase() };
 }
 
 export function validateUploadBuffer(buffer, { ext }) {
-  if (!Buffer.isBuffer(buffer) || buffer.length === 0) return { valid: false, error: 'File is empty' };
-  if (buffer.length > MAX_UPLOAD_SIZE) return { valid: false, error: 'File exceeds the 50 MB limit' };
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) return { valid: false, code: 'EMPTY_FILE', error: 'File is empty' };
+  if (buffer.length > MAX_UPLOAD_SIZE) return { valid: false, code: 'TOO_LARGE', error: 'File exceeds the 50 MB limit' };
   let valid = false;
   if (ext === '.jpg' || ext === '.jpeg') valid = startsWith(buffer, [0xff, 0xd8, 0xff]);
   else if (ext === '.png') valid = startsWith(buffer, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -52,7 +56,7 @@ export function validateUploadBuffer(buffer, { ext }) {
     const sample = buffer.subarray(0, 8192);
     valid = !sample.includes(0) && !/<\s*(?:script|html|svg|iframe|object|embed)\b/i.test(sample.toString('utf8'));
   }
-  return valid ? { valid: true } : { valid: false, error: `File content does not match extension "${ext}"` };
+  return valid ? { valid: true } : { valid: false, code: 'CONTENT_MISMATCH', error: `File content does not match extension "${ext}"` };
 }
 
 export function validateUploadedFile(filename, mimetype, buffer) {

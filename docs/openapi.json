@@ -2943,6 +2943,18 @@
         ],
         "type": "object"
       },
+      "MfaRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "required": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "required"
+        ],
+        "type": "object"
+      },
       "MilestoneCreate": {
         "properties": {
           "color": {
@@ -8950,11 +8962,13 @@
                 "proposal",
                 "contract",
                 "user",
+                "organization",
                 "api_key",
                 "settings",
                 "attachment",
+                "revision_round",
+                "project",
                 "ai_provider_connection",
-                "organization",
                 "ai_action",
                 "ai_session",
                 "import_run",
@@ -9002,10 +9016,14 @@
                 "auth.mfa_failed",
                 "auth.reauthenticated",
                 "auth.reauth_failed",
+                "organization.mfa_requirement_changed",
                 "api_key.created",
                 "api_key.revoked",
                 "settings.ai_provider_changed",
                 "client_portal.document_deleted",
+                "client_portal.revision_responded",
+                "client_portal.feedback_submitted",
+                "upload.rejected",
                 "ai.connection_connected",
                 "ai.connection_validated",
                 "ai.connection_rotated",
@@ -9030,6 +9048,7 @@
                 "review.share_link_created",
                 "review.share_link_revoked",
                 "review.client_access_changed",
+                "review.evidence_exported",
                 "estimate.approved",
                 "estimate.declined",
                 "estimate.link_revoked",
@@ -26945,6 +26964,58 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/reviews/{id}/export": {
+      "get": {
+        "operationId": "get_api_reviews_id_export",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/reviews/:id/export",
+        "tags": [
+          "reviews"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/reviews/{id}/recapture": {
       "post": {
         "operationId": "post_api_reviews_id_recapture",
@@ -28104,6 +28175,90 @@
           "settings"
         ],
         "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/settings/mfa-requirement": {
+      "get": {
+        "operationId": "get_api_settings_mfa_requirement",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/settings/mfa-requirement",
+        "tags": [
+          "settings"
+        ],
+        "x-access": "admin",
+        "x-tenancy": "scoped"
+      },
+      "put": {
+        "operationId": "put_api_settings_mfa_requirement",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaRequirement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PUT /api/settings/mfa-requirement",
+        "tags": [
+          "settings"
+        ],
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
         "x-tenancy": "scoped"
       }
     },
@@ -32028,6 +32183,94 @@
         "x-access": "public",
         "x-tenancy": "exempt"
       }
+    },
+    "/api/work-queue": {
+      "get": {
+        "operationId": "get_api_work_queue",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "enum": [
+                "needs_action",
+                "awaiting_approval",
+                "waiting_on_client",
+                "at_risk"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "schema": {
+              "default": "everyone",
+              "enum": [
+                "me",
+                "everyone"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "clientId",
+            "required": false,
+            "schema": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "projectId",
+            "required": false,
+            "schema": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/work-queue",
+        "tags": [
+          "work-queue"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
     }
   },
   "servers": [
@@ -32260,6 +32503,9 @@
     },
     {
       "name": "webhooks"
+    },
+    {
+      "name": "work-queue"
     }
   ]
 }

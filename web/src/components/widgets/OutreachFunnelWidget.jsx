@@ -42,13 +42,13 @@ export default function OutreachFunnelWidget({ outreach = {}, coldEmail = {}, li
   return (
     <Card>
       <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-        <Funnel className="w-4 h-4 text-orange-500" />
+        <Funnel className="w-4 h-4 text-warning" />
         <h2 className="font-semibold text-foreground">Outreach Pipeline</h2>
       </div>
       <div className="p-4">
-        <FunnelBar label="Outreach" stages={outreach} total={totalOutreach} colorClass="bg-orange-500" />
-        <FunnelBar label="Cold Email" stages={coldEmail} total={totalColdEmail} colorClass="bg-blue-500" />
-        <FunnelBar label="LinkedIn" stages={linkedIn} total={totalLinkedIn} colorClass="bg-indigo-500" />
+        <FunnelBar label="Outreach" stages={outreach} total={totalOutreach} colorClass="bg-warning" />
+        <FunnelBar label="Cold Email" stages={coldEmail} total={totalColdEmail} colorClass="bg-info" />
+        <FunnelBar label="LinkedIn" stages={linkedIn} total={totalLinkedIn} colorClass="bg-primary" />
       </div>
     </Card>
   );

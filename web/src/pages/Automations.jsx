@@ -8,22 +8,22 @@ import QueryErrorState from '../components/QueryErrorState';
 const TRIGGER_CONFIG = {
   PROPOSAL_APPROVED: {
     icon: CheckCircle,
-    color: 'text-green-600 bg-green-50 dark:bg-green-900/20',
+    color: 'text-success bg-success/5',
     label: 'Proposal Approved'
   },
   CONTRACT_SIGNED: {
     icon: FileSignature,
-    color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20',
+    color: 'text-info bg-info/5',
     label: 'Contract Signed'
   },
   INVOICE_OVERDUE: {
     icon: Clock,
-    color: 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20',
+    color: 'text-warning bg-warning/5',
     label: 'Invoice Overdue'
   },
   INVOICE_OVERDUE_7D: {
     icon: AlertTriangle,
-    color: 'text-red-600 bg-red-50 dark:bg-red-900/20',
+    color: 'text-destructive bg-destructive/5',
     label: 'Invoice 7+ Days Overdue'
   }
 };
@@ -46,9 +46,9 @@ function formatTime(date) {
 
 function ActionBadge({ action }) {
   const colors = {
-    created: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-    reminded: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-    escalated: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    created: 'bg-success/10 text-success',
+    reminded: 'bg-warning/10 text-warning',
+    escalated: 'bg-destructive/10 text-destructive',
   };
   return (
     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${colors[action] || 'bg-muted text-muted-foreground'}`}>
@@ -76,7 +76,7 @@ export default function Automations() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
-            <Zap className="w-6 h-6 text-amber-500" />
+            <Zap className="w-6 h-6 text-warning" />
             Workflow Automations
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -114,10 +114,10 @@ export default function Automations() {
         <h2 className="text-sm font-semibold text-foreground mb-3">Active Rules</h2>
         <div className="space-y-3">
           {[
-            { icon: CheckCircle, color: 'text-green-500', trigger: 'Proposal Approved', action: 'Auto-create draft contract + notify admin' },
-            { icon: FileSignature, color: 'text-blue-500', trigger: 'Contract Signed', action: 'Auto-create project + welcome email + notify admin' },
-            { icon: Clock, color: 'text-yellow-500', trigger: 'Invoice Overdue', action: 'Send reminder email + notify admin' },
-            { icon: AlertTriangle, color: 'text-red-500', trigger: 'Invoice 7+ Days Overdue', action: 'Send escalation email + flag client AT_RISK' },
+            { icon: CheckCircle, color: 'text-success', trigger: 'Proposal Approved', action: 'Auto-create draft contract + notify admin' },
+            { icon: FileSignature, color: 'text-info', trigger: 'Contract Signed', action: 'Auto-create project + welcome email + notify admin' },
+            { icon: Clock, color: 'text-warning', trigger: 'Invoice Overdue', action: 'Send reminder email + notify admin' },
+            { icon: AlertTriangle, color: 'text-destructive', trigger: 'Invoice 7+ Days Overdue', action: 'Send escalation email + flag client AT_RISK' },
           ].map(({ icon: Icon, color, trigger, action }) => (
             <div key={trigger} className="flex items-center gap-3 text-sm">
               <Icon className={`w-4 h-4 ${color} flex-shrink-0`} />
@@ -183,7 +183,7 @@ export default function Automations() {
                           <span> for {event.metadata.clientName}</span>
                         )}
                         {event.metadata?.daysOverdue && (
-                          <span className="text-red-500"> ({event.metadata.daysOverdue} days overdue)</span>
+                          <span className="text-destructive"> ({event.metadata.daysOverdue} days overdue)</span>
                         )}
                       </p>
                     </div>

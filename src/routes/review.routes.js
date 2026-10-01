@@ -34,8 +34,12 @@ import { captureWebPage as defaultCaptureWebPage, WebCaptureError } from '../ser
 import { requireRecentAuth } from '../auth/reauth.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { scanReviewMedia } from '../services/media-scan.service.js';
+import { buildReviewEvidence, reviewEvidenceFileName, serializeReviewEvidence } from '../services/review-evidence.service.js';
+import { sha256Hex } from '../services/upload-integrity.service.js';
+import { contentDisposition } from '../utils/send-file.js';
 import {
   ANNOTATIONS_PER_SESSION_MAX,
+  REVIEW_STAFF_ROLES,
   ReviewSessionClosedError,
   lockOpenSession,
   annotationLimitFailure,
@@ -74,7 +78,8 @@ export const WEB_CAPTURE_DISABLED = Object.freeze({
   code: 'WEB_REVIEW_CAPTURE_DISABLED',
 });
 
-const STAFF_ROLES = new Set(['ADMIN', 'TEAM']);
+const STAFF_ROLES = new Set(REVIEW_STAFF_ROLES);
+export const EXPORT_RATE_LIMIT = Object.freeze({ max: 10, timeWindow: '1 minute' });
 
 /** Media review is a staff workspace: bots and other principals are refused. */
 async function requireReviewStaff(request, reply) {
@@ -125,6 +130,22 @@ export default async function reviewRoutes(fastify, options = {}) {
   const webCaptureEnabled = () => options.webCaptureEnabled ?? env.webReviewCaptureEnabled;
   const captureWebPage = options.captureWebPage ?? defaultCaptureWebPage;
   const uploadDir = options.uploadDir ?? UPLOAD_DIR;
+
+  // Per-user bound on evidence exports (each walks a whole version chain).
+  // Fails closed per request if @fastify/rate-limit is not registered (it
+  // is, app-wide, in src/index.js).
+  const exportRateCheck = typeof fastify.createRateLimit === 'function'
+    ? fastify.createRateLimit({ ...EXPORT_RATE_LIMIT, keyGenerator: (request) => `review-export:${request.user?.id ?? 'anonymous'}` })
+    : null;
+  async function exportRateLimit(request, reply) {
+    if (!exportRateCheck) return reply.status(503).send({ error: 'Evidence export is temporarily unavailable', code: 'RATE_LIMITER_UNAVAILABLE' });
+    const limit = await exportRateCheck(request);
+    if (!limit.isAllowed && limit.isExceeded) {
+      reply.header('Retry-After', String(limit.ttlInSeconds));
+      return reply.status(429).send({ error: 'Too many evidence exports. Try again shortly.', code: 'REVIEW_EXPORT_RATE_LIMITED' });
+    }
+    return undefined;
+  }
 
   async function loadSession(request, reply) {
     const session = await request.prisma.reviewSession.findFirst({
@@ -293,6 +314,7 @@ export default async function reviewRoutes(fastify, options = {}) {
           mimeType: 'image/png',
           size: capture.png.length,
           path: `/uploads/${filename}`,
+          checksumSha256: sha256Hex(capture.png),
           entityType: 'PROJECT',
           entityId: projectId,
           uploadedById: request.user.id,
@@ -386,6 +408,42 @@ export default async function reviewRoutes(fastify, options = {}) {
       decisions: decisions.map(staffDecision),
       shareLinks: shareLinks.map((link) => staffShareLink(link, now)),
     };
+  });
+
+  // Evidence export (docs/media-review.md "Evidence export"): the review, its
+  // asset versions with checksums, annotations, decisions, share links and
+  // review audit trail as a JSON download. Same access as viewing the review:
+  // staff of the review's organization (another tenant's id answers 404).
+  // GET only (no HEAD route: a HEAD would build the export and audit it), and
+  // at most EXPORT_RATE_LIMIT exports per staff user.
+  fastify.get('/:id/export', {
+    exposeHeadRoute: false,
+    onRequest: [fastify.authenticate],
+    preHandler: [requireReviewStaff, exportRateLimit],
+  }, async (request, reply) => {
+    const session = await loadSession(request, reply);
+    if (!session) return reply;
+    const now = new Date();
+    const evidence = await buildReviewEvidence(request.prisma, session, { exportedBy: request.user, now });
+    const { body, sha256 } = serializeReviewEvidence(evidence);
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'review.evidence_exported',
+      entityId: session.id,
+      metadata: {
+        versionCount: evidence.versions.length,
+        annotationCount: evidence.annotations.length,
+        decisionCount: evidence.decisions.length,
+        shareLinkCount: evidence.shareLinks.length,
+        auditEventCount: evidence.auditTrail.length,
+        evidenceSha256: sha256,
+      },
+    });
+    return reply
+      .header('Content-Type', 'application/json; charset=utf-8')
+      .header('Content-Disposition', contentDisposition('attachment', reviewEvidenceFileName(session, now)))
+      .header('Cache-Control', 'no-store')
+      .header('X-Evidence-Sha256', sha256)
+      .send(body);
   });
 
   // Add an annotation, or a reply to one (parentId).

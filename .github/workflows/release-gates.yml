@@ -24,6 +24,17 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
+      # Realtime integration tests (src/tests/integration/realtime-redis.test.js)
+      # run two Socket.IO servers and the worker emitter over a real Redis.
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
     env:
       CI: true
       NODE_ENV: test
@@ -47,6 +58,10 @@ jobs:
         run: npm run check:secrets
       - name: Release gate contract
         run: npm run check:release-gates
+      - name: Coolify release safety checks
+        run: |
+          node --test src/tests/unit/coolify-release.test.mjs src/tests/unit/coolify-workflow-gates.test.mjs src/tests/unit/production-backup.test.mjs src/tests/unit/coolify-migration-floor.test.mjs
+          python3 scripts/deploy/test-backup-ssh-command.py
       - name: Install locked dependencies
         run: |
           npm ci --no-audit --no-fund
@@ -87,6 +102,9 @@ jobs:
       - name: Backend unit tests
         run: npm test
       - name: Backend integration tests
+        env:
+          REDIS_URL: redis://localhost:6379
+          REQUIRE_REDIS_TESTS: '1'
         run: npm run test:integration
       - name: Frontend unit tests
         run: npm --prefix web test

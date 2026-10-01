@@ -152,7 +152,7 @@ export default function AssetLibrary() {
                 <span className="text-xs text-muted-foreground">{asset.category}</span>
                 <button onClick={() => { deleteMutation.reset(); setAssetToDelete(asset); }}
                   type="button" aria-label={`Delete asset ${asset.name}`} disabled={deleteMutation.isPending}
-                  className="min-h-11 min-w-11 p-1 text-muted-foreground hover:text-red-500 rounded opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity disabled:opacity-50">
+                  className="min-h-11 min-w-11 p-1 text-muted-foreground hover:text-destructive rounded opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity disabled:opacity-50">
                   <Trash2 className="w-3 h-3" />
                 </button>
               </div>

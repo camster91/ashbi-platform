@@ -5,6 +5,11 @@ script at `scripts/deploy-vps-direct.sh`. GitHub Actions and Coolify do not
 deploy production. Coolify may monitor the service, but it must not have an
 automatic deployment webhook or mutate the production container.
 
+A complete Coolify stack (`docker-compose.coolify.yml`) is maintained for
+staging and for a future move of production to Coolify; see
+[coolify-deployment.md](coolify-deployment.md). This document remains the
+production controller until the owner records that move here.
+
 Before upload, the operator runs the release gates, builds once with the full
 Git revision, and records both the Docker image ID and archive SHA-256. The
 same archive is uploaded to each environment. The VPS script verifies both

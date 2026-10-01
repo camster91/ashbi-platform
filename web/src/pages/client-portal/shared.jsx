@@ -1,12 +1,14 @@
 // Helpers, brand tokens, icons and chat primitives shared by the client
 // portal route and its lazily loaded sections.
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { Badge, Button, Card, Input } from '../../components/ui';
 import { inputStyles } from '../../components/ui/Input';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
 import { formatInvoiceMoney } from '../../lib/format';
 import { cn } from '../../lib/utils';
+import usePortalLightTheme from '../../hooks/usePortalLightTheme';
+import { statusColor, statusLabel } from '../../lib/status';
 import { uploadFileWithProgress } from '../../lib/upload';
 import MessageAttachments from '../../components/media/MessageAttachments';
 import { AttachmentToolbar, AttachmentTray, useCaptureDialog, useDropAndPaste } from '../../components/media/ComposerAttachments';
@@ -76,16 +78,7 @@ export async function deletePortalDocument(token, documentId) {
 // removing `.dark`, and restores the previous theme when it unmounts. Every
 // portal colour is a design token (`bg-primary`, `text-muted-foreground`,
 // `border-border`, …), so this one switch keeps the whole route light.
-export function usePortalLightTheme() {
-  useLayoutEffect(() => {
-    const root = document.documentElement;
-    const wasDark = root.classList.contains('dark');
-    root.classList.remove('dark');
-    return () => {
-      if (wasDark) root.classList.add('dark');
-    };
-  }, []);
-}
+export { usePortalLightTheme };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // Invoice amounts always carry their own currency code ("$1,250.00 CAD"); a
@@ -120,7 +113,9 @@ export function statusBadge(status) {
   const s = (status || '').toUpperCase();
   if (s === 'PAID') return <PortalBadge color="success">PAID</PortalBadge>;
   if (s === 'OVERDUE') return <PortalBadge color="danger">OVERDUE</PortalBadge>;
-  if (s === 'SENT' || s === 'PENDING' || s === 'DRAFT') return <PortalBadge color="warning">DUE</PortalBadge>;
+  // Same client wording as PortalInvoice (lib/status.js clientLabel).
+  if (s === 'SENT') return <PortalBadge color="warning">AWAITING PAYMENT</PortalBadge>;
+  if (s === 'PENDING' || s === 'DRAFT') return <PortalBadge color="warning">DUE</PortalBadge>;
   if (s === 'VOID') return <PortalBadge color="default">VOID</PortalBadge>;
   return <PortalBadge color="default">{s}</PortalBadge>;
 }
@@ -130,43 +125,28 @@ export function StatusBadge({ color, children }) {
 }
 
 export function projectStatusLabel(s) {
-  const map = {
-    STARTING_UP: 'Starting Up', DESIGN_DEV: 'Design & Dev', ADDING_CONTENT: 'Adding Content',
-    FINALIZING: 'Finalizing', LAUNCHED: 'Launched', ON_HOLD: 'On Hold',
-    CANCELLED: 'Cancelled', ACTIVE: 'Active',
-  };
-  return map[s] || s;
+  return statusLabel('project', s, { audience: 'client' });
 }
 
-// Badge `color` for each status (see docs/ui-primitives.md, Badge).
+// Badge `color` for each status, from the shared map in lib/status.js.
 export function projectStatusColor(s) {
-  const map = {
-    STARTING_UP: 'info', DESIGN_DEV: 'primary',
-    ADDING_CONTENT: 'accent', FINALIZING: 'warning',
-    LAUNCHED: 'success', ON_HOLD: 'default',
-    CANCELLED: 'danger', ACTIVE: 'success',
-  };
-  return map[s] || 'default';
+  return statusColor('project', s);
 }
 
 export function taskStatusLabel(s) {
-  const map = { PENDING: 'To Do', UPCOMING: 'To Do', IMMEDIATE: 'To Do', IN_PROGRESS: 'In Progress', COMPLETED: 'Done', BLOCKED: 'Blocked' };
-  return map[s] || s;
+  return statusLabel('task', s, { audience: 'client' });
 }
 
 export function taskStatusColor(s) {
-  const map = { PENDING: 'warning', UPCOMING: 'warning', IMMEDIATE: 'warning', IN_PROGRESS: 'accent', COMPLETED: 'success', BLOCKED: 'danger' };
-  return map[s] || 'default';
+  return statusColor('task', s);
 }
 
 export function priorityLabel(p) {
-  const map = { CRITICAL: 'Critical', HIGH: 'High', NORMAL: 'Normal', LOW: 'Low' };
-  return map[p] || p;
+  return statusLabel('priority', p);
 }
 
 export function priorityColor(p) {
-  const map = { CRITICAL: 'danger', HIGH: 'warning', NORMAL: 'default', LOW: 'default' };
-  return map[p] || 'default';
+  return statusColor('priority', p);
 }
 
 // Portal form fields use the shared Input look. Text is 16px below the `sm`

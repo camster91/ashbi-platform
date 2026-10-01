@@ -14,8 +14,10 @@
  *   - Clients: by email or name
  *   - Projects: by bonsaiProjectId
  *   - Invoices: by invoiceNumber
- *   - Time entries: by date + project + duration + user
- *   - Expenses: by description + date + amount
+ *   - Time entries: by date + project + duration + user (also within one export)
+ *   - Expenses: by description + date + amount + client (within the organization)
+ *
+ * Playbook: docs/bonsai-migration.md.
  */
 
 // Prisma 7 ESM + driver adapter setup.
@@ -27,10 +29,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import csvParser from 'csv-parser';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
-});
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// The pure helpers below are exported for unit tests; importing this module
+// must not parse flags, connect to the database or start an import.
+const IS_MAIN = Boolean(process.argv[1]) && path.resolve(process.argv[1]) === __filename;
 const DRY_RUN = process.argv.includes('--dry-run');
 const CONFIRM_LIVE = process.argv.includes('--confirm');
 
@@ -43,13 +46,54 @@ const CSV_DIR = path.resolve(readOption('--csv-dir', process.env.BONSAI_CSV_DIR 
 const SUMMARY_FILE = readOption('--summary-file');
 const ORGANIZATION_ID = readOption('--organization-id', process.env.IMPORT_ORGANIZATION_ID);
 
-if (!DRY_RUN && !CONFIRM_LIVE) {
+if (IS_MAIN && !DRY_RUN && !CONFIRM_LIVE) {
   console.error('Refusing live import without --confirm. Use --dry-run first and review the reconciliation summary.');
   process.exit(2);
 }
-if (!ORGANIZATION_ID) {
+if (IS_MAIN && !ORGANIZATION_ID) {
   console.error('Refusing import without --organization-id (or IMPORT_ORGANIZATION_ID). Imports must be explicitly tenant-scoped.');
   process.exit(2);
+}
+
+/**
+ * Why a report cannot be written to `file`, or null when it can. Checked
+ * before any database work so that a committed live import is never left
+ * without its report (the file itself is still created with `wx` at the end).
+ */
+export function summaryFileProblem(file) {
+  const destination = path.resolve(file);
+  if (fs.existsSync(destination)) return `summary file already exists: ${destination}`;
+  const directory = path.dirname(destination);
+  try {
+    if (!fs.statSync(directory).isDirectory()) return `summary file directory is not a directory: ${directory}`;
+    fs.accessSync(directory, fs.constants.W_OK);
+  } catch {
+    return `summary file directory is missing or not writable: ${directory}`;
+  }
+  return null;
+}
+
+if (IS_MAIN && SUMMARY_FILE) {
+  const problem = summaryFileProblem(SUMMARY_FILE);
+  if (problem) {
+    console.error(`Refusing import: ${problem}. Choose a new report path; earlier reports are never overwritten.`);
+    process.exit(2);
+  }
+}
+
+/** A reconciliation is complete only with every input file and no finding. */
+export function isReconciliationComplete(inputInventory, errors) {
+  return inputInventory.every((file) => file.present) && errors.length === 0;
+}
+
+/** Identity of a time entry, used for duplicates in the database and within one export. */
+export function timeEntryKey({ projectId, userId, date, duration }) {
+  return `${projectId}|${userId}|${date.toISOString()}|${duration}`;
+}
+
+/** The lookup key for a time-entry owner; blank means "no owner", which matches nobody. */
+export function ownerKey(ownerName) {
+  return (ownerName || '').trim().toLowerCase();
 }
 
 // === CSV Directory ===
@@ -176,9 +220,11 @@ const stats = {
   projects: { created: 0, existing: 0, skipped: 0 },
   invoices: { created: 0, existing: 0, skipped: 0 },
   lineItems: { created: 0 },
-  timeEntries: { created: 0, existing: 0, skipped: 0 },
+  timeEntries: { created: 0, existing: 0, skipped: 0, duplicates: 0 },
   expenses: { created: 0, skipped: 0 },
   owners: { mappedToImporter: 0 },
+  // Findings that do not block a live run; each has a `code`.
+  warnings: [],
   errors: []
 };
 const inputInventory = [];
@@ -186,7 +232,15 @@ const inputInventory = [];
 function writeSummary(reconciliation) {
   if (!SUMMARY_FILE) return;
   const destination = path.resolve(SUMMARY_FILE);
-  const descriptor = fs.openSync(destination, 'wx', 0o600);
+  let descriptor;
+  try {
+    descriptor = fs.openSync(destination, 'wx', 0o600);
+  } catch (error) {
+    // The path was checked before the run; if it was taken since, keep the
+    // evidence on stdout instead of losing it.
+    console.log(JSON.stringify(reconciliation, null, 2));
+    throw error;
+  }
   try {
     fs.writeFileSync(descriptor, `${JSON.stringify(reconciliation, null, 2)}\n`, 'utf8');
   } finally {
@@ -329,13 +383,32 @@ async function runImport(prisma) {
   // Now upsert clients into DB
   const clientIdMap = new Map(); // normalized name → DB id
   const emailToClientId = new Map(); // email → DB client id
+  const domainsClaimed = new Map(); // domain → client key that takes it in this run
+  const domainsReleased = new Map(); // domain → id of the existing client this run moves off it
+
+  // Client.domain is unique across ALL organizations. Decide before any write,
+  // identically in a dry run and a live run, whether this client may take the
+  // domain. The decision is made against the planned state of this run: a
+  // domain an earlier row of this export moved an existing client off is free
+  // in both modes, although a dry run never writes that update. Only the fact
+  // that it is taken is reported: nothing about the holder (which may be
+  // another organization's client) is read or shown.
+  async function domainTaken(domain, key, ownClientId) {
+    const claimant = domainsClaimed.get(domain);
+    if (claimant !== undefined) return claimant !== key;
+    const holder = await prisma.client.findFirst({ where: { domain }, select: { id: true } });
+    if (!holder || holder.id === ownClientId) return false;
+    return domainsReleased.get(domain) !== holder.id;
+  }
 
   // Every imported invoice needs an accountable agency user. Never create a
   // synthetic login from an external CSV; unknown historical owners are
   // attributed to this importer and included in reconciliation.
-  let adminUser = await prisma.user.findFirst({ where: { organizationId: ORGANIZATION_ID, role: 'ADMIN' } });
+  // Deterministic: the oldest active ADMIN, else the oldest active user.
+  const oldestFirst = [{ createdAt: 'asc' }, { id: 'asc' }];
+  let adminUser = await prisma.user.findFirst({ where: { organizationId: ORGANIZATION_ID, role: 'ADMIN', isActive: true }, orderBy: oldestFirst });
   if (!adminUser) {
-    adminUser = await prisma.user.findFirst({ where: { organizationId: ORGANIZATION_ID } });
+    adminUser = await prisma.user.findFirst({ where: { organizationId: ORGANIZATION_ID, isActive: true }, orderBy: oldestFirst });
   }
   if (!adminUser) {
     console.log('  ❌ No users found in DB. Cannot create invoices without createdById.');
@@ -385,7 +458,23 @@ async function runImport(prisma) {
         postalCode: addr ? addr['Postal Code'] : null,
       };
 
+      if (clientData.domain) {
+        if (await domainTaken(clientData.domain, key, existing?.id)) {
+          stats.warnings.push({ code: 'CLIENT_DOMAIN_TAKEN', client: data.name, domain: clientData.domain });
+          console.log(`  [domain taken, not written] ${data.name}: ${clientData.domain}`);
+          // Keep the client's current domain (update) or leave it empty (create).
+          delete clientData.domain;
+        } else {
+          domainsClaimed.set(clientData.domain, key);
+        }
+      }
+
       if (existing) {
+        // The update moves this client off its current domain (a new website,
+        // or none): later rows of this export may take that domain.
+        if (existing.domain && clientData.domain !== undefined && clientData.domain !== existing.domain) {
+          domainsReleased.set(existing.domain, existing.id);
+        }
         if (!DRY_RUN) {
           await prisma.client.update({ where: { id: existing.id }, data: clientData });
         }
@@ -394,11 +483,6 @@ async function runImport(prisma) {
         stats.clients.existing++;
       } else {
         if (!DRY_RUN) {
-          // Remove domain if it would conflict
-          if (clientData.domain) {
-            const domainConflict = await prisma.client.findFirst({ where: { organizationId: ORGANIZATION_ID, domain: clientData.domain } });
-            if (domainConflict) clientData.domain = null;
-          }
           const created = await prisma.client.create({ data: { ...clientData, organizationId: ORGANIZATION_ID } });
           clientIdMap.set(key, created.id);
           if (data.contactEmail) emailToClientId.set(data.contactEmail, created.id);
@@ -648,32 +732,37 @@ async function runImport(prisma) {
   // must not create login-capable accounts; unmatched owners remain attributed
   // to the importer and are visible in the reconciliation summary.
   const userCache = new Map(); // owner_name(lower) → userId
+  const timeEntriesSeen = new Set(); // timeEntryKey of rows already handled in this export
 
   async function resolveUserId(ownerName) {
-    const key = (ownerName || '').trim().toLowerCase();
+    const key = ownerKey(ownerName);
     if (userCache.has(key)) return userCache.get(key);
 
+    // A blank owner matches nobody: an empty "contains" would match any user.
     let user = null;
     if (key.includes('cameron')) {
       user = await prisma.user.findFirst({
         where: { organizationId: ORGANIZATION_ID, OR: [{ name: { contains: 'Cameron', mode: 'insensitive' } }, { email: { contains: 'cameron' } }] },
+        orderBy: oldestFirst,
       });
     } else if (key.includes('bianca')) {
       user = await prisma.user.findFirst({
         where: { organizationId: ORGANIZATION_ID, OR: [{ name: { contains: 'Bianca', mode: 'insensitive' } }, { email: { contains: 'bianca' } }] },
-      });
-    }
-
-    if (!user) {
-      // Try generic match
-      user = await prisma.user.findFirst({
-        where: { organizationId: ORGANIZATION_ID, name: { contains: ownerName.split(' ')[0], mode: 'insensitive' } },
+        orderBy: oldestFirst,
       });
     }
 
     if (!user && key) {
+      // Try generic match
+      user = await prisma.user.findFirst({
+        where: { organizationId: ORGANIZATION_ID, name: { contains: key.split(/\s+/)[0], mode: 'insensitive' } },
+        orderBy: oldestFirst,
+      });
+    }
+
+    if (!user) {
       stats.owners.mappedToImporter++;
-      console.log(`  [owner mapped to importer] ${ownerName}`);
+      console.log(`  [owner mapped to importer] ${ownerName || '(blank owner)'}`);
     }
     const id = user?.id || adminUser.id;
     userCache.set(key, id);
@@ -726,6 +815,15 @@ async function runImport(prisma) {
       const billable = (entry.billing_status || '').toLowerCase() === 'billed';
       const notes = (entry.notes || '').trim();
 
+      // Dedup within this export first, so a dry run counts a repeated row
+      // exactly as a live run (which would find the first copy) does.
+      const entryKey = timeEntryKey({ projectId: resolvedProjectId, userId, date, duration });
+      if (timeEntriesSeen.has(entryKey)) {
+        stats.timeEntries.duplicates++;
+        continue;
+      }
+      timeEntriesSeen.add(entryKey);
+
       // Dedup: same project + user + date + duration
       const existing = await prisma.timeEntry.findFirst({
         where: {
@@ -768,7 +866,7 @@ async function runImport(prisma) {
   if (DRY_RUN && stats.timeEntries.created > 5) {
     console.log(`  ... and ${stats.timeEntries.created - 5} more`);
   }
-  console.log(`  ✅ Time Entries: ${stats.timeEntries.created} created, ${stats.timeEntries.existing} existing, ${stats.timeEntries.skipped} skipped`);
+  console.log(`  ✅ Time Entries: ${stats.timeEntries.created} created, ${stats.timeEntries.existing} existing, ${stats.timeEntries.duplicates} duplicates in export, ${stats.timeEntries.skipped} skipped`);
 
   // ============================================================
   // STEP 5: EXPENSES
@@ -807,20 +905,29 @@ async function runImport(prisma) {
     }
 
     const clientId = clientName ? resolveClientId(clientName) : null;
+    // Expense has no organizationId column: its only tenant link is its
+    // client. An expense without a resolvable client would belong to no
+    // organization, so it is not created; it is reported instead.
+    if (!clientId) {
+      stats.expenses.skipped++;
+      stats.warnings.push({ code: 'EXPENSE_NO_CLIENT', description, date: date.toISOString(), amount, currency, client: clientName || null });
+      continue;
+    }
     // Try to resolve project
     let projectId = null;
-    if (projectName && clientName) {
+    if (projectName) {
       projectId = resolveProjectId(clientName, projectName);
     }
 
     try {
-      // Dedup: same description + date + amount
+      // Dedup: same description + date + amount + client, in this organization
       const existing = await prisma.expense.findFirst({
         where: {
           description,
           date,
           amount,
-          clientId: clientId || undefined,
+          clientId,
+          client: { organizationId: ORGANIZATION_ID },
         },
       });
 
@@ -838,7 +945,7 @@ async function runImport(prisma) {
             category,
             date,
             billable,
-            clientId: clientId || undefined,
+            clientId,
             projectId: projectId || undefined,
           },
         });
@@ -876,8 +983,13 @@ async function runImport(prisma) {
   console.log(`  Projects:     ${stats.projects.created} new, ${stats.projects.existing} updated, ${stats.projects.skipped} skipped`);
   console.log(`  Invoices:     ${stats.invoices.created} new, ${stats.invoices.existing} existing, ${stats.invoices.skipped} skipped`);
   console.log(`  Line Items:   ${stats.lineItems.created} new`);
-  console.log(`  Time Entries: ${stats.timeEntries.created} new, ${stats.timeEntries.existing} existing, ${stats.timeEntries.skipped} skipped`);
+  console.log(`  Time Entries: ${stats.timeEntries.created} new, ${stats.timeEntries.existing} existing, ${stats.timeEntries.duplicates} duplicates in export, ${stats.timeEntries.skipped} skipped`);
   console.log(`  Expenses:     ${stats.expenses.created} new, ${stats.expenses.skipped} skipped`);
+
+  if (stats.warnings.length > 0) {
+    console.log(`\n  ⚠ Warnings (${stats.warnings.length}); see stats.warnings in the report:`);
+    for (const warning of stats.warnings.slice(0, 20)) console.log(`    - ${warning.code}: ${warning.client || warning.description}`);
+  }
 
   if (stats.errors.length > 0) {
     console.log(`\n  ⚠ Errors (${stats.errors.length}):`);
@@ -897,15 +1009,21 @@ async function runImport(prisma) {
     csvDir: CSV_DIR,
     inputInventory,
     stats,
-    complete: inputInventory.every(file => file.present),
+    complete: isReconciliationComplete(inputInventory, stats.errors),
   };
   console.log('');
   return reconciliation;
 }
 
-main()
-  .catch((e) => {
-    console.error('❌ Import failed:', e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+let prisma;
+if (IS_MAIN) {
+  prisma = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+  });
+  main()
+    .catch((e) => {
+      console.error('❌ Import failed:', e);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());
+}

@@ -10,6 +10,7 @@
 // expires.
 
 import { isCurrentUserSession, sessionCookieOptions } from './session.js';
+import { clientSessionHasPortalAccess } from './portal-principal.js';
 
 export const SESSION_COOKIE = 'token';
 
@@ -41,7 +42,10 @@ export async function resolveRequestSession(request, prisma) {
     return 'stale';
   }
   try {
-    if (await isCurrentUserSession(prisma, request.user)) return 'current';
+    // A client session whose client was paused, archived, churned or
+    // deleted, or whose contact was removed, is not current either, so it
+    // cannot keep using the /api/auth routes (#286, portal-principal.js).
+    if (await isCurrentUserSession(prisma, request.user) && await clientSessionHasPortalAccess(prisma, request.user)) return 'current';
   } catch {
     request.user = null;
     return 'error';

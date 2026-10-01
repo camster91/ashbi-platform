@@ -91,6 +91,7 @@ once.
 | Requeue dead-lettered domain events (*Proposal*, #412) | `POST /api/domain-events/replay` | `requireRecentAuth` (ADMIN). Only `dead` events of the caller's organization, at most 50 per call and 5 replays per event; each requeue writes a `domain_event.replayed` audit event. Subscribers receive the event again (at-least-once). See [event-outbox.md](event-outbox.md) |
 | Disable own two-factor | `POST /api/auth/mfa/disable` | Unchanged: already requires the current password **and** a TOTP or recovery code in the request itself, which is stricter than the window |
 | Reset another member's two-factor | `POST /api/auth/mfa/admin/users/:userId/reset` | Unchanged: already requires the admin's password in the request, and the admin's own TOTP or recovery code when the admin has two-factor on |
+| Require (or stop requiring) two-factor for every staff member of the organization | `PUT /api/settings/mfa-requirement` | `requireRecentAuth` (ADMIN); turning it on also needs the admin's own two-factor. See [Organization MFA requirement](#organization-mfa-requirement) |
 
 Not applicable today:
 
@@ -99,7 +100,8 @@ Not applicable today:
   only removes access.
 - **Organization-wide data export**: there is no HTTP export route. The
   workspace export is the operator CLI `scripts/export-workspace.js`, which
-  runs with database access, not a user session.
+  runs with database access, not a user session; see
+  [workspace-export.md](workspace-export.md).
 - **Credential vault export**: there is no bulk export; the list route returns
   masked passwords only.
 
@@ -125,6 +127,7 @@ Support impersonation and break-glass have their own events
 `break_glass.redeemed`, `break_glass.revoked`).
 
 The guarded actions keep emitting their own events (`api_key.created`,
+`organization.mfa_requirement_changed`,
 `user.role_changed`, `user.deactivated`, `user.reactivated`,
 `auth.password_changed`, `settings.ai_provider_changed`, `ai.disabled`,
 `ai.enabled`, `ai.connection_connected`, `ai.connection_rotated`,
@@ -349,6 +352,123 @@ Independently of those records, the per-request checks end a view whenever
 the admin's session is revoked or rotated, the admin loses the `ADMIN` role,
 or the viewed person is deactivated or changes role.
 
+## Organization MFA requirement
+
+An organization administrator can require two-factor authentication (TOTP)
+for **every staff member** of the organization: Settings → Organization
+security → "Require two-factor authentication for all staff". Code:
+`src/auth/mfa-enforcement.js` (the guard), the global `preHandler` in
+`src/index.js`, `src/services/organization-mfa-policy.service.js` and
+`GET` / `PUT /api/settings/mfa-requirement`; in the web app
+`OrganizationMfaPolicy.jsx`, `MfaEnrollmentGate.jsx` and the setup page
+`/security/two-factor-setup`. Stored as `organizations.mfaRequired`
+(default `false`, migration `20260930150000_organization_mfa_enforcement`).
+
+### Changing it
+
+| Rule | Enforcement |
+| --- | --- |
+| Admins of the organization only | `fastify.adminOnly`; the organization is the one in the admin's verified session, so an admin can only change their own organization's setting |
+| Step-up | `requireRecentAuth` (the 10-minute window). An admin with two-factor on re-authenticates with a code, so in practice turning it **off** needs the second factor too |
+| Never locks out the admin turning it on | Turning it on answers `409 { code: "MFA_SELF_ENROLLMENT_REQUIRED" }` unless the acting admin has two-factor enabled. Turning it off has no such check |
+| Audit | `organization.mfa_requirement_changed { fromRequired, toRequired, staffWithoutMfa }`, written only when the value actually changes (the update is conditional on the old value, so concurrent requests write one event). Repeating the current value answers `200` with `changed: false` and writes nothing |
+
+`GET /api/settings/mfa-requirement` returns `{ required, staffWithoutMfa,
+actorMfaEnabled }`; `staffWithoutMfa` counts active staff (every role except
+`CLIENT` and `BOT`) who have not enrolled.
+
+### What a staff member without two-factor can do
+
+Sign-in is unchanged: they sign in with their password and receive an
+ordinary session (members who have enrolled complete the second factor at
+sign-in exactly as before). The login response and `GET /api/auth/me` say
+`mfaEnrollmentRequired: true`.
+
+While the requirement applies to them, a global `preHandler` refuses **every**
+`/api` request made with their identity with
+
+```json
+403 { "error": "Your organization requires two-factor authentication. Set it up to continue.", "code": "MFA_ENROLLMENT_REQUIRED" }
+```
+
+except these routes (`MFA_ENROLLMENT_ALLOWED_ROUTES`, matched on the method
+and the router's route pattern, so encoded or doubled paths cannot pose as
+one of them):
+
+| Purpose | Routes |
+| --- | --- |
+| Who am I, sign out | `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/impersonation/stop` |
+| Enrollment | `GET /api/auth/mfa` (also returns `requiredByOrganization`), `POST /api/auth/mfa/enroll`, `POST /api/auth/mfa/confirm` |
+| Credential exchange (never acts with the session's authority) | `POST /api/auth/login`, `/login/mfa`, `/forgot-password`, `/reset-password`, `/client/login`, `/client/signup`, `/break-glass/redeem` |
+| Public probes | `GET /api/live`, `GET /api/health` |
+
+Everything else is refused, including `PUT /api/auth/me`, changing the
+password, step-up (`/api/auth/reauth`), starting a support view, creating
+users through `POST /api/auth/register`, and every staff and admin API.
+`POST /api/auth/register` identifies its caller in its own `onRequest` guard
+(`/api/auth` is outside the global session hook), so the requirement sees the
+admin however the request carries the session: the cookie, or an
+`Authorization` header with any case of the `Bearer` scheme, exactly as
+`@fastify/jwt` accepts it. The guard's own token fallback on other `/api/auth`
+routes parses the header the same way.
+
+Public routes are not staff routes and are **never** restricted, even when
+the same browser holds a restricted staff session (the global session hook
+still reads that cookie on them): every route that declares
+`config: { public: true }` without `actsForStaff`. Those are the capability links (portal, proposal,
+estimate, invoice, contract, form and media-review share links, including the
+older `/api/estimates/view/:viewToken`, `/api/contracts/sign/:signToken`,
+`/api/invoices/client/:viewToken` and `/api/proposals/client/:viewToken`
+paths), the public intake forms (booking, client acquisition), signed
+webhooks, the client-portal magic-link exchange and the health probes. The
+access matrix test (`src/tests/unit/api-access-matrix.test.js`) requires the
+flag on every route of its public allowlist in those categories and on no
+other route. OAuth callbacks (Slack, Google Calendar) are public too (no route
+guard; the signed state authenticates them) but declare `actsForStaff`: they
+complete a connection for the staff member who started it, so they stay
+restricted. The client portal accepts only client sessions.
+
+Realtime (Socket.IO) is refused as well: at the handshake, again when the
+connection is admitted, and on every `join-project` (which answers
+`{ joined: false, code: "MFA_ENROLLMENT_REQUIRED" }` and disconnects the
+socket). Sockets already open when the requirement starts to apply are
+disconnected at once, on every API instance (through the same Redis-backed
+revoker as support views), when an admin turns the requirement on (the
+organization's staff without two-factor), resets a member's two-factor (that
+member; their sessions are revoked too), or a member turns their own
+two-factor off under the requirement (that member). The web app routes the
+person to `/security/two-factor-setup`, which explains the requirement, runs
+the normal enrollment and offers sign-out; any `403 MFA_ENROLLMENT_REQUIRED`
+answer mid-session (for example when an admin turns the requirement on while
+the person is working) sends them there too, without an error toast.
+
+**The check reads the database on every request** (one primary-key lookup of
+the user with the organization joined), not a claim in the session token, so:
+
+- turning the requirement on applies to sessions that already exist, at once;
+- confirming enrollment (`POST /api/auth/mfa/confirm`) lifts the restriction
+  **without signing in again**: confirmation already reissues the session
+  cookie (it signs out other sessions), and the next request passes. The web
+  app reloads once so its queries and realtime connection start fresh;
+- turning the requirement off restores everyone's access at once;
+- an admin resetting a member's two-factor
+  (`POST /api/auth/mfa/admin/users/:userId/reset`), or a member turning their
+  own off (`POST /api/auth/mfa/disable`, still allowed so an authenticator can
+  be replaced, and answering `mfaEnrollmentRequired`), puts that person back
+  under the restriction immediately.
+
+If the lookup fails, the request is refused with `503` (fail closed).
+
+### Whose two-factor counts
+
+| Path | Rule |
+| --- | --- |
+| Session cookie or bearer session token | The signed-in user |
+| Support impersonation | The **viewing admin** (the actor), never the viewed person. An admin who must enroll cannot start a view (`POST /api/auth/impersonation` is refused), and a view they already had open is refused request by request; they can still stop it. An enrolled admin can view an unenrolled member: the view is read-only and authenticated by the admin |
+| API keys | The key's owner: an owner who must enroll cannot use their keys either |
+| Break-glass | Redemption turns the recovered person's two-factor off (unchanged). In an organization with the requirement, their next session is enrollment-only, so recovery ends with setting up two-factor before any administrator action, including changing this setting |
+| Client portal users, bots | **Out of scope**: they cannot enroll in two-factor (`MFA_INELIGIBLE_ROLES` in `src/auth/mfa.js`), so the requirement never restricts them |
+
 ## Break-glass administrator recovery
 
 For an organization whose administrators are all locked out (lost password
@@ -393,7 +513,8 @@ named staff member of that organization, who redeems it themselves.
    from the request (for example by phone or SMS to the number on file). It
    works once and expires in 30 minutes.
 4. The person opens it, sets a new password, signs in, and sets up two-factor
-   again in Settings.
+   again in Settings. When the organization requires two-factor, the app
+   takes them straight to setup and nothing else works until it is done.
 5. Also enable the flag on the API process for the redemption
    (`BREAK_GLASS_ENABLED=true` in its environment, then restart), and turn it
    off again as soon as the grant is redeemed or has expired.
@@ -417,10 +538,30 @@ To cancel an unused grant: `node scripts/break-glass.mjs revoke --grant <id>
 
 ## Known limitations
 
-- **Organization-level MFA enforcement** is not implemented: creating or
-  promoting an administrator requires step-up re-authentication, but an
-  organization cannot yet require every administrator to enrol in two-factor
-  authentication. Tracked as a follow-up to the security audit at 8687cf9.
+- The organization MFA requirement has no grace period or deadline: once it
+  is on, a staff member without two-factor is limited to enrollment on their
+  next request. Staff are not notified in advance; the setup page explains it
+  when they next use the app. The requirement applies to TOTP only (there is
+  no WebAuthn/passkey factor yet).
+- The requirement check is one extra database lookup per signed-in API
+  request.
+- Enrollment needs only the account password (the session and the password
+  prove the person; there is no second factor yet to prove). Someone who
+  holds only a staff member's password can therefore sign in and enroll
+  **their own** authenticator before the real member does, and from then on
+  pass the requirement as that member. Mitigation: before turning the
+  requirement on, an admin checks `staffWithoutMfa` (Settings → Organization
+  security, or `GET /api/settings/mfa-requirement`) and asks those members to
+  enroll first, or resets the passwords of accounts that are not in active
+  use. Enrollment writes the `auth.mfa_enabled` audit event, and an admin can reset
+  a member's two-factor (`POST /api/auth/mfa/admin/users/:userId/reset`) if
+  the member did not enroll it themselves.
+- Disconnecting open sockets when the requirement starts to apply is best
+  effort across instances: if the Redis publish fails, the change still
+  applies to every HTTP request at once, the sockets on the instance that
+  served the change are dropped, and a socket elsewhere is refused on its
+  next `join-project` or reconnection. There is no periodic sweep for this
+  case (support views have one).
 
 - Two-factor re-authentication shares the sign-in attempt budget. Someone
   holding only a stolen session cookie can therefore use bad codes to lock the

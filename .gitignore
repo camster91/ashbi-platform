@@ -16,6 +16,7 @@ node_modules/
 # Build outputs
 dist/
 web/dist/
+web/dist-visual/
 
 # Logs
 logs/

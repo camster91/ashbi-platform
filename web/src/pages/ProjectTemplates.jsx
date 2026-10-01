@@ -16,9 +16,9 @@ const TYPE_LABELS = {
 };
 
 const TYPE_COLORS = {
-  WEBSITE: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  BRANDING: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  MARKETING: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  WEBSITE: 'bg-info/10 text-info',
+  BRANDING: 'bg-primary/10 text-primary',
+  MARKETING: 'bg-success/10 text-success',
   CUSTOM: 'bg-muted text-muted-foreground',
 };
 
@@ -83,13 +83,13 @@ export default function ProjectTemplates() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
-            <FileText className="w-6 h-6 text-blue-600" /> Project Templates
+            <FileText className="w-6 h-6 text-info" /> Project Templates
           </h1>
           <p className="text-sm text-muted-foreground mt-1">Reusable project structures with predefined milestones and tasks</p>
         </div>
         <button
           onClick={() => navigate('/project-planner')}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700"
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90"
         >
           <Plus className="w-4 h-4" /> Create with AI
         </button>
@@ -109,7 +109,7 @@ export default function ProjectTemplates() {
           <p className="text-muted-foreground mt-1 mb-4">Create a project plan with AI, then save it as a template for reuse.</p>
           <button
             onClick={() => navigate('/project-planner')}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90"
           >
             Create Your First Template
           </button>
@@ -152,7 +152,7 @@ export default function ProjectTemplates() {
                       </button>
                       <button
                         onClick={() => handleUseTemplate(template)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700"
+                        className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90"
                       >
                         Use Template <ArrowRight className="w-3.5 h-3.5" />
                       </button>
@@ -161,7 +161,7 @@ export default function ProjectTemplates() {
                         aria-label={`Delete template ${template.name}`}
                         onClick={() => { deleteTemplate.reset(); setTemplateToDelete(template); }}
                         disabled={deleteTemplate.isPending}
-                        className="min-h-11 min-w-11 p-1.5 text-muted-foreground hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                        className="min-h-11 min-w-11 p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/5 disabled:opacity-50"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -176,9 +176,9 @@ export default function ProjectTemplates() {
                         <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Milestones</h4>
                         <div className="flex flex-wrap gap-2">
                           {template.milestones.map((ms, i) => (
-                            <div key={i} className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg text-sm">
-                              <span className="font-medium text-blue-800 dark:text-blue-400">{ms.name}</span>
-                              {ms.dueOffset && <span className="text-blue-500 ml-1">(Day {ms.dueOffset})</span>}
+                            <div key={i} className="px-3 py-1.5 bg-info/5 border border-info/30 rounded-lg text-sm">
+                              <span className="font-medium text-info">{ms.name}</span>
+                              {ms.dueOffset && <span className="text-info ml-1">(Day {ms.dueOffset})</span>}
                             </div>
                           ))}
                         </div>
@@ -193,7 +193,7 @@ export default function ProjectTemplates() {
                               <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 shrink-0" />
                               <span>{task.title}</span>
                               {task.priority && task.priority !== 'NORMAL' && (
-                                <span className="text-xs text-orange-600">({task.priority})</span>
+                                <span className="text-xs text-warning">({task.priority})</span>
                               )}
                               {task.estimatedTime && (
                                 <span className="text-xs text-muted-foreground">{task.estimatedTime}</span>
@@ -272,7 +272,7 @@ export default function ProjectTemplates() {
             </div>
 
             {createFromTemplate.isError && (
-              <div role="alert" className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
+              <div role="alert" className="p-3 bg-destructive/5 border border-destructive/30 rounded-lg text-destructive text-sm">
                 {createFromTemplate.error?.message || 'Failed to create project'}
               </div>
             )}

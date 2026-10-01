@@ -32,7 +32,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [AshConversation](#model-ashconversation) | `ash_conversations` | yes | no | 7 |
 | [Asset](#model-asset) | `assets` | no | no | 15 |
 | [AssignmentRule](#model-assignmentrule) | `assignment_rules` | yes | no | 11 |
-| [Attachment](#model-attachment) | `attachments` | yes | no | 15 |
+| [Attachment](#model-attachment) | `attachments` | yes | no | 16 |
 | [AuditEvent](#model-auditevent) | `audit_events` | yes | no | 12 |
 | [BrandSettings](#model-brandsettings) | `brand_settings` | yes | no | 15 |
 | [BreakGlassGrant](#model-breakglassgrant) | `break_glass_grants` | yes | no | 14 |
@@ -78,7 +78,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 60 |
+| [Organization](#model-organization) | `organizations` | no | no | 61 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -449,6 +449,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `entityType` | String | required |  |  |  |
 | `entityId` | String | required |  |  |  |
 | `uploadedById` | String | required |  |  |  |
+| `checksumSha256` | String | optional |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `uploadedBy` | User | required |  | → User, via (uploadedById) → (id) |  |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id) |  |
@@ -1691,6 +1692,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `logo` | String | optional |  |  |  |
 | `plan` | String | required | `"FREE"` |  | FREE, PRO, ENTERPRISE |
 | `aiDisabled` | Boolean | required | `false` |  |  |
+| `mfaRequired` | Boolean | required | `false` |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `users` | User[] | list, required |  | → User |  |

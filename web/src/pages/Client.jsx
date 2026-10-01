@@ -23,11 +23,11 @@ import { formatRelativeTime, getHealthColor, getProjectStatusColor, getProjectSt
 import { formatDate, formatMoney } from '../lib/format';
 
 const invoiceStatusConfig = {
-  DRAFT: { color: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
-  SENT: { color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-  PAID: { color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-  OVERDUE: { color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
-  VOID: { color: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' },
+  DRAFT: { color: 'bg-muted text-muted-foreground' },
+  SENT: { color: 'bg-info/10 text-info' },
+  PAID: { color: 'bg-success/10 text-success' },
+  OVERDUE: { color: 'bg-destructive/10 text-destructive' },
+  VOID: { color: 'bg-muted text-muted-foreground' },
 };
 
 export default function Client() {
@@ -108,10 +108,10 @@ export default function Client() {
           className={cn(
             'px-3 py-1.5 text-sm font-medium rounded-lg',
             client.status === 'ACTIVE'
-              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+              ? 'bg-success/10 text-success'
               : client.status === 'PAUSED'
-              ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-              : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+              ? 'bg-warning/10 text-warning'
+              : 'bg-muted text-muted-foreground'
           )}
         >
           {client.status}
@@ -139,14 +139,14 @@ export default function Client() {
 
         <div className="ml-auto flex items-center gap-4 text-sm">
           {isAdmin && client.totalRevenue > 0 && (
-            <div className="flex items-center gap-1.5 text-green-800 dark:text-green-400">
+            <div className="flex items-center gap-1.5 text-success">
               <DollarSign className="w-4 h-4" />
               <span className="font-medium">{formatMoney(client.totalRevenue)}</span>
               <span className="text-muted-foreground">total revenue</span>
             </div>
           )}
           {isAdmin && client.outstandingBalance > 0 && (
-            <div className="flex items-center gap-1.5 text-orange-800 dark:text-orange-400">
+            <div className="flex items-center gap-1.5 text-warning">
               <AlertTriangle className="w-4 h-4" />
               <span className="font-medium">{formatMoney(client.outstandingBalance)}</span>
               <span className="text-muted-foreground">outstanding</span>

@@ -96,7 +96,11 @@ describe('client portal primitive convergence (#316)', () => {
 
   it('keeps the portal light-only by pinning the light token set while mounted', () => {
     const all = jsx.map(({ source }) => source).join('\n');
-    expect(all).toContain("root.classList.remove('dark')");
+    // The hook lives in hooks/usePortalLightTheme.js so the public Portal*
+    // pages can share it without the portal bundle; shared.jsx re-exports it.
+    const hook = readFileSync(resolve(process.cwd(), 'src/hooks/usePortalLightTheme.js'), 'utf8');
+    expect(hook).toContain("root.classList.remove('dark')");
+    expect(all).toContain("import usePortalLightTheme from '../../hooks/usePortalLightTheme';");
     expect(all).toContain('usePortalLightTheme();');
   });
 
