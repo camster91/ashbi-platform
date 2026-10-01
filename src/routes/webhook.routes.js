@@ -2,7 +2,7 @@
 
 import { parseEmail } from '../utils/emailParser.js';
 import { processEmailPipeline } from '../services/pipeline.service.js';
-import { clearExpiredCheckout, handleCheckoutFailure, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout } from '../services/stripe.service.js';
+import { clearExpiredCheckout, handleCheckoutFailure, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout, recordRefusedCheckout } from '../services/stripe.service.js';
 import env from '../config/env.js';
 import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
 import { runTenantJob } from '../jobs/tenant-iteration.js';
@@ -152,6 +152,7 @@ export default async function webhookRoutes(fastify) {
           fastify.log.info({ invoiceId: result.invoiceId, duplicate: result.duplicate }, 'Stripe checkout processed');
         } catch (error) {
           const failure = handleCheckoutFailure(error, { event, route: '/api/webhooks/stripe', log: fastify.log });
+          await recordRefusedCheckout(fastify.prisma, request, event, failure);
           // Permanent rejections are acknowledged so Stripe stops retrying them.
           if (failure.acknowledged) return reply.status(200).send({ received: true, recorded: false, code: failure.code });
           return reply.status(failure.statusCode).send({ error: failure.error, code: failure.code });

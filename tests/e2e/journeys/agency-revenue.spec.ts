@@ -139,7 +139,9 @@ test('agency sells, contracts, invoices and collects payment end to end', async 
     const dialog = page.getByRole('dialog', { name: 'Record payment' });
     await dialog.getByLabel('Payment method').selectOption('BANK');
     await dialog.getByLabel(/Transaction ID/).fill(`E2E-${suffix}`);
-    await dialog.getByRole('button', { name: 'Mark as paid', exact: true }).click();
+    // The amount defaults to the balance due, so this records the full payment.
+    await expect(dialog.getByLabel('Amount received')).toHaveValue(String(INVOICE_TOTAL));
+    await dialog.getByRole('button', { name: 'Record payment', exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByRole('button', { name: 'Mark as Paid', exact: true })).toBeHidden();
 

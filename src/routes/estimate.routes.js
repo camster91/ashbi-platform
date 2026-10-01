@@ -7,6 +7,7 @@ import { softDelete } from '../services/trash.service.js';
 import { deliveryFieldsFromSend, mailgunTrackingFields, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { recordAuditEvent, recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { computeProposalLineItems, proposalTotals } from '../utils/proposal-totals.js';
 
 // Estimates a client may see through the public link. A DRAFT is never public,
 // whatever token it holds.
@@ -112,6 +113,56 @@ export function estimateStatusChangeError(from, to) {
     CONVERTED: 'Convert the estimate (POST /api/estimates/:id/convert)',
   }[to] ?? 'This status cannot be set directly';
   return `An estimate cannot move from ${from} to ${to} here. ${via}.`;
+}
+
+const PROPOSAL_VALIDITY_MS = 30 * 24 * 60 * 60 * 1000;
+
+// Estimates POST /:id/convert accepts (the CONVERTED transition above).
+export const ESTIMATE_CONVERTIBLE_STATUSES = Object.freeze(['APPROVED', 'SENT']);
+
+/**
+ * The Proposal a converted estimate becomes. Proposals are pre-tax (subtotal
+ * minus discount, see src/utils/proposal-totals.js), so the line items and
+ * subtotal match the estimate's and the estimate's tax rate travels in
+ * metadata; an invoice created from the proposal applies that rate, which
+ * gives the estimate's total again. Legacy estimates without a stored
+ * taxRate carry the rate their fixed tax amount implies.
+ */
+export function proposalDataFromEstimate(estimate, { createdById, now = new Date() }) {
+  const estimateLines = Array.isArray(estimate.lineItems) ? estimate.lineItems : [];
+  const lineItems = computeProposalLineItems(estimateLines.map((item) => ({
+    description: typeof item?.description === 'string' && item.description.trim() ? item.description : 'Line item',
+    quantity: Number(item?.quantity) || 0,
+    unitPrice: Number(item?.rate) || 0,
+  })));
+  const { subtotal, total } = proposalTotals(lineItems, 0);
+  const estimateTotals = computeEstimateTotals(estimateLines, { taxRate: estimate.taxRate, tax: estimate.tax });
+  const taxRate = estimate.taxRate !== null && estimate.taxRate !== undefined
+    ? Number(estimate.taxRate)
+    : (estimateTotals.subtotal > 0 ? Math.round((estimateTotals.tax / estimateTotals.subtotal) * 100 * 10000) / 10000 : 0);
+  return {
+    title: estimate.title,
+    notes: estimate.description || null,
+    clientId: estimate.clientId,
+    createdById,
+    status: 'DRAFT',
+    subtotal,
+    discount: 0,
+    total,
+    // A proposal is sent with a future validity: keep the estimate's while it
+    // is still ahead, otherwise give the new draft the usual 30 days.
+    validUntil: estimate.validUntil && new Date(estimate.validUntil) > now
+      ? estimate.validUntil
+      : new Date(now.getTime() + PROPOSAL_VALIDITY_MS),
+    metadata: JSON.stringify({
+      source: 'estimate',
+      estimateId: estimate.id,
+      taxRate,
+      tax: estimateTotals.tax,
+      estimateTotal: estimateTotals.total,
+    }),
+    lineItems: { create: lineItems },
+  };
 }
 
 /** Why a public link cannot be used, or null. Unknown and draft look the same. */
@@ -439,7 +490,11 @@ export default async function estimateRoutes(fastify) {
     return { id, publicAccessRevokedAt: revokedAt };
   });
 
-  // Convert estimate to proposal
+  // Convert estimate to proposal. The estimate moves APPROVED | SENT ->
+  // CONVERTED (see PUT_STATUS_TRANSITIONS above) with a compare-and-set in the
+  // same transaction that creates the proposal, so a double click, a retry or
+  // a client answering at the same moment can never produce two proposals or
+  // a converted estimate without one.
   fastify.post('/:id/convert', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
@@ -449,27 +504,22 @@ export default async function estimateRoutes(fastify) {
       include: { client: { select: { id: true, name: true } } }
     });
     if (!estimate) return reply.status(404).send({ error: 'Estimate not found' });
-    if (!['APPROVED', 'SENT'].includes(estimate.status)) {
+    if (!ESTIMATE_CONVERTIBLE_STATUSES.includes(estimate.status)) {
       return reply.status(400).send({ error: 'Only approved or sent estimates can be converted' });
     }
 
-    const proposal = await request.prisma.proposal.create({
-      data: {
-        title: estimate.title,
-        content: estimate.description || '',
-        clientId: estimate.clientId,
-        lineItems: estimate.lineItems,
-        subtotal: estimate.subtotal,
-        tax: estimate.tax,
-        total: estimate.total,
-        status: 'DRAFT'
-      }
+    const data = proposalDataFromEstimate(estimate, { createdById: request.user.id });
+    const proposal = await request.prisma.$transaction(async (tx) => {
+      const claimed = await tx.estimate.updateMany({
+        where: { id, status: { in: ESTIMATE_CONVERTIBLE_STATUSES } },
+        data: { status: 'CONVERTED' },
+      });
+      if (claimed.count !== 1) return null;
+      return tx.proposal.create({ data, include: { lineItems: true } });
     });
-
-    await request.prisma.estimate.update({
-      where: { id },
-      data: { status: 'CONVERTED' }
-    });
+    if (!proposal) {
+      return reply.status(409).send({ error: 'This estimate was already converted or answered', code: 'ESTIMATE_STATUS_CHANGED' });
+    }
 
     return { proposal, estimateId: id };
   });

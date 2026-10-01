@@ -10,10 +10,11 @@ import {
   getProposalTemplates,
   saveProposal,
   updateProposal,
+  markProposalSent,
   trackProposalView,
   getProposal,
   getProposalStats,
-  acceptProposal,
+  ProposalBuilderError,
   PRICING_TIERS,
   PROPOSAL_STATUS
 } from '../agents/proposal-builder.agent.js';
@@ -24,6 +25,16 @@ import {
   proposalBuilderUpdateSchema,
 } from '../validators/schemas.js';
 
+
+// ProposalBuilderError codes and the fixed message each answers with.
+const BUILDER_ERROR_MESSAGES = {
+  NOT_FOUND: 'Proposal not found',
+  PROPOSAL_NOT_DRAFT: 'Only DRAFT proposals can be updated',
+};
+
+function builderErrorBody(error) {
+  return { error: BUILDER_ERROR_MESSAGES[error.code] ?? 'Proposal could not be changed', code: error.code };
+}
 
 export default async function proposalBuilderRoutes(fastify) {
 
@@ -105,6 +116,10 @@ export default async function proposalBuilderRoutes(fastify) {
       if (!proposal) {
         return reply.status(404).send({ error: 'Proposal not found' });
       }
+      // An answered proposal is never sent again (or moved back to SENT).
+      if (![PROPOSAL_STATUS.DRAFT, PROPOSAL_STATUS.SENT, PROPOSAL_STATUS.VIEWED].includes(proposal.status)) {
+        return reply.status(409).send({ error: 'Proposal has already been answered', code: 'PROPOSAL_ANSWERED' });
+      }
 
       // Get email from proposal or use override
       const recipientEmail = email || proposal.client?.email;
@@ -154,8 +169,8 @@ export default async function proposalBuilderRoutes(fastify) {
         console.warn('Gmail draft creation failed:', draftErr.message);
       }
 
-      // Update proposal status to SENT
-      await updateProposal(proposalId, { status: PROPOSAL_STATUS.SENT });
+      // DRAFT -> SENT (compare-and-set); a SENT or VIEWED proposal keeps its status.
+      const status = await markProposalSent(proposalId);
 
       return {
         success: true,
@@ -171,10 +186,16 @@ export default async function proposalBuilderRoutes(fastify) {
         } : null,
         proposal: {
           id: proposal.id,
-          status: PROPOSAL_STATUS.SENT
+          status
         }
       };
     } catch (error) {
+      if (error instanceof ProposalBuilderError) {
+        return reply.status(error.statusCode).send(builderErrorBody(error));
+      }
+      if (error?.message?.includes('not found')) {
+        return reply.status(404).send({ error: 'Proposal not found' });
+      }
       console.error('Error sending proposal:', error);
       return reply.status(500).send({ error: 'Failed to send proposal' });
     }
@@ -266,7 +287,9 @@ export default async function proposalBuilderRoutes(fastify) {
 
   /**
    * PUT /:id
-   * Update proposal content
+   * Update a DRAFT proposal's content. Status and totals are not accepted:
+   * totals are derived from the line items on the server, and the status
+   * changes only through send or the client's answer.
    */
   fastify.put('/:id', {
     onRequest: [fastify.authenticate],
@@ -274,10 +297,10 @@ export default async function proposalBuilderRoutes(fastify) {
   }, async (request, reply) => {
     try {
       const proposalId = request.params.id;
-      const { title, notes, status, subtotal, total, validUntil } = request.body || {};
+      const { title, notes, validUntil, lineItems, discount } = request.body || {};
 
       const proposal = await updateProposal(proposalId, {
-        title, notes, status, subtotal, total, validUntil
+        title, notes, validUntil, lineItems, discount
       });
 
       return {
@@ -287,12 +310,17 @@ export default async function proposalBuilderRoutes(fastify) {
           title: proposal.title,
           status: proposal.status,
           subtotal: proposal.subtotal,
+          discount: proposal.discount,
           total: proposal.total,
           validUntil: proposal.validUntil,
-          updatedAt: new Date().toISOString()
+          lineItems: proposal.lineItems,
+          updatedAt: proposal.updatedAt
         }
       };
     } catch (error) {
+      if (error instanceof ProposalBuilderError) {
+        return reply.status(error.statusCode).send(builderErrorBody(error));
+      }
       console.error('Error updating proposal:', error);
       return reply.status(500).send({ error: 'Failed to update proposal' });
     }
@@ -314,27 +342,10 @@ export default async function proposalBuilderRoutes(fastify) {
     }
   });
 
-  /**
-   * POST /:id/accept
-   * Mark proposal as accepted (triggers contract generation)
-   */
-  fastify.post('/:id/accept', {
-    onRequest: [fastify.authenticate]
-  }, async (request, reply) => {
-    try {
-      const proposalId = request.params.id;
-      const result = await acceptProposal(proposalId);
-
-      return {
-        success: true,
-        proposal: result.proposal,
-        message: result.message
-      };
-    } catch (error) {
-      console.error('Error accepting proposal:', error);
-      return reply.status(500).send({ error: 'Failed to accept proposal' });
-    }
-  });
+  // There is deliberately no staff "accept" route. A proposal is approved
+  // only by the client, through the portal or public link (portal.routes.js,
+  // proposal.routes.js), which compare-and-set from SENT/VIEWED, write the
+  // proposal.approved audit and outbox events and run onProposalApproved.
 
   /**
    * GET /templates

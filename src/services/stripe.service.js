@@ -3,9 +3,10 @@ import crypto from 'crypto';
 import Stripe from 'stripe';
 import env from '../config/env.js';
 import { recordAuditEvent } from './audit-event.service.js';
-import { recordInvoicePaid } from './domain-event-producers.js';
 import { sendOperationalAlert } from '../observability/alerts.js';
 import defaultLogger from '../utils/logger.js';
+import { withInvoiceBalance } from '../utils/invoice-balance.js';
+import { applyInvoicePayment, claimPayableInvoice, InvoiceOverpaymentError } from './invoice-settlement.js';
 
 let stripe = null;
 
@@ -30,8 +31,11 @@ export async function createPaymentLink(invoice) {
 // client is never redirected to a Checkout page that expires mid-payment.
 const CHECKOUT_REUSE_MARGIN_MS = 5 * 60 * 1000;
 
+// Checkout charges what is still owed: the balance after recorded (partial)
+// payments when the caller loaded it (withInvoiceBalance), else the total.
 export function checkoutAmountMinor(invoice) {
-  return Math.round(Number(invoice.total || 0) * 100);
+  const amount = invoice.balanceDue ?? invoice.total;
+  return Math.round(Number(amount || 0) * 100);
 }
 
 export function checkoutCurrency(invoice) {
@@ -133,19 +137,56 @@ export function checkoutPersistenceData(invoice, result) {
   };
 }
 
+/** The invoice cannot take a Checkout payment (settled, voided, nothing owed). */
+export class CheckoutNotPayableError extends Error {
+  constructor(message = 'Invoice is not awaiting payment') {
+    super(message);
+    this.name = 'CheckoutNotPayableError';
+    this.code = 'INVOICE_NOT_PAYABLE';
+    this.statusCode = 409;
+  }
+}
+
+const CHECKOUT_STORE_ATTEMPTS = 3;
+
 /**
  * Reuse the invoice's open Checkout session when it still matches, otherwise
  * create a new one and persist it. Returns null when Stripe is not configured.
+ *
+ * The session is priced from the balance read here. It is stored with a
+ * compare-and-set on stripeCheckoutAttempt, which every recorded payment
+ * bumps (src/services/invoice-settlement.js): if a payment landed after the
+ * read, the store loses, the new session is expired at Stripe and the
+ * balance is read again. A concurrent request that stored the same session
+ * (same idempotency key) is not a loss.
  */
-export async function ensureCheckoutSession(prisma, invoice, { stripeClient = getStripe(), now = new Date() } = {}) {
-  const reusable = reusableCheckoutLink(invoice, now);
-  if (reusable) return { paymentLink: reusable, reused: true };
-  if (!stripeClient) return null;
+export async function ensureCheckoutSession(prisma, input, { stripeClient = getStripe(), now = new Date(), expireSession = expireCheckoutSession } = {}) {
+  let invoice = input.balanceDue === undefined ? await withInvoiceBalance(prisma, input) : input;
+  for (let round = 0; round < CHECKOUT_STORE_ATTEMPTS; round += 1) {
+    if (!invoice || !SETTLEABLE_INVOICE_STATUSES.includes(invoice.status)) throw new CheckoutNotPayableError();
+    if (!(invoice.balanceDue > 0)) throw new CheckoutNotPayableError('Invoice has no balance due');
+    const reusable = reusableCheckoutLink(invoice, now);
+    if (reusable) return { paymentLink: reusable, reused: true };
+    if (!stripeClient) return null;
 
-  const result = await createPaymentLinkWithClient(invoice, stripeClient);
-  const data = checkoutPersistenceData(invoice, result);
-  await prisma.invoice.update({ where: { id: invoice.id }, data });
-  return { paymentLink: result.paymentLink, reused: false, data };
+    const result = await createPaymentLinkWithClient(invoice, stripeClient);
+    const data = checkoutPersistenceData(invoice, result);
+    const attempt = Number.isInteger(invoice.stripeCheckoutAttempt) ? invoice.stripeCheckoutAttempt : 0;
+    const stored = await prisma.invoice.updateMany({
+      where: { id: invoice.id, status: { in: [...SETTLEABLE_INVOICE_STATUSES] }, stripeCheckoutAttempt: attempt },
+      data,
+    });
+    if (stored.count === 1) return { paymentLink: result.paymentLink, reused: false, data };
+
+    const fresh = await prisma.invoice.findUnique({ where: { id: invoice.id } });
+    if (fresh?.stripeCheckoutSessionId === result.checkoutSessionId) {
+      return { paymentLink: result.paymentLink, reused: false, data };
+    }
+    // Priced from a stale balance (or the invoice was settled meanwhile).
+    await expireSession(result.checkoutSessionId, { stripeClient });
+    invoice = fresh ? await withInvoiceBalance(prisma, fresh) : null;
+  }
+  throw new CheckoutNotPayableError('Invoice changed while the payment link was created; try again');
 }
 
 export async function handleWebhook(payload, signature) {
@@ -163,11 +204,12 @@ export async function handleWebhook(payload, signature) {
  * A verified checkout that must not settle the invoice: the session does not
  * match it (`CHECKOUT_MISMATCH`), it was already settled by another payment
  * (`INVOICE_ALREADY_PAID`), or the invoice was voided before the customer
- * paid (`INVOICE_VOID` — never flipped back to PAID). Retrying the delivery
- * cannot help.
+ * paid (`INVOICE_VOID` — never flipped back to PAID), or it charged more
+ * than the invoice still owes after a payment recorded since the session was
+ * created (`CHECKOUT_BALANCE_CHANGED`). Retrying the delivery cannot help.
  */
 export class StripeCheckoutRejectedError extends Error {
-  /** @param {string} message @param {'CHECKOUT_MISMATCH' | 'INVOICE_ALREADY_PAID' | 'INVOICE_VOID'} code */
+  /** @param {string} message @param {'CHECKOUT_MISMATCH' | 'INVOICE_ALREADY_PAID' | 'INVOICE_VOID' | 'CHECKOUT_BALANCE_CHANGED'} code */
   constructor(message, code = 'CHECKOUT_MISMATCH') {
     super(message);
     this.name = 'StripeCheckoutRejectedError';
@@ -194,57 +236,60 @@ export async function recordCompletedCheckout(prisma, event, { correlationId = n
       const invoice = await tx.invoice.findUnique({ where: { id: invoiceId } });
       if (!invoice) throw new StripeCheckoutRejectedError('Stripe invoice metadata is invalid');
 
-      const expectedAmount = Math.round(invoice.total * 100);
       const expectedCurrency = (invoice.currency || 'CAD').toLowerCase();
       if (session.payment_status !== 'paid') throw new StripeCheckoutRejectedError('Stripe session is not paid');
-      if (session.amount_total !== expectedAmount) throw new StripeCheckoutRejectedError('Stripe paid amount does not match invoice');
+      const prior = await tx.invoicePayment.findUnique({ where: { transactionId, method: 'STRIPE' } });
+      if (prior?.invoiceId === invoiceId) return { duplicate: true, invoiceId };
       if (session.currency?.toLowerCase() !== expectedCurrency) throw new StripeCheckoutRejectedError('Stripe currency does not match invoice');
       if (session.metadata?.invoiceNumber !== invoice.invoiceNumber) throw new StripeCheckoutRejectedError('Stripe invoice number does not match');
-
-      // Only an open invoice can be settled: a VOID (or DRAFT) invoice is
-      // never flipped to PAID by a stale Checkout session.
-      const transitioned = await tx.invoice.updateMany({
-        where: { id: invoiceId, status: { in: SETTLEABLE_INVOICE_STATUSES } },
-        data: {
-          status: 'PAID',
-          paidAt: new Date(event.created * 1000),
-          paymentMethod: 'STRIPE',
-          stripeCheckoutSessionId: session.id,
-          stripePaymentIntentId: transactionId,
-        },
-      });
-
-      if (transitioned.count === 0) {
-        const prior = await tx.invoicePayment.findUnique({ where: { transactionId, method: 'STRIPE' } });
-        if (prior?.invoiceId === invoiceId) return { duplicate: true, invoiceId };
-        const current = await tx.invoice.findUnique({ where: { id: invoiceId }, select: { status: true } });
-        if (current?.status === 'VOID') throw new StripeCheckoutRejectedError('Invoice was voided before the payment completed', 'INVOICE_VOID');
-        if (current?.status !== 'PAID') throw new StripeCheckoutRejectedError('Invoice is not awaiting payment');
-        throw new StripeCheckoutRejectedError('Invoice was already paid by another transaction', 'INVOICE_ALREADY_PAID');
+      if (!Number.isInteger(session.amount_total) || session.amount_total <= 0) {
+        throw new StripeCheckoutRejectedError('Stripe paid amount does not match invoice');
       }
 
+      // Only an open invoice takes the payment: a VOID (or DRAFT) invoice is
+      // never flipped to PAID by a stale Checkout session, and a PAID one is
+      // not paid twice. The claim locks the row (src/services/invoice-settlement.js).
+      const current = await claimPayableInvoice(tx, invoiceId);
+      // The claim waits for a concurrent delivery of this same event; once it
+      // returns, that delivery's payment is committed and visible here (a new
+      // statement under READ COMMITTED). A replay is a duplicate, never an
+      // "already paid" alert, whether the invoice is now PAID or still open.
+      const replayed = await tx.invoicePayment.findUnique({ where: { transactionId, method: 'STRIPE' } });
+      if (replayed?.invoiceId === invoiceId) return { duplicate: true, invoiceId };
+      if (!current) {
+        const status = (await tx.invoice.findUnique({ where: { id: invoiceId }, select: { status: true } }))?.status;
+        if (status === 'VOID') throw new StripeCheckoutRejectedError('Invoice was voided before the payment completed', 'INVOICE_VOID');
+        if (status === 'PAID') throw new StripeCheckoutRejectedError('Invoice was already paid by another transaction', 'INVOICE_ALREADY_PAID');
+        throw new StripeCheckoutRejectedError('Invoice is not awaiting payment');
+      }
+
+      // The charge is recorded against the balance as it is now. A session
+      // priced before a manual payment may be smaller than the balance (a
+      // partial payment, recorded) or larger (refused and alerted: the
+      // customer paid more than is owed and staff must refund the excess).
       const paidAt = new Date(event.created * 1000);
-      const payment = await tx.invoicePayment.create({
-        data: {
-          invoiceId,
-          amount: invoice.total,
+      try {
+        const result = await applyInvoicePayment(tx, {
+          invoice: current,
+          amount: session.amount_total / 100,
           method: 'STRIPE',
-          transactionId,
           paidAt,
-          notes: `Paid via Stripe Checkout event ${event.id}`,
-        },
-      });
-      await recordInvoicePaid(tx, {
-        invoice,
-        paymentId: payment.id,
-        amount: payment.amount,
-        method: 'STRIPE',
-        source: 'stripe_checkout',
-        paidAt,
-        correlationId,
-        causationId: typeof event.id === 'string' ? `stripe:${event.id}` : null,
-      });
-      return { duplicate: false, invoiceId };
+          invoiceFields: { ...CLEARED_CHECKOUT_FIELDS, stripePaymentIntentId: transactionId },
+          paymentFields: { transactionId, notes: `Paid via Stripe Checkout event ${event.id}` },
+          source: 'stripe_checkout',
+          correlationId,
+          causationId: typeof event.id === 'string' ? `stripe:${event.id}` : null,
+        });
+        if (result.fullyPaid) {
+          await tx.invoice.update({ where: { id: invoiceId }, data: { stripeCheckoutSessionId: session.id } });
+        }
+        return { duplicate: false, invoiceId, fullyPaid: result.fullyPaid };
+      } catch (error) {
+        if (error instanceof InvoiceOverpaymentError) {
+          throw new StripeCheckoutRejectedError('Stripe paid more than the invoice balance', 'CHECKOUT_BALANCE_CHANGED');
+        }
+        throw error;
+      }
     });
   } catch (err) {
     if (err?.code === 'P2002') {
@@ -291,6 +336,11 @@ export function handleCheckoutFailure(err, { event, route, log = defaultLogger, 
     // Stripe stops retrying, alerted so staff refund or re-issue.
     result = { statusCode: 200, acknowledged: true, code: err.code, error: 'Invoice was voided before the payment completed' };
     alertEvent = 'stripe_checkout_invoice_void';
+  } else if (err instanceof StripeCheckoutRejectedError && err.code === 'CHECKOUT_BALANCE_CHANGED') {
+    // A session priced before a later payment charged more than is owed now:
+    // nothing is recorded, and staff refund or apply the money.
+    result = { statusCode: 200, acknowledged: true, code: err.code, error: 'Stripe payment exceeds the invoice balance' };
+    alertEvent = 'stripe_checkout_balance_changed';
   } else if (err instanceof StripeCheckoutRejectedError) {
     result = { statusCode: 200, acknowledged: true, code: 'CHECKOUT_MISMATCH', error: 'Stripe payment did not match an invoice' };
   } else if (err?.code === 'DOMAIN_EVENT_INVALID' || err?.code === 'DOMAIN_EVENT_IDEMPOTENCY_CONFLICT') {
@@ -315,7 +365,7 @@ export function handleCheckoutFailure(err, { event, route, log = defaultLogger, 
  * @param {any} prisma
  * @param {any} request Fastify request (correlation id + network prefix)
  * @param {any} event Verified Stripe event
- * @param {{ duplicate: boolean, invoiceId: string } | undefined} result
+ * @param {{ duplicate: boolean, invoiceId: string, fullyPaid?: boolean } | undefined} result
  */
 export async function recordCheckoutAuditEvents(prisma, request, event, result) {
   if (!result || result.duplicate) return;
@@ -337,12 +387,16 @@ export async function recordCheckoutAuditEvents(prisma, request, event, result) 
     requestId: request?.id ?? null,
     ip: null,
   };
-  await recordAuditEvent(prisma, {
-    ...shared,
-    action: 'invoice.paid',
-    entityId: result.invoiceId,
-    metadata: { toStatus: 'PAID', method: 'STRIPE', stripeEventId: event?.id, currency: session.currency },
-  });
+  // A charge that leaves a balance (stale, smaller session) is a payment,
+  // not a settlement.
+  if (result.fullyPaid !== false) {
+    await recordAuditEvent(prisma, {
+      ...shared,
+      action: 'invoice.paid',
+      entityId: result.invoiceId,
+      metadata: { toStatus: 'PAID', method: 'STRIPE', stripeEventId: event?.id, currency: session.currency },
+    });
+  }
   await recordAuditEvent(prisma, {
     ...shared,
     action: 'payment.recorded',
@@ -354,6 +408,42 @@ export async function recordCheckoutAuditEvents(prisma, request, event, result) 
       source: 'stripe_checkout',
       stripeEventId: event?.id,
       currency: session.currency,
+    },
+  });
+}
+
+// Refusals where the customer's money arrived but was not applied: staff
+// must refund or re-apply it, so each one is kept in the audit log as well
+// as alerted (docs/invoicing.md, "Refused Stripe charges").
+export const REFUSED_CHARGE_CODES = Object.freeze(['CHECKOUT_BALANCE_CHANGED', 'INVOICE_ALREADY_PAID', 'INVOICE_VOID']);
+
+/**
+ * Record a refused Checkout charge as a `payment.refused` audit event on the
+ * invoice (tenant resolved from the invoice). Never throws.
+ * @param {any} prisma
+ * @param {any} request Fastify request (correlation id)
+ * @param {any} event Verified Stripe event
+ * @param {{ code: string }} failure handleCheckoutFailure's answer
+ */
+export async function recordRefusedCheckout(prisma, request, event, failure) {
+  if (!REFUSED_CHARGE_CODES.includes(failure?.code)) return;
+  const session = event?.data?.object || {};
+  const invoiceId = session.metadata?.invoiceId;
+  if (!invoiceId) return;
+  await recordAuditEvent(prisma, {
+    ownerInvoiceId: invoiceId,
+    actorType: 'WEBHOOK',
+    actorUserId: null,
+    requestId: request?.id ?? null,
+    ip: null,
+    action: 'payment.refused',
+    entityId: invoiceId,
+    metadata: {
+      code: failure.code,
+      amount: Number.isFinite(session.amount_total) ? session.amount_total / 100 : null,
+      currency: session.currency,
+      stripeEventId: event?.id,
+      transactionId: session.payment_intent || session.id,
     },
   });
 }

@@ -1,6 +1,7 @@
 // Professional Invoice PDF Generator — uses pdfkit
 import PDFDocument from 'pdfkit';
 import { formatMoney } from './money.js';
+import { CENT_TOLERANCE, invoiceBalance } from './invoice-balance.js';
 
 const BRAND_BLUE = '#2563eb';
 const DARK = '#1e293b';
@@ -173,11 +174,13 @@ export async function generateInvoicePdf(invoice, { compress = true } = {}) {
     if (invoice.discountAmount > 0) {
       totalRows.push([`Discount`, `-${fmt(invoice.discountAmount)}`, false]);
     }
-    totalRows.push([`${invoice.taxType || 'HST'} (${invoice.taxRate || 13}%)`, fmt(invoice.tax), false]);
+    totalRows.push([`${invoice.taxType || 'HST'} (${invoice.taxRate ?? 13}%)`, fmt(invoice.tax), false]);
 
     // Paid amount
-    const totalPaid = (invoice.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
-    const balanceDue = Math.max(0, (invoice.total || 0) - totalPaid);
+    // Shared balance arithmetic (rounded to cents), so float sums of partial
+    // payments never leave a phantom 0.000001 balance.
+    const { amountPaid: totalPaid, balanceDue } = invoiceBalance(invoice.total || 0, (invoice.payments || []).reduce((s, p) => s + (p.amount || 0), 0));
+    const settled = balanceDue < CENT_TOLERANCE;
 
     for (const [label, value, bold] of totalRows) {
       doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10).fillColor(MUTED)
@@ -203,9 +206,9 @@ export async function generateInvoicePdf(invoice, { compress = true } = {}) {
         .text(fmt(totalPaid), totalsX + totalsLabelW, rowY, { width: totalsValueW, align: 'right' });
       rowY += 18;
 
-      doc.font('Helvetica-Bold').fontSize(10).fillColor(balanceDue === 0 ? GREEN : RED)
+      doc.font('Helvetica-Bold').fontSize(10).fillColor(settled ? GREEN : RED)
         .text('Balance Due:', totalsX, rowY, { width: totalsLabelW, align: 'right' });
-      doc.font('Helvetica-Bold').fontSize(10).fillColor(balanceDue === 0 ? GREEN : RED)
+      doc.font('Helvetica-Bold').fontSize(10).fillColor(settled ? GREEN : RED)
         .text(fmt(balanceDue), totalsX + totalsLabelW, rowY, { width: totalsValueW, align: 'right' });
       rowY += 18;
     }

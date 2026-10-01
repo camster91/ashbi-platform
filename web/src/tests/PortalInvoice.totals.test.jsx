@@ -51,6 +51,14 @@ describe('public invoice totals', () => {
     expect(screen.getAllByText('$1,017.00 USD').length).toBeGreaterThan(0);
   });
 
+  it('charges and shows only the balance left after a partial payment', async () => {
+    getPortalInvoice.mockResolvedValue(invoice({ amountPaid: 500, balanceDue: 517 }));
+    renderInvoice();
+    expect(await screen.findByRole('button', { name: 'Pay Now - $517.00 USD' })).toBeInTheDocument();
+    expect(screen.getByText('Balance due')).toBeInTheDocument();
+    expect(screen.getByText('-$500.00 USD')).toBeInTheDocument();
+  });
+
   it('hides Pay when there is nothing to collect', async () => {
     getPortalInvoice.mockResolvedValue(invoice({ subtotal: 100, discountAmount: 100, tax: 0, total: 0 }));
     renderInvoice();

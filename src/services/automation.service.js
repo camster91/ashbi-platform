@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import { resolveTenantOrganizationIds, runTenantJob } from '../jobs/tenant-iteration.js';
 import { sendInvoiceOverdueEmail } from './email.service.js';
 import { formatMoney } from '../utils/money.js';
+import { invoiceBalance } from '../utils/invoice-balance.js';
 import { invoicePublicAccessFailure } from '../utils/public-document-access.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
 import { emitNotification } from './notification.service.js';
@@ -404,6 +405,10 @@ async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
   const release = await claimOverdueStage(db, invoice, stage, now);
   if (!release) return { reminded: false, skipped: 'claimed_or_changed' };
 
+  const { balanceDue } = invoiceBalance(
+    invoice.total,
+    (invoice.payments || []).reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0),
+  );
   const contact = await getClientEmail(invoice.clientId);
   // The pay link is the public invoice page, which creates or refreshes a
   // Checkout session on demand; only link it while the link is valid.
@@ -416,7 +421,7 @@ async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
         to: contact.email,
         clientName: contact.name || invoice.client?.name,
         invoiceNumber: invoice.invoiceNumber,
-        total: invoice.total,
+        total: balanceDue,
         currency: invoice.currency,
         daysOverdue,
         viewUrl: `${hubUrl()}/portal/invoice/${invoice.viewToken}`,
@@ -435,7 +440,7 @@ async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
   // Without a contact or a usable link the stage stays claimed (staff are
   // notified below) rather than being retried on every run.
 
-  const amount = formatMoney(invoice.total, invoice.currency);
+  const amount = formatMoney(balanceDue, invoice.currency);
   const organizationId = invoice.organizationId || null;
   if (stage === 'ESCALATION') {
     await bestEffort('Client payment-status flag', invoice.id, () => db.client.update({
@@ -486,6 +491,8 @@ export async function checkOverdueInvoices(db = prisma, { now = new Date(), send
       },
       include: {
         client: { select: { id: true, name: true } },
+        // Reminders ask for what is still owed after partial payments.
+        payments: { select: { amount: true } },
       },
       orderBy: { id: 'asc' },
       take: pageSize,

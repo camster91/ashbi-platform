@@ -1,6 +1,7 @@
 // Client Portal routes (public - no auth required, token-based access)
 
-import { ensureCheckoutSession } from '../services/stripe.service.js';
+import { CheckoutNotPayableError, ensureCheckoutSession } from '../services/stripe.service.js';
+import { invoiceBalance } from '../utils/invoice-balance.js';
 import { onProposalApproved, onContractSigned } from '../services/automation.service.js';
 import crypto from 'crypto';
 import { validateBody, bookingSchema, contractSignSchema, formSubmitSchema, proposalDeclineSchema } from '../validators/schemas.js';
@@ -172,18 +173,21 @@ export default async function portalRoutes(fastify) {
     if (proposal.status === 'DECLINED') {
       return reply.status(400).send({ error: 'Proposal was declined' });
     }
+    if (!['SENT', 'VIEWED'].includes(proposal.status)) {
+      return reply.status(409).send({ error: 'Proposal is not awaiting approval' });
+    }
     if (proposal.validUntil && new Date(proposal.validUntil) < new Date()) {
       return reply.status(400).send({ error: 'Proposal has expired' });
     }
 
-    // Compare-and-set on the status read above: two concurrent approvals
+    // Compare-and-set on an awaiting-answer status: two concurrent approvals
     // (double click, replayed link) must not both run the automation or
     // both write an audit event.
     // The approval and its outbox event (docs/event-outbox.md) commit together.
     const approvedAt = new Date();
     const transitioned = await request.prisma.$transaction(async (tx) => {
       const result = await tx.proposal.updateMany({
-        where: { id: proposal.id, status: proposal.status, publicAccessRevokedAt: null },
+        where: { id: proposal.id, status: { in: ['SENT', 'VIEWED'] }, publicAccessRevokedAt: null },
         data: {
           status: 'APPROVED',
           approvedAt,
@@ -235,20 +239,26 @@ export default async function portalRoutes(fastify) {
       return reply.status(400).send({ error: 'Proposal already declined' });
     }
 
-    const updated = await request.prisma.proposal.update({
-      where: { id: proposal.id },
+    // Compare-and-set: only a proposal still awaiting an answer can be
+    // declined, so a decline racing an approval never overwrites it.
+    const declinedAt = new Date();
+    const transitioned = await request.prisma.proposal.updateMany({
+      where: { id: proposal.id, status: { in: ['SENT', 'VIEWED'] }, publicAccessRevokedAt: null },
       data: {
         status: 'DECLINED',
-        declinedAt: new Date(),
-        publicAccessRevokedAt: new Date(),
+        declinedAt,
+        publicAccessRevokedAt: declinedAt,
         // Store decline reason in internalNotes (no dedicated field)
         internalNotes: reason
           ? `${proposal.internalNotes ? proposal.internalNotes + '\n' : ''}[Client declined] ${reason}`
           : proposal.internalNotes
       }
     });
+    if (transitioned.count !== 1) {
+      return reply.status(409).send({ error: 'Proposal is no longer awaiting a decision' });
+    }
 
-    return { success: true, status: 'DECLINED', declinedAt: updated.declinedAt };
+    return { success: true, status: 'DECLINED', declinedAt };
   });
 
   // ==================== CONTRACTS ====================
@@ -419,6 +429,8 @@ export default async function portalRoutes(fastify) {
       taxType: invoice.taxType,
       tax: invoice.tax,
       total: invoice.total,
+      // What is still owed after partial payments (the pay button charges it).
+      ...invoiceBalance(invoice.total, invoice.payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)),
       notes: invoice.notes,
       paidAt: invoice.paidAt,
       sentAt: invoice.sentAt,
@@ -471,6 +483,7 @@ export default async function portalRoutes(fastify) {
 
       return { checkoutUrl: result.paymentLink };
     } catch (error) {
+      if (error instanceof CheckoutNotPayableError) return reply.status(409).send({ error: 'Invoice is not awaiting payment', code: error.code });
       fastify.log.error('Stripe payment link creation failed:', error);
       return reply.status(500).send({ error: 'Failed to create payment session' });
     }

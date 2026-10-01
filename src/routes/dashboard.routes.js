@@ -48,7 +48,11 @@ export default async function dashboardRoutes(fastify) {
       // implying there is nothing to bill.
       draftInvoices,
       // Outstanding invoices that are overdue (marked OVERDUE or past due)
-      overdueInvoices
+      overdueInvoices,
+      // Partial payments already received on those invoices: outstanding
+      // money is the balance (total minus payments), not the total.
+      outstandingPaid,
+      overduePaid
     ] = await Promise.all([
       request.prisma.retainerPlan.aggregate({
         where: { retainerStatus: 'ACTIVE' },
@@ -277,6 +281,14 @@ export default async function dashboardRoutes(fastify) {
         },
         _sum: { total: true },
         _count: { _all: true }
+      }),
+      request.prisma.invoicePayment.aggregate({
+        where: { invoice: { status: { in: ['SENT', 'OVERDUE'] } } },
+        _sum: { amount: true },
+      }),
+      request.prisma.invoicePayment.aggregate({
+        where: { invoice: { status: { in: ['SENT', 'OVERDUE'] }, OR: [{ status: 'OVERDUE' }, { dueDate: { lt: now } }] } },
+        _sum: { amount: true },
       })
     ]);
 
@@ -284,8 +296,9 @@ export default async function dashboardRoutes(fastify) {
     const mrr = activeRetainers?._sum?.monthlyAmountUsd || 0;
 
     // Outstanding totals
-    const totalOutstanding = outstandingInvoices?._sum?.total || 0;
-    const overdueAmount = overdueInvoices?._sum?.total || 0;
+    const balance = (aggregate, paid) => Math.max(0, Math.round(((aggregate?._sum?.total || 0) - (paid?._sum?.amount || 0)) * 100) / 100);
+    const totalOutstanding = balance(outstandingInvoices, outstandingPaid);
+    const overdueAmount = balance(overdueInvoices, overduePaid);
 
     // Build client health grid with computed fields
     const clientHealth = activeClients.map(client => {

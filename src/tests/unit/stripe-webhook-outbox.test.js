@@ -16,6 +16,7 @@ const { handleCheckoutFailure, StripeCheckoutRejectedError } = await import('../
 const { DomainEventValidationError } = await import('../../services/domain-event-catalog.js');
 const { enterRequestContext } = await import('../../utils/request-context.js');
 const { outboxStore } = await import('../helpers/domain-event-fake.js');
+import { applyInvoiceData, statusMatches } from '../helpers/fake-invoice-row.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -52,13 +53,15 @@ function database(invoice, { failEventWrite = null, clientOrganizationId = 'org-
       findUnique: async ({ where, select }) => (where.id === state.invoice.id
         ? (select?.client ? { client: { organizationId: 'org-1' } } : { ...state.invoice })
         : null),
-      updateMany: async () => {
-        if (state.invoice.status === 'PAID') return { count: 0 };
-        state.invoice.status = 'PAID';
+      updateMany: async ({ where, data }) => {
+        if (!statusMatches(state.invoice.status, where.status)) return { count: 0 };
+        applyInvoiceData(state.invoice, data);
         return { count: 1 };
       },
+      update: async ({ data }) => ({ ...applyInvoiceData(state.invoice, data) }),
     },
     invoicePayment: {
+      aggregate: async () => ({ _sum: { amount: state.payments.reduce((sum, payment) => sum + payment.amount, 0) || null } }),
       findUnique: async ({ where }) => state.payments.find((payment) => payment.transactionId === where.transactionId) ?? null,
       create: async ({ data }) => {
         const payment = { id: `payment-${state.payments.length + 1}`, ...data };
@@ -149,10 +152,26 @@ for (const [label, routes, url] of [
   test(`${label}: a session that does not match the invoice is acknowledged (200) as a mismatch, unrecorded`, async (t) => {
     const { db, state } = database({ ...LEGACY_INVOICE, currency: 'CAD' });
     const app = await buildApp(t, routes, db);
-    const response = await app.inject({ method: 'POST', url, ...signedDelivery(checkoutEvent({ ...LEGACY_INVOICE, currency: 'CAD' }, { amount_total: 1 })) });
+    const response = await app.inject({ method: 'POST', url, ...signedDelivery(checkoutEvent({ ...LEGACY_INVOICE, currency: 'CAD' }, { currency: 'usd' })) });
     assert.equal(response.statusCode, 200, response.body);
     assert.deepEqual(response.json(), { received: true, recorded: false, code: 'CHECKOUT_MISMATCH' });
     assert.equal(state.payments.length, 0);
+  });
+
+  test(`${label}: a charge above the balance is refused, alerted and kept as a payment.refused audit event`, async (t) => {
+    const invoice = { ...LEGACY_INVOICE, currency: 'CAD', clientId: 'client-1' };
+    const { db, state } = database(invoice);
+    // A manual payment landed after the session was priced at the full total.
+    state.payments.push({ id: 'manual-1', invoiceId: invoice.id, amount: 2, method: 'BANK', transactionId: null });
+    const audits = [];
+    db.auditEvent = { create: async ({ data }) => { audits.push(data); return data; } };
+    const app = await buildApp(t, routes, db);
+    const response = await app.inject({ method: 'POST', url, ...signedDelivery(checkoutEvent(invoice)) });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.deepEqual(response.json(), { received: true, recorded: false, code: 'CHECKOUT_BALANCE_CHANGED' });
+    assert.equal(state.payments.length, 1);
+    assert.deepEqual(audits.map((row) => [row.action, row.entityType, row.entityId, row.actorType]), [['payment.refused', 'invoice', invoice.id, 'WEBHOOK']]);
+    assert.deepEqual(audits[0].metadata, { code: 'CHECKOUT_BALANCE_CHANGED', amount: 42, currency: 'cad', stripeEventId: 'evt_outbox_1', transactionId: 'pi_1' });
   });
 }
 
@@ -167,6 +186,7 @@ test('handleCheckoutFailure logs a distinct code and alerts where a human must a
     [new DomainEventValidationError('Invalid invoice.paid v1 payload'), 500, 'DOMAIN_EVENT_INVALID'],
     [new StripeCheckoutRejectedError('Stripe paid amount does not match invoice'), 200, 'CHECKOUT_MISMATCH'],
     [new StripeCheckoutRejectedError('Invoice was already paid by another transaction', 'INVOICE_ALREADY_PAID'), 200, 'INVOICE_ALREADY_PAID'],
+    [new StripeCheckoutRejectedError('Stripe paid more than the invoice balance', 'CHECKOUT_BALANCE_CHANGED'), 200, 'CHECKOUT_BALANCE_CHANGED'],
     [new Error('connect ECONNREFUSED'), 500, 'CHECKOUT_RECORDING_FAILED'],
   ];
   for (const [err, statusCode, code] of cases) {
@@ -174,11 +194,12 @@ test('handleCheckoutFailure logs a distinct code and alerts where a human must a
     assert.deepEqual([result.statusCode, result.code], [statusCode, code]);
   }
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(alerts, ['domain_event_invalid', 'stripe_checkout_invoice_already_paid']);
+  assert.deepEqual(alerts, ['domain_event_invalid', 'stripe_checkout_invoice_already_paid', 'stripe_checkout_balance_changed']);
   assert.deepEqual(logs.map(([level, code]) => [level, code]), [
     ['error', 'DOMAIN_EVENT_INVALID'],
     ['warn', 'CHECKOUT_MISMATCH'],
     ['error', 'INVOICE_ALREADY_PAID'],
+    ['error', 'CHECKOUT_BALANCE_CHANGED'],
     ['error', 'CHECKOUT_RECORDING_FAILED'],
   ]);
 });
