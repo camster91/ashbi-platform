@@ -278,10 +278,15 @@ export default async function milestoneRoutes(fastify) {
   }, async (request, reply) => {
     const { id, taskId } = request.params;
 
-    await request.prisma.task.update({
-      where: { id: taskId },
+    // Only detach the task from this milestone, never from another one.
+    const { count } = await request.prisma.task.updateMany({
+      where: { id: taskId, milestoneId: id },
       data: { milestoneId: null }
     });
+
+    if (!count) {
+      return reply.status(404).send({ error: 'Task not found on this milestone' });
+    }
 
     return { success: true };
   });

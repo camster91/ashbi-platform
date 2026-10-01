@@ -130,7 +130,7 @@ container_image() {
   local out
   if out=$(docker inspect --format '{{.Config.Image}}' "$1" 2>&1) && [[ -n $out ]]; then
     echo "$out"
-  elif [[ $out == *"No such"* ]]; then
+  elif [[ $out =~ [Nn][Oo][[:space:]][Ss][Uu][Cc][Hh][[:space:]](object|container) ]]; then
     echo ""
   else
     echo unknown
@@ -142,7 +142,7 @@ container_state() {
   local out
   if out=$(docker inspect --format '{{.State.Running}}' "$1" 2>&1); then
     [[ $out == true || $out == false ]] && echo "$out" || echo unknown
-  elif [[ $out == *"No such"* ]]; then
+  elif [[ $out =~ [Nn][Oo][[:space:]][Ss][Uu][Cc][Hh][[:space:]](object|container) ]]; then
     echo gone
   else
     echo unknown

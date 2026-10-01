@@ -2,7 +2,7 @@
 
 import { findTasksInPriorityOrder } from '../services/task-priority-order.js';
 import { sortByTaskPriority, taskPriorityRank } from '../shared/task-priority.js';
-import { validateBody, createTaskSchema, updateTaskSchema, taskUpdateSchema, taskBulkUpdateSchema, taskPageContentUpdateSchema, taskSubpageCreateSchema, taskDependencyCreateSchema, taskCreateQuickSchema, TASK_STATUS_VALUES } from '../validators/schemas.js';
+import { validateBody, updateTaskSchema, taskBulkUpdateSchema, taskPageContentUpdateSchema, taskSubpageCreateSchema, taskDependencyCreateSchema, taskCreateQuickSchema, TASK_STATUS_VALUES } from '../validators/schemas.js';
 import { z } from 'zod';
 import bus, { EVENTS } from '../utils/events.js';
 import { parseTaskContent } from '../utils/taskContent.js';

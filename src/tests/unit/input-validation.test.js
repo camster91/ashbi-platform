@@ -25,14 +25,11 @@ const schemasModule = await import('../../validators/schemas.js');
 // Individual named exports
 const {
   loginSchema, registerSchema, changePasswordSchema,
-  createProjectSchema, updateProjectSchema,
-  createTaskSchema, updateTaskSchema,
-  createClientSchema, updateClientSchema,
-  createExpenseSchema, createInvoiceSchema,
-  markInvoicePaidSchema, sendInvoiceSchema,
-  bookingSchema, contractSignSchema, formSubmitSchema,
-  updateProfileSchema,
-  fileUpload, validateUploadedFile,
+  createProjectSchema,
+  createTaskSchema,
+  createClientSchema,
+  createExpenseSchema,
+  fileUpload,
 } = schemasModule;
 
 const { ALLOWED_EXTENSIONS: ALLOWED_UPLOAD_EXTENSIONS, ALLOWED_MIMETYPES: ALLOWED_UPLOAD_MIMETYPES } = fileUpload;

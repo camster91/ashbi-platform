@@ -11,7 +11,7 @@
  * In CI these tests auto-skip — see _live-api-skip.js. Force-run by
  * setting ASHBI_RUN_LIVE_API_TESTS=1.
  */
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { shouldSkipLiveApiTests } from '../_test-skip.js';
 
@@ -67,7 +67,7 @@ describe('Auth Login Flow - Live API Tests', { skip }, () => {
     });
 
     it('should validate request body schema', async () => {
-      const { status, data } = await fetchJSON(`${API_BASE}/auth/login`, {
+      const { status } = await fetchJSON(`${API_BASE}/auth/login`, {
         method: 'POST',
         body: JSON.stringify({ email: 'not-an-email', password: 'password123' }),
       });

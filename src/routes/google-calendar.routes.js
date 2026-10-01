@@ -84,11 +84,13 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
       status: 'ACTIVE', lastError: null, disconnectedAt: null,
     };
     const existing = await fastify.prisma.googleCalendarConnection.findFirst({ where: { userId: oauthState.userId } });
-    const connection = existing
-      ? await fastify.prisma.googleCalendarConnection.update({ where: { id: existing.id }, data })
-      : await fastify.prisma.googleCalendarConnection.create({
+    if (existing) {
+      await fastify.prisma.googleCalendarConnection.update({ where: { id: existing.id }, data });
+    } else {
+      await fastify.prisma.googleCalendarConnection.create({
         data: { organizationId: oauthState.organizationId, userId: oauthState.userId, ...data },
       });
+    }
     // OAuth callbacks are browser navigations. Return the user to the
     // authenticated settings surface rather than rendering token-connection
     // JSON at a provider callback URL.

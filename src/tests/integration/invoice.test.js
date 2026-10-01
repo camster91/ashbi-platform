@@ -1,7 +1,7 @@
 // Invoice module tests — Node.js built-in test runner
 // Run: node --test src/tests/invoice.test.js
 
-import { test, describe, before, after, beforeEach } from 'node:test';
+import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';

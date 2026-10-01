@@ -60,7 +60,6 @@ function checkRouteHasAuth(content, routeName) {
   const issues = [];
 
   // Find all route registrations: fastify.get(...), fastify.post(...), etc.
-  const methodRegex = /fastify\.(get|post|put|patch|delete)\s*\(\s*['"]/g;
   const routeRegex = /fastify\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]/g;
 
   let match;
