@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import { verifiedProductionBackup } from './production-backup.mjs';
 
 // No production credentials or response bodies are written to logs.
@@ -16,6 +17,9 @@ export async function release(env, { fetchImpl = fetch, sleep = ms => new Promis
     throw new Error('Coolify URL must be a trusted HTTPS origin');
   }
   const health = new URL('https://hub.ashbi.ca/api/health?strict=1');
+  const normalize = value => String(value || '').replace(/\r\n/g, '\n').trim();
+  const approvedCompose = normalize(await readFile(new URL('../../docker-compose.coolify-production.yml', import.meta.url), 'utf8'));
+  if (!approvedCompose.includes("ports: ['127.0.0.1:3002:3002']")) throw new Error('Approved production source lacks the existing proxy upstream');
   async function api(path, method = 'GET', body) {
     const response = await fetchImpl(new URL(`/api/v1${path}`, origin), {
       method, redirect: 'error', signal: AbortSignal.timeout(30000),
@@ -31,6 +35,7 @@ export async function release(env, { fetchImpl = fetch, sleep = ms => new Promis
       || app.docker_compose_location !== '/docker-compose.coolify-production.yml') {
       throw new Error('Coolify resource does not match the approved application');
     }
+    if (normalize(app.docker_compose_raw) !== approvedCompose) throw new Error('Configured Compose differs from the verified production source');
     const domainMap = typeof app.docker_compose_domains === 'string' ? JSON.parse(app.docker_compose_domains) : app.docker_compose_domains;
     const domains = (domainMap?.app?.domain || '').split(',').map(value => value.trim());
     if (!domains.includes('https://hub.ashbi.ca') || Number(app.domain_port_overrides?.['https://hub.ashbi.ca']) !== 3002) {

@@ -41,6 +41,13 @@ does not approve a release. Public probes never carry the Coolify token.
    `https://hub.ashbi.ca` origin, and preserve any explicitly configured values.
    Stop the old worker during the handoff before the new worker starts; their
    shared Redis heartbeat cannot represent two source revisions simultaneously.
+   Retain the existing Traefik file route to `http://127.0.0.1:3002` by binding
+   only `127.0.0.1:3002:3002` on the production API. Staging publishes no host
+   port; worker/migrations remain private. The legacy API must stop before the
+   candidate claims that port. Any generated Docker route must reach the same
+   candidate; verify public HTTPS and serving SHA before retiring routing.
+   The release controller compares configured raw Compose with checked source
+   before writes so routing/storage drift cannot silently deploy.
 4. Rehearse database/upload/configuration backups and rollback for this exact
    resource. Configure a fail-closed pre-deployment backup hook before
    automated migrations; the direct script's backup and rollback-floor

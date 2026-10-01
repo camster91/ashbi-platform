@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { release } from '../../../scripts/deploy/coolify-release.mjs';
 
 const sha = 'a'.repeat(40);
 const env = { RELEASE_SHA: sha, RELEASE_BRANCH: 'main', COOLIFY_RELEASE_ENABLED: 'true', COOLIFY_APP_UUID: 'app123', COOLIFY_TOKEN: 'test-only-token', COOLIFY_URL: 'https://coolify.example.test' };
-const app = { uuid: 'app123', git_repository: 'https://github.com/camster91/ashbi-platform.git', git_branch: 'main', build_pack: 'dockercompose', docker_compose_location: '/docker-compose.coolify-production.yml', docker_compose_domains: JSON.stringify({ app: { domain: 'https://hub.ashbi.ca' } }), domain_port_overrides: { 'https://hub.ashbi.ca': 3002 }, git_commit_sha: 'HEAD', settings: { is_auto_deploy_enabled: false, include_source_commit_in_build: true } };
+const app = { uuid: 'app123', git_repository: 'https://github.com/camster91/ashbi-platform.git', git_branch: 'main', build_pack: 'dockercompose', docker_compose_location: '/docker-compose.coolify-production.yml', docker_compose_raw: readFileSync(new URL('../../../docker-compose.coolify-production.yml', import.meta.url), 'utf8'), docker_compose_domains: JSON.stringify({ app: { domain: 'https://hub.ashbi.ca' } }), domain_port_overrides: { 'https://hub.ashbi.ca': 3002 }, git_commit_sha: 'HEAD', settings: { is_auto_deploy_enabled: false, include_source_commit_in_build: true } };
 function harness({ resource = app, retainedSha = sha, deployedSha = sha, publicSha = sha, status = 'finished', healthStatus = 'ok', queueUuid = 'app123', ready = true, checks = { database: { status: 'ok' }, redis: { status: 'ok' }, worker: { status: 'ok' } } } = {}) {
   const calls = [];
   const responses = [resource, { uuid: 'app123' }, { ...resource, git_commit_sha: retainedSha }, { deployments: [{ resource_uuid: queueUuid, deployment_uuid: 'release123' }] }, { status, commit: deployedSha }, { status: healthStatus, revision: publicSha, ready, checks }];
@@ -43,6 +44,14 @@ test('partial SHA and unsafe API origins are rejected before sending credentials
     const h = harness();
     await assert.rejects(release({ ...env, ...settings }, h));
     assert.equal(h.calls.length, 0);
+  }
+});
+test('resource drift that removes loopback routing or changes production storage is rejected before writes', async () => {
+  for (const raw of [undefined, app.docker_compose_raw.replace('127.0.0.1:3002:3002', '3002:3002'), app.docker_compose_raw.replace('/opt/ashbi-platform/data/uploads', '/tmp/fresh-uploads')]) {
+    const h = harness({ resource: { ...app, docker_compose_raw: raw } });
+    await assert.rejects(release(env, h), /Configured Compose differs/);
+    assert.equal(h.calls.length, 1);
+    assert.equal(h.calls[0].method, 'GET');
   }
 });
 test('unretained pin and mismatched deployment cannot be reported as a release', async () => {

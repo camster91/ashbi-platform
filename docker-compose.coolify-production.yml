@@ -12,6 +12,8 @@ services:
     command: ["sh", "scripts/start.sh"]
     stop_grace_period: 30s
     expose: ["3002"]
+    # Existing host-network Traefik's file route uses this loopback upstream.
+    ports: ['127.0.0.1:3002:3002']
     env_file:
       - path: .env
         required: false

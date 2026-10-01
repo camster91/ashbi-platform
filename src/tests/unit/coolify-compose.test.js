@@ -91,8 +91,9 @@ test('production adoption preserves existing stores and files without creating f
   assert.deepEqual(services.migrate.volumes, ['/opt/ashbi-platform/releases:/release-state']);
   assert.equal(services.app.user, undefined);
   assert.equal(services.worker.user, undefined);
-  for (const service of Object.values(services)) {
-    assert.equal(service.ports, undefined);
+  for (const [name, service] of Object.entries(services)) {
+    if (name === 'app') assert.deepEqual(service.ports, ['127.0.0.1:3002:3002']);
+    else assert.equal(service.ports, undefined);
     assert.equal(service.environment.DATABASE_URL, '${DATABASE_URL:?}');
     assert.ok(service.networks.includes('production-data'));
     assert.equal(Array.isArray(service.environment), false);
