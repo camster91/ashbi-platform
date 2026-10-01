@@ -85,6 +85,7 @@ test('production adoption preserves existing stores and files without creating f
   assert.equal(volumes, undefined);
   assert.equal(networks['production-data'].external, true);
   assert.equal(networks['production-data'].name, 'ashbi-hub-src_default');
+  assert.equal(services.app.environment.ADMIN_INVITE_TOKEN, '${ADMIN_INVITE_TOKEN:-}', 'adoption must not enable previously disabled bootstrap registration');
   for (const service of Object.values(services)) {
     assert.equal(service.ports, undefined);
     assert.equal(service.environment.DATABASE_URL, '${DATABASE_URL:?}');

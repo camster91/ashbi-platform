@@ -36,6 +36,9 @@ does not approve a release. Public probes never carry the Coolify token.
    not create a database, Redis instance or empty data volumes. The five-service
    `docker-compose.coolify.yml` remains for isolated staging/new installations.
    Verify both connection URLs against the live containers before configuration.
+   Preserve an unset `ADMIN_INVITE_TOKEN`; adoption must not enable bootstrap
+   registration. Fill missing link origins with the existing effective
+   `https://hub.ashbi.ca` origin, and preserve any explicitly configured values.
    Stop the old worker during the handoff before the new worker starts; their
    shared Redis heartbeat cannot represent two source revisions simultaneously.
 4. Rehearse database/upload/configuration backups and rollback for this exact

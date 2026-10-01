@@ -23,7 +23,8 @@ services:
       REDIS_URL: '${REDIS_URL:?}'
       JWT_SECRET: '${JWT_SECRET:?}'
       CREDENTIALS_KEY: '${CREDENTIALS_KEY:?}'
-      ADMIN_INVITE_TOKEN: '${ADMIN_INVITE_TOKEN:?}'
+      # Live bootstrap registration is disabled; preserve an unset token.
+      ADMIN_INVITE_TOKEN: '${ADMIN_INVITE_TOKEN:-}'
       WEBHOOK_SECRET: '${WEBHOOK_SECRET:?}'
       APP_URL: '${APP_URL:?}'
       HUB_URL: '${HUB_URL:?}'
