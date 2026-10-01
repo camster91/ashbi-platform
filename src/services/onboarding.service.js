@@ -1,6 +1,6 @@
 // Client onboarding service — creates client, contact, project, thread, message, notification
 
-import { normalizeClientDomain, normalizeContactEmail } from '../utils/client-identity.js';
+import { clientDomainFromEmail, normalizeContactEmail } from '../utils/client-identity.js';
 
 const TIER_HOURS = {
   '999': 20,
@@ -12,7 +12,7 @@ export async function onboardClient(fastify, { name, email, contactName, retaine
   const { prisma } = fastify;
   const result = await prisma.$transaction(async transaction => {
     const client = await transaction.client.create({
-      data: { name, domain: normalizeClientDomain(email.split('@')[1]), status: 'ACTIVE' },
+      data: { name, domain: clientDomainFromEmail(email), status: 'ACTIVE' },
     });
     const contact = await transaction.contact.create({
       data: { email: normalizeContactEmail(email), name: contactName, role: 'Primary Contact', isPrimary: true, clientId: client.id },

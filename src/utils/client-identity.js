@@ -16,6 +16,31 @@ export function normalizeClientDomain(domain) {
   return value === '' ? null : value;
 }
 
+/** Consumer mailbox providers: their domain identifies no client. */
+export const FREE_EMAIL_PROVIDERS = Object.freeze([
+  'gmail.com', 'googlemail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com', 'icloud.com', 'me.com', 'aol.com', 'protonmail.com', 'proton.me',
+]);
+
+/**
+ * Whether `domain` is a consumer mailbox provider (any case).
+ * @param {unknown} domain
+ */
+export function isFreeEmailDomain(domain) {
+  return FREE_EMAIL_PROVIDERS.includes(String(domain ?? '').trim().toLowerCase());
+}
+
+/**
+ * The client domain an email address implies: its normalized domain, or null
+ * for a consumer mailbox provider (gmail.com is nobody's company domain) or
+ * an address without one.
+ * @param {unknown} email
+ * @returns {string | null}
+ */
+export function clientDomainFromEmail(email) {
+  const domain = normalizeClientDomain(String(email ?? '').split('@')[1] ?? null) ?? null;
+  return domain && !isFreeEmailDomain(domain) ? domain : null;
+}
+
 /**
  * Contact.email as stored: trimmed and lowercased, so the portal's
  * request-access and principal checks match it in any case.

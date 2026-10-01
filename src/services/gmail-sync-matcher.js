@@ -8,11 +8,7 @@
 // client, whatever its contacts or domains are.
 
 import { insensitiveEquals } from '../utils/insensitive-equals.js';
-
-/** Consumer mailbox providers: their domain identifies no client. */
-export const FREE_EMAIL_PROVIDERS = Object.freeze([
-  'gmail.com', 'googlemail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com', 'icloud.com', 'me.com', 'aol.com', 'protonmail.com', 'proton.me',
-]);
+import { isFreeEmailDomain } from '../utils/client-identity.js';
 
 /**
  * Whether a sender's domain belongs to a client's domain: the same domain, or
@@ -53,7 +49,7 @@ export async function matchSenderToClient(prisma, organizationId, senderEmail) {
   });
   if (contact) return { client: contact.client, contact, confidence: 1.0 };
 
-  if (FREE_EMAIL_PROVIDERS.includes(domain)) return null;
+  if (isFreeEmailDomain(domain)) return null;
 
   // Client domains are stored lowercased and unique per organization.
   const exact = await prisma.client.findFirst({ where: { ...liveClient, domain } });

@@ -215,7 +215,9 @@ test('portal chat, uploads and request-access work for a contact stored in mixed
     await app.ready();
 
     const headers = { authorization: `Bearer ${signUserSession(app.jwt, portalUser, { contactId: ids.contact })}` };
-    const usersBefore = await raw.user.count();
+    // Scoped to this fixture: other test files create users concurrently.
+    const ownUsers = { OR: [{ organizationId: ids.org }, { clientId: ids.client }] };
+    const usersBefore = await raw.user.count({ where: ownUsers });
 
     // Chat message: authored by the session's user.
     const sent = await app.inject({ method: 'POST', url: `/api/client-portal/projects/${ids.project}/messages`, headers, payload: { content: 'Hello' } });
@@ -234,7 +236,7 @@ test('portal chat, uploads and request-access work for a contact stored in mixed
     assert.deepEqual(uploaders.map((row) => row.uploadedById), [ids.portal, ids.portal]);
     const removed = await app.inject({ method: 'DELETE', url: `/api/client-portal/projects/${ids.project}/chat-uploads/${pending.json().id}`, headers });
     assert.equal(removed.statusCode, 200, removed.body);
-    assert.equal(await raw.user.count(), usersBefore, 'no user is created for a portal write');
+    assert.equal(await raw.user.count({ where: ownUsers }), usersBefore, 'no user is created for a portal write');
 
     // Request access: a mixed-case contact gets its link; the answer is the
     // same as for an unknown address.

@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import { matchSenderToClient, senderDomainMatches } from '../../services/gmail-sync-matcher.js';
+import { clientDomainFromEmail } from '../../utils/client-identity.js';
 import env from '../../config/env.js';
 import gmailRoutes from '../../routes/gmail.routes.js';
 
@@ -99,6 +100,14 @@ test('senderDomainMatches accepts the domain and its subdomains only', () => {
   assert.equal(senderDomainMatches('acme.com', 'mail.acme.com'), false);
   assert.equal(senderDomainMatches('acme.com.evil.test', 'acme.com'), false);
   assert.equal(senderDomainMatches('acme.com', ''), false);
+});
+
+test('clientDomainFromEmail never yields a consumer mailbox domain', () => {
+  assert.equal(clientDomainFromEmail('Jane@Acme.COM '), 'acme.com');
+  assert.equal(clientDomainFromEmail('bob@GMail.com'), null);
+  assert.equal(clientDomainFromEmail('x@outlook.com'), null);
+  assert.equal(clientDomainFromEmail('no-at-sign'), null);
+  assert.equal(clientDomainFromEmail(''), null);
 });
 
 test('POST /sync-now is refused unless configured and requested by that organization', async (t) => {
