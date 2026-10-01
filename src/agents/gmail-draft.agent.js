@@ -236,32 +236,9 @@ async function createDraftWithAttachment(toEmail, subject, body, pdfBuffer, atta
     throw new Error('MATON_API_KEY environment variable is not set');
   }
 
-  const sanitizedSubject = sanitizeEmailHeader(subject);
-  const sanitizedTo = sanitizeEmailHeader(toEmail);
-  const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-
-  // Build multipart message
-  const base64Attachment = pdfBuffer.toString('base64');
-
-  const multipartBody = [
-    `To: ${sanitizedTo}`,
-    `Subject: ${sanitizedSubject}`,
-    'Content-Type: multipart/mixed; boundary="' + boundary + '"',
-    '',
-    `--${boundary}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    'Content-Transfer-Encoding: quoted-printable',
-    '',
-    body,
-    '',
-    `--${boundary}`,
-    `Content-Type: application/pdf; name="${attachmentName}"`,
-    'Content-Transfer-Encoding: base64',
-    `Content-Disposition: attachment; filename="${attachmentName}"`,
-    '',
-    base64Attachment,
-    `--${boundary}--`
-  ].join('\r\n');
+  // One builder for every attachment draft, so the text part is always
+  // quoted-printable encoded as its header declares.
+  const multipartBody = buildRfc2822EmailWithAttachment(toEmail, subject, body, { attachment: pdfBuffer, attachmentName });
 
   const rawEncoded = toBase64Url(multipartBody);
 
