@@ -92,7 +92,9 @@ export async function tenancyMiddleware(request, reply) {
   // Only enforce tenancy on API routes
   // Decide on the route the router matched, never the raw URL string.
   const path = requestPath(request);
-  if (!path.startsWith('/api/')) {
+  // An unmatched URL (the not-found pass, e.g. after the SPA static wildcard
+  // found no file) reaches no handler that reads data; let it answer 404.
+  if (!path.startsWith('/api/') || request.is404) {
     request.prisma = prisma;
     enterRequestContext({ prisma, organizationId: null });
     return;

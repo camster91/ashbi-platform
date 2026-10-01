@@ -98,7 +98,13 @@ test('the real API factory serves the built SPA with the cache policy (productio
       assert.match(response.body, body, url);
     }
     const missingApi = await app.inject({ method: 'GET', url: '/api/definitely-not-a-route' });
-    assert.notEqual(missingApi.statusCode, 200);
+    assert.equal(missingApi.statusCode, 404, missingApi.body);
+    const signedIn = await app.inject({
+      method: 'GET',
+      url: '/api/definitely-not-a-route',
+      headers: { cookie: `token=${app.jwt.sign({ id: 'u1', role: 'ADMIN', organizationId: 'o1', typ: 'user' })}` },
+    });
+    assert.equal(signedIn.statusCode, 404, signedIn.body);
     assert.doesNotMatch(missingApi.body, /<div id="root">/, 'unknown API routes never fall back to the SPA');
   } finally {
     await app.close();
