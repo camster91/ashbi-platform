@@ -196,7 +196,10 @@ function AppRoutes() {
         <Suspense fallback={<RouteLoader />}>
           <Routes>
           <Route path="/login" element={<LoginRoute />} />
-          {import.meta.env.DEV && (
+          {/* Dev-only gallery. The visual-regression build (playwright.visual.config.ts)
+              sets VITE_ENABLE_UI_LAB=true so its baselines can capture it; production
+              builds never set it. */}
+          {(import.meta.env.DEV || import.meta.env.VITE_ENABLE_UI_LAB === 'true') && (
             <Route path="/ui-lab" element={<UiLab />} />
           )}
           <Route path="/forgot-password" element={<ForgotPassword />} />

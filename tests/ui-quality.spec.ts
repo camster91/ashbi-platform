@@ -174,6 +174,22 @@ test.describe('UI quality', () => {
     });
   }
 
+  // The shared page skeletons (PageSkeleton.jsx) render on every collection
+  // screen while it loads. The UI lab (dev-only) shows all three side by side;
+  // at 375px their headers used to be wider than the viewport (#322 baseline).
+  test('page skeletons do not scroll the page horizontally at 375px', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/ui-lab');
+    await expect(page.getByRole('heading', { name: 'UI polish lab', level: 1 })).toBeVisible();
+    await expect(page.getByRole('status', { name: 'Loading clients demo' })).toBeVisible();
+    await settle(page);
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(scrollWidth, '/ui-lab skeletons are wider than the viewport').toBeLessThanOrEqual(clientWidth + 1);
+  });
+
   test('project page opens at the top instead of scrolling to the chat', async ({ page }) => {
     await page.goto('/project/project-a');
     await expect(page.getByRole('heading', { name: 'Website Redesign', level: 1 })).toBeVisible();
