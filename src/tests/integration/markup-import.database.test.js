@@ -12,6 +12,7 @@ import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 import { importScopeLockKey } from '../../services/operator-import-common.js';
 import { readMarkupImport, runMarkupImport } from '../../services/markup-import.service.js';
 import { setMediaScanner } from '../../services/media-scan.service.js';
+import { UPLOAD_DIR } from '../../services/chat-attachment.service.js';
 
 // Runs the real MarkUp.io comments importer CLI against a real PostgreSQL
 // database (built with `prisma migrate deploy`) to prove the reconciliation
@@ -472,14 +473,12 @@ test('a MarkUp review whose file the media scanner blocks is reported, and its c
   fs.cpSync(path.join(fixtures, 'markup-import-basic'), inputDir, { recursive: true });
   const csv = path.join(inputDir, 'markup-comments.csv');
   fs.writeFileSync(csv, fs.readFileSync(csv, 'utf8').replaceAll('{{ALICE_EMAIL}}', `alice+scan-${suffix}@example.test`));
-  // In-process, uploads land in the repository's shared uploads directory
-  // (UPLOAD_DIR is fixed at load time) while other test files run
-  // concurrently, so this test tracks only the files its own import stored:
-  // the scanner sees every stored path for this tenant.
-  const uploadsDir = path.join(repoRoot, 'uploads');
+  // In-process, uploads land in the shared UPLOAD_DIR while other test files
+  // run concurrently, so this test tracks only the files its own import
+  // stored: the scanner sees every stored path for this tenant.
   const scannedPaths = new Set();
   // Stored paths are public URLs (`/uploads/<name>`); map them onto the disk.
-  const resolveUpload = (stored) => path.join(uploadsDir, path.basename(stored));
+  const resolveUpload = (stored) => path.join(UPLOAD_DIR, path.basename(stored));
   try {
     await raw.organization.create({ data: { id: ids.org, name: 'MarkUp scan tenant', slug: `markup-scan-${suffix}` } });
     await raw.client.create({ data: { id: ids.client, organizationId: ids.org, name: 'Client' } });
