@@ -155,6 +155,11 @@ const env = {
   // means no HITL email is sent. Replies are accepted only from the Hub user
   // the notification was created for, or an active admin of that user's org.
   hitlApproverEmail: process.env.HITL_APPROVER_EMAIL?.trim() || null,
+  // Key material for HITL reply addresses (reply+<id>.<token>@...). Falls
+  // back to JWT_SECRET (a derived key is used either way); set it to rotate
+  // reply addresses independently of sessions. Rotating invalidates replies
+  // to emails already sent.
+  hitlReplySecret: process.env.HITL_REPLY_SECRET || null,
   // Local development only: accept unsigned POST /api/mailgun when
   // MAILGUN_SIGNING_KEY is unset. Honoured only with NODE_ENV=development.
   mailgunAllowUnsignedInbound: process.env.MAILGUN_ALLOW_UNSIGNED_INBOUND === '1',

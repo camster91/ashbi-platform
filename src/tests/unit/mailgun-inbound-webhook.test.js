@@ -11,9 +11,16 @@ import mailgunHitlRoutes from '../../routes/mailgun-hitl.routes.js';
 import {
   mailgunSenderAuthentication,
   parseEmailAddress,
+  parseMessageHeaders,
   parseUrlEncodedFields,
 } from '../../services/mailgun-webhook-request.js';
-import { hitlApproverEmail, resolveHitlApprover, sendApprovalHITLEmail } from '../../utils/hitl-email.service.js';
+import {
+  hitlApproverEmail,
+  resolveHitlApprover,
+  sendApprovalHITLEmail,
+  sendToHitlApprover,
+} from '../../utils/hitl-email.service.js';
+import { hitlReplyAddress, hitlReplyToken, verifyHitlReplyRecipient } from '../../services/hitl-reply-address.js';
 
 // Mailgun inbound routes post form fields (urlencoded, or multipart when the
 // message has attachments). The app only had a JSON parser and multipart
@@ -46,13 +53,34 @@ function multipartForm(fields, attachment) {
   return { payload: form.getBuffer(), headers: form.getHeaders() };
 }
 
-/** Mailgun's message-headers JSON with its SPF/DKIM verdicts. */
-function mailgunHeaders({ from, spf = 'Pass', dkim = 'Pass', dkimDomains = ['agency.example'], extra = [] } = {}) {
-  const headers = [];
-  if (from) headers.push(['From', from]);
+const HITL_MESSAGE_ID = '<hitl-1@mg.agency.example>';
+
+/**
+ * Mailgun's message-headers JSON: its X-Mailgun-* verdict block first, then
+ * the message's own headers (Received, From, Date, threading, DKIM).
+ */
+function mailgunHeaders({
+  from,
+  spf = 'Pass',
+  dkim = 'Pass',
+  dkimDomains = ['agency.example'],
+  dkimSignatures,
+  inReplyTo = HITL_MESSAGE_ID,
+  references,
+  date = new Date().toUTCString(),
+  extra = [],
+} = {}) {
+  const headers = [['X-Mailgun-Incoming', 'Yes']];
   if (spf) headers.push(['X-Mailgun-Spf', spf]);
   if (dkim) headers.push(['X-Mailgun-Dkim-Check-Result', dkim]);
-  for (const d of dkimDomains) headers.push(['DKIM-Signature', `v=1; a=rsa-sha256; d=${d}; s=sel; b=abc`]);
+  headers.push(['Received', 'by mxa.mailgun.example with SMTP']);
+  if (from) headers.push(['From', from]);
+  if (date) headers.push(['Date', date]);
+  if (inReplyTo) headers.push(['In-Reply-To', inReplyTo]);
+  if (references) headers.push(['References', references]);
+  for (const sig of dkimSignatures || dkimDomains.map(d => `v=1; a=rsa-sha256; d=${d}; s=sel; b=abc`)) {
+    headers.push(['DKIM-Signature', sig]);
+  }
   return JSON.stringify([...headers, ...extra]);
 }
 
@@ -155,7 +183,9 @@ const saved = {
   isTest: env.isTest,
   isDevelopment: env.isDevelopment,
   allowUnsigned: env.mailgunAllowUnsignedInbound,
+  hitlReplySecret: env.hitlReplySecret,
 };
+const HOUR_AGO = new Date(Date.now() - 60 * 60 * 1000);
 
 async function buildApp(prisma, processed) {
   const app = Fastify({ logger: false });
@@ -178,12 +208,14 @@ async function buildApp(prisma, processed) {
 before(() => {
   env.mailgunSigningKey = KEY;
   env.botOrganizationId = 'org-1';
+  env.hitlReplySecret = 'test-hitl-reply-secret';
 });
 
 after(() => {
   env.mailgunSigningKey = saved.signingKey;
   env.botOrganizationId = saved.botOrganizationId;
   env.hitlApproverEmail = saved.hitlApproverEmail;
+  env.hitlReplySecret = saved.hitlReplySecret;
 });
 
 describe('POST /api/mailgun (inbound client email)', () => {
@@ -240,13 +272,15 @@ describe('POST /api/mailgun (inbound client email)', () => {
     assert.equal(processed.calls.length, 1);
   });
 
-  it('rejects a bad signature with 401, and a missing or JSON body with 406', async () => {
+  it('rejects a bad signature with 401, a missing body with 406 and a JSON body with 415', async () => {
     const bad = await inject(urlencoded({ ...message, ...signed({ key: 'attacker' }) }));
     assert.equal(bad.statusCode, 401);
     const empty = await app.inject({ method: 'POST', url: '/api/mailgun' });
     assert.equal(empty.statusCode, 406);
     const json = await app.inject({ method: 'POST', url: '/api/mailgun', payload: { ...message, ...signed() } });
-    assert.equal(json.statusCode, 406, 'Mailgun never posts JSON; only the form parsers are trusted');
+    assert.equal(json.statusCode, 415, 'Mailgun never posts JSON; the scope has no JSON parser');
+    const text = await app.inject({ method: 'POST', url: '/api/mailgun', payload: 'hi', headers: { 'content-type': 'text/plain' } });
+    assert.equal(text.statusCode, 415);
     assert.equal(processed.calls.length, 0);
   });
 
@@ -304,6 +338,22 @@ describe('POST /api/mailgun (inbound client email)', () => {
     assert.equal(processed.calls.length, 0);
   });
 
+  it('accepts a message with 150 header fields (every MIME header is a field)', async () => {
+    const headerFields = Array.from({ length: 150 }, (_, i) => [`X-Header-${i}`, `value ${i}`]);
+    const pairs = [...Object.entries({ ...message, ...signed() }), ...headerFields];
+    assert.equal((await inject(multipartForm(pairs))).statusCode, 200);
+    assert.equal((await inject(urlencoded([...Object.entries({ ...message, ...signed() }), ...headerFields]))).statusCode, 200);
+    assert.equal(processed.calls.length, 2);
+    assert.equal(processed.calls[0]['X-Header-149'], 'value 149');
+  });
+
+  it('answers 413 to a multipart field truncated at the per-field limit', async () => {
+    // Under the 30 MB total, over the 25 MB per-field limit.
+    const response = await inject(multipartForm({ ...message, 'body-html': 'a'.repeat(26 * MB), ...signed() }));
+    assert.equal(response.statusCode, 413);
+    assert.equal(processed.calls.length, 0);
+  });
+
   it('keeps form bodies off the other Mailgun routes', async () => {
     const send = await app.inject({ method: 'POST', url: '/api/mailgun/send', ...urlencoded({ to: 'a@b.test', subject: 's', text: 't' }) });
     assert.equal(send.statusCode, 415);
@@ -347,14 +397,15 @@ describe('POST /api/mailgun-hitl/hitl-reply', () => {
     { id: 'u-team', email: 'team@agency.example', role: 'TEAM', isActive: true, organizationId: 'org-1' },
     { id: 'u-other-admin', email: 'boss@other.example', role: 'ADMIN', isActive: true, organizationId: 'org-2' },
     { id: 'u-gone', email: 'gone@agency.example', role: 'ADMIN', isActive: false, organizationId: 'org-1' },
+    { id: 'u-sub', email: 'lead@team.agency.example', role: 'ADMIN', isActive: true, organizationId: 'org-1' },
   ];
 
   beforeEach(async () => {
     prisma = fakePrisma({
       users,
       notifications: [
-        { id: 'n-approval', type: 'HITL_REQUIRED', userId: 'u-owner', read: false, data: JSON.stringify({ type: 'APPROVAL', refId: 'ap-1' }) },
-        { id: 'n-task', type: 'HITL_REQUIRED', userId: 'u-owner', read: false, data: JSON.stringify({ type: 'TASK', refId: 't-1' }) },
+        { id: 'n-approval', type: 'HITL_REQUIRED', userId: 'u-owner', read: false, createdAt: HOUR_AGO, data: JSON.stringify({ type: 'APPROVAL', refId: 'ap-1', hitlMessageId: HITL_MESSAGE_ID }) },
+        { id: 'n-task', type: 'HITL_REQUIRED', userId: 'u-owner', read: false, createdAt: HOUR_AGO, data: JSON.stringify({ type: 'TASK', refId: 't-1', hitlMessageId: HITL_MESSAGE_ID }) },
       ],
       approvals: [{ id: 'ap-1', status: 'PENDING', projectId: 'p-1' }],
       tasks: [{ id: 't-1', status: 'WAITING_US' }],
@@ -364,7 +415,7 @@ describe('POST /api/mailgun-hitl/hitl-reply', () => {
   afterEach(async () => { await app.close(); });
 
   const replyFields = (from, notificationId = 'n-approval', text = 'APPROVED - ship it', headers = {}) => ({
-    recipient: `reply+${notificationId}@mg.agency.example`,
+    recipient: hitlReplyAddress(notificationId, 'mg.agency.example'),
     sender: parseEmailAddress(from) || 'bounce@agency.example',
     from,
     'body-plain': `${text}\n\nOn Mon, Hub wrote:\n> Approval needed`,
@@ -462,6 +513,77 @@ describe('POST /api/mailgun-hitl/hitl-reply', () => {
     assert.equal(prisma.state.notes.length, 1);
   });
 
+  it('rejects a reply address with a missing or mismatched token', async () => {
+    const owner = 'owner@agency.example';
+    const cases = [
+      ['missing token', 'reply+n-approval@mg.agency.example'],
+      ['forged token', `reply+n-approval.${'x'.repeat(22)}@mg.agency.example`],
+      ['token of another notification', `reply+n-approval.${hitlReplyToken('n-task')}@mg.agency.example`],
+    ];
+    for (const [label, recipient] of cases) {
+      const response = await post({ ...replyFields(owner), recipient });
+      assert.equal(response.statusCode, 406, label);
+    }
+    assert.equal(approvalStatus(), 'PENDING');
+  });
+
+  it('requires In-Reply-To or References to name the HITL email', async () => {
+    const owner = 'owner@agency.example';
+    const missing = await post(replyFields(owner, 'n-approval', 'APPROVED', { inReplyTo: null }));
+    assert.equal(missing.statusCode, 406, 'no threading headers');
+    const other = await post(replyFields(owner, 'n-approval', 'APPROVED', { inReplyTo: '<older@mg.agency.example>' }));
+    assert.equal(other.statusCode, 406, 'replies to another email');
+    const partial = await post(replyFields(owner, 'n-approval', 'APPROVED', { inReplyTo: '<hitl-1@mg.agency.example.evil>' }));
+    assert.equal(partial.statusCode, 406, 'look-alike message id');
+    assert.equal(approvalStatus(), 'PENDING');
+    // References alone is enough (some clients thread that way).
+    const viaReferences = await post(replyFields(owner, 'n-approval', 'APPROVED', {
+      inReplyTo: null,
+      references: `<root@mg.agency.example> ${HITL_MESSAGE_ID}`,
+    }));
+    assert.equal(viaReferences.statusCode, 200);
+    assert.equal(approvalStatus(), 'APPROVED');
+  });
+
+  it('refuses a reply when no outbound Message-Id was recorded', async () => {
+    prisma.state.notifications.get('n-approval').data = JSON.stringify({ type: 'APPROVAL', refId: 'ap-1' });
+    assert.equal((await post(replyFields('owner@agency.example'))).statusCode, 406);
+    assert.equal(approvalStatus(), 'PENDING');
+  });
+
+  it('rejects a reply dated before the notification, or without a Date', async () => {
+    const owner = 'owner@agency.example';
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toUTCString();
+    assert.equal((await post(replyFields(owner, 'n-approval', 'APPROVED', { date: twoHoursAgo }))).statusCode, 406);
+    assert.equal((await post(replyFields(owner, 'n-approval', 'APPROVED', { date: null }))).statusCode, 406);
+    assert.equal((await post(replyFields(owner, 'n-approval', 'APPROVED', { date: 'not a date' }))).statusCode, 406);
+    assert.equal(approvalStatus(), 'PENDING');
+  });
+
+  it('fails closed without message-headers, or with a verdict after Mailgun\'s block', async () => {
+    const owner = 'owner@agency.example';
+    const { 'message-headers': _headers, ...withoutHeaders } = replyFields(owner);
+    assert.equal((await post(withoutHeaders)).statusCode, 406, 'missing message-headers');
+    // Mailgun added no DKIM verdict; the sender's own copy sits after Received.
+    const injected = replyFields(owner, 'n-approval', 'APPROVED', {
+      spf: null,
+      dkim: null,
+      extra: [['X-Mailgun-Dkim-Check-Result', 'Pass']],
+    });
+    assert.equal((await post(injected)).statusCode, 406, 'verdict after the first Received');
+    const doubleD = replyFields(owner, 'n-approval', 'APPROVED', { spf: null, dkimSignatures: ['v=1; d=agency.example; d=evil.example; s=a'] });
+    assert.equal((await post(doubleD)).statusCode, 406, 'double d= tag');
+    const parent = replyFields('lead@team.agency.example', 'n-approval', 'APPROVED', { spf: null, dkimDomains: ['agency.example'] });
+    assert.equal((await post(parent)).statusCode, 406, 'parent-domain d=');
+    assert.equal(approvalStatus(), 'PENDING');
+  });
+
+  it('answers 415 to a JSON body without reading it', async () => {
+    const response = await app.inject({ method: 'POST', url: '/api/mailgun-hitl/hitl-reply', payload: replyFields('owner@agency.example') });
+    assert.equal(response.statusCode, 415);
+    assert.equal(approvalStatus(), 'PENDING');
+  });
+
   it('rejects a stale timestamp and a replayed token', async () => {
     const stale = await post({ ...replyFields('owner@agency.example'), ...signed({ ageSeconds: 3600 }) });
     assert.equal(stale.statusCode, 406);
@@ -539,12 +661,73 @@ test('email address parsing accepts exactly one mailbox', () => {
   assert.equal(parseEmailAddress(undefined), null);
 });
 
-test('sender authentication reads Mailgun verdicts only when each appears once', () => {
-  const fields = { 'message-headers': mailgunHeaders({ spf: 'Pass', dkim: null, dkimDomains: [] }), sender: 'x@agency.example' };
-  assert.equal(mailgunSenderAuthentication(fields, 'admin@agency.example').ok, true);
-  const doubled = { ...fields, 'message-headers': mailgunHeaders({ spf: 'Pass', dkim: null, dkimDomains: [], extra: [['x-mailgun-spf', 'Pass']] }) };
-  assert.equal(mailgunSenderAuthentication(doubled, 'admin@agency.example').ok, false);
-  assert.equal(mailgunSenderAuthentication({ ...fields, 'message-headers': 'not json' }, 'admin@agency.example').ok, false);
+test('sender authentication trusts only Mailgun\'s leading verdict block', () => {
+  const auth = (opts, sender = 'x@agency.example', from = 'admin@agency.example') =>
+    mailgunSenderAuthentication(parseMessageHeaders({ 'message-headers': mailgunHeaders({ from, ...opts }) }), sender, from);
+  assert.equal(auth({ dkim: null, dkimDomains: [] }).ok, true, 'SPF pass, aligned envelope');
+  assert.equal(auth({}).method, 'dkim');
+  // A verdict the sender added after Mailgun's block poisons the message,
+  // even when Mailgun added none of its own (DKIM checking not configured).
+  assert.equal(auth({ dkim: null, spf: null, extra: [['X-Mailgun-Dkim-Check-Result', 'Pass']] }).reason, 'verdict_outside_mailgun_block');
+  assert.equal(auth({ extra: [[' x-mailgun-spf ', 'Pass']] }).reason, 'verdict_outside_mailgun_block');
+  // A verdict repeated inside the block counts as none.
+  const doubled = JSON.stringify([['X-Mailgun-Spf', 'Pass'], ['X-Mailgun-Spf', 'Pass'], ['Received', 'x'], ['From', 'admin@agency.example']]);
+  assert.equal(mailgunSenderAuthentication(parseMessageHeaders({ 'message-headers': doubled }), 'x@agency.example', 'admin@agency.example').ok, false);
+  // Missing message-headers fails closed.
+  assert.equal(mailgunSenderAuthentication(parseMessageHeaders({}), 'x@agency.example', 'admin@agency.example').reason, 'missing_message_headers');
+  assert.equal(parseMessageHeaders({ 'message-headers': 'not json' }), null);
+});
+
+test('DKIM alignment: one d= tag, equal to or a subdomain of the From domain', () => {
+  const dkimOnly = (signatures, from = 'admin@agency.example') => mailgunSenderAuthentication(
+    parseMessageHeaders({ 'message-headers': mailgunHeaders({ from, spf: null, dkimSignatures: signatures }) }), 'x@evil.example', from);
+  assert.equal(dkimOnly(['v=1; d=agency.example; s=a']).ok, true);
+  assert.equal(dkimOnly(['v=1; d=mail.agency.example; s=a']).ok, true, 'subdomain of From');
+  assert.equal(dkimOnly(['v=1; d=agency.example; d=evil.example; s=a']).ok, false, 'two d= tags');
+  assert.equal(dkimOnly(['v=1; s=a; b=x']).ok, false, 'no d= tag');
+  assert.equal(dkimOnly(['v=1; d=example; s=a']).ok, false, 'parent domain of From');
+  assert.equal(dkimOnly(['v=1; d=agency.example; s=a'], 'admin@team.agency.example').ok, false, 'parent of a subdomain From');
+  assert.equal(dkimOnly(['v=1; d=evilagency.example; s=a']).ok, false, 'suffix without a dot boundary');
+  // SPF: a parent envelope domain does not align either.
+  const spfOnly = mailgunSenderAuthentication(
+    parseMessageHeaders({ 'message-headers': mailgunHeaders({ from: 'a@team.agency.example', dkim: null, dkimDomains: [] }) }),
+    'bounce@agency.example', 'a@team.agency.example');
+  assert.equal(spfOnly.ok, false);
+});
+
+test('reply addresses carry an HMAC token bound to the notification', () => {
+  const address = hitlReplyAddress('n-approval', 'mg.agency.example');
+  assert.match(address, /^reply\+n-approval\.[A-Za-z0-9_-]{22}@mg\.agency\.example$/);
+  assert.equal(verifyHitlReplyRecipient(address), 'n-approval');
+  assert.equal(verifyHitlReplyRecipient('reply+n-approval@mg.agency.example'), null, 'missing token');
+  assert.equal(verifyHitlReplyRecipient(`reply+n-task.${hitlReplyToken('n-approval')}@mg.agency.example`), null, 'token of another notification');
+  assert.equal(verifyHitlReplyRecipient(`reply+n-approval.${'A'.repeat(22)}@mg.agency.example`), null, 'forged token');
+  const original = env.hitlReplySecret;
+  env.hitlReplySecret = 'another-secret';
+  try {
+    assert.equal(verifyHitlReplyRecipient(address), null, 'a different server secret');
+  } finally {
+    env.hitlReplySecret = original;
+  }
+});
+
+test('sending a HITL email uses the signed reply address and records its Message-Id', async () => {
+  const prisma = fakePrisma({ notifications: [{ id: 'n-9', type: 'HITL_REQUIRED', userId: 'u', data: JSON.stringify({ type: 'TASK', refId: 't-9' }) }] });
+  const sent = [];
+  env.hitlApproverEmail = 'approver@agency.example';
+  try {
+    const result = await sendToHitlApprover(
+      { notificationId: 'n-9', prisma, subject: 'S', html: '<p>x</p>' },
+      { send: async (message) => { sent.push(message); return { ok: true, id: '<20260101.abc@mg.agency.example>' }; } },
+    );
+    assert.equal(result.recorded, true);
+  } finally {
+    env.hitlApproverEmail = saved.hitlApproverEmail;
+  }
+  assert.equal(sent[0].to, 'approver@agency.example');
+  assert.equal(verifyHitlReplyRecipient(sent[0].replyTo), 'n-9');
+  const data = JSON.parse(prisma.state.notifications.get('n-9').data);
+  assert.deepEqual(data, { type: 'TASK', refId: 't-9', hitlMessageId: '<20260101.abc@mg.agency.example>' });
 });
 
 test('the HITL approver is resolved from HITL_APPROVER_EMAIL, case-insensitively, staff only', async () => {

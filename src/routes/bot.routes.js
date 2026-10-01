@@ -598,7 +598,7 @@ export default async function botRoutes(fastify) {
               data: JSON.stringify({ type: 'APPROVAL', refId: approval.id }),
             }
           });
-          await sendApprovalHITLEmail({ notificationId: hitlNotif.id, approval });
+          await sendApprovalHITLEmail({ notificationId: hitlNotif.id, prisma: fastify.prisma, approval });
         }).catch(err => fastify.log.error({ err }, 'Approval HITL email error'));
       }
     } catch (notifErr) {
@@ -1278,6 +1278,7 @@ export default async function botRoutes(fastify) {
           });
           sendTaskHITLEmail({
             notificationId: hitlNotif.id,
+            prisma,
             task,
             project,
             context: taskDef.description || `Agent ${taskDef.assigneeAgent || 'system'} needs your input on this task.`,
@@ -1330,6 +1331,7 @@ export default async function botRoutes(fastify) {
         const project = await prisma.project.findUnique({ where: { id: task.projectId } });
         emailResult = await sendTaskHITLEmail({
           notificationId: notification.id,
+          prisma,
           task,
           project,
           context,
@@ -1342,15 +1344,16 @@ export default async function botRoutes(fastify) {
       if (approval) {
         emailResult = await sendApprovalHITLEmail({
           notificationId: notification.id,
+          prisma,
           approval,
         });
       }
     } else {
       // CUSTOM or PROJECT — send generic email
-      const replyTo = `reply+${notification.id}@${env.mailgunDomain || 'ashbi.ca'}`;
       const urgencyPrefix = urgency === 'CRITICAL' ? '🔴 [CRITICAL] ' : urgency === 'HIGH' ? '🟠 [ACTION NEEDED] ' : '';
       emailResult = await sendToHitlApprover({
-        replyTo,
+        notificationId: notification.id,
+        prisma,
         subject: `${urgencyPrefix}${subject} — Ashbi Hub`,
         html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
           <h2>🔔 ${subject}</h2>

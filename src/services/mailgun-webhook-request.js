@@ -25,7 +25,9 @@ import {
 // checked.
 export const MAILGUN_WEBHOOK_BODY_LIMIT = 30 * 1024 * 1024;
 const MAX_FIELD_SIZE = 25 * 1024 * 1024;
-const MAX_FIELDS = 100;
+// Mailgun posts every MIME header as its own field, and Microsoft 365 mail
+// carries many; the byte cap above still bounds memory.
+const MAX_FIELDS = 1000;
 const MAX_FILES = 20;
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
@@ -89,12 +91,16 @@ export function parseUrlEncodedFields(text) {
 }
 
 /**
- * Add the urlencoded body parser to an encapsulated Fastify scope. Only the
- * routes registered in that scope accept form posts. The route's bodyLimit
- * (MAILGUN_WEBHOOK_BODY_LIMIT) bounds the body; Fastify answers 413 above it.
+ * Make an encapsulated Fastify scope accept Mailgun form posts only: add the
+ * urlencoded parser and drop the inherited JSON and text parsers, so any
+ * other content type gets 415 before its body is read (the large webhook
+ * bodyLimit never applies to JSON). Multipart stays with @fastify/multipart.
+ * The route's bodyLimit (MAILGUN_WEBHOOK_BODY_LIMIT) bounds a urlencoded body;
+ * Fastify answers 413 above it.
  * @param {import('fastify').FastifyInstance} scope
  */
 export function addMailgunFormParser(scope) {
+  scope.removeContentTypeParser(['application/json', 'text/plain']);
   scope.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_request, body, done) => {
     done(null, parseUrlEncodedFields(String(body)));
   });
@@ -124,6 +130,8 @@ export async function readMailgunWebhookFields(request) {
         for await (const _chunk of part.file) { /* discard attachment bytes */ }
         continue;
       }
+      // A truncated field or name would be parsed as a different value.
+      if (part.valueTruncated || part.fieldnameTruncated) throw httpError(413, 'Webhook field too large');
       const value = typeof part.value === 'string' ? part.value : String(part.value ?? '');
       fieldBytes += Buffer.byteLength(value) + Buffer.byteLength(part.fieldname || '');
       if (fieldBytes > MAILGUN_WEBHOOK_BODY_LIMIT) throw httpError(413, 'Webhook body too large');
@@ -220,75 +228,137 @@ export function addressDomain(address) {
   return at > 0 ? address.slice(at + 1).toLowerCase() : null;
 }
 
-/** Relaxed DMARC-style alignment: same domain, or one a subdomain of the other. */
-export function domainsAligned(a, b) {
-  if (!a || !b) return false;
-  const x = a.toLowerCase().replace(/\.$/, '');
-  const y = b.toLowerCase().replace(/\.$/, '');
-  return x === y || x.endsWith(`.${y}`) || y.endsWith(`.${x}`);
-}
-
 /**
- * Every value of a message header, matched case-insensitively. Mailgun posts
- * the full header list as `message-headers` (JSON [[name, value], ...]); when
- * that is absent, top-level fields stand in. Returns null when the headers
- * JSON is present but unreadable.
+ * Whether `candidate` (a DKIM d= or envelope domain) is aligned with the From
+ * domain: equal to it, or a subdomain of it. A parent domain of From never
+ * aligns, so a public suffix or a sibling's parent cannot vouch for it.
  */
-export function headerValues(fields, name) {
-  const wanted = name.toLowerCase();
-  const raw = fields['message-headers'];
-  if (typeof raw === 'string' && raw) {
-    let list;
-    try { list = JSON.parse(raw); } catch { return null; }
-    if (!Array.isArray(list)) return null;
-    return list
-      .filter(entry => Array.isArray(entry) && typeof entry[0] === 'string' && entry[0].toLowerCase() === wanted)
-      .map(entry => String(entry[1] ?? ''));
-  }
-  return Object.keys(fields)
-    .filter(key => key.toLowerCase() === wanted)
-    .map(key => String(fields[key] ?? ''));
-}
-
-function singleHeader(fields, name) {
-  const values = headerValues(fields, name);
-  return values && values.length === 1 ? values[0].trim() : null;
+export function domainAlignedWithFrom(candidate, fromDomain) {
+  if (!candidate || !fromDomain) return false;
+  const c = candidate.toLowerCase().replace(/\.$/, '');
+  const f = fromDomain.toLowerCase().replace(/\.$/, '');
+  return c === f || c.endsWith(`.${f}`);
 }
 
 /**
- * Whether Mailgun's own checks vouch for the From domain: DKIM passed and
- * every DKIM signature is aligned with the From domain, or SPF passed for an
- * envelope sender aligned with the From domain. Mailgun's result headers are
- * trusted only when each appears exactly once, so a copy added by the sender
- * makes the message fail.
+ * Mailgun's `message-headers` field (JSON [[name, value], ...]) as an ordered
+ * list of { name (trimmed, lower-cased), value }, or null when it is missing
+ * or unreadable.
+ */
+export function parseMessageHeaders(fields) {
+  const raw = fields?.['message-headers'];
+  if (typeof raw !== 'string' || !raw) return null;
+  let list;
+  try { list = JSON.parse(raw); } catch { return null; }
+  if (!Array.isArray(list)) return null;
+  const headers = [];
+  for (const entry of list) {
+    if (!Array.isArray(entry) || typeof entry[0] !== 'string') return null;
+    headers.push({ name: entry[0].trim().toLowerCase(), value: String(entry[1] ?? '') });
+  }
+  return headers;
+}
+
+/** Every value of one header (case-insensitive name) in a parsed header list. */
+export function headerValues(headers, name) {
+  const wanted = name.trim().toLowerCase();
+  return headers.filter(header => header.name === wanted).map(header => header.value);
+}
+
+const VERDICT_HEADERS = ['x-mailgun-spf', 'x-mailgun-dkim-check-result'];
+
+/**
+ * Mailgun's SPF / DKIM verdicts, trusted only from the leading block of
+ * X-Mailgun-* headers that Mailgun prepends (everything before the first
+ * other header, e.g. Received). A verdict-named header anywhere after that
+ * block was supplied by the sender, so the message is refused; a verdict that
+ * is absent from, or repeated in, the block counts as no verdict.
+ */
+function mailgunVerdicts(headers) {
+  let blockEnd = headers.findIndex(header => !header.name.startsWith('x-mailgun-'));
+  if (blockEnd === -1) blockEnd = headers.length;
+  const lead = headers.slice(0, blockEnd);
+  if (headers.slice(blockEnd).some(header => VERDICT_HEADERS.includes(header.name))) {
+    return { ok: false, reason: 'verdict_outside_mailgun_block' };
+  }
+  const single = (name) => {
+    const values = headerValues(lead, name);
+    return values.length === 1 ? values[0].trim().toLowerCase() : null;
+  };
+  return { ok: true, spf: single('X-Mailgun-Spf'), dkim: single('X-Mailgun-Dkim-Check-Result') };
+}
+
+/** The d= domain of a DKIM-Signature, or null when there is not exactly one d= tag. */
+function dkimSigningDomain(signature) {
+  const tags = [...signature.matchAll(/(?:^|;)\s*d\s*=\s*([^;\s]*)/gi)];
+  return tags.length === 1 && tags[0][1] ? tags[0][1] : null;
+}
+
+/**
+ * Whether Mailgun's own checks vouch for the From domain: a DKIM pass with
+ * every DKIM-Signature aligned with the From domain, or an SPF pass for an
+ * envelope sender aligned with it. Fails closed without message-headers.
+ * @param {Array<{ name: string, value: string }> | null} headers parseMessageHeaders()
+ * @param {unknown} envelopeSender Mailgun's `sender` field
+ * @param {string | null} fromAddress
  * @returns {{ ok: boolean, reason?: string, method?: string }}
  */
-export function mailgunSenderAuthentication(fields, fromAddress) {
+export function mailgunSenderAuthentication(headers, envelopeSender, fromAddress) {
+  if (!headers) return { ok: false, reason: 'missing_message_headers' };
   const fromDomain = addressDomain(fromAddress);
   if (!fromDomain) return { ok: false, reason: 'no_from_domain' };
 
-  // A second From header makes the parsed `from` field ambiguous.
-  const fromHeaders = headerValues(fields, 'From');
-  if (fromHeaders === null) return { ok: false, reason: 'unreadable_headers' };
-  if (fromHeaders.length > 1) return { ok: false, reason: 'multiple_from_headers' };
-  if (fromHeaders.length === 1 && parseEmailAddress(fromHeaders[0]) !== fromAddress) {
-    return { ok: false, reason: 'from_mismatch' };
-  }
+  // Exactly one From header, naming the same mailbox as the `from` field.
+  const fromHeaders = headerValues(headers, 'From');
+  if (fromHeaders.length !== 1) return { ok: false, reason: 'from_header_count' };
+  if (parseEmailAddress(fromHeaders[0]) !== fromAddress) return { ok: false, reason: 'from_mismatch' };
 
-  const dkimResult = singleHeader(fields, 'X-Mailgun-Dkim-Check-Result');
-  if (dkimResult && dkimResult.toLowerCase() === 'pass') {
-    const signatures = headerValues(fields, 'DKIM-Signature') || [];
-    const domains = signatures.map(sig => /(?:^|;)\s*d\s*=\s*([^;\s]+)/i.exec(sig)?.[1]).filter(Boolean);
-    if (domains.length > 0 && domains.length === signatures.length && domains.every(d => domainsAligned(d, fromDomain))) {
+  const verdicts = mailgunVerdicts(headers);
+  if (!verdicts.ok) return { ok: false, reason: verdicts.reason };
+
+  if (verdicts.dkim === 'pass') {
+    const signatures = headerValues(headers, 'DKIM-Signature');
+    const domains = signatures.map(dkimSigningDomain);
+    if (signatures.length > 0 && domains.every(d => domainAlignedWithFrom(d, fromDomain))) {
       return { ok: true, method: 'dkim' };
     }
   }
 
-  const spfResult = singleHeader(fields, 'X-Mailgun-Spf');
-  if (spfResult && spfResult.toLowerCase() === 'pass') {
-    const envelopeDomain = addressDomain(parseEmailAddress(fields.sender));
-    if (envelopeDomain && domainsAligned(envelopeDomain, fromDomain)) return { ok: true, method: 'spf' };
+  if (verdicts.spf === 'pass') {
+    const envelopeDomain = addressDomain(parseEmailAddress(envelopeSender));
+    if (domainAlignedWithFrom(envelopeDomain, fromDomain)) return { ok: true, method: 'spf' };
   }
 
   return { ok: false, reason: 'unauthenticated_sender' };
+}
+
+/** The <message-id> tokens in an In-Reply-To or References value. */
+function messageIdTokens(value) {
+  return value.match(/<[^<>\s]+>/g) || [];
+}
+
+/**
+ * Whether the reply's In-Reply-To or References names `messageId` (the
+ * "<id@host>" Mailgun returned when the HITL email was sent).
+ */
+export function replyReferencesMessage(headers, messageId) {
+  if (!headers || typeof messageId !== 'string' || !messageId) return false;
+  return [...headerValues(headers, 'In-Reply-To'), ...headerValues(headers, 'References')]
+    .some(value => messageIdTokens(value).includes(messageId));
+}
+
+// Tolerated clock difference between the replier's mail server and ours.
+export const HITL_REPLY_DATE_SKEW_MS = 5 * 60 * 1000;
+
+/**
+ * Whether the reply's single Date header is not older than the notification
+ * (with a small clock-skew allowance). A missing, repeated or unparseable
+ * Date fails.
+ */
+export function replyDateIsAfter(headers, notBefore) {
+  if (!headers || !(notBefore instanceof Date)) return false;
+  const dates = headerValues(headers, 'Date');
+  if (dates.length !== 1) return false;
+  const sentAt = Date.parse(dates[0]);
+  return Number.isFinite(sentAt) && sentAt >= notBefore.getTime() - HITL_REPLY_DATE_SKEW_MS;
 }

@@ -1,19 +1,24 @@
 // Mailgun HITL reply webhook — parses staff email replies back into Hub.
 //
-// A HITL email goes out with Reply-To reply+{notificationId}@<mailgun domain>;
-// Mailgun's inbound route forwards the reply here as form fields. A reply is
-// applied only when:
+// A HITL email goes out with Reply-To reply+<notificationId>.<token>@<mailgun
+// domain> (token: HMAC of the id, see services/hitl-reply-address.js), and
+// its Mailgun Message-Id is recorded on the notification. Mailgun's inbound
+// route forwards the reply here as form fields. A reply is applied only when:
 //   - the Mailgun signature is valid, its timestamp is inside the 15-minute
 //     window and its token has not been used before (same checks as
 //     POST /api/mailgun/events);
 //   - no security-relevant field (recipient, from, sender, signature fields,
 //     body, Mailgun's SPF/DKIM results) was posted twice;
+//   - the reply address carries a valid token for the notification;
+//   - message-headers is present, In-Reply-To or References names the
+//     recorded Message-Id, and the single Date header is not older than the
+//     notification (an old signed email cannot be replayed into it);
 //   - the From header names exactly one address, and that address is the Hub
 //     user the notification was created for, or an active admin of that
 //     user's organization (case-insensitive);
-//   - Mailgun's own checks vouch for the From domain (aligned DKIM pass, or
-//     SPF pass for an aligned envelope sender), because the From header
-//     itself is not authenticated; and
+//   - as defence in depth, Mailgun's own verdicts (read only from the
+//     X-Mailgun-* block it prepends) show a DKIM pass aligned with the From
+//     domain, or an SPF pass for an envelope sender aligned with it; and
 //   - for an approval, it is still PENDING.
 // Knowing a notification id is therefore not enough to approve anything.
 //
@@ -31,9 +36,13 @@ import {
   MAILGUN_WEBHOOK_BODY_LIMIT,
   mailgunSenderAuthentication,
   parseEmailAddress,
+  parseMessageHeaders,
   readMailgunWebhookRequest,
+  replyDateIsAfter,
+  replyReferencesMessage,
 } from '../services/mailgun-webhook-request.js';
-import { stripQuotedReply, sendDiscordCamNotification } from '../utils/hitl-email.service.js';
+import { verifyHitlReplyRecipient } from '../services/hitl-reply-address.js';
+import { parseNotificationData, stripQuotedReply, sendDiscordCamNotification } from '../utils/hitl-email.service.js';
 
 const STAFF_ROLES = new Set(['ADMIN', 'TEAM']);
 const USER_FIELDS = { id: true, email: true, role: true, isActive: true, organizationId: true };
@@ -42,18 +51,6 @@ class ReplyRejected extends Error {
   constructor(message) {
     super(message);
     this.name = 'ReplyRejected';
-  }
-}
-
-function notificationData(notification) {
-  const raw = notification?.data;
-  if (raw && typeof raw === 'object') return raw;
-  if (typeof raw !== 'string' || !raw) return {};
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
   }
 }
 
@@ -101,13 +98,19 @@ function parseDecision(replyText) {
  * runs once the writes are committed.
  */
 async function applyHitlReply({ prisma, log, body, onCommit }) {
-  const recipient = typeof body.recipient === 'string' ? body.recipient : '';
-  const match = recipient.match(/reply\+([^@\s]+)@/);
-  if (!match) {
-    log.warn('[hitl-reply] Could not extract a notification id from the recipient');
+  // reply+<notificationId>.<token>@ — the token is an HMAC of the id, so a
+  // reply address cannot be made up for a notification.
+  const notificationId = verifyHitlReplyRecipient(body.recipient);
+  if (!notificationId) {
+    log.warn('[hitl-reply] Reply address has a missing or invalid token');
     return { status: 406, payload: { error: 'Unrecognised reply address' } };
   }
-  const notificationId = match[1];
+
+  const headers = parseMessageHeaders(body);
+  if (!headers) {
+    log.warn({ notificationId }, '[hitl-reply] Missing or unreadable message-headers');
+    return { status: 406, payload: { error: 'Message headers are required' } };
+  }
 
   // Strip quoted text — the actual reply is at the top
   const bodyPlain = typeof body['body-plain'] === 'string' ? body['body-plain'] : '';
@@ -132,13 +135,28 @@ async function applyHitlReply({ prisma, log, body, onCommit }) {
     return { status: 406, payload: { error: 'Sender is not authorized to answer this notification' } };
   }
 
-  const senderAuth = mailgunSenderAuthentication(body, fromAddress);
+  const data = parseNotificationData(notification.data);
+  // The reply must answer the email Hub sent (its recorded Message-Id), and
+  // must not be dated before the notification existed, so an older signed
+  // email from the approver cannot be replayed into this notification.
+  if (!replyReferencesMessage(headers, data.hitlMessageId)) {
+    log.warn({ notificationId }, '[hitl-reply] Reply does not reference the HITL email');
+    return { status: 406, payload: { error: 'Reply does not answer this notification email' } };
+  }
+  const createdAt = notification.createdAt instanceof Date ? notification.createdAt : new Date(notification.createdAt);
+  if (!replyDateIsAfter(headers, createdAt)) {
+    log.warn({ notificationId }, '[hitl-reply] Reply Date is missing or older than the notification');
+    return { status: 406, payload: { error: 'Reply is older than this notification' } };
+  }
+
+  // Defence in depth: Mailgun's SPF/DKIM verdicts must vouch for the From domain.
+  const senderAuth = mailgunSenderAuthentication(headers, body.sender, fromAddress);
   if (!senderAuth.ok) {
     log.warn({ notificationId, reason: senderAuth.reason }, '[hitl-reply] Reply sender not verified by SPF/DKIM');
     return { status: 406, payload: { error: 'Sender could not be verified' } };
   }
 
-  const { type, refId } = notificationData(notification);
+  const { type, refId } = data;
   let approval = null;
   let task = null;
   if (type === 'APPROVAL' && refId) {
