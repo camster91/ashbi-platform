@@ -132,6 +132,12 @@ jobs:
     name: Browser and accessibility smoke
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The official Playwright image ships Chromium, Firefox, WebKit and their
+    # system libraries, so the gate no longer depends on apt mirror speed.
+    # Keep the tag in step with the locked @playwright/test version.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --ipc=host
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -147,8 +153,10 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm ci --prefix web --no-audit --no-fund
-      - name: Install browser runtimes
-        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Verify browser runtimes
+        # No-op when the image matches the locked version; downloads only
+        # browsers (never system packages) if they ever drift.
+        run: npx playwright install chromium firefox webkit
       - name: Build production frontend for browser gates
         run: npm run build
         env:
