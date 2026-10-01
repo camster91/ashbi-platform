@@ -95,7 +95,18 @@ test('brand settings and project references are isolated per organization', {
     assert.deepEqual([afterA.companyName, afterA.primaryColor], ['Alpha Studio', '#111111'], "org B's save left org A's brand alone");
     assert.equal((await raw.brandSettings.findUnique({ where: { id: brandB.id } })).companyName, 'Beta Renamed');
 
-    // An organization without a brand gets its own row, not org A's.
+    // An organization without a brand gets its own row, not org A's, and
+    // concurrent first reads create exactly one (unique organizationId +
+    // upsert).
+    const firstReads = await Promise.all(Array.from({ length: 6 }, () => as('c', 'GET', '/api/brand')));
+    for (const response of firstReads) assert.equal(response.statusCode, 200, response.body);
+    assert.equal(new Set(firstReads.map((response) => response.json().id)).size, 1);
+    assert.equal(await raw.brandSettings.count({ where: { organizationId: orgC } }), 1);
+    await assert.rejects(
+      raw.brandSettings.create({ data: { organizationId: orgC } }),
+      (error) => error?.code === 'P2002',
+      'the database refuses a second brand row for an organization',
+    );
     const readC = await as('c', 'GET', '/api/brand');
     assert.equal(readC.statusCode, 200, readC.body);
     assert.notEqual(readC.json().id, brandA.id);

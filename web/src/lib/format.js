@@ -129,3 +129,27 @@ export function toDateInputValue(date) {
   const value = new Date(date);
   return Number.isNaN(value.getTime()) ? '' : value.toISOString().slice(0, 10);
 }
+
+/**
+ * Today's calendar date in the viewer's timezone as "YYYY-MM-DD", the default
+ * for a new <input type="date"> (toISOString would give the UTC date, which is
+ * tomorrow for an evening in North America).
+ */
+export function todayDateInputValue(now = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+/**
+ * Whole days from the viewer's today to a calendar date stored in UTC (a
+ * date-only value such as a milestone due date at 00:00Z): 0 = today,
+ * negative = past. Compares calendar days, so the viewer's timezone never
+ * shifts the date by one. null for missing/invalid input.
+ */
+export function calendarDaysUntil(value, now = new Date()) {
+  const date = toDate(value);
+  if (!date) return null;
+  const due = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((due - today) / 86_400_000);
+}

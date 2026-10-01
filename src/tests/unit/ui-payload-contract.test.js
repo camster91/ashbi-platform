@@ -14,7 +14,7 @@ import { describe, it } from 'node:test';
 import Fastify from 'fastify';
 
 const schemas = await import('../../validators/schemas.js');
-const { default: estimateRoutes, computeEstimateTotals } = await import('../../routes/estimate.routes.js');
+const { default: estimateRoutes, computeEstimateTotals, estimateValidThrough } = await import('../../routes/estimate.routes.js');
 const { expenseListOrderBy } = await import('../../routes/expense.routes.js');
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -65,18 +65,22 @@ describe('Expenses page (web/src/pages/Expenses.jsx handleSubmit)', () => {
   });
 
   it('updates with links, a receipt and a date-only value', () => {
-    const body = parses(schemas.expenseUpdateSchema, {
-      ...created, clientId: 'client_1', projectId: null, receiptUrl: '/uploads/receipt-a.png',
-    });
+    const receiptUrl = '/uploads/receipt-0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d.png';
+    const body = parses(schemas.expenseUpdateSchema, { ...created, clientId: 'client_1', projectId: null, receiptUrl });
     assert.equal(body.clientId, 'client_1');
     assert.equal(body.projectId, null);
-    assert.equal(body.receiptUrl, '/uploads/receipt-a.png');
+    assert.equal(body.receiptUrl, receiptUrl);
     assert.equal(body.date, '2026-09-30T00:00:00.000Z');
+    assert.equal(parses(schemas.expenseUpdateSchema, { receiptUrl: '' }).receiptUrl, '');
   });
 
-  it('rejects receipt links that are not an upload path or http(s)', () => {
-    rejects(schemas.createExpenseSchema, { ...created, receiptUrl: 'javascript:alert(1)' });
-    rejects(schemas.createExpenseSchema, { ...created, receiptUrl: '/uploads/../.env' });
+  it('accepts only the receipt path the upload route returns', () => {
+    for (const receiptUrl of [
+      'javascript:alert(1)', '/uploads/../.env', '/uploads/receipt-a.png', '/uploads/brand/logo-1.png',
+      'https://example.com/receipt.pdf', '/uploads/receipt-0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d.png/../x',
+    ]) {
+      rejects(schemas.createExpenseSchema, { ...created, receiptUrl });
+    }
     rejects(schemas.createExpenseSchema, { ...created, date: '2026-02-30' });
   });
 
@@ -234,10 +238,12 @@ describe('Estimates page (web/src/pages/Estimates.jsx handleCreate/handleUpdate)
   const created = {
     clientId: 'client_1', title: 'Website estimate', description: undefined, taxRate: 13, validUntil: '2026-10-31', lineItems,
   };
-  // The page's own totals (Estimates.jsx formSubtotal / formTax / formTotal).
-  const formSubtotal = lineItems.reduce((sum, li) => sum + (parseFloat(li.quantity) || 0) * (parseFloat(li.rate) || 0), 0);
-  const formTax = parseFloat(((formSubtotal * 13) / 100).toFixed(2));
-  const formTotal = parseFloat((formSubtotal + formTax).toFixed(2));
+  // The page's own totals (Estimates.jsx lineAmount / estimateTotals): each
+  // line rounded to cents, the subtotal the sum of those lines.
+  const round2 = (value) => parseFloat((Number(value) || 0).toFixed(2));
+  const formSubtotal = round2(lineItems.reduce((sum, li) => sum + round2((parseFloat(li.quantity) || 0) * (parseFloat(li.rate) || 0)), 0));
+  const formTax = round2((formSubtotal * 13) / 100);
+  const formTotal = round2(formSubtotal + formTax);
 
   it('keeps taxRate and accepts a date-only validUntil', () => {
     const body = parses(schemas.createEstimateSchema, created);
@@ -256,13 +262,34 @@ describe('Estimates page (web/src/pages/Estimates.jsx handleCreate/handleUpdate)
     assert.equal(computeEstimateTotals(lineItems, { tax: 10 }).tax, 10);
   });
 
+  it('makes the subtotal the sum of the rounded line amounts', () => {
+    // 1.5 x 10.01 = 15.015 per line: each line shows and stores 15.02, so
+    // the subtotal is 30.04 (rounding the raw 30.03 would disagree).
+    const items = [{ description: 'A', quantity: 1.5, rate: 10.01 }, { description: 'B', quantity: 1.5, rate: 10.01 }];
+    const totals = computeEstimateTotals(items, { taxRate: 13 });
+    assert.equal(totals.subtotal, 30.04);
+    assert.equal(totals.tax, 3.91);
+    assert.equal(totals.total, 33.95);
+  });
+
+  it('keeps a date-only validUntil answerable until the day ends in UTC-12', () => {
+    assert.equal(estimateValidThrough('2026-10-31T23:59:59.999Z').toISOString(), '2026-11-01T11:59:59.999Z');
+    assert.equal(estimateValidThrough('2026-10-31T17:00:00.000Z').toISOString(), '2026-10-31T17:00:00.000Z');
+    assert.equal(estimateValidThrough(null), null);
+  });
+
   it('stores the tax and total staff saw through POST and PUT /api/estimates', async (t) => {
     const rows = new Map();
     const prisma = {
       estimate: {
         create: async ({ data }) => { const row = { id: 'est_1', status: 'DRAFT', ...data }; rows.set(row.id, row); return row; },
         findUnique: async ({ where }) => rows.get(where.id) ?? null,
-        update: async ({ where, data }) => { const row = { ...rows.get(where.id), ...data }; rows.set(where.id, row); return row; },
+        updateMany: async ({ where, data }) => {
+          const row = rows.get(where.id);
+          if (!row || (where.status && row.status !== where.status)) return { count: 0 };
+          rows.set(where.id, { ...row, ...data });
+          return { count: 1 };
+        },
       },
     };
     const app = Fastify();
@@ -276,7 +303,7 @@ describe('Estimates page (web/src/pages/Estimates.jsx handleCreate/handleUpdate)
     const create = await app.inject({ method: 'POST', url: '/api/estimates', payload: created });
     assert.equal(create.statusCode, 201, create.body);
     const stored = rows.get('est_1');
-    assert.deepEqual([stored.tax, stored.total], [formTax, formTotal]);
+    assert.deepEqual([stored.tax, stored.taxRate, stored.total], [formTax, 13, formTotal]);
     assert.equal(stored.validUntil.toISOString(), '2026-10-31T23:59:59.999Z');
 
     const update = await app.inject({
@@ -284,9 +311,22 @@ describe('Estimates page (web/src/pages/Estimates.jsx handleCreate/handleUpdate)
       payload: { clientId: 'client_1', title: 'Website estimate', taxRate: 5, validUntil: null, lineItems },
     });
     assert.equal(update.statusCode, 200, update.body);
-    const fivePercent = parseFloat(((formSubtotal * 5) / 100).toFixed(2));
-    assert.deepEqual([rows.get('est_1').tax, rows.get('est_1').total], [fivePercent, parseFloat((formSubtotal + fivePercent).toFixed(2))]);
+    const fivePercent = round2((formSubtotal * 5) / 100);
+    assert.deepEqual([rows.get('est_1').tax, rows.get('est_1').total], [fivePercent, round2(formSubtotal + fivePercent)]);
+    assert.equal(rows.get('est_1').taxRate, 5, 'the rate staff entered is stored and returned');
+    assert.equal(update.json().taxRate, 5);
     assert.equal(rows.get('est_1').validUntil, null);
+
+    // Editing only the lines re-applies the stored rate.
+    const linesOnly = await app.inject({ method: 'PUT', url: '/api/estimates/est_1', payload: { lineItems: [{ description: 'One', quantity: 3.33, rate: 1 }] } });
+    assert.equal(linesOnly.statusCode, 200, linesOnly.body);
+    assert.deepEqual([rows.get('est_1').subtotal, rows.get('est_1').tax, rows.get('est_1').taxRate], [3.33, 0.17, 5]);
+
+    // An estimate sent between the read and the write is not edited.
+    rows.set('est_1', { ...rows.get('est_1'), status: 'SENT' });
+    const late = await app.inject({ method: 'PUT', url: '/api/estimates/est_1', payload: { title: 'Too late' } });
+    assert.equal(late.statusCode, 400, late.body);
+    assert.equal(rows.get('est_1').title, 'Website estimate');
   });
 });
 

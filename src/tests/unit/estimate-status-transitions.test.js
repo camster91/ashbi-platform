@@ -15,11 +15,12 @@ async function setup(t, status) {
   const prisma = {
     estimate: {
       findUnique: async ({ where }) => rows.get(where.id) ?? null,
-      update: async ({ where, data }) => {
+      updateMany: async ({ where, data }) => {
+        const row = rows.get(where.id);
+        if (!row || (where.status && row.status !== where.status)) return { count: 0 };
         writes.push(data);
-        const row = { ...rows.get(where.id), ...data };
-        rows.set(where.id, row);
-        return row;
+        rows.set(where.id, { ...row, ...data });
+        return { count: 1 };
       },
     },
   };
@@ -31,7 +32,7 @@ async function setup(t, status) {
   await app.register(estimateRoutes, { prefix: '/api/estimates' });
   t.after(() => app.close());
   const put = (payload) => app.inject({ method: 'PUT', url: '/api/estimates/est_1', payload });
-  return { put, rows, writes };
+  return { app, put, rows, writes };
 }
 
 describe('estimate status transitions through PUT', () => {
@@ -65,6 +66,47 @@ describe('estimate status transitions through PUT', () => {
     const response = await put({ status: 'APPROVED' });
     assert.ok([400, 409].includes(response.statusCode), response.body);
     assert.equal(rows.get('est_1').status, 'SENT');
+  });
+
+  it('refuses an edit when the estimate stopped being a draft after it was read', async (t) => {
+    const { put, rows, writes } = await setup(t, 'DRAFT');
+    const findUnique = rows.get.bind(rows);
+    let reads = 0;
+    // The first read sees DRAFT; the estimate is sent before the write.
+    rows.get = (id) => {
+      reads += 1;
+      const row = findUnique(id);
+      if (reads === 1) return row;
+      return row && { ...row, status: 'SENT' };
+    };
+    const response = await put({ title: 'Raced' });
+    rows.get = findUnique;
+    assert.equal(response.statusCode, 409, response.body);
+    assert.equal(response.json().code, 'ESTIMATE_NOT_DRAFT');
+    assert.equal(writes.length, 0);
+  });
+
+  it('sends a draft once: a send that loses the race is refused', async (t) => {
+    const { app, rows, writes } = await setup(t, 'DRAFT');
+    const first = await app.inject({ method: 'POST', url: '/api/estimates/est_1/send' });
+    assert.equal(first.statusCode, 200, first.body);
+    assert.equal(rows.get('est_1').status, 'SENT');
+    const token = rows.get('est_1').viewToken;
+
+    // A second send that read the row while it was still a draft.
+    rows.set('est_1', { ...rows.get('est_1'), status: 'DRAFT' });
+    const findUnique = rows.get.bind(rows);
+    let reads = 0;
+    rows.get = (id) => {
+      reads += 1;
+      const row = findUnique(id);
+      return reads === 1 ? row : row && { ...row, status: 'SENT' };
+    };
+    const second = await app.inject({ method: 'POST', url: '/api/estimates/est_1/send' });
+    rows.get = findUnique;
+    assert.equal(second.statusCode, 409, second.body);
+    assert.equal(rows.get('est_1').viewToken, token, 'the issued link is not replaced');
+    assert.equal(writes.length, 1);
   });
 
   it('names the route that owns each status change', () => {

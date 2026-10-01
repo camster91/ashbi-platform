@@ -11,7 +11,7 @@ import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
-import { formatDate, formatMoney } from '../lib/format';
+import { formatDate, formatMoney, todayDateInputValue } from '../lib/format';
 
 const CATEGORIES = [
   { value: 'OFFICE', label: 'Office' },
@@ -48,7 +48,7 @@ const emptyForm = {
   amount: '',
   category: 'OTHER',
   currency: 'CAD',
-  date: new Date().toISOString().split('T')[0],
+  date: todayDateInputValue(),
   billable: false,
   notes: '',
   clientId: '',
@@ -198,7 +198,11 @@ export default function Expenses() {
   async function handleSubmit(e) {
     e.preventDefault();
 
-    let receiptUrl = form.receiptUrl;
+    // receiptUrl is sent only for a newly uploaded receipt (or null on a new
+    // expense without one): an edit leaves the stored receipt as it is, so an
+    // older expense whose receipt value predates the upload route stays
+    // editable.
+    let receiptUrl;
 
     // Upload receipt if file selected
     if (receiptFile) {
@@ -217,7 +221,7 @@ export default function Expenses() {
 
     // Shape checked by createExpenseSchema / expenseUpdateSchema
     // (src/tests/unit/ui-payload-contract.test.js): a "YYYY-MM-DD" date, null
-    // for no client/project, '' or null for no receipt.
+    // for no client/project, and the uploaded receipt path when there is one.
     const payload = {
       description: form.description,
       amount: parseFloat(form.amount),
@@ -228,7 +232,7 @@ export default function Expenses() {
       notes: form.notes,
       clientId: form.clientId || null,
       projectId: form.projectId || null,
-      receiptUrl: receiptUrl || null,
+      ...(receiptUrl ? { receiptUrl } : (editingId ? {} : { receiptUrl: null })),
     };
 
     if (editingId) {
@@ -600,7 +604,7 @@ export default function Expenses() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 text-sm text-foreground">
                         <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                        {formatDate(expense.date)}
+                        {formatDate(expense.date, { dateOnly: true })}
                       </div>
                     </td>
                     <td className="px-4 py-3">

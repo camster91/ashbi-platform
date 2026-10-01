@@ -2141,8 +2141,16 @@
           "receiptUrl": {
             "anyOf": [
               {
-                "maxLength": 500,
-                "type": "string"
+                "anyOf": [
+                  {
+                    "const": "",
+                    "type": "string"
+                  },
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  }
+                ]
               },
               {
                 "type": "null"
@@ -2733,8 +2741,16 @@
           "receiptUrl": {
             "anyOf": [
               {
-                "maxLength": 500,
-                "type": "string"
+                "anyOf": [
+                  {
+                    "const": "",
+                    "type": "string"
+                  },
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  }
+                ]
               },
               {
                 "type": "null"
@@ -8979,7 +8995,7 @@
         "tags": [
           "assets"
         ],
-        "x-access": "staff",
+        "x-access": "admin",
         "x-tenancy": "scoped"
       }
     },

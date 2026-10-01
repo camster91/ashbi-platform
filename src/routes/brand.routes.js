@@ -105,7 +105,7 @@ export default async function brandRoutes(fastify, options = {}) {
     // removed. The previous logo is removed only after the row points at the
     // new one, so a failure never leaves the settings naming a deleted file.
     const { updated, previousLogoUrl } = await writeUploadThenPersist(path.join(brandDir, filename), buffer, async () => {
-      // The caller's organization's row (created if missing).
+      // The caller's organization's row (created if missing, upserted).
       const settings = await getOrCreateBrandSettings(request.prisma, request.user.organizationId);
       return replaceLogoUrl(request.prisma, settings, logoUrl);
     });

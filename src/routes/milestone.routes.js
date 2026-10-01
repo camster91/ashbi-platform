@@ -38,8 +38,8 @@ export default async function milestoneRoutes(fastify) {
       const completedTasks = m.tasks.filter(t => t.status === 'COMPLETED').length;
       const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-      // Check if overdue
-      const isOverdue = new Date(m.dueDate) < new Date() && m.status !== 'COMPLETED';
+      // Overdue once the due (UTC calendar) day has ended.
+      const isOverdue = m.status !== 'COMPLETED' && new Date(m.dueDate).getTime() + 86_400_000 <= Date.now();
 
       return {
         ...m,
@@ -127,13 +127,16 @@ export default async function milestoneRoutes(fastify) {
       }
     });
 
-    // Create calendar event for milestone
+    // Create calendar event for milestone: an all-day event is its UTC
+    // calendar day (00:00Z to 23:59:59.999Z), which Schedule shows on that
+    // date in every timezone.
+    const dueDay = new Date(dueDate).toISOString().slice(0, 10);
     await request.prisma.calendarEvent.create({
       data: {
         title: `Milestone: ${name}`,
         description: description || `Milestone due date for ${name}`,
-        startTime: new Date(dueDate),
-        endTime: new Date(dueDate),
+        startTime: new Date(`${dueDay}T00:00:00.000Z`),
+        endTime: new Date(`${dueDay}T23:59:59.999Z`),
         type: 'MILESTONE',
         isAllDay: true,
         color: color || '#3B82F6',

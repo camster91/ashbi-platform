@@ -11,6 +11,7 @@ import {
 } from '../security/file-upload-policy.js';
 import { API_KEY_MAX_EXPIRY_DAYS, API_KEY_SCOPES } from '../auth/api-key-scopes.js';
 import { INVOICE_CURRENCIES } from '../utils/money.js';
+import { receiptRelativePath } from '../utils/stored-upload.js';
 
 // ── Reusable field validators ──────────────────────────────────────────────
 const email = z.string().email().max(255);
@@ -284,17 +285,21 @@ export const createInvoiceSchema = z.object({
 // the start of that day in UTC, which is how the page reads them back), null
 // for "no client/project", '' or null for "no receipt", and the receipt URL
 // that POST /api/expenses/upload-receipt returned. The route decides whether
-// a receiptUrl is acceptable (receiptColumns in expense.routes.js: only
-// /uploads/receipt-<uuid>.<ext> stored by this server, see
-// src/utils/stored-upload.js, or the expense's current value) and computes
-// its checksum.
+// a new receiptUrl's file exists and computes its checksum (receiptColumns in
+// expense.routes.js); the page sends receiptUrl only when it changed, so an
+// older expense keeps whatever receipt value it already has.
 export const EXPENSE_CURRENCIES = ['USD', 'CAD', 'EUR', 'GBP'];
 const expenseDate = invoiceDateInput({ endOfDay: false });
 const expenseCurrency = z.preprocess(
   (value) => (typeof value === 'string' ? value.trim().toUpperCase() : value),
   z.enum(EXPENSE_CURRENCIES),
 );
-const expenseReceiptUrl = z.string().max(500).nullable();
+// Only the path the receipt upload route returns: /uploads/receipt-<uuid>.<ext>
+// (receiptRelativePath, src/utils/stored-upload.js), '' or null.
+const expenseReceiptUrl = z.union([
+  z.literal(''),
+  z.string().max(500).refine((value) => receiptRelativePath(value) !== null, 'Expected an uploaded receipt (/uploads/receipt-<uuid>.<ext>)'),
+]).nullable();
 
 export const createExpenseSchema = z.object({
   description: z.string().trim().min(1).max(500),
@@ -493,10 +498,11 @@ const estimateLineItemSchema = z.object({
 
 // The Estimates page sends a tax *rate* (percent, like invoices' taxRate) and
 // shows tax = round2(subtotal * taxRate / 100); the route stores that same
-// amount (computeEstimateTotals in estimate.routes.js). A fixed tax amount
-// (`tax`) is still accepted for API clients, but not together with taxRate.
-// validUntil may be a date ("YYYY-MM-DD", valid through the end of that UTC
-// day) or an ISO datetime.
+// amount and the rate (computeEstimateTotals in estimate.routes.js). A fixed
+// tax amount (`tax`) is still accepted for API clients, but not together with
+// taxRate. validUntil may be a date ("YYYY-MM-DD", stored as 23:59:59.999Z of
+// that day; the estimate stays answerable until the day has ended in UTC-12,
+// see estimateValidThrough) or an ISO datetime.
 const estimateTaxRate = z.number().min(0).max(50);
 const estimateValidUntil = invoiceDateInput({ endOfDay: true });
 const notBothTaxFields = (value) => !(value.taxRate !== undefined && value.tax !== undefined);

@@ -5,15 +5,16 @@ import { decrypt } from '../utils/crypto.js';
 import { createGoogleCalendarClient, propagateCalendarEventDeletion } from '../services/google-calendar-sync.service.js';
 
 /**
- * The attendee ids that name active members of the caller's organization
- * (request.prisma is tenant-scoped), de-duplicated, in request order. Unknown
- * or foreign ids are dropped so an event never links or notifies them.
+ * The attendee ids that name active staff (ADMIN or TEAM) of the caller's
+ * organization (request.prisma is tenant-scoped), de-duplicated, in request
+ * order. Unknown or foreign ids, client-portal users and bots are dropped so
+ * an event never links or notifies them.
  */
 async function resolveAttendeeIds(prisma, attendeeIds) {
   const requested = [...new Set((attendeeIds || []).filter(Boolean))];
   if (requested.length === 0) return [];
   const users = await prisma.user.findMany({
-    where: { id: { in: requested }, isActive: true },
+    where: { id: { in: requested }, isActive: true, role: { in: ['ADMIN', 'TEAM'] } },
     select: { id: true },
   });
   const known = new Set(users.map((user) => user.id));
@@ -260,6 +261,14 @@ export default async function calendarRoutes(fastify, options = {}) {
     // Only creator or admin can update
     if (existing.createdById !== request.user.id && request.user.role !== 'ADMIN') {
       return reply.status(403).send({ error: 'Cannot edit this event' });
+    }
+
+    // The schema compares start and end when both are sent; with only one,
+    // compare it with the stored other end.
+    const nextStart = new Date(startTime ?? existing.startTime);
+    const nextEnd = new Date(endTime ?? existing.endTime);
+    if (nextEnd < nextStart) {
+      return reply.status(400).send({ error: 'endTime must not be before startTime' });
     }
 
     const data = {};

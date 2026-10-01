@@ -72,9 +72,9 @@ export default async function assetLibraryRoutes(fastify) {
     return getBrandSettings(request.user.organizationId);
   });
 
-  // Update brand settings
+  // Update brand settings: admins only, like PUT /api/brand.
   fastify.post('/guidelines', {
-    onRequest: [fastify.authenticate],
+    onRequest: [fastify.adminOnly],
     preHandler: validateBody(assetGuidelineCreateSchema),
   }, async (request) => {
     return updateBrandSettings(request.user.organizationId, request.body);

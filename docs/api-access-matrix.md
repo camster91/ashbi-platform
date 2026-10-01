@@ -173,7 +173,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | PATCH | `/api/assets/:id` | staff | scoped |  |
 | GET | `/api/assets/client/:clientId` | staff | scoped |  |
 | GET | `/api/assets/guidelines` | staff | scoped |  |
-| POST | `/api/assets/guidelines` | staff | scoped |  |
+| POST | `/api/assets/guidelines` | admin | scoped |  |
 | GET | `/api/assets/search` | staff | scoped |  |
 
 ### /api/attachments

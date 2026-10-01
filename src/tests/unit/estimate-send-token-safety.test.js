@@ -39,10 +39,20 @@ async function buildApp(t, draft) {
   app.decorate('authenticate', async (request) => {
     request.user = { id: 'user-a', organizationId: 'org-a', role: 'ADMIN' };
   });
+  let current = draft;
   app.decorate('prisma', {
     estimate: {
-      findUnique: async () => draft,
-      update: async ({ data }) => ({ ...draft, ...data, client: { id: 'client-a', name: 'Avery Client' } }),
+      findUnique: async () => current,
+      // Send claims the draft with a conditional updateMany (status DRAFT).
+      updateMany: async ({ where, data }) => {
+        if (where.status && current.status !== where.status) return { count: 0 };
+        current = { ...current, ...data };
+        return { count: 1 };
+      },
+      update: async ({ data }) => {
+        current = { ...current, ...data };
+        return { ...current, client: { id: 'client-a', name: 'Avery Client' } };
+      },
     },
   });
   app.addHook('onRequest', async (request) => {

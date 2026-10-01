@@ -198,6 +198,22 @@ export default async function teamRoutes(fastify) {
       ? await request.prisma.user.findUnique({ where: { id }, select: { role: true, isActive: true } })
       : null;
 
+    // The organization must keep at least one active admin: demoting or
+    // deactivating the last one would lock everyone out of admin settings.
+    const losesAdmin = before?.role === 'ADMIN' && before.isActive
+      && ((role && role !== 'ADMIN') || isActive === false);
+    if (losesAdmin) {
+      const otherAdmins = await request.prisma.user.count({
+        where: { id: { not: id }, role: 'ADMIN', isActive: true },
+      });
+      if (otherAdmins === 0) {
+        return reply.status(409).send({
+          error: 'This is the last active admin. Make another member an admin first.',
+          code: 'LAST_ADMIN',
+        });
+      }
+    }
+
     // A role change ends the member's sessions: adminOnly trusts the role in
     // the session token, so a demoted admin would otherwise keep admin rights
     // until the token expired.

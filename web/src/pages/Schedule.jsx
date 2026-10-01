@@ -47,6 +47,22 @@ const TYPE_ICONS = {
   REMINDER: Bell,
 };
 
+// All-day events are calendar dates stored as that UTC day (00:00Z to
+// 23:59:59.999Z, like milestone due dates), so their day is read in UTC and
+// shown as the same local calendar day; timed events use local time.
+function utcCalendarDay(value) {
+  const d = new Date(value);
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+function eventDay(event) {
+  return event.allDay ? utcCalendarDay(event.startTime) : new Date(event.startTime);
+}
+
+function fmtEventDate(event) {
+  return eventDay(event).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 // The API stores isAllDay and returns attendee rows ({ userId, user }); the
 // page reads allDay and lists attendees by user.
 function normalizeEvent(event) {
@@ -137,7 +153,7 @@ function EventModal({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const defaultStart = useMemo(() => {
-    if (editEvent) return new Date(editEvent.startTime);
+    if (editEvent) return eventDay(normalizeEvent(editEvent));
     if (initialDate) return roundToNextHour(initialDate);
     return roundToNextHour(new Date());
   }, [editEvent, initialDate]);
@@ -213,9 +229,12 @@ function EventModal({
       projectId: form.projectId || null,
       isAllDay: form.allDay,
       attendeeIds: form.attendeeIds,
-      startTime: new Date(form.startTime).toISOString(),
+      // An all-day event is the chosen calendar date as a UTC day.
+      startTime: form.allDay
+        ? `${form.startTime.slice(0, 10)}T00:00:00.000Z`
+        : new Date(form.startTime).toISOString(),
       endTime: form.allDay
-        ? new Date(new Date(form.startTime).setHours(23, 59, 59)).toISOString()
+        ? `${form.startTime.slice(0, 10)}T23:59:59.999Z`
         : new Date(form.endTime).toISOString(),
     };
     if (isEdit) {
@@ -525,7 +544,7 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
           <div className="flex items-center gap-2 text-foreground">
             <Clock className="w-4 h-4 text-muted-foreground" />
             {event.allDay ? (
-              <span>All day &middot; {new Date(event.startTime).toLocaleDateString({ month: 'short', day: 'numeric' })}</span>
+              <span>All day &middot; {fmtEventDate(event)}</span>
             ) : (
               <span>{fmtTime(event.startTime)} &ndash; {fmtTime(event.endTime)}</span>
             )}
@@ -700,7 +719,7 @@ function UpcomingSidebar({ onEventClick }) {
                   <p className="text-sm font-medium text-foreground truncate">{event.title}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {event.allDay
-                      ? new Date(event.startTime).toLocaleDateString({ month: 'short', day: 'numeric' })
+                      ? fmtEventDate(event)
                       : fmtTime(event.startTime)}
                     {' '}
                     <span className={cn('ml-1', style.text)}>{style.label}</span>
@@ -737,9 +756,11 @@ export default function Schedule() {
     isFetching: calendarFetching,
   } = useQuery({
     queryKey: ['calendar', currentWeekStart.toISOString()],
+    // One extra day each side: an all-day event's UTC day can start before
+    // the local week does. Each day column still shows only its own events.
     queryFn: () => api.getCalendarEvents({
-      startDate: currentWeekStart.toISOString(),
-      endDate: weekEnd.toISOString(),
+      startDate: addDays(currentWeekStart, -1).toISOString(),
+      endDate: addDays(weekEnd, 1).toISOString(),
     }).then(normalizeEvents),
   });
 
@@ -766,7 +787,13 @@ export default function Schedule() {
   });
 
   // Separate all-day and timed events
-  const allDayEvents = useMemo(() => events.filter(e => e.allDay), [events]);
+  const allDayEvents = useMemo(
+    () => {
+      const end = addDays(currentWeekStart, 7);
+      return events.filter(e => e.allDay && eventDay(e) >= currentWeekStart && eventDay(e) < end);
+    },
+    [events, currentWeekStart],
+  );
   const timedEvents = useMemo(() => events.filter(e => !e.allDay), [events]);
 
   // Build days array
@@ -780,7 +807,7 @@ export default function Schedule() {
   }, [timedEvents]);
 
   const getAllDayEventsForDay = useCallback((day) => {
-    return allDayEvents.filter(e => sameDay(new Date(e.startTime), day));
+    return allDayEvents.filter(e => sameDay(eventDay(e), day));
   }, [allDayEvents]);
 
   // Navigation

@@ -8,6 +8,7 @@ import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
+import { formatDate } from '../lib/format';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -17,19 +18,33 @@ function fmt(n) {
   return `$${(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function formatDate(date) {
-  if (!date) return '';
-  return new Date(date).toLocaleDateString({ month: 'short', day: 'numeric', year: 'numeric' });
+const DEFAULT_TAX_RATE = 13;
+const roundMoney = (value) => parseFloat((Number(value) || 0).toFixed(2));
+
+// Same arithmetic as the API (computeEstimateTotals in estimate.routes.js):
+// each line is round2(quantity * rate) and the subtotal is the sum of those.
+function lineAmount(li) {
+  return roundMoney((parseFloat(li.quantity) || 0) * (parseFloat(li.rate) || 0));
 }
 
-// Estimates store the tax amount, not the rate; recover the rate the amount
-// was computed from (round2(subtotal * rate / 100)) when editing.
+function estimateTotals(lineItems, taxRate) {
+  const subtotal = roundMoney(lineItems.reduce((sum, li) => sum + lineAmount(li), 0));
+  const tax = roundMoney((subtotal * (parseFloat(taxRate) || 0)) / 100);
+  return { subtotal, tax, total: roundMoney(subtotal + tax) };
+}
+
+// The API stores the rate staff entered. Estimates from before it was stored
+// have only the rounded tax amount: use the half-percent rate (the input's
+// step) that reproduces it, else the closest two-decimal rate.
 function estimateTaxRate(estimate) {
   if (estimate.taxRate !== undefined && estimate.taxRate !== null) return estimate.taxRate;
   const subtotal = Number(estimate.subtotal) || 0;
   const tax = Number(estimate.tax) || 0;
-  if (subtotal <= 0) return tax > 0 ? 0 : 13;
-  return Math.round((tax / subtotal) * 100 * 100) / 100;
+  if (subtotal <= 0) return tax > 0 ? 0 : DEFAULT_TAX_RATE;
+  const exact = (tax / subtotal) * 100;
+  const halfStep = Math.round(exact * 2) / 2;
+  if (roundMoney((subtotal * halfStep) / 100) === roundMoney(tax)) return halfStep;
+  return Math.round(exact * 100) / 100;
 }
 
 function defaultLineItem() {
@@ -52,7 +67,7 @@ export default function Estimates() {
     clientId: '',
     title: '',
     description: '',
-    taxRate: 13,
+    taxRate: DEFAULT_TAX_RATE,
     validUntil: '',
     lineItems: [defaultLineItem()],
   });
@@ -162,7 +177,7 @@ export default function Estimates() {
 
   // Form helpers
   const resetForm = () => setForm({
-    clientId: '', title: '', description: '', taxRate: 13, validUntil: '',
+    clientId: '', title: '', description: '', taxRate: DEFAULT_TAX_RATE, validUntil: '',
     lineItems: [defaultLineItem()],
   });
 
@@ -181,11 +196,7 @@ export default function Estimates() {
   }));
 
   // Computed totals
-  const formSubtotal = form.lineItems.reduce(
-    (sum, li) => sum + (parseFloat(li.quantity) || 0) * (parseFloat(li.rate) || 0), 0
-  );
-  const formTax = parseFloat(((formSubtotal * parseFloat(form.taxRate || 0)) / 100).toFixed(2));
-  const formTotal = parseFloat((formSubtotal + formTax).toFixed(2));
+  const { subtotal: formSubtotal, tax: formTax, total: formTotal } = estimateTotals(form.lineItems, form.taxRate);
 
   const handleCreate = (e) => {
     e.preventDefault();
@@ -393,7 +404,7 @@ function EstimateCard({ estimate, onEdit, onSend, onConvert, onDelete, sendLoadi
           {estimate.validUntil && (
             <span className="flex items-center gap-1">
               <CalendarDays className="w-3 h-3" />
-              Valid until {formatDate(estimate.validUntil)}
+              Valid until {formatDate(estimate.validUntil, { dateOnly: true })}
             </span>
           )}
           {estimate.createdAt && (
@@ -429,7 +440,7 @@ function EstimateCard({ estimate, onEdit, onSend, onConvert, onDelete, sendLoadi
             {estimate.validUntil && (
               <span className="flex items-center gap-1">
                 <CalendarDays className="w-3 h-3" />
-                Valid until {formatDate(estimate.validUntil)}
+                Valid until {formatDate(estimate.validUntil, { dateOnly: true })}
               </span>
             )}
             {estimate.createdAt && (
@@ -609,7 +620,7 @@ function EstimateForm({
                     className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-right"
                   />
                   <span className="col-span-2 text-sm text-right font-medium">
-                    {fmt((parseFloat(li.quantity) || 0) * (parseFloat(li.rate) || 0))}
+                    {fmt(lineAmount(li))}
                   </span>
                   <button
                     type="button"
@@ -666,7 +677,7 @@ function EstimateForm({
                     <div>
                       <label className="block text-xs text-muted-foreground mb-0.5">Amount</label>
                       <div className="px-2 py-1.5 text-sm font-medium">
-                        {fmt((parseFloat(li.quantity) || 0) * (parseFloat(li.rate) || 0))}
+                        {fmt(lineAmount(li))}
                       </div>
                     </div>
                   </div>
