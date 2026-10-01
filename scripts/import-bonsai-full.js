@@ -28,6 +28,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import csvParser from 'csv-parser';
+import { insensitiveEquals } from '../src/utils/insensitive-equals.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -422,7 +423,7 @@ async function runImport(prisma) {
       let existing = null;
       if (data.contactEmail) {
         const contact = await prisma.contact.findFirst({
-          where: { email: data.contactEmail, client: { organizationId: ORGANIZATION_ID } },
+          where: { email: insensitiveEquals(data.contactEmail), client: { organizationId: ORGANIZATION_ID } },
           include: { client: true },
         });
         if (contact) existing = contact.client;
@@ -500,7 +501,7 @@ async function runImport(prisma) {
       const clientId = clientIdMap.get(key);
       if (data.contactEmail && clientId) {
         const existingContact = await prisma.contact.findFirst({
-          where: { email: data.contactEmail, clientId },
+          where: { email: insensitiveEquals(data.contactEmail), clientId },
         });
         if (!existingContact) {
           if (!DRY_RUN) {

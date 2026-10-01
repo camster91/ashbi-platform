@@ -3,11 +3,16 @@
 /**
  * Gmail -> Hub Sync
  *
- * Pulls emails from the last 48hrs from cameron@ashbi.ca inbox,
+ * Pulls emails from the last 48hrs from the connected Gmail inbox,
  * matches senders to Hub clients/contacts, stores via Prisma,
  * and applies AI triage tags.
  *
- * Usage: node scripts/gmail-sync.js
+ * The mailbox belongs to one organization: GMAIL_SYNC_ORGANIZATION_ID (an
+ * existing Organization id) is required, and senders are matched only
+ * against that organization's clients (src/services/gmail-sync-matcher.js).
+ * Without it the sync refuses to run.
+ *
+ * Usage: GMAIL_SYNC_ORGANIZATION_ID=<org id> node scripts/gmail-sync.js
  * Cron (every 30min 8am-10pm ET): use docker exec cron
  * Cron overnight: full sync at 5am UTC
  */
@@ -19,6 +24,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { matchSenderToClient } from '../src/services/gmail-sync-matcher.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const prisma = new PrismaClient({
@@ -33,6 +39,8 @@ const TOKENS_PATH = process.env.GMAIL_TOKENS_PATH
 
 const GMAIL_API = 'https://www.googleapis.com/gmail/v1/users/me';
 const HOURS_LOOKBACK = parseInt(process.env.GMAIL_LOOKBACK_HOURS || '48');
+// The organization that owns the synced mailbox; resolved and checked in main().
+const ORGANIZATION_ID = (process.env.GMAIL_SYNC_ORGANIZATION_ID || '').trim();
 
 // ==================== TOKEN MANAGEMENT ====================
 
@@ -212,44 +220,8 @@ function detectUpwork(fromEmail, subject, body) {
 }
 
 // ==================== CLIENT MATCHING ====================
-
-async function matchSenderToClient(senderEmail) {
-  const domain = senderEmail.split('@')[1]?.toLowerCase();
-  if (!domain) return null;
-
-  // Skip common email providers
-  const freeProviders = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'protonmail.com'];
-  const isFreeProvider = freeProviders.includes(domain);
-
-  // Try exact contact email match
-  const contact = await prisma.contact.findFirst({
-    where: { email: { equals: senderEmail, mode: 'insensitive' } },
-    include: { client: true }
-  });
-  if (contact) return { client: contact.client, contact, confidence: 1.0 };
-
-  // Try domain match (skip free email providers)
-  if (!isFreeProvider) {
-    const client = await prisma.client.findFirst({
-      where: { domain: { equals: domain, mode: 'insensitive' } }
-    });
-    if (client) return { client, contact: null, confidence: 0.9 };
-  }
-
-  // Try fuzzy domain match
-  if (!isFreeProvider) {
-    const clients = await prisma.client.findMany({
-      where: { domain: { not: null } }
-    });
-    for (const c of clients) {
-      if (c.domain && (domain.includes(c.domain.toLowerCase()) || c.domain.toLowerCase().includes(domain))) {
-        return { client: c, contact: null, confidence: 0.7 };
-      }
-    }
-  }
-
-  return null;
-}
+// matchSenderToClient(prisma, ORGANIZATION_ID, senderEmail) from
+// src/services/gmail-sync-matcher.js: confined to the mailbox's organization.
 
 // ==================== AI TRIAGE ====================
 
@@ -323,7 +295,8 @@ async function isDuplicate(senderEmail, subject, gmailMessageId) {
       senderEmail,
       aiExtracted: {
         contains: gmailMessageId
-      }
+      },
+      thread: { client: { organizationId: ORGANIZATION_ID } }
     }
   });
   return !!existing;
@@ -358,6 +331,7 @@ async function storeInHub(email, clientMatch, tags, upworkInfo) {
     // Find existing Upwork triage item with same thread
     const existingTriage = await prisma.emailTriageItem.findFirst({
       where: {
+        organizationId: ORGANIZATION_ID,
         senderEmail,
         status: 'PENDING'
       },
@@ -367,6 +341,7 @@ async function storeInHub(email, clientMatch, tags, upworkInfo) {
     if (!existingTriage) {
       await prisma.emailTriageItem.create({
         data: {
+          organizationId: ORGANIZATION_ID,
           subject: subject || '(Upwork message)',
           senderEmail,
           senderName: upworkInfo.clientName || senderName,
@@ -455,6 +430,7 @@ async function storeInHub(email, clientMatch, tags, upworkInfo) {
   // No client match - store as EmailTriageItem for review
   await prisma.emailTriageItem.create({
     data: {
+      organizationId: ORGANIZATION_ID,
       subject: subject || '(no subject)',
       senderEmail,
       senderName,
@@ -474,6 +450,15 @@ async function main() {
   const timestamp = new Date().toISOString();
   console.log(`\n[gmail-sync] ===== Starting at ${timestamp} =====`);
   console.log(`[gmail-sync] Looking back ${HOURS_LOOKBACK} hours`);
+
+  // Fail closed: without the mailbox's organization nothing can be filed.
+  if (!ORGANIZATION_ID) {
+    throw new Error('GMAIL_SYNC_ORGANIZATION_ID is not set: the organization that owns the synced mailbox is required');
+  }
+  const organization = await prisma.organization.findUnique({ where: { id: ORGANIZATION_ID }, select: { id: true } });
+  if (!organization) {
+    throw new Error(`GMAIL_SYNC_ORGANIZATION_ID ${ORGANIZATION_ID} is not an existing organization`);
+  }
 
   const token = await getAccessToken();
   const messageList = await listRecentMessages(token);
@@ -507,7 +492,7 @@ async function main() {
       }
 
       // Match sender to client (skip for Upwork)
-      const clientMatch = upworkInfo ? null : await matchSenderToClient(senderEmail);
+      const clientMatch = upworkInfo ? null : await matchSenderToClient(prisma, ORGANIZATION_ID, senderEmail);
 
       // Triage
       let tags = triageEmail({ from: senderEmail, subject, body, isUpwork: !!upworkInfo });

@@ -30,6 +30,7 @@ import clientRoutes from '../../routes/client.routes.js';
 import clientPortalRoutes from '../../routes/client-portal.routes.js';
 import { signUserSession } from '../../auth/session.js';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
+import { insensitiveEquals } from '../../utils/insensitive-equals.js';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
@@ -104,6 +105,30 @@ test('client domains are unique per organization, and blank domains never confli
     await raw.client.deleteMany({ where: { organizationId: { in: orgs } } });
     await purgeFixtureAuditEvents(raw, { ids: orgs });
     await raw.organization.deleteMany({ where: { id: { in: orgs } } });
+    await raw.$disconnect();
+  }
+});
+
+test('insensitiveEquals is an exact, case-insensitive match on PostgreSQL', { skip, timeout: 60_000 }, async () => {
+  const { PrismaClient } = prismaPkg;
+  const raw = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  const suffix = randomUUID().slice(0, 12);
+  const org = `ilike-org-${suffix}`;
+  const stored = [`John.${suffix}@Acme.Example`, `j_hn.${suffix}@acme.example`, `100%.${suffix}@acme.example`, `back\\slash.${suffix}@acme.example`];
+  try {
+    await raw.organization.create({ data: { id: org, name: 'ILIKE', slug: `ilike-${suffix}` } });
+    await raw.user.createMany({ data: stored.map((email, i) => ({ id: `ilike-${i}-${suffix}`, organizationId: org, email, name: 'U', password: password(), role: 'TEAM' })) });
+    const find = async (email) => (await raw.user.findMany({ where: { organizationId: org, email: insensitiveEquals(email) }, select: { email: true } })).map((row) => row.email);
+    // Without escaping, Prisma's ILIKE lets `_` and `%` match other addresses.
+    assert.equal((await raw.user.findMany({ where: { organizationId: org, email: { equals: `j_hn.${suffix}@acme.example`, mode: 'insensitive' } } })).length, 2);
+    assert.deepEqual(await find(`JOHN.${suffix}@acme.example`), [stored[0]]);
+    assert.deepEqual(await find(`j_hn.${suffix}@acme.example`), [stored[1]]);
+    assert.deepEqual(await find(`%.${suffix}@acme.example`), []);
+    assert.deepEqual(await find(`100%.${suffix}@ACME.example`), [stored[2]]);
+    assert.deepEqual(await find(`back\\slash.${suffix}@acme.example`), [stored[3]]);
+  } finally {
+    await raw.user.deleteMany({ where: { organizationId: org } });
+    await raw.organization.deleteMany({ where: { id: org } });
     await raw.$disconnect();
   }
 });
@@ -224,9 +249,19 @@ test('portal chat, uploads and request-access work for a contact stored in mixed
       return saved.fetch(url, init);
     };
     const unknown = await app.inject({ method: 'POST', url: '/api/client-portal/request-access', payload: { email: `nobody-${suffix}@example.test` } });
+    // LIKE metacharacters match only themselves: `_` (valid in an address)
+    // does not reach Jane's or Nora's address, so no mail is sent and no user
+    // is created. (`%` is refused by the email schema; the
+    // insensitiveEquals test above covers it at the database.)
+    const patterns = [];
+    for (const email of [typed.replace('Jane', 'J_ne'), typed.replace('Jane', '____'), typedNew.replace('Nora', 'N_r_')]) {
+      patterns.push(await app.inject({ method: 'POST', url: '/api/client-portal/request-access', payload: { email } }));
+    }
+    assert.deepEqual(mailed, [], 'a LIKE pattern matched a different address');
+    assert.equal(await raw.user.count({ where: { organizationId: ids.org } }), 1);
     const existing = await app.inject({ method: 'POST', url: '/api/client-portal/request-access', payload: { email: typed.toUpperCase() } });
     const fresh = await app.inject({ method: 'POST', url: '/api/client-portal/request-access', payload: { email: typedNew.toLowerCase() } });
-    for (const response of [unknown, existing, fresh]) {
+    for (const response of [unknown, ...patterns, existing, fresh]) {
       assert.equal(response.statusCode, 200, response.body);
       assert.deepEqual(response.json(), unknown.json());
     }

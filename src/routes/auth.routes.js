@@ -6,6 +6,8 @@ import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
 import logger from '../utils/logger.js';
+import { insensitiveEquals } from '../utils/insensitive-equals.js';
+import { normalizeContactEmail } from '../utils/client-identity.js';
 import { isCurrentUserSession, revokeUserSessions, sessionCookieOptions, signUserSession } from '../auth/session.js';
 import { recordAuditEvent, recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { clearReauthCookieOptions, REAUTH_COOKIE, recentAuthProblem, sendReauthRequired } from '../auth/reauth.js';
@@ -85,7 +87,7 @@ function auditLoginFailure(prisma, request, { email, account: knownAccount }, po
       let account = knownAccount;
       if (!account) {
         const matches = await prisma.user.findMany({
-          where: { email: { equals: trimmed, mode: 'insensitive' } },
+          where: { email: insensitiveEquals(trimmed) },
           select: { id: true, organizationId: true, isActive: true },
           take: 2,
         });
@@ -489,7 +491,7 @@ export default async function authRoutes(fastify) {
     // Accounts created before addresses were normalised may be stored in
     // mixed case, so any case variant counts as an existing account.
     const existingUser = await request.prisma.user.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } },
+      where: { email: insensitiveEquals(email) },
       select: { id: true },
     });
 
@@ -527,10 +529,10 @@ export default async function authRoutes(fastify) {
         });
 
         const invitedContact = await tx.contact.findFirst({
-          where: { clientId: invitation.clientId, email: { equals: email, mode: 'insensitive' } },
+          where: { clientId: invitation.clientId, email: insensitiveEquals(email) },
           select: { id: true },
         }) ?? await tx.contact.create({
-          data: { email, name: createdUser.name, clientId: invitation.clientId },
+          data: { email: normalizeContactEmail(email), name: createdUser.name, clientId: invitation.clientId },
           select: { id: true },
         });
 
@@ -573,7 +575,7 @@ export default async function authRoutes(fastify) {
 
     const user = await request.prisma.user.findFirst({
       where: {
-        email: { equals: email, mode: 'insensitive' },
+        email: insensitiveEquals(email),
         role: 'CLIENT'
       },
       orderBy: { createdAt: 'asc' },
@@ -622,7 +624,7 @@ export default async function authRoutes(fastify) {
 
       // Any case variant: older accounts may be stored in mixed case.
       const user = await request.prisma.user.findFirst({
-        where: { email: { equals: email.trim(), mode: 'insensitive' } },
+        where: { email: insensitiveEquals(email.trim()) },
         orderBy: { createdAt: 'asc' },
       });
 

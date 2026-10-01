@@ -153,9 +153,16 @@ export default function Proposals() {
         <ProposalGenerator
           clients={clients}
           onClose={() => setShowGenerator(false)}
-          onSaveDraft={(data) => {
-            createMutation.mutate(data);
-            setShowGenerator(false);
+          saving={createMutation.isPending}
+          onSaveDraft={async (data) => {
+            // The generator (and its text) stays open until the proposal is
+            // saved; a failure is reported by the mutation's onError toast.
+            try {
+              await createMutation.mutateAsync(data);
+              setShowGenerator(false);
+            } catch {
+              /* kept open with the generated text */
+            }
           }}
         />
       )}
@@ -330,7 +337,10 @@ const TONE_OPTIONS = [
   { value: 'creative', label: 'Creative' },
 ];
 
-function ProposalGenerator({ clients, onClose, onSaveDraft }) {
+// proposalCreateSchema.notes (src/validators/schemas.js); Proposal.notes is TEXT.
+const PROPOSAL_NOTES_MAX = 50_000;
+
+function ProposalGenerator({ clients, onClose, onSaveDraft, saving = false }) {
   const toast = useToast();
   const [genForm, setGenForm] = useState({
     clientId: '',
@@ -411,8 +421,12 @@ function ProposalGenerator({ clients, onClose, onSaveDraft }) {
 
   const proposalText = () => generatedResult?.proposal || '';
 
+  const draftContent = isEditing ? editedContent : proposalText();
+  const draftTooLong = draftContent.length > PROPOSAL_NOTES_MAX;
+
   const handleSaveDraft = () => {
-    const content = isEditing ? editedContent : proposalText();
+    const content = draftContent;
+    if (content.length > PROPOSAL_NOTES_MAX) return;
     const title = `${genForm.projectType.charAt(0).toUpperCase() + genForm.projectType.slice(1).replace('-', ' ')} Proposal - ${generatedResult?.clientName || genForm.clientName}`;
 
     onSaveDraft({
@@ -567,14 +581,22 @@ function ProposalGenerator({ clients, onClose, onSaveDraft }) {
                 {isEditing ? 'Preview' : 'Edit'}
               </Button>
               <button
+                type="button"
                 onClick={handleSaveDraft}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-full bg-brand-indigo text-brand-lime hover:brightness-110 transition"
+                disabled={saving || draftTooLong}
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-full bg-brand-indigo text-brand-lime hover:brightness-110 transition disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Save className="w-3 h-3" />
-                Create Proposal
+                {saving ? 'Creating...' : 'Create Proposal'}
               </button>
             </div>
           </div>
+
+          {draftTooLong && (
+            <p role="alert" className="text-xs text-destructive">
+              The proposal text is {draftContent.length.toLocaleString()} characters; a proposal can hold up to {PROPOSAL_NOTES_MAX.toLocaleString()}. Edit it down before creating the proposal.
+            </p>
+          )}
 
           {/* Content: either formatted preview or editable textarea */}
           {isEditing ? (

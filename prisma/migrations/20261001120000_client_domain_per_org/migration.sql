@@ -27,10 +27,11 @@
 -- conflict as 409); re-adding the global index would need the cross-tenant
 -- duplicates it forbade to be resolved first.
 --
--- Atomicity: Prisma does not wrap a PostgreSQL migration in a transaction, so
--- the explicit BEGIN/COMMIT applies all four steps or none.
-BEGIN;
-
+-- Atomicity: Prisma sends this file as one multi-statement query, which
+-- PostgreSQL runs as a single implicit transaction: all four steps apply or
+-- none do, and SET LOCAL lasts until its end. There is deliberately no
+-- explicit BEGIN/COMMIT, so a failure reports its real error and the
+-- migration can simply be rerun.
 SET LOCAL lock_timeout = '5s';
 
 -- 1. The global index (baseline) goes first: normalizing case could otherwise
@@ -59,12 +60,10 @@ SET "domain" = NULL,
       E'\n',
       NULLIF(c."clientNotes", ''),
       '[migration 20261001120000_client_domain_per_org] Domain "' || ranked."domain"
-        || '" was cleared: an older client in this organization has the same domain.'
+        || '" was cleared: another client in this organization keeps this domain.'
     )
 FROM ranked
 WHERE c."id" = ranked."id" AND ranked.rn > 1;
 
 -- 4. Per-organization uniqueness.
 CREATE UNIQUE INDEX "clients_organizationId_domain_key" ON "clients"("organizationId", "domain");
-
-COMMIT;

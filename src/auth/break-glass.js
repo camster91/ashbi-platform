@@ -30,6 +30,7 @@
 import crypto from 'node:crypto';
 import bcrypt from 'bcrypt';
 import defaultLogger from '../utils/logger.js';
+import { insensitiveEquals } from '../utils/insensitive-equals.js';
 import { recordAuditEvent } from '../services/audit-event.service.js';
 import { endImpersonationSessions } from './impersonation.js';
 
@@ -146,7 +147,7 @@ export async function issueBreakGlassGrant(prisma, input, {
 
   const where = input.targetUserId
     ? { id: input.targetUserId, organizationId: organization.id }
-    : { email: { equals: String(input.targetEmail || '').trim(), mode: 'insensitive' }, organizationId: organization.id };
+    : { email: insensitiveEquals(String(input.targetEmail || '').trim()), organizationId: organization.id };
   const targets = await prisma.user.findMany({
     where,
     select: { id: true, email: true, name: true, role: true, isActive: true },

@@ -26,6 +26,8 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { insensitiveEquals } from '../src/utils/insensitive-equals.js';
+import { normalizeContactEmail } from '../src/utils/client-identity.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const prisma = new PrismaClient({
@@ -199,13 +201,14 @@ async function main() {
     // Upsert contacts
     const clientId = clientIdMap.get(name);
     for (const contact of data.contacts) {
+      const email = normalizeContactEmail(contact.email);
       const existingContact = await prisma.contact.findFirst({
-        where: { email: contact.email, clientId }
+        where: { email: insensitiveEquals(email), clientId }
       });
       if (!existingContact) {
         await prisma.contact.create({
           data: {
-            email: contact.email,
+            email,
             name: contact.name,
             clientId,
             isPrimary: data.contacts.indexOf(contact) === 0,

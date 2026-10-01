@@ -1,5 +1,7 @@
 // Lead management routes (admin)
 
+import { normalizeClientDomain, normalizeContactEmail } from '../utils/client-identity.js';
+
 export default async function leadRoutes(fastify) {
   // Public inquiries arrive through /api/client-acquisition/intake. The old
   // anonymous /leads/intake route here was removed: it created leads with no
@@ -48,7 +50,7 @@ export default async function leadRoutes(fastify) {
       company = meta.company;
     } catch { /* ignore */ }
 
-    const domain = lead.senderEmail.split('@')[1] || null;
+    const domain = normalizeClientDomain(lead.senderEmail.split('@')[1]);
 
     // Create client
     const client = await fastify.prisma.client.create({
@@ -62,7 +64,7 @@ export default async function leadRoutes(fastify) {
     // Create contact
     const contact = await fastify.prisma.contact.create({
       data: {
-        email: lead.senderEmail,
+        email: normalizeContactEmail(lead.senderEmail),
         name: lead.senderName || lead.senderEmail,
         isPrimary: true,
         clientId: client.id

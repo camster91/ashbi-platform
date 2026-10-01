@@ -2,6 +2,7 @@
 
 import { safeParse } from '../utils/safeParse.js';
 import {validateBody, inboxUnmatchedAssignSchema} from '../validators/schemas.js';
+import { normalizeClientDomain, normalizeContactEmail } from '../utils/client-identity.js';
 
 export default async function inboxRoutes(fastify) {
   // Get inbox (all threads with filters)
@@ -117,7 +118,7 @@ export default async function inboxRoutes(fastify) {
 
     // Create new client if requested
     if (createNewClient) {
-      const domain = unmatched.senderEmail.split('@')[1];
+      const domain = normalizeClientDomain(unmatched.senderEmail.split('@')[1]);
       const client = await request.prisma.client.create({
         data: {
           name: createNewClient.name || domain,
@@ -129,7 +130,7 @@ export default async function inboxRoutes(fastify) {
       // Create contact
       await request.prisma.contact.create({
         data: {
-          email: unmatched.senderEmail,
+          email: normalizeContactEmail(unmatched.senderEmail),
           name: unmatched.senderName || unmatched.senderEmail.split('@')[0],
           clientId: client.id,
           isPrimary: true

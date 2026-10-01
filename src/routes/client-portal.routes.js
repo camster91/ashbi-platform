@@ -38,6 +38,7 @@ import { writeUploadThenPersist } from '../utils/stored-upload.js';
 import { validateBody, validateQuery, chatMessageListQuerySchema, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
 import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
+import { insensitiveEquals } from '../utils/insensitive-equals.js';
 
 // The project document fields the client portal returns (docs list, upload).
 const PORTAL_DOCUMENT_SELECT = Object.freeze({
@@ -217,7 +218,7 @@ export default async function clientPortalRoutes(fastify) {
     // typed (mixed case), so the match is case-insensitive.
     const contact = await request.prisma.contact.findFirst({
       where: {
-        email: { equals: normalizedEmail, mode: 'insensitive' },
+        email: insensitiveEquals(normalizedEmail),
         client: {
           deletedAt: null,
           status: 'ACTIVE',
@@ -236,7 +237,7 @@ export default async function clientPortalRoutes(fastify) {
     // Legacy accounts may be stored in mixed case too: any case variant is
     // this person's account, and an ambiguous match sends nothing.
     const users = await request.prisma.user.findMany({
-      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+      where: { email: insensitiveEquals(normalizedEmail) },
       take: 2,
     });
     if (users.length > 1) {

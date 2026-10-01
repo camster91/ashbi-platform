@@ -24,6 +24,7 @@ import crypto from 'node:crypto';
 import env from '../config/env.js';
 import defaultLogger from '../utils/logger.js';
 import { safeEqual } from '../utils/crypto.js';
+import { insensitiveEquals } from '../utils/insensitive-equals.js';
 import { sessionBinding } from './reauth.js';
 import { sessionTokenTypeFor } from './session.js';
 import { recordAuditEvent } from '../services/audit-event.service.js';
@@ -430,7 +431,7 @@ const SUBJECT_SELECT = {
 export async function findPortalContact(prisma, subject) {
   if (subject?.role !== 'CLIENT' || !subject.clientId) return null;
   return prisma.contact.findFirst({
-    where: { clientId: subject.clientId, email: { equals: subject.email, mode: 'insensitive' } },
+    where: { clientId: subject.clientId, email: insensitiveEquals(subject.email) },
     select: { id: true },
   });
 }

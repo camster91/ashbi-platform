@@ -19,6 +19,22 @@ const RELATIONS = {
 
 const UNIQUE = { breakGlassGrant: ['tokenHash'], user: ['email'] };
 
+// `{ equals, mode: 'insensitive' }` is `ILIKE` on PostgreSQL: `%` and `_` are
+// wildcards unless escaped with a backslash (src/utils/insensitive-equals.js).
+function ilike(actual, pattern) {
+  let source = '';
+  for (let i = 0; i < pattern.length; i += 1) {
+    const character = pattern[i];
+    if (character === '\\' && i + 1 < pattern.length) {
+      i += 1;
+      source += pattern[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    } else if (character === '%') source += '[\\s\\S]*';
+    else if (character === '_') source += '[\\s\\S]';
+    else source += character.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${source}$`, 'i').test(actual);
+}
+
 function value(v) {
   return v instanceof Date ? v.getTime() : v;
 }
@@ -60,7 +76,7 @@ export function createFakeIdentityDb() {
           case 'lte': return actual !== null && actual !== undefined && compare(actual, operand) <= 0;
           case 'equals':
             return condition.mode === 'insensitive'
-              ? String(actual ?? '').toLowerCase() === String(operand ?? '').toLowerCase()
+              ? ilike(String(actual ?? ''), String(operand ?? ''))
               : actual === operand;
           case 'mode': return true;
           case 'has': return (actual || []).includes(operand);
