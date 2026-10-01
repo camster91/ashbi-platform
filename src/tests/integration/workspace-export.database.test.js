@@ -98,6 +98,13 @@ test('workspace export: complete, tenant-isolated, secret-free, with verified fi
     await raw.contract.create({ data: { id: i('contract'), title: 'MSA', content: 'Terms', clientId: client, createdById: staff, proposalId: proposal, signToken: secret(`sign-${org}`) } });
     await raw.estimate.create({ data: { id: i('estimate'), clientId: client, title: 'Estimate', viewToken: secret(`estimate-view-${org}`) } });
     await raw.expense.create({ data: { id: i('expense'), organizationId: orgId, description: 'Hosting', amount: 20, clientId: client, projectId: project } });
+    // Expenses carry organizationId: one without a client is exported; one
+    // whose client, or (without a client) whose project, is trashed is not.
+    await raw.expense.create({ data: { id: i('expense-overhead'), organizationId: orgId, description: 'Software', amount: 5 } });
+    const trashedProject = i('project-trashed');
+    await raw.project.create({ data: { id: trashedProject, organizationId: orgId, clientId: client, name: `Trashed project ${org}`, deletedAt: new Date() } });
+    await raw.expense.create({ data: { id: i('expense-trashed-project'), organizationId: orgId, description: 'Old project', amount: 6, projectId: trashedProject } });
+    await raw.expense.create({ data: { id: i('expense-trashed-client'), organizationId: orgId, description: 'Old client', amount: 7, clientId: trashed } });
     await raw.retainerPlan.create({ data: { id: i('retainer'), clientId: client, tier: '999', hoursPerMonth: 20 } });
     await raw.timeEntry.create({ data: { id: i('time-entry'), projectId: project, userId: staff, taskId: task, duration: 60 } });
 
@@ -171,7 +178,7 @@ test('workspace export: complete, tenant-isolated, secret-free, with verified fi
     const expected = {
       organization: 1, users: 1, clients: 1, contacts: 1, projects: 1, milestones: 1, tasks: 1, task_comments: 1, notes: 1,
       invoices: 1, invoice_line_items: 1, invoice_payments: 1, proposals: 1, proposal_line_items: 1, contracts: 1,
-      estimates: 1, expenses: 1, retainer_plans: 1, time_entries: 1,
+      estimates: 1, expenses: 2, retainer_plans: 1, time_entries: 1,
       threads: 1, messages: 1, internal_notes: 1, chat_messages: 2, chat_reactions: 1,
       review_sessions: 1, review_annotations: 1, review_decisions: 1, review_share_links: 1, attachments: 2,
     };
@@ -183,6 +190,8 @@ test('workspace export: complete, tenant-isolated, secret-free, with verified fi
       assert.ok(exportedIds.has(orgAId), `org-A record ${orgAId} is exported`);
     }
     assert.ok(!exportedIds.has(`wx-client-trashed-a-${suffix}`), 'trashed client is not exported');
+    assert.ok(!exportedIds.has(`wx-expense-trashed-project-a-${suffix}`), 'expense of a trashed project is not exported');
+    assert.ok(!exportedIds.has(`wx-expense-trashed-client-a-${suffix}`), 'expense of a trashed client is not exported');
     assert.deepEqual(rowsOf.chat_messages.map((row) => row.visibility).sort(), ['CLIENT', 'INTERNAL']);
     assert.equal(rowsOf.users[0].email, `wx-staff-a-${suffix}@example.com`);
 
@@ -267,7 +276,7 @@ test('workspace export: complete, tenant-isolated, secret-free, with verified fi
     await raw.chatReaction.deleteMany({ where: { message: projectWhere } });
     await raw.chatMessage.deleteMany({ where: projectWhere });
     await raw.timeEntry.deleteMany({ where: projectWhere });
-    await raw.expense.deleteMany({ where: clientWhere });
+    await raw.expense.deleteMany({ where: { organizationId: { in: orgIds } } });
     await raw.contract.deleteMany({ where: clientWhere });
     await raw.invoice.deleteMany({ where: clientWhere });
     await raw.proposal.deleteMany({ where: clientWhere });

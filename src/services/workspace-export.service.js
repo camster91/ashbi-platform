@@ -122,9 +122,9 @@ export const EXPORT_ENTITIES = Object.freeze([
   { name: 'proposal_versions', model: 'ProposalVersion', category: 'finance', where: (org) => ({ proposal: proposalScope(org) }), description: 'Saved proposal versions' },
   { name: 'contracts', model: 'Contract', category: 'finance', where: (org) => ({ deletedAt: null, client: activeClient(org) }), omit: ['signToken', 'draftData'], description: 'Contracts and signature evidence' },
   { name: 'estimates', model: 'Estimate', category: 'finance', where: (org) => ({ deletedAt: null, client: activeClient(org) }), omit: ['viewToken', 'draftData'], description: 'Estimates' },
-  // Expenses carry organizationId; one linked to a trashed client is left out
-  // like the client's other children.
-  { name: 'expenses', model: 'Expense', category: 'finance', where: (org) => ({ organizationId: org, deletedAt: null, OR: [{ clientId: null }, { client: activeClient(org) }] }), description: 'Expenses' },
+  // Expenses carry organizationId; one linked to a trashed client (or, without
+  // a client, to a trashed project) is left out like their other children.
+  { name: 'expenses', model: 'Expense', category: 'finance', where: (org) => ({ organizationId: org, deletedAt: null, OR: [{ clientId: null, OR: [{ projectId: null }, { project: activeProject(org) }] }, { client: activeClient(org) }] }), description: 'Expenses' },
   { name: 'retainer_plans', model: 'RetainerPlan', category: 'finance', where: (org) => ({ deletedAt: null, client: activeClient(org) }), omit: ['draftData'], description: 'Retainer plans' },
   { name: 'rate_cards', model: 'RateCard', category: 'finance', where: (org) => ({ client: activeClient(org) }), description: 'Client rate cards' },
   { name: 'time_entries', model: 'TimeEntry', category: 'finance', where: (org) => ({ deletedAt: null, project: activeProject(org) }), description: 'Time entries' },

@@ -387,6 +387,40 @@ plain error message (for example "Organization not found", "ClickUp CSV
 could not be read: …", "Refusing import: summary file already exists: …",
 or "Live import cannot complete with unresolved reconciliation findings").
 
+## Schema migration failures
+
+### Expense organization migration
+
+Migration `20261001130000_expense_organization` gives every expense an
+`organizationId`. It derives it from the expense's client, then its project,
+then its linked invoice. When none of them exists and the database holds
+exactly one organization, the expense goes to that organization. It refuses
+to guess otherwise. `prisma migrate deploy` then stops with `P3018`,
+database error code `P0001`, and one of these messages (also stored in
+`_prisma_migrations.logs`):
+
+- `Expense organization migration aborted: N expense(s) have no client,
+  project or invoice to derive an organization from, and the database holds
+  M organizations; …`
+- `Expense organization migration aborted: N expense(s) link a client and a
+  project of different organizations; …`
+
+The migration runs as one implicit transaction, so nothing it did is kept:
+`expenses` has no `organizationId` column afterwards and the previous image
+keeps working. To recover:
+
+1. Find the rows. Unattributable:
+   `SELECT id, description, amount, date FROM expenses WHERE "clientId" IS NULL AND "projectId" IS NULL AND "invoiceId" IS NULL;`
+   Conflicting:
+   `SELECT e.id FROM expenses e JOIN clients c ON c.id = e."clientId" JOIN projects p ON p.id = e."projectId" WHERE c."organizationId" <> p."organizationId";`
+2. With the owning organization's operator, give each one the right client or
+   project (or clear the wrong one), or delete it. Take a backup first
+   ([backup-and-restore.md](backup-and-restore.md)).
+3. Prisma recorded the attempt as failed, so the next deploy stops with
+   `P3009` until it is marked rolled back:
+   `npx prisma migrate resolve --rolled-back 20261001130000_expense_organization`
+4. Rerun `npx prisma migrate deploy` (or redeploy).
+
 ## Communication
 
 | When | Who | Message |

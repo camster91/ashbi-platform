@@ -15,7 +15,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'unit-test-secret-at-least-32
 const {
   brandLogoRelativePath, hashStoredUpload, openStoredUpload, receiptRelativePath, removeStoredBrandLogo, writeUploadThenPersist,
 } = await import('../../utils/stored-upload.js');
-const { default: brandRoutes } = await import('../../routes/brand.routes.js');
+const { default: brandRoutes, replaceLogoUrl } = await import('../../routes/brand.routes.js');
 const { default: attachmentRoutes } = await import('../../routes/attachment.routes.js');
 
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('stored-upload-test')]);
@@ -119,9 +119,10 @@ test('brand logo upload: a failed settings write leaves no new file and keeps th
       brandSettings: {
         findFirst: async () => settings,
         create: async () => settings,
-        update: async ({ data }) => {
+        updateMany: async ({ data }) => {
           if (failUpdate) throw new Error('database unavailable');
-          return { ...settings, ...data };
+          Object.assign(settings, data);
+          return { count: 1 };
         },
       },
     });
@@ -173,4 +174,29 @@ test('attachment upload: a failed attachment insert leaves no file behind', asyn
   } finally {
     await app.close();
   }
+});
+
+test('replaceLogoUrl swaps only the value it read and reports what it replaced', async () => {
+  const row = { id: 'brand-1', logoUrl: '/uploads/brand/old.png' };
+  let calls = 0;
+  const prisma = {
+    brandSettings: {
+      // A concurrent upload wins the first swap.
+      updateMany: async ({ where, data }) => {
+        calls += 1;
+        if (calls === 1) row.logoUrl = '/uploads/brand/concurrent.png';
+        if (where.id !== row.id || where.logoUrl !== row.logoUrl) return { count: 0 };
+        row.logoUrl = data.logoUrl;
+        return { count: 1 };
+      },
+      findFirst: async () => ({ ...row }),
+    },
+  };
+  const result = await replaceLogoUrl(prisma, { id: 'brand-1', logoUrl: '/uploads/brand/old.png' }, '/uploads/brand/mine.png');
+  assert.equal(result.previousLogoUrl, '/uploads/brand/concurrent.png');
+  assert.equal(result.updated.logoUrl, '/uploads/brand/mine.png');
+  assert.equal(row.logoUrl, '/uploads/brand/mine.png');
+
+  const stuck = { brandSettings: { updateMany: async () => ({ count: 0 }), findFirst: async () => ({ ...row }) } };
+  await assert.rejects(replaceLogoUrl(stuck, row, '/uploads/brand/x.png'), (error) => error.statusCode === 409);
 });

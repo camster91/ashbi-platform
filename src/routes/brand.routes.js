@@ -8,6 +8,33 @@ import {
   DEFAULT_UPLOADS_DIR, brandLogoRelativePath, removeStoredBrandLogo, sendStoredUpload, writeUploadThenPersist,
 } from '../utils/stored-upload.js';
 
+const LOGO_REPLACE_ATTEMPTS = 3;
+
+/**
+ * Point the settings row at a new logo with a compare-and-set on the previous
+ * value, so two concurrent uploads cannot both believe they replaced the same
+ * old logo (one would otherwise leave its file orphaned). On a lost race the
+ * row is re-read and the swap retried; the previous value returned is exactly
+ * the one this request replaced.
+ * @param {any} prisma
+ * @param {{ id: string, logoUrl: string | null }} settings
+ * @param {string} logoUrl
+ */
+export async function replaceLogoUrl(prisma, settings, logoUrl) {
+  let current = settings;
+  for (let attempt = 0; attempt < LOGO_REPLACE_ATTEMPTS; attempt += 1) {
+    const previousLogoUrl = current.logoUrl;
+    const { count } = await prisma.brandSettings.updateMany({
+      where: { id: current.id, logoUrl: previousLogoUrl },
+      data: { logoUrl },
+    });
+    if (count === 1) return { updated: { ...current, logoUrl }, previousLogoUrl };
+    current = await prisma.brandSettings.findFirst({ where: { id: current.id } });
+    if (!current) break;
+  }
+  throw Object.assign(new Error('The brand logo was changed by another request; try again'), { statusCode: 409 });
+}
+
 /**
  * @param {import('fastify').FastifyInstance} fastify
  * @param {{ uploadsDir?: string }} [options]
@@ -83,19 +110,16 @@ export default async function brandRoutes(fastify, options = {}) {
     // Write the file, then the row; if the row write fails the new file is
     // removed. The previous logo is removed only after the row points at the
     // new one, so a failure never leaves the settings naming a deleted file.
-    let previousLogoUrl = null;
-    const updated = await writeUploadThenPersist(path.join(brandDir, filename), buffer, async () => {
+    const { updated, previousLogoUrl } = await writeUploadThenPersist(path.join(brandDir, filename), buffer, async () => {
       let settings = await fastify.prisma.brandSettings.findFirst();
       if (!settings) {
         settings = await fastify.prisma.brandSettings.create({ data: {} });
       }
-      previousLogoUrl = settings.logoUrl;
-      return fastify.prisma.brandSettings.update({
-        where: { id: settings.id },
-        data: { logoUrl },
-      });
+      return replaceLogoUrl(fastify.prisma, settings, logoUrl);
     });
 
+    // Only the logo this request's update replaced is removed, so concurrent
+    // uploads never delete a logo another request still points at.
     if (previousLogoUrl && previousLogoUrl !== logoUrl) {
       await removeStoredBrandLogo(previousLogoUrl, uploadsDir);
     }

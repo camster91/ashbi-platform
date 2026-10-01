@@ -31,11 +31,15 @@
 -- (a receipt URL names a shared upload directory, so it must never be
 -- claimable across tenants).
 --
--- Atomicity: Prisma does not wrap a PostgreSQL migration in a transaction,
--- so the body is an explicit BEGIN/COMMIT; a failure rolls everything back
--- and the deploy can be rerun. lock_timeout fails fast instead of queueing
--- behind a long transaction.
-BEGIN;
+-- Atomicity: no explicit BEGIN/COMMIT. Prisma sends this script as one
+-- multi-statement query, which PostgreSQL runs as a single implicit
+-- transaction: a failure (for example the backfill RAISE) rolls everything
+-- back, and the real error message reaches the operator and
+-- _prisma_migrations.logs (an explicit BEGIN would leave Prisma's own
+-- bookkeeping inside an aborted transaction and hide it). SET LOCAL
+-- lock_timeout applies to that implicit transaction and fails fast instead
+-- of queueing behind a long transaction. Recovery after an abort:
+-- docs/migration-cutover-runbook.md ("Expense organization migration").
 
 SET LOCAL lock_timeout = '5s';
 
@@ -120,6 +124,12 @@ BEGIN
       RAISE EXCEPTION 'expense project must belong to the expense organization';
     END IF;
   END IF;
+  -- Serialize writers of the same receipt URL for the rest of the
+  -- transaction, so two organizations cannot both pass the check below
+  -- concurrently.
+  IF NEW."receiptUrl" IS NOT NULL THEN
+    PERFORM pg_advisory_xact_lock(hashtext(NEW."receiptUrl"));
+  END IF;
   IF NEW."receiptUrl" IS NOT NULL AND EXISTS (
     SELECT 1 FROM "expenses" o
     WHERE o."receiptUrl" = NEW."receiptUrl"
@@ -137,4 +147,3 @@ CREATE TRIGGER expenses_tenant_guard
   BEFORE INSERT OR UPDATE OF "organizationId", "clientId", "projectId", "receiptUrl" ON "expenses"
   FOR EACH ROW EXECUTE FUNCTION expenses_tenant_guard();
 
-COMMIT;
