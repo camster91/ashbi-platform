@@ -426,6 +426,8 @@ export const api = {
     request('/ai/ask', { method: 'POST', body: { question, ...context } }),
   aiChat: (data) =>
     request('/ai/chat', { method: 'POST', body: data }),
+  /** AI proposal text for one of this organization's clients.
+   * body: { clientId, projectId?, brief?, budget?, deadline? } -> { proposal, clientId, clientName } */
   generateProposal: (data) =>
     request('/ai/generate-proposal', { method: 'POST', body: data }),
   getClientHealth: () =>
@@ -801,12 +803,6 @@ export const api = {
     request(`/proposals/${id}/versions/${versionId}/restore`, { method: 'POST' }),
 
   // ===== PROPOSALS PIPELINE (Phase 3a) =====
-  /** AI-generate a proposal from client + services */
-  aiGenerateProposal: (data) =>
-    request('/proposals/generate', { method: 'POST', body: data }),
-  /** Convert proposal to PDF */
-  proposalGeneratePdf: (id) =>
-    request(`/proposals/${id}/pdf`, { method: 'POST' }),
   /** Send proposal via Gmail — body: { email, subject, body } */
   proposalSendViaGmail: (id, data = {}) =>
     request(`/proposals/${id}/send`, { method: 'POST', body: data }),
@@ -1007,12 +1003,6 @@ export const api = {
     request(`/email-triage/update-draft/${draftId}`, { method: 'PUT', body: data }),
   archiveEmailItem: (itemId) =>
     request(`/email-triage/archive/${itemId}`, { method: 'PUT' }),
-
-  // ===== PROPOSAL AI =====
-  generateProposalAI: (data) =>
-    request('/proposals-ai/generate', { method: 'POST', body: data }),
-  generateSalesProposal: (data) =>
-    request('/sales/proposal/generate', { method: 'POST', body: data }),
 
   // ===== INVOICE CHASER =====
   chaseInvoices: (data = {}) =>

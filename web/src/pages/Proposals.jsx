@@ -356,47 +356,38 @@ function ProposalGenerator({ clients, onClose, onSaveDraft }) {
     }));
   };
 
+  // POST /api/ai/generate-proposal: the client is referenced by id (the
+  // server reads its name inside this organization); project type, tone and
+  // requirements travel in the free-text brief.
   const handleGenerate = async (e) => {
     e.preventDefault();
+    if (!genForm.clientId) {
+      toast.error('Select a client to generate a proposal for');
+      return;
+    }
     setIsGenerating(true);
     setGeneratedResult(null);
     setIsEditing(false);
     setEditedContent('');
 
-    const payload = {
-      clientName: genForm.clientName,
-      projectType: genForm.projectType,
-      budget: genForm.budget || undefined,
-      requirements: genForm.requirements || undefined,
-      tone: genForm.tone,
-    };
+    const projectTypeLabel = PROJECT_TYPES.find((pt) => pt.value === genForm.projectType)?.label || genForm.projectType;
+    const toneLabel = TONE_OPTIONS.find((t) => t.value === genForm.tone)?.label || genForm.tone;
+    const brief = [
+      `Project type: ${projectTypeLabel}`,
+      `Tone: ${toneLabel}`,
+      genForm.requirements.trim() ? `Requirements: ${genForm.requirements.trim()}` : '',
+    ].filter(Boolean).join('\n');
+    const budget = Number(genForm.budget);
 
     try {
-      // Try the structured proposals-ai endpoint first (returns JSON with lineItems)
-      if (genForm.clientId) {
-        const aiPayload = {
-          clientId: genForm.clientId,
-          clientName: genForm.clientName,
-          projectType: genForm.projectType,
-          budget: genForm.budget || undefined,
-          scope: genForm.requirements || undefined,
-          notes: genForm.requirements || undefined,
-        };
-        const result = await api.generateProposalAI(aiPayload);
-        setGeneratedResult({ ...result, source: 'ai' });
-      } else {
-        // No clientId — use the sales text-based endpoint
-        const result = await api.generateSalesProposal(payload);
-        setGeneratedResult({ ...result, source: 'sales' });
-      }
+      const result = await api.generateProposal({
+        clientId: genForm.clientId,
+        brief,
+        budget: Number.isFinite(budget) && budget > 0 ? budget : undefined,
+      });
+      setGeneratedResult(result);
     } catch (err) {
-      // Fallback: try the other endpoint if the first fails
-      try {
-        const fallback = await api.generateSalesProposal(payload);
-        setGeneratedResult({ ...fallback, source: 'sales' });
-      } catch (fallbackErr) {
-        toast.error('Failed to generate proposal: ' + (fallbackErr.message || 'Unknown error'));
-      }
+      toast.error('Failed to generate proposal: ' + (err.message || 'Unknown error'));
     } finally {
       setIsGenerating(false);
     }
@@ -418,45 +409,17 @@ function ProposalGenerator({ clients, onClose, onSaveDraft }) {
     setIsEditing(true);
   };
 
-  const proposalText = () => {
-    if (!generatedResult) return '';
-    if (generatedResult.source === 'ai' && generatedResult.proposal) {
-      const p = generatedResult.proposal;
-      const parts = [
-        p.title ? `# ${p.title}` : '',
-        p.summary ? `\n${p.summary}` : '',
-        p.lineItems?.length
-          ? `\n## Deliverables & Pricing\n` +
-            p.lineItems.map((li) => `- ${li.description} (x${li.quantity ?? 1}): $${li.unitPrice?.toLocaleString()}`).join('\n')
-          : '',
-        p.timeline ? `\n## Timeline\n${p.timeline}` : '',
-        p.notes ? `\n## Terms & Notes\n${p.notes}` : '',
-      ].filter(Boolean);
-      return parts.join('\n') || JSON.stringify(generatedResult, null, 2);
-    }
-    // Sales endpoint returns proposal as plain text string
-    return generatedResult.proposal || JSON.stringify(generatedResult, null, 2);
-  };
+  const proposalText = () => generatedResult?.proposal || '';
 
   const handleSaveDraft = () => {
     const content = isEditing ? editedContent : proposalText();
-    const matchedClient = clients.find((c) => c.id === genForm.clientId);
-    const title =
-      generatedResult?.title ||
-      `${genForm.projectType.charAt(0).toUpperCase() + genForm.projectType.slice(1).replace('-', ' ')} Proposal - ${genForm.clientName}`;
-
-    const lineItems =
-      generatedResult?.proposal?.lineItems?.map((li) => ({
-        description: li.description,
-        quantity: li.quantity ?? 1,
-        unitPrice: li.unitPrice ?? 0,
-      })) || [{ description: genForm.projectType, quantity: 1, unitPrice: 0 }];
+    const title = `${genForm.projectType.charAt(0).toUpperCase() + genForm.projectType.slice(1).replace('-', ' ')} Proposal - ${generatedResult?.clientName || genForm.clientName}`;
 
     onSaveDraft({
-      clientId: matchedClient?.id || genForm.clientId || clients[0]?.id,
+      clientId: generatedResult?.clientId || genForm.clientId,
       title,
       notes: content,
-      lineItems,
+      lineItems: [{ description: genForm.projectType, quantity: 1, unitPrice: 0 }],
     });
   };
 
@@ -474,32 +437,21 @@ function ProposalGenerator({ clients, onClose, onSaveDraft }) {
 
       <form onSubmit={handleGenerate} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Client dropdown */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Client</label>
+          {/* Client dropdown: a proposal is generated for an existing client */}
+          <div className="sm:col-span-2">
+            <label htmlFor="proposal-generator-client" className="block text-sm font-medium mb-1">Client</label>
             <select
+              id="proposal-generator-client"
               value={genForm.clientId}
               onChange={(e) => handleClientChange(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+              required
             >
-              <option value="">Select client (or type below)...</option>
+              <option value="">Select client...</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
-          </div>
-
-          {/* Client name (auto-filled from dropdown, or free text) */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Client Name</label>
-            <input
-              type="text"
-              value={genForm.clientName}
-              onChange={(e) => setGenForm({ ...genForm, clientName: e.target.value, clientId: '' })}
-              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
-              placeholder="e.g., Acme Foods"
-              required
-            />
           </div>
 
           {/* Project type */}
@@ -624,15 +576,6 @@ function ProposalGenerator({ clients, onClose, onSaveDraft }) {
             </div>
           </div>
 
-          {/* Metadata bar */}
-          <div className="flex gap-3 text-xs text-muted-foreground">
-            {generatedResult.metadata?.generatedAt && (
-              <span>Generated {new Date(generatedResult.metadata.generatedAt).toLocaleString()}</span>
-            )}
-            {generatedResult.source === 'ai' && <span>Structured output with line items</span>}
-            {generatedResult.source === 'sales' && <span>Text-based output</span>}
-          </div>
-
           {/* Content: either formatted preview or editable textarea */}
           {isEditing ? (
             <textarea
@@ -657,64 +600,7 @@ function ProposalGenerator({ clients, onClose, onSaveDraft }) {
    ─────────────────────────────────────────────── */
 
 function FormattedProposal({ result }) {
-  // Structured output from proposals-ai endpoint
-  if (result.source === 'ai' && result.proposal) {
-    const p = result.proposal;
-    return (
-      <div className="prose prose-sm dark:prose-invert max-w-none">
-        {p.title && <h2 className="text-lg font-bold text-brand-indigo dark:text-brand-lime">{p.title}</h2>}
-        {p.summary && <p className="text-sm leading-relaxed">{p.summary}</p>}
-
-        {p.lineItems?.length > 0 && (
-          <>
-            <h3 className="text-sm font-semibold mt-4 mb-2">Deliverables &amp; Pricing</h3>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                  <th className="pb-2">Deliverable</th>
-                  <th className="pb-2 w-16 text-center">Qty</th>
-                  <th className="pb-2 w-24 text-right">Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {p.lineItems.map((li, i) => (
-                  <tr key={i} className="border-b border-border/50">
-                    <td className="py-2">{li.description}</td>
-                    <td className="py-2 text-center">{li.quantity ?? 1}</td>
-                    <td className="py-2 text-right">${li.unitPrice?.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-              {p.subtotal != null && (
-                <tfoot>
-                  <tr className="font-semibold">
-                    <td colSpan={2} className="pt-2">Total</td>
-                    <td className="pt-2 text-right">${p.total?.toLocaleString() ?? p.subtotal?.toLocaleString()}</td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </>
-        )}
-
-        {p.timeline && (
-          <>
-            <h3 className="text-sm font-semibold mt-4 mb-1">Timeline</h3>
-            <p className="text-sm">{p.timeline}</p>
-          </>
-        )}
-
-        {p.notes && (
-          <>
-            <h3 className="text-sm font-semibold mt-4 mb-1">Terms &amp; Notes</h3>
-            <p className="text-sm whitespace-pre-line">{p.notes}</p>
-          </>
-        )}
-      </div>
-    );
-  }
-
-  // Plain-text output from sales endpoint
+  // POST /api/ai/generate-proposal returns the proposal as plain text
   const text = result.proposal || '';
   return (
     <div className="text-sm whitespace-pre-line leading-relaxed">{text}</div>

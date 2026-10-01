@@ -80,7 +80,7 @@ compared case-insensitively.
 
 | Bonsai | Ashbi |
 | --- | --- |
-| `Client` (or an invoice/project client name) | `Client.name`; `contactPerson` = `Contact Name`; `phone`; `domain` = `Website`, unless another client in **any** organization, or an earlier client of the same export, already has it: then the domain is not written (a new client gets none, a matched client keeps its current one) and a `CLIENT_DOMAIN_TAKEN` warning is reported. A domain that an earlier row of the same export moves a matched client off (a new or blank `Website`) is free for later rows, in the dry run as in the live run; address fields from `addresses.csv` matched by client name, `country` defaulting to `US` |
+| `Client` (or an invoice/project client name) | `Client.name`; `contactPerson` = `Contact Name`; `phone`; `domain` = `Website` (lowercased), unless another client of the importing organization, or an earlier client of the same export, already has it (other organizations' domains are not consulted): then the domain is not written (a new client gets none, a matched client keeps its current one) and a `CLIENT_DOMAIN_TAKEN` warning is reported. A domain that an earlier row of the same export moves a matched client off (a new or blank `Website`) is free for later rows, in the dry run as in the live run; address fields from `addresses.csv` matched by client name, `country` defaulting to `US` |
 | paid invoices per client | `totalRevenueUsd` / `totalRevenueCad` (sum of `paid_amount` of `paid` invoices, by currency; anything but `CAD` counts as USD) and `tier`: `T1` at 5,000 or more, `T2` at 2,000 or more, else `T3`, using USD + CAD × 0.74 |
 | `Contact Email` (or the invoice `client_email`) | one primary `Contact` per client and email |
 | project `status` | `active` → `DESIGN_DEV`, `completed` → `LAUNCHED`, `archived` → `ON_HOLD`, anything else → `STARTING_UP` |
@@ -312,7 +312,7 @@ a disposition before `--confirm`:
 
 | Code | Report entry | Meaning | Category |
 | --- | --- | --- | --- |
-| `CLIENT_DOMAIN_TAKEN` | `{ code, client, domain }` | The client's `Website` is already the `domain` of another client, in this or **another** organization, or of an earlier client of the same export (`Client.domain` is unique across all organizations). A domain an earlier row moves a matched client off does not count as taken, in either mode. The client is imported without it: a new client gets no domain, a matched client keeps its current one. Nothing about the other client or its organization is read or reported | warning |
+| `CLIENT_DOMAIN_TAKEN` | `{ code, client, domain }` | The client's `Website` is already the `domain` of another client of the importing organization, or of an earlier client of the same export (`Client.domain` is unique per organization; another organization's use of the domain does not count). A domain an earlier row moves a matched client off does not count as taken, in either mode. The client is imported without it: a new client gets no domain, a matched client keeps its current one. Nothing about the other client is reported | warning |
 | `EXPENSE_NO_CLIENT` | `{ code, description, date, amount, currency, client }` | The expense's `client` is blank or did not resolve to a client of this import. It is **not imported** (expenses carry `organizationId` since migration `20261001130000_expense_organization`, so importing client-less expenses is possible but not yet implemented) and counted in `stats.expenses.skipped`. `client` is the name from the CSV, or `null` when blank. To import it, give it a client in a copy of `expenses.csv` or enter it by hand | unsupported |
 
 These are not in `stats.errors` or `stats.warnings`:
@@ -373,9 +373,10 @@ failed live command, check the database before assuming nothing changed.
   are not imported** and are reported as `EXPENSE_NO_CLIENT`. Expenses carry
   `organizationId` since migration `20261001130000_expense_organization`, so
   importing them is now possible but not yet implemented.
-- The domain check reads every organization's clients to find out whether a
-  domain is taken. It reads only whether a holder exists, and the report
-  says only that the domain is taken.
+- The domain check reads only the importing organization's clients to find
+  out whether a domain is taken (domains are unique per organization). It
+  reads only whether a holder exists, and the report says only that the
+  domain is taken.
 - Owner matching uses fixed name rules (`cameron`, `bianca`) and a
   first-word "contains" match over all users of the organization (any role,
   active or not), so an owner can be attributed to the wrong user. Check the

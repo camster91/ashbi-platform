@@ -629,6 +629,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Tenant-scoped: yes (`organizationId`)
 - Soft-deletable: yes (`deletedAt`)
 - Constraints and indexes:
+  - `@@unique([organizationId, domain])`
   - `@@index([status])`
   - `@@index([organizationId])`
 
@@ -639,7 +640,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id) |  |
 | `name` | String | required |  |  |  |
 | `email` | String | optional |  |  |  |
-| `domain` | String | unique, optional |  |  |  |
+| `domain` | String | optional |  |  | lowercase, trimmed; unique per organization |
 | `status` | String | required | `"ACTIVE"` |  | ACTIVE, PAUSED, CHURNED |
 | `communicationPrefs` | String | required | `"{}"` |  | JSON: tone, frequency, etc. |
 | `satisfactionSignals` | String | required | `"{}"` |  | JSON: sentiment trends |

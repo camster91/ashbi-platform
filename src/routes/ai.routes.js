@@ -440,10 +440,27 @@ ${context ? `Additional context from user: ${context}` : ''}`;
     onRequest: [fastify.authenticate],
     preHandler: validateBody(aiGenerateProposalSchema),
   }, async (request, reply) => {
-    const { clientName, projectType, budgetRange, notes } = request.body;
+    // The body is aiGenerateProposalSchema: the client (and optional project)
+    // are referenced by id and read through the tenant-scoped client, so a
+    // proposal can only be written for this organization's records.
+    const { clientId, projectId, brief, budget, deadline } = request.body;
 
-    if (!clientName || !projectType) {
-      return reply.status(400).send({ error: 'clientName and projectType are required' });
+    const client = await request.prisma.client.findUnique({
+      where: { id: clientId },
+      select: { id: true, name: true }
+    });
+    if (!client) {
+      return reply.status(404).send({ error: 'Client not found' });
+    }
+    let project = null;
+    if (projectId) {
+      project = await request.prisma.project.findFirst({
+        where: { id: projectId, clientId: client.id },
+        select: { name: true }
+      });
+      if (!project) {
+        return reply.status(404).send({ error: 'Project not found' });
+      }
     }
 
     const system = `You are a proposal writer for Ashbi Design, a Toronto-based CPG/DTC creative agency. Family-run with 10+ years of experience in branding, web design, packaging, and SEO for consumer brands.
@@ -452,10 +469,11 @@ Write compelling, professional proposals that reflect Ashbi's expertise in the C
 
     const prompt = `Generate a full client proposal for the following:
 
-Client: ${clientName}
-Project Type: ${projectType}
-Budget Range: ${budgetRange || 'Not specified'}
-Additional Notes: ${notes || 'None'}
+Client: ${client.name}
+Project: ${project?.name || 'Not specified'}
+Budget: ${budget ? `$${budget.toLocaleString('en-US')}` : 'Not specified'}
+Deadline: ${deadline ? deadline.slice(0, 10) : 'Not specified'}
+Brief: ${brief || 'None'}
 
 Write a complete proposal that includes:
 1. Introduction / About Ashbi Design
@@ -463,7 +481,7 @@ Write a complete proposal that includes:
 3. Proposed approach and methodology
 4. Deliverables with descriptions
 5. Timeline
-6. Investment / pricing (use the budget range as a guide)
+6. Investment / pricing (use the budget as a guide)
 7. Why Ashbi Design (differentiators)
 8. Next steps
 
@@ -476,7 +494,7 @@ Format the proposal as clean, professional text ready to be sent to a client. Do
         temperature: 0.6
       });
 
-      return { proposal, clientName, projectType };
+      return { proposal, clientId: client.id, clientName: client.name };
     } catch (error) {
       if (isAiControlError(error)) return sendAiError(reply, error);
       fastify.log.error('AI generate-proposal error:', error);

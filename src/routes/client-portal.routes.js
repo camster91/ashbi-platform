@@ -124,24 +124,15 @@ export function magicLinkClaims(user, contact) {
 }
 
 /**
- * The user row a portal contact writes as (chat author, uploader). Created on
- * first use for contacts that predate client-portal user accounts.
+ * The user a portal request writes as (chat author, uploader): the CLIENT user
+ * of the verified portal principal (clientAuth re-resolved it this request,
+ * src/auth/portal-principal.js). Never looked up by the contact's email and
+ * never created here: an email lookup is case-sensitive against addresses
+ * stored as typed and can match another organization's user, and a created
+ * row would have no organization.
  */
-async function resolveContactAuthor(prisma, { contactId, clientId }) {
-  const contact = await prisma.contact.findUnique({ where: { id: contactId } });
-  let authorUser = await prisma.user.findFirst({ where: { email: contact.email } });
-  if (!authorUser) {
-    authorUser = await prisma.user.create({
-      data: {
-        email: contact.email,
-        name: contact.name,
-        password: await bcrypt.hash(randomUUID(), 12), // magic-link account; keep stored credential non-reusable
-        role: 'CLIENT',
-        clientId
-      }
-    });
-  }
-  return authorUser;
+function portalAuthor(request) {
+  return { id: request.clientUser.id };
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
@@ -222,9 +213,11 @@ export default async function clientPortalRoutes(fastify) {
     const { email } = request.body;
 
     const normalizedEmail = email.toLowerCase().trim();
+    // Contacts added before emails were normalized on write are stored as
+    // typed (mixed case), so the match is case-insensitive.
     const contact = await request.prisma.contact.findFirst({
       where: {
-        email: normalizedEmail,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
         client: {
           deletedAt: null,
           status: 'ACTIVE',
@@ -232,6 +225,7 @@ export default async function clientPortalRoutes(fastify) {
         },
       },
       include: { client: { select: { id: true, name: true, organizationId: true } } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
 
     if (!contact) {
@@ -239,7 +233,16 @@ export default async function clientPortalRoutes(fastify) {
       return { sent: true };
     }
 
-    let user = await request.prisma.user.findUnique({ where: { email: normalizedEmail } });
+    // Legacy accounts may be stored in mixed case too: any case variant is
+    // this person's account, and an ambiguous match sends nothing.
+    const users = await request.prisma.user.findMany({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+      take: 2,
+    });
+    if (users.length > 1) {
+      return { sent: true };
+    }
+    let user = users[0] ?? null;
     if (user && (user.role !== 'CLIENT' || user.clientId !== contact.clientId || user.organizationId !== contact.client.organizationId || !user.isActive)) {
       return { sent: true };
     }
@@ -623,13 +626,13 @@ export default async function clientPortalRoutes(fastify) {
   // chat message that is still being written. Stored as a pending chat upload
   // owned by the contact's user; the message send claims it.
   fastify.post('/projects/:id/chat-uploads', { preHandler: clientAuth }, async (request, reply) => {
-    const { clientId, contactId } = request.clientUser;
+    const { clientId } = request.clientUser;
     const { id } = request.params;
 
     const project = await request.prisma.project.findFirst({ where: { id, clientId, deletedAt: null }, select: { id: true, organizationId: true } });
     if (!project) return reply.status(404).send({ error: 'Project not found' });
 
-    const authorUser = await resolveContactAuthor(request.prisma, { contactId, clientId });
+    const authorUser = portalAuthor(request);
     const pending = await request.prisma.attachment.count({
       where: { entityType: CHAT_PENDING_ENTITY, entityId: id, uploadedById: authorUser.id },
     });
@@ -666,11 +669,11 @@ export default async function clientPortalRoutes(fastify) {
   // DELETE /api/client-portal/projects/:id/chat-uploads/:attachmentId — remove
   // one of the contact's own unsent uploads.
   fastify.delete('/projects/:id/chat-uploads/:attachmentId', { preHandler: clientAuth }, async (request, reply) => {
-    const { clientId, contactId } = request.clientUser;
+    const { clientId } = request.clientUser;
     const { id, attachmentId } = request.params;
     const project = await request.prisma.project.findFirst({ where: { id, clientId, deletedAt: null }, select: { id: true } });
     if (!project) return reply.status(404).send({ error: 'Project not found' });
-    const authorUser = await resolveContactAuthor(request.prisma, { contactId, clientId });
+    const authorUser = portalAuthor(request);
     const existing = await request.prisma.attachment.findFirst({
       where: { id: attachmentId, entityType: CHAT_PENDING_ENTITY, entityId: id, uploadedById: authorUser.id },
       select: { id: true, path: true },
@@ -710,7 +713,7 @@ export default async function clientPortalRoutes(fastify) {
 
   // POST /api/client-portal/projects/:id/messages
   fastify.post('/projects/:id/messages', { preHandler: [clientAuth, validateBody(clientPortalMessageSchema)] }, async (request, reply) => {
-    const { clientId, contactId } = request.clientUser;
+    const { clientId } = request.clientUser;
     const { id } = request.params;
     const { content = '', type } = request.body;
     let attachmentIds;
@@ -726,7 +729,7 @@ export default async function clientPortalRoutes(fastify) {
     }
 
     // Find or create a user for the contact to use as author
-    const authorUser = await resolveContactAuthor(request.prisma, { contactId, clientId });
+    const authorUser = portalAuthor(request);
 
     // A portal message is always CLIENT-visible; it and the claim of its
     // pending uploads commit together (docs/chat-media.md).
@@ -817,7 +820,7 @@ export default async function clientPortalRoutes(fastify) {
 
   // POST /api/client-portal/projects/:id/upload — Upload document
   fastify.post('/projects/:id/upload', { preHandler: clientAuth }, async (request, reply) => {
-    const { clientId, contactId } = request.clientUser;
+    const { clientId } = request.clientUser;
     const { id } = request.params;
 
     const project = await request.prisma.project.findFirst({ where: { id, clientId, deletedAt: null } });
@@ -843,23 +846,7 @@ export default async function clientPortalRoutes(fastify) {
     // Ensure upload directory
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
 
-    // Find or create user for the contact (before the file is written, so a
-    // failure here leaves nothing on disk)
-    const contact = await request.prisma.contact.findUnique({ where: { id: contactId } });
-    let authorUser = await request.prisma.user.findFirst({ where: { email: contact.email } });
-    if (!authorUser) {
-      authorUser = await request.prisma.user.create({
-        data: {
-          email: contact.email,
-          name: contact.name,
-          // This account is not password-authenticated, but the invariant for
-          // every stored login credential remains a bcrypt hash.
-          password: await bcrypt.hash(randomUUID(), 12),
-          role: 'CLIENT',
-          clientId
-        }
-      });
-    }
+    const authorUser = portalAuthor(request);
 
     // Use validated extension (always from allowlist)
     const filename = `${randomUUID()}${validation.ext}`;

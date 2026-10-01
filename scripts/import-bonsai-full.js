@@ -386,17 +386,17 @@ async function runImport(prisma) {
   const domainsClaimed = new Map(); // domain → client key that takes it in this run
   const domainsReleased = new Map(); // domain → id of the existing client this run moves off it
 
-  // Client.domain is unique across ALL organizations. Decide before any write,
+  // Client.domain is unique per organization. Decide before any write,
   // identically in a dry run and a live run, whether this client may take the
   // domain. The decision is made against the planned state of this run: a
   // domain an earlier row of this export moved an existing client off is free
-  // in both modes, although a dry run never writes that update. Only the fact
-  // that it is taken is reported: nothing about the holder (which may be
-  // another organization's client) is read or shown.
+  // in both modes, although a dry run never writes that update. Only clients
+  // of the importing organization are consulted: another organization's use
+  // of a domain neither blocks it nor is read.
   async function domainTaken(domain, key, ownClientId) {
     const claimant = domainsClaimed.get(domain);
     if (claimant !== undefined) return claimant !== key;
-    const holder = await prisma.client.findFirst({ where: { domain }, select: { id: true } });
+    const holder = await prisma.client.findFirst({ where: { organizationId: ORGANIZATION_ID, domain }, select: { id: true } });
     if (!holder || holder.id === ownClientId) return false;
     return domainsReleased.get(domain) !== holder.id;
   }
@@ -447,7 +447,7 @@ async function runImport(prisma) {
         name: data.name,
         contactPerson: data.contactName || null,
         phone: data.phone || null,
-        domain: data.website || null,
+        domain: data.website.toLowerCase() || null, // stored like the API stores it (src/routes/client.routes.js)
         tier,
         totalRevenueUsd: rev.usd,
         totalRevenueCad: rev.cad,

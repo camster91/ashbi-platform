@@ -23,12 +23,6 @@ const ALLOWLIST = {
   // `${data.action}` is 'approve' or 'decline'; both
   // POST /api/portal/proposal/:viewToken/approve|decline are registered.
   'POST /portal/proposal/:param/:param': 'action segment is approve|decline, both registered',
-  // Invoice/proposal/contract/Stripe paths are owned by a separate remediation
-  // track; these known mismatches are reported there, not fixed here.
-  'POST /proposals/generate': 'proposal track: no AI proposal generation route is registered',
-  'POST /proposals/:param/pdf': 'proposal track: PDFs are served by GET /api/proposal-builder/:id/pdf',
-  'POST /proposals-ai/generate': 'proposal track: no proposals-ai route is registered (used by Proposals.jsx)',
-  'POST /sales/proposal/generate': 'proposal track: no sales route is registered (used by Proposals.jsx)',
 };
 
 /**
