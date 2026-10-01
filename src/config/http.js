@@ -63,10 +63,11 @@ export function canonicalRequestUrl(url) {
 export function requestPath(request) {
   const route = request?.routeOptions?.url;
   if (typeof route === 'string' && route.startsWith('/')) return route;
-  const url = request?.url ?? request?.raw?.url ?? '/';
-  try {
-    return new URL(url, 'http://localhost').pathname;
-  } catch {
-    return '/';
-  }
+  // Unmatched URL: keep its path as spelled (origin-form, query dropped) so
+  // callers' normalizedPath still collapses `//api/...` instead of a URL
+  // parser reading `api` as a host.
+  const url = canonicalRequestUrl(String(request?.url ?? request?.raw?.url ?? '/'));
+  const end = url.search(/[?#]/);
+  const path = end === -1 ? url : url.slice(0, end);
+  return path.startsWith('/') ? path : '/';
 }
