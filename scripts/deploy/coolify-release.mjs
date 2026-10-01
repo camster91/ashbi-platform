@@ -1,7 +1,8 @@
 import { pathToFileURL } from 'node:url';
+import { verifiedProductionBackup } from './production-backup.mjs';
 
 // No production credentials or response bodies are written to logs.
-export async function release(env, { fetchImpl = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), log = console.log } = {}) {
+export async function release(env, { fetchImpl = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), log = console.log, backup = verifiedProductionBackup } = {}) {
   const sha = env.RELEASE_SHA;
   const uuid = env.COOLIFY_APP_UUID;
   const branch = env.RELEASE_BRANCH;
@@ -43,6 +44,9 @@ export async function release(env, { fetchImpl = fetch, sleep = ms => new Promis
   }
   const original = await api(`/applications/${uuid}`);
   validateResource(original);
+  const recovery = await backup(env);
+  if (recovery?.releaseSha !== sha || recovery.offServerCopyVerified !== true) throw new Error('Verified off-server pre-deployment backup required');
+  log(`Verified encrypted pre-deployment backup for ${sha}`);
   await api(`/applications/${uuid}`, 'PATCH', { git_commit_sha: sha });
   const pinned = await api(`/applications/${uuid}`);
   validateResource(pinned);

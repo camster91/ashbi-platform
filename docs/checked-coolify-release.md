@@ -52,10 +52,24 @@ does not approve a release. Public probes never carry the Coolify token.
    is running, so that command alone cannot enforce a backup before the first
    adoption or after an outage. The release controller must verify a successful
    fresh backup before queueing a deployment, including those cases.
+   The checked workflow now runs `scripts/deploy/production-backup.mjs` over
+   strict host-key-pinned SSH. Its root-side verifier accepts only the reviewed
+   backup script checksum, generates a new encrypted archive, decrypts it into
+   a temporary root-only directory, checks every manifest entry and the database
+   catalog, then removes plaintext. The runner copies the encrypted archive,
+   verifies its hash and uploads it to a private GitHub workflow artifact with
+   30-day retention before deployment. The controller requires a fresh proof
+   for the exact candidate and workflow run; failure blocks all API writes.
+   This gate does not replace isolated restore drills or independent key custody.
+   A backup script change requires reviewing and updating its pinned checksum.
 5. Confirm existing `production` GitHub environment policy. Configure
    `COOLIFY_URL`, `COOLIFY_TOKEN`, `COOLIFY_APP_UUID` securely; existing secret
    names do not prove correct values. Use the normal authorized Coolify API,
    never database edits to create access or alter resources.
+   The backup transport also requires existing `VPS_SSH_KEY` access and the
+   `ASHBI_VPS_KNOWN_HOSTS` repository variable, pinned from a trusted existing
+   SSH host record for `187.77.26.99`. Do not use runtime `ssh-keyscan` trust.
+   Prove this runner's actual access and artifact persistence before enabling.
 6. Perform and verify the first cutover: exact serving SHA, strict readiness,
    API/worker parity, sign-in, files and representative workflows. Record the
    controller transfer and retained rollback procedure in the deployment

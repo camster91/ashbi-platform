@@ -48,7 +48,22 @@ jobs:
           node-version: '22'
       - name: Test release safety checks
         if: steps.source.outputs.current == 'true'
-        run: node --test src/tests/unit/coolify-release.test.mjs
+        run: node --test src/tests/unit/coolify-release.test.mjs src/tests/unit/production-backup.test.mjs
+      - name: Create and verify encrypted production backup
+        if: steps.source.outputs.current == 'true'
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          ASHBI_VPS_KNOWN_HOSTS: ${{ vars.ASHBI_VPS_KNOWN_HOSTS }}
+        run: node scripts/deploy/production-backup.mjs
+      - name: Retain verified encrypted pre-deployment backup
+        if: steps.source.outputs.current == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ashbi-production-backup-${{ github.event.workflow_run.head_sha }}
+          path: ${{ runner.temp }}/ashbi-release-backup/
+          if-no-files-found: error
+          retention-days: 30
       - name: Deploy verified revision and await readiness
         if: steps.source.outputs.current == 'true'
         env:

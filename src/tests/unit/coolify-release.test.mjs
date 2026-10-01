@@ -13,12 +13,22 @@ function harness({ resource = app, retainedSha = sha, deployedSha = sha, publicS
     const payload = responses.shift();
     if (!payload) throw new Error('Unexpected network request');
     return { ok: true, status: 200, json: async () => payload };
-  }, sleep: async () => {}, log: () => {} };
+  }, sleep: async () => {}, log: () => {}, backup: async () => ({ releaseSha: sha, offServerCopyVerified: true }) };
 }
 test('disabled adoption makes no network requests', async () => {
   const h = harness();
   await assert.rejects(release({ ...env, COOLIFY_RELEASE_ENABLED: 'false' }, h), /not been enabled/);
   assert.equal(h.calls.length, 0);
+});
+test('failed or mismatched backup blocks every configuration write and deployment', async () => {
+  for (const backup of [async () => { throw new Error('backup failed'); }, async () => null,
+    async () => ({ releaseSha: 'b'.repeat(40), offServerCopyVerified: true }),
+    async () => ({ releaseSha: sha, offServerCopyVerified: false })]) {
+    const h = harness();
+    await assert.rejects(release(env, { ...h, backup }));
+    assert.equal(h.calls.length, 1);
+    assert.equal(h.calls[0].method, 'GET');
+  }
 });
 test('wrong application or direct Git trigger is rejected before a write', async () => {
   for (const resource of [{ ...app, git_repository: 'camster91/other' }, { ...app, settings: { is_auto_deploy_enabled: true } }, { ...app, docker_compose_domains: '{}' }, { ...app, domain_port_overrides: {} }, { ...app, docker_compose_location: '/docker-compose.yml' }, { ...app, docker_compose_location: '/docker-compose.coolify.yml' }, { ...app, settings: { is_auto_deploy_enabled: false, include_source_commit_in_build: false } }]) {

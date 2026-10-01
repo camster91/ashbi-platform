@@ -16,3 +16,9 @@ test('manual, PR, direct push and SSH deployment paths cannot bypass release CI'
   }
   assert.ok(validateCoolifyReleaseWorkflow(source + '\n  - uses: appleboy/ssh-action@v1\n').length > 0);
 });
+test('backup verification and encrypted artifact persistence must precede deployment', () => {
+  for (const gate of ['node scripts/deploy/production-backup.mjs', 'ASHBI_VPS_KNOWN_HOSTS: ${{ vars.ASHBI_VPS_KNOWN_HOSTS }}', 'if-no-files-found: error']) {
+    assert.ok(validateCoolifyReleaseWorkflow(source.replace(gate, 'removed')).length > 0);
+  }
+  assert.ok(validateCoolifyReleaseWorkflow(source.replace('name: Retain verified encrypted pre-deployment backup', 'name: omitted backup retention')).length > 0);
+});
