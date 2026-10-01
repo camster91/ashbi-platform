@@ -34,12 +34,12 @@ const categories = [
 ];
 
 const categoryColors = {
-  WP_ADMIN: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  HOSTING: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  DNS: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  FTP: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  STRIPE: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
-  OTHER: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400',
+  WP_ADMIN: 'bg-info/10 text-info',
+  HOSTING: 'bg-primary/10 text-primary',
+  DNS: 'bg-success/10 text-success',
+  FTP: 'bg-warning/10 text-warning',
+  STRIPE: 'bg-primary/10 text-primary',
+  OTHER: 'bg-muted text-foreground',
 };
 
 const emptyForm = {
@@ -421,7 +421,7 @@ export default function Credentials() {
                             className="min-h-8 min-w-8 inline-flex items-center justify-center p-1 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             title="Copy password"
                           >
-                            {copiedId === cred.id ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                            {copiedId === cred.id ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
                           </button>
                         </div>
                       </td>

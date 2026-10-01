@@ -50,7 +50,10 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
     return reply.redirect(authorizeUrl);
   });
 
-  fastify.get('/oauth/callback', { config: { public: true } }, async (request, reply) => {
+  // No route guard (the signed OAuth state authenticates the browser), but
+  // it completes a connection for the staff member who started it
+  // (`actsForStaff`), so the organization MFA requirement still applies.
+  fastify.get('/oauth/callback', { config: { public: true, actsForStaff: true } }, async (request, reply) => {
     if (!googleClientId || !googleClientSecret || !googleRedirectUri) {
       return reply.status(503).send({ error: 'Google Calendar OAuth is not configured', code: 'GOOGLE_CALENDAR_OAUTH_UNAVAILABLE' });
     }

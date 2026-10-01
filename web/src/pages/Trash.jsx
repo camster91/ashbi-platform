@@ -108,7 +108,7 @@ export default function Trash() {
         {items.length > 0 && (
           <button
             onClick={() => { setOperationError(''); setShowEmptyConfirm(true); }}
-            className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/5 rounded-lg transition-colors"
           >
             <Trash2 className="w-4 h-4 inline mr-1" />
             Empty Trash
@@ -197,7 +197,7 @@ export default function Trash() {
                   type="button"
                   aria-label={`Restore ${item.typeLabel}: ${item.title}`}
                   onClick={() => { setOperationError(''); setConfirmRestore(item); }}
-                  className="min-h-11 min-w-11 p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                  className="min-h-11 min-w-11 p-2 text-success hover:bg-success/5 rounded-lg transition-colors"
                   title="Restore"
                 >
                   <RotateCcw className="w-4 h-4" />
@@ -206,7 +206,7 @@ export default function Trash() {
                   type="button"
                   aria-label={`Permanently delete ${item.typeLabel}: ${item.title}`}
                   onClick={() => { setOperationError(''); setConfirmDelete(item); }}
-                  className="min-h-11 min-w-11 p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  className="min-h-11 min-w-11 p-2 text-destructive hover:bg-destructive/5 rounded-lg transition-colors"
                   title="Delete permanently"
                 >
                   <X className="w-4 h-4" />
@@ -235,7 +235,7 @@ export default function Trash() {
               <strong>{confirmRestore.typeLabel}</strong>: {confirmRestore.title}
             </p>
             <p className="text-sm text-muted-foreground">It will reappear in your lists immediately.</p>
-            {operationError && <p role="alert" className="mt-4 text-sm text-red-600">{operationError}</p>}
+            {operationError && <p role="alert" className="mt-4 text-sm text-destructive">{operationError}</p>}
             <ModalFooter className="flex-col-reverse sm:flex-row">
               <Button variant="outline" className="w-full sm:w-auto" onClick={() => { setOperationError(''); setConfirmRestore(null); }} disabled={Boolean(pendingAction)}>Cancel</Button>
               <Button className="w-full sm:w-auto" onClick={() => handleRestore(confirmRestore.id, confirmRestore.type)} loading={pendingAction === `restore:${confirmRestore.id}`}>Restore</Button>
@@ -259,17 +259,17 @@ export default function Trash() {
         {confirmDelete && (
           <>
             <div className="flex items-start gap-3">
-              <AlertTriangle className="w-6 h-6 text-red-500 shrink-0 mt-0.5" />
+              <AlertTriangle className="w-6 h-6 text-destructive shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm text-muted-foreground mt-1">
                   <strong>{confirmDelete.typeLabel}</strong>: {confirmDelete.title}
                 </p>
-                <p className="text-sm text-red-600 mt-2">
+                <p className="text-sm text-destructive mt-2">
                   This cannot be undone. The item will be permanently removed.
                 </p>
               </div>
             </div>
-            {operationError && <p role="alert" className="mb-4 text-sm text-red-600">{operationError}</p>}
+            {operationError && <p role="alert" className="mb-4 text-sm text-destructive">{operationError}</p>}
             <ModalFooter className="flex-col-reverse sm:flex-row">
               <Button variant="outline" className="w-full sm:w-auto" onClick={() => { setOperationError(''); setConfirmDelete(null); }} disabled={Boolean(pendingAction)}>Cancel</Button>
               <Button variant="destructive" className="w-full sm:w-auto" onClick={() => handlePermanentDelete(confirmDelete.id, confirmDelete.type)} loading={pendingAction === `delete:${confirmDelete.id}`}>Delete forever</Button>
@@ -291,14 +291,14 @@ export default function Trash() {
         showCloseButton={!pendingAction}
       >
         <div className="flex items-start gap-3">
-              <AlertTriangle className="w-6 h-6 text-red-500 shrink-0 mt-0.5" />
+              <AlertTriangle className="w-6 h-6 text-destructive shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm text-muted-foreground mt-1">
                   All {items.length} items will be permanently deleted. This cannot be undone.
                 </p>
               </div>
             </div>
-            {operationError && <p role="alert" className="mb-4 text-sm text-red-600">{operationError}</p>}
+            {operationError && <p role="alert" className="mb-4 text-sm text-destructive">{operationError}</p>}
         <ModalFooter className="flex-col-reverse sm:flex-row">
           <Button variant="outline" className="w-full sm:w-auto" onClick={() => { setOperationError(''); setShowEmptyConfirm(false); }} disabled={Boolean(pendingAction)}>Cancel</Button>
           <Button variant="destructive" className="w-full sm:w-auto" onClick={handleEmptyTrash} loading={pendingAction === 'empty'}>Empty trash</Button>

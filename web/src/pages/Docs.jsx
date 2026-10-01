@@ -36,10 +36,10 @@ const NOTE_TYPES = [
 ];
 
 const TYPE_COLORS = {
-  NOTE: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  MEETING_NOTES: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  WIKI: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  DOC: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  NOTE: 'bg-info/10 text-info',
+  MEETING_NOTES: 'bg-warning/10 text-warning',
+  WIKI: 'bg-primary/10 text-primary',
+  DOC: 'bg-success/10 text-success',
 };
 
 export default function Docs() {

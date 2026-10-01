@@ -18,7 +18,7 @@ import { useAttachmentDraft } from './media/useAttachmentDraft';
 export function VisibilityBadge({ visibility }) {
   if (visibility === 'CLIENT') {
     return (
-      <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200" title="The client can read this message in their portal">
+      <span className="inline-flex items-center gap-1 rounded bg-warning/10 px-1.5 py-0.5 text-[11px] font-medium text-warning" title="The client can read this message in their portal">
         <Eye className="h-3 w-3" aria-hidden="true" /> Visible to client
       </span>
     );
@@ -269,13 +269,13 @@ export default function ProjectChat({ projectId }) {
                   <div
                     className={`rounded-lg px-4 py-2 ${
                       msg.authorId === user?.id
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-info text-info-foreground'
                         : 'bg-muted text-foreground'
                     }`}
                   >
                     {msg.removedAt ? <p className="italic opacity-80">Message deleted</p> : editingId === msg.id ? <form onSubmit={(event) => { event.preventDefault(); if (editingContent.trim()) editMutation.mutate({ id: msg.id, content: editingContent.trim() }); }}><input autoFocus value={editingContent} onChange={(event) => setEditingContent(event.target.value)} className="w-full rounded px-2 py-1 bg-background text-foreground" /><div className="mt-2 flex gap-2"><button type="submit" className="text-xs underline">Save</button><button type="button" onClick={() => setEditingId(null)} className="text-xs underline">Cancel</button></div></form> : <p className="whitespace-pre-wrap">{msg.content}</p>}
                     <div className="flex items-center justify-between mt-1">
-                      <span className={`text-xs ${msg.authorId === user?.id ? 'text-blue-50' : 'text-muted-foreground'}`}>
+                      <span className={`text-xs ${msg.authorId === user?.id ? 'text-info-foreground/80' : 'text-muted-foreground'}`}>
                         {formatTime(msg.createdAt)}
                         {msg.isEdited && ' (edited)'}
                       </span>
@@ -350,18 +350,18 @@ export default function ProjectChat({ projectId }) {
       )}
 
       {/* Input */}
-      <form onSubmit={handleSend} {...dropHandlers} aria-label="Write a message" className={`border-t border-border p-3 ${visibility === 'CLIENT' ? 'bg-amber-50 dark:bg-amber-950/30' : ''} ${dragging ? 'outline outline-2 outline-dashed outline-primary' : ''}`}>
+      <form onSubmit={handleSend} {...dropHandlers} aria-label="Write a message" className={`border-t border-border p-3 ${visibility === 'CLIENT' ? 'bg-warning/5' : ''} ${dragging ? 'outline outline-2 outline-dashed outline-primary' : ''}`}>
         <fieldset className="mb-2 flex flex-wrap items-center gap-2 text-xs">
           <legend className="sr-only">Who can read this message</legend>
           <label className={`inline-flex min-h-11 cursor-pointer items-center gap-1 rounded border px-2 ${visibility === 'INTERNAL' ? 'border-foreground/60 bg-muted font-semibold' : 'border-border'}`}>
             <input type="radio" name={`chat-visibility-${projectId}`} value="INTERNAL" checked={visibility === 'INTERNAL'} onChange={() => setVisibility('INTERNAL')} />
             <Lock className="h-3 w-3" aria-hidden="true" /> Internal (team only)
           </label>
-          <label className={`inline-flex min-h-11 cursor-pointer items-center gap-1 rounded border px-2 ${visibility === 'CLIENT' ? 'border-amber-700 bg-amber-100 font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200' : 'border-border'}`}>
+          <label className={`inline-flex min-h-11 cursor-pointer items-center gap-1 rounded border px-2 ${visibility === 'CLIENT' ? 'border-warning bg-warning/10 font-semibold text-warning' : 'border-border'}`}>
             <input type="radio" name={`chat-visibility-${projectId}`} value="CLIENT" checked={visibility === 'CLIENT'} onChange={() => setVisibility('CLIENT')} />
             <Eye className="h-3 w-3" aria-hidden="true" /> Visible to client
           </label>
-          {visibility === 'CLIENT' && <span role="status" className="text-amber-900 dark:text-amber-200">The client will see this message in their portal.</span>}
+          {visibility === 'CLIENT' && <span role="status" className="text-warning">The client will see this message in their portal.</span>}
         </fieldset>
         <AttachmentTray draft={draft} capture={capture} className="mb-2" />
         <div className="flex gap-2">
@@ -380,7 +380,7 @@ export default function ProjectChat({ projectId }) {
           <button
             type="submit"
             disabled={!canSend || sendMutation.isPending}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-info text-info-foreground px-4 py-2 rounded-lg hover:bg-info/90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sendMutation.isPending ? '...' : 'Send'}
           </button>

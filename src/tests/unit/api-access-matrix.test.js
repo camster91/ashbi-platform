@@ -164,6 +164,16 @@ function renderAccessMatrix(routes) {
   out.push('below is therefore reachable without a session, and any check it performs');
   out.push('happens inside its handler. Role checks inside handlers are not shown.');
   out.push('');
+  out.push('Across every guard, the global `preHandler` from `src/auth/mfa-enforcement.js`');
+  out.push('refuses a staff identity whose organization requires two-factor');
+  out.push('authentication and who has not enrolled (`403 MFA_ENROLLMENT_REQUIRED`),');
+  out.push('except on `MFA_ENROLLMENT_ALLOWED_ROUTES` (enrollment, `/api/auth/me`,');
+  out.push('sign-out, credential exchange, probes) and on routes declaring');
+  out.push('`config: { public: true }` without `actsForStaff`: the public capability-link,');
+  out.push('intake, webhook, magic-link and health routes below, which act with no');
+  out.push('staff authority (OAuth callbacks declare `actsForStaff` and stay restricted).');
+  out.push('See docs/privileged-actions.md.');
+  out.push('');
   out.push('The Tenancy column shows whether `tenancyMiddleware` scopes the route\'s');
   out.push('Prisma client to the caller\'s organization (`scoped`) or hands it the raw');
   out.push('client (`exempt`). A signed-in route marked `exempt` must confine its own');
@@ -269,6 +279,39 @@ test('every unguarded route is on the documented public allowlist', async () => 
   for (const [key, entry] of Object.entries(INTENTIONALLY_PUBLIC_ROUTES)) {
     assert.ok(entry.category && entry.reason, `allowlist entry ${key} needs a category and reason`);
   }
+});
+
+/**
+ * Public categories whose routes never act with a staff member's authority.
+ * Each carries `config: { public: true }` without `actsForStaff`, which
+ * exempts it from the organization MFA requirement (isPublicRoute in
+ * src/auth/mfa-enforcement.js). Credential exchange (the requirement lists
+ * those it allows by name, and POST /api/auth/register acts for an admin) and
+ * CORS preflight are not in this set; OAuth callbacks carry `actsForStaff`
+ * (they complete a staff member's connection), so they stay restricted.
+ */
+const NO_STAFF_AUTHORITY_CATEGORIES = new Set(['capability token', 'public intake', 'signed webhook', 'magic link', 'health']);
+
+test('config.public marks exactly the public routes that act with no staff authority', async () => {
+  const routes = await getMatrix();
+  const keysOf = (categories) => Object.entries(INTENTIONALLY_PUBLIC_ROUTES)
+    .filter(([, entry]) => categories.has(entry.category))
+    .map(([key]) => key)
+    .sort(compare);
+  const keysWhere = (predicate) => routes.filter(predicate).map((route) => `${route.method} ${route.url}`).sort(compare);
+  assert.deepEqual(
+    keysWhere((route) => route.public && !route.actsForStaff),
+    keysOf(NO_STAFF_AUTHORITY_CATEGORIES),
+    'config.public (without actsForStaff) exempts a route from the organization MFA requirement. Set it on '
+      + 'every allowlisted capability, intake, webhook, magic-link and health route, and on no other route.',
+  );
+  assert.deepEqual(
+    keysWhere((route) => route.actsForStaff),
+    keysOf(new Set(['oauth callback'])),
+    'OAuth callbacks complete a staff member\'s connection: they must declare config.actsForStaff.',
+  );
+  const byKey = new Map(routes.map((route) => [`${route.method} ${route.url}`, route]));
+  assert.equal(byKey.get('POST /api/auth/register')?.public, false, 'register acts for an admin and must not be config.public');
 });
 
 test('docs/api-access-matrix.md matches the application', async () => {

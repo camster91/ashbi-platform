@@ -388,6 +388,7 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
       pricedModels: [],
       usage: { since: '2026-08-01T00:00:00.000Z', calls: 0, promptTokens: 0, completionTokens: 0, unpricedTokens: 0, spentCents: 0, budgetCents: null, alertThresholdPercent: 80 },
     });
+    if (path === '/settings/mfa-requirement') return json(route, { required: false, staffWithoutMfa: 1, actorMfaEnabled: true });
     if (path === '/auth/mfa') return json(route, { eligible: true, enabled: false, enabledAt: null, pendingEnrollment: false, recoveryCodesRemaining: 0 });
     if (path === '/audit-events/catalog') return json(route, { actions: ['auth.login', 'invoice.sent', 'auth.mfa_enabled'], entityTypes: ['user', 'invoice'], actorTypes: ['USER', 'CLIENT', 'SYSTEM', 'WEBHOOK', 'BOT'] });
     if (path === '/audit-events') return json(route, { events: [

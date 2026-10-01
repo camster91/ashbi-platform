@@ -210,8 +210,8 @@ function RateCardRow({ card, onEdit, onDelete }) {
               <span className={cn(
                 'px-2 py-0.5 rounded-full text-xs font-medium',
                 card.clientId
-                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                  : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                  ? 'bg-info/10 text-info'
+                  : 'bg-muted text-foreground'
               )}>
                 {card.client?.name ?? 'Global'}
               </span>
@@ -396,7 +396,7 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
                     size="xs"
                     aria-label={`Remove service ${idx + 1}`}
                     onClick={() => removeRate(idx)}
-                    className="sm:col-span-1 text-destructive hover:text-destructive"
+                    className="sm:col-span-1 text-destructive hover:text-destructive/80"
                   >
                     <X className="w-4 h-4" />
                   </Button>

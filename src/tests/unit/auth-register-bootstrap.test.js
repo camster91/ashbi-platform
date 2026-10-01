@@ -133,3 +133,67 @@ test('an admin registering a later user places them in the admin organization', 
   assert.equal(response.json().organizationId, 'org-a');
   assert.equal(db.organizations.length, 1, 'no new organization for later users');
 });
+
+// F1 (#416 follow-up): /api/auth is exempt from the global session hook, so
+// POST /register identifies its caller in its own onRequest guard. The
+// organization MFA requirement (a global preHandler in src/index.js) must see
+// the admin whatever case of the `Bearer` scheme @fastify/jwt accepts.
+test('the register guard identifies the admin before any preHandler, whatever the bearer case', async (t) => {
+  const db = fakeDatabase({
+    users: [{ id: 'admin-1', email: 'founder@agency.test', role: 'ADMIN', organizationId: 'org-a', sessionVersion: 0, isActive: true }],
+    organizations: [{ id: 'org-a', name: 'Agency', slug: 'agency' }],
+  });
+  db.client.user.findUnique = async ({ where }) => db.users.find((row) => (where.id ? row.id === where.id : row.email === where.email)) ?? null;
+  const app = Fastify();
+  await app.register(fastifyJwt, { secret: 'unit-test-secret' });
+  app.decorate('authenticate', async () => {});
+  app.decorate('prisma', db.client);
+  app.addHook('onRequest', async (request) => { request.prisma = db.client; });
+  const seen = [];
+  app.addHook('preHandler', async (request) => { seen.push(request.user?.id ?? null); });
+  await app.register(authRoutes);
+  t.after(() => app.close());
+  const token = app.jwt.sign({ typ: 'session', id: 'admin-1', role: 'ADMIN', organizationId: 'org-a', sessionVersion: 0 });
+
+  for (const [index, scheme] of ['Bearer', 'bearer', 'BEARER', 'BeArEr'].entries()) {
+    seen.length = 0;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/register',
+      headers: { authorization: `${scheme} ${token}` },
+      payload: { email: `member-${index}@agency.test`, password: 'Member-Passw0rd!', name: 'Member', role: 'TEAM' },
+    });
+    assert.equal(response.statusCode, 201, `${scheme}: ${response.body}`);
+    assert.deepEqual(seen, ['admin-1'], scheme);
+  }
+
+  // A stale session (wrong version) leaves the request anonymous: the guard
+  // never answers by itself, and the handler refuses it.
+  seen.length = 0;
+  const stale = app.jwt.sign({ typ: 'session', id: 'admin-1', role: 'ADMIN', organizationId: 'org-a', sessionVersion: 9 });
+  const refused = await app.inject({
+    method: 'POST',
+    url: '/register',
+    headers: { authorization: `bearer ${stale}` },
+    payload: { email: 'late@agency.test', password: 'Member-Passw0rd!', name: 'Late', role: 'TEAM' },
+  });
+  assert.equal(refused.statusCode, 401, refused.body);
+  assert.deepEqual(seen, [null]);
+});
+
+test('the register guard leaves first-admin bootstrap anonymous', async (t) => {
+  const db = fakeDatabase();
+  const app = Fastify();
+  await app.register(fastifyJwt, { secret: 'unit-test-secret' });
+  app.decorate('authenticate', async () => {});
+  app.decorate('prisma', db.client);
+  app.addHook('onRequest', async (request) => { request.prisma = db.client; });
+  const seen = [];
+  app.addHook('preHandler', async (request) => { seen.push(request.user?.id ?? null); });
+  await app.register(authRoutes);
+  t.after(() => app.close());
+
+  const response = await app.inject({ method: 'POST', url: '/register', payload: ADMIN });
+  assert.equal(response.statusCode, 201, response.body);
+  assert.deepEqual(seen, [null]);
+});

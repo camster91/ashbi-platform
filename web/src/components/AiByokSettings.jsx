@@ -36,7 +36,7 @@ function errorMessage(error, fallback) {
 
 function UsageBar({ spentCents, budgetCents, alertThresholdPercent }) {
   const percent = budgetCents ? Math.min(100, Math.round((spentCents / budgetCents) * 100)) : 0;
-  const tone = percent >= 100 ? 'bg-destructive' : percent >= (alertThresholdPercent || 80) ? 'bg-amber-500' : 'bg-primary';
+  const tone = percent >= 100 ? 'bg-destructive' : percent >= (alertThresholdPercent || 80) ? 'bg-warning' : 'bg-primary';
   return (
     <div>
       <div className="flex justify-between text-xs text-muted-foreground mb-1">
@@ -190,12 +190,12 @@ export default function AiByokSettings() {
   return (
     <div className="space-y-5">
       {data?.platformAiDisabled && (
-        <p role="status" className="text-sm rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200 p-3">
+        <p role="status" className="text-sm rounded-lg bg-warning/10 text-warning p-3">
           AI is turned off for this whole deployment by the platform operator.
         </p>
       )}
       {data?.aiDisabled && (
-        <p role="status" className="text-sm rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200 p-3">
+        <p role="status" className="text-sm rounded-lg bg-warning/10 text-warning p-3">
           AI features are turned off for this workspace.
         </p>
       )}

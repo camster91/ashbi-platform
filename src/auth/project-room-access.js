@@ -17,6 +17,7 @@
  */
 
 import { toClientAttachmentPayload } from '../services/chat-attachment.service.js';
+import { MFA_ENROLLMENT_REQUIRED_CODE } from './mfa-enforcement.js';
 
 /** @param {string} projectId */
 export function projectRoom(projectId) {
@@ -65,14 +66,24 @@ export function canJoinProjectRoom(principal, project) {
  * joined before sending call presence or signals, which the server drops for
  * sockets that are not yet in the internal project room.
  *
- * @param {{ userRole?: string, organizationId?: string, clientId?: string, join: (room: string) => void }} socket
- * @param {{ findProject: (projectId: string) => Promise<any>, logger?: { error: Function } }} deps
+ * `mustEnrollMfa` re-checks the organization MFA requirement on every join
+ * (the handshake check alone would let a socket opened before the
+ * requirement applied keep joining rooms): when it resolves true the join is
+ * refused and the socket disconnected. A failed check refuses the join.
+ *
+ * @param {{ userRole?: string, organizationId?: string, clientId?: string, join: (room: string) => void, disconnect?: (close?: boolean) => void }} socket
+ * @param {{ findProject: (projectId: string) => Promise<any>, mustEnrollMfa?: () => Promise<boolean> | boolean, logger?: { error: Function } }} deps
  */
-export function createJoinProjectHandler(socket, { findProject, logger }) {
+export function createJoinProjectHandler(socket, { findProject, mustEnrollMfa = () => false, logger }) {
   return async (projectId, ack) => {
     const reply = typeof ack === 'function' ? ack : () => {};
     if (!projectId || typeof projectId !== 'string') return reply({ joined: false });
     try {
+      if (await mustEnrollMfa()) {
+        reply({ joined: false, code: MFA_ENROLLMENT_REQUIRED_CODE });
+        socket.disconnect?.(true);
+        return undefined;
+      }
       const project = await findProject(projectId);
       const access = projectRoomAccess(socket, project);
       if (access === 'internal') socket.join(projectRoom(projectId));

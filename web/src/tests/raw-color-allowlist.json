@@ -1,0 +1,61 @@
+{
+  "_comment": "Files allowed to keep raw Tailwind palette classes, opaque bg-white or hex colours (#315, #118). Each entry is the exact number of hits web/src/tests/raw-color-guard.test.js finds today. The count is a ratchet: it may only go down, and the test fails until you lower it here after migrating. Never add a file or raise a count without a reason a reviewer would accept. Everything else must use the design tokens in web/src/index.css (see docs/ui-primitives.md, Design tokens).",
+  "files": {
+    "src/pages/PortalIntakeForm.jsx": {
+      "count": 71,
+      "reason": "Deliberately dark (slate-950/900) public intake form. It needs a dark-surface token set before it can move to tokens; light tokens would invert it. See portal-text-contrast-guard.test.js."
+    },
+    "src/pages/Pipeline.jsx": {
+      "count": 18,
+      "reason": "Categorical pipeline-stage colours (six gradient stage headers plus the invoiced/paid chips). Six categories cannot be expressed with the four status tokens without losing the distinction; each stage also has an icon and a label."
+    },
+    "src/pages/Expenses.jsx": {
+      "count": 12,
+      "reason": "Categorical expense-category chips (pink/teal/lime) that have no status meaning. The chip text states the category."
+    },
+    "src/pages/BrandSettings.jsx": {
+      "count": 11,
+      "reason": "Default values for the client's own brand colours (<input type=\"color\"> values and preview swatches). This is user data, not the Ashbi theme."
+    },
+    "src/components/media/markup.js": {
+      "count": 9,
+      "reason": "Annotation colour palette saved with markup data and drawn onto media; must be stable hex so every viewer sees the stored colour."
+    },
+    "src/components/review/markup.js": {
+      "count": 6,
+      "reason": "Review annotation colour palette saved with review data; same reason as media/markup.js."
+    },
+    "src/pages/ApprovalQueue.jsx": {
+      "count": 4,
+      "reason": "Categorical content-type chip (COPY, pink) in the TYPE_COLORS map; the chip text states the type."
+    },
+    "src/components/Layout.jsx": {
+      "count": 2,
+      "reason": "Brand sidebar exception: the sidebar is a fixed brand-indigo surface in both themes (brand-* colours, white/NN tints). The logout hover uses red-400 because the theme's destructive token is too dark on indigo in light mode."
+    },
+    "src/lib/data-colors.js": {
+      "count": 1,
+      "reason": "Single source for colours stored as data (default calendar event / milestone colour)."
+    },
+    "src/components/ErrorBoundary.jsx": {
+      "count": 1,
+      "reason": "console.group %c styling for developer logs; never rendered in the UI."
+    },
+    "src/lib/api.js": {
+      "count": 1,
+      "reason": "console.group %c styling for developer API-error logs; never rendered in the UI."
+    },
+    "src/components/review/AnnotationOverlay.jsx": {
+      "count": 1,
+      "reason": "White halo under annotation shapes so they stay visible on any media; independent of the UI theme."
+    },
+    "src/components/review/pdf-render.worker.js": {
+      "count": 1,
+      "reason": "White page fill for rendered PDF pages in an OffscreenCanvas (a worker has no CSS variables)."
+    },
+    "src/pages/PortalContract.jsx": {
+      "count": 1,
+      "reason": "Signature-pad ink colour on a canvas, which cannot read Tailwind classes; the signature image is stored."
+    }
+  }
+}

@@ -24,24 +24,24 @@ import SupportAccessLog from '../components/SupportAccessLog';
 import { useAuth } from '../hooks/useAuth';
 
 const roleColors = {
-  ADMIN: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  MEMBER: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  BOT: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  ADMIN: 'bg-primary/10 text-primary',
+  MEMBER: 'bg-info/10 text-info',
+  BOT: 'bg-warning/10 text-warning',
 };
 
 // Roles an admin may view the app as (#416): never another administrator.
 const VIEWABLE_ROLES = new Set(['TEAM', 'STAFF', 'CLIENT']);
 
 const statusColor = (status) => {
-  if (status === 'overloaded') return 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20';
-  if (status === 'busy') return 'text-amber-800 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20';
-  return 'text-green-800 dark:text-green-400 bg-green-50 dark:bg-green-900/20';
+  if (status === 'overloaded') return 'text-destructive bg-destructive/5';
+  if (status === 'busy') return 'text-warning bg-warning/5';
+  return 'text-success bg-success/5';
 };
 
 const barColor = (status) => {
-  if (status === 'overloaded') return 'bg-red-500';
-  if (status === 'busy') return 'bg-amber-500';
-  return 'bg-green-500';
+  if (status === 'overloaded') return 'bg-destructive';
+  if (status === 'busy') return 'bg-warning';
+  return 'bg-success';
 };
 
 export default function Team() {
@@ -138,7 +138,7 @@ export default function Team() {
           <p className="text-sm text-muted-foreground mt-1">
             {activeCount} active member{activeCount !== 1 ? 's' : ''}
             {overloadedCount > 0 && (
-              <span className="ml-2 text-amber-800 dark:text-amber-400">· {overloadedCount} overloaded</span>
+              <span className="ml-2 text-warning">· {overloadedCount} overloaded</span>
             )}
           </p>
         </div>
@@ -207,7 +207,7 @@ export default function Team() {
                       <div>
                         <div className="flex justify-between text-xs text-muted-foreground mb-1">
                           <span>Utilization</span>
-                          <span className={member.utilizationPercent > 80 ? 'text-amber-800 dark:text-amber-400 font-semibold' : ''}>
+                          <span className={member.utilizationPercent > 80 ? 'text-warning font-semibold' : ''}>
                             {member.utilizationPercent}%
                           </span>
                         </div>
@@ -310,10 +310,10 @@ export default function Team() {
                               <span className="text-xs text-muted-foreground">(inactive)</span>
                             )}
                             {member.mfaEnabled && (
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">2FA on</span>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success">2FA on</span>
                             )}
                             {member.mfaLocked && (
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">2FA locked</span>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning">2FA locked</span>
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">{member.email}</p>
@@ -367,7 +367,7 @@ export default function Team() {
                           </button>
                           <button
                             onClick={() => handleToggleActive(member)}
-                            className={cn('p-1.5 rounded', member.isActive ? 'text-green-800 dark:text-green-400 hover:text-red-500' : 'text-muted-foreground hover:text-green-600')}
+                            className={cn('p-1.5 rounded', member.isActive ? 'text-success hover:text-destructive' : 'text-muted-foreground hover:text-success/80')}
                             title={member.isActive ? 'Deactivate' : 'Activate'}
                           >
                             {member.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
@@ -415,7 +415,7 @@ export default function Team() {
                 </Card>
                 <Card className="p-4">
                   <p className="text-xs text-muted-foreground">Overloaded</p>
-                  <p className="text-2xl font-bold text-red-700 dark:text-red-400">{allocations.filter(a => a.utilization > 90).length}</p>
+                  <p className="text-2xl font-bold text-destructive">{allocations.filter(a => a.utilization > 90).length}</p>
                 </Card>
               </div>
 
@@ -432,14 +432,14 @@ export default function Team() {
                         </div>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
                           <span>{a.weeklyHours.toFixed(1)}h/week</span>
-                          <span className={cn('px-2 py-0.5 rounded-full font-medium', a.utilization > 90 ? 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20' : a.utilization > 70 ? 'text-amber-800 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'text-green-800 dark:text-green-400 bg-green-50 dark:bg-green-900/20')}>
+                          <span className={cn('px-2 py-0.5 rounded-full font-medium', a.utilization > 90 ? 'text-destructive bg-destructive/5' : a.utilization > 70 ? 'text-warning bg-warning/5' : 'text-success bg-success/5')}>
                             {a.utilization}%
                           </span>
                         </div>
                       </div>
                       <div className="h-2 bg-muted rounded-full overflow-hidden">
                         <div
-                          className={cn('h-full rounded-full', a.utilization > 90 ? 'bg-red-500' : a.utilization > 70 ? 'bg-amber-500' : 'bg-green-500')}
+                          className={cn('h-full rounded-full', a.utilization > 90 ? 'bg-destructive' : a.utilization > 70 ? 'bg-warning' : 'bg-success')}
                           style={{ width: `${Math.min(100, a.utilization)}%` }}
                         />
                       </div>

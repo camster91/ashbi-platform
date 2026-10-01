@@ -88,9 +88,9 @@ export default function SemanticSearch() {
   };
 
   const similarityColor = (score) => {
-    if (score >= 0.8) return 'text-emerald-600 dark:text-emerald-400';
-    if (score >= 0.6) return 'text-amber-700 dark:text-amber-400';
-    return 'text-red-700 dark:text-red-300';
+    if (score >= 0.8) return 'text-success';
+    if (score >= 0.6) return 'text-warning';
+    return 'text-destructive';
   };
 
   return (
@@ -142,7 +142,7 @@ export default function SemanticSearch() {
         </p>
       )}
       {rebuildMutation.data && (
-        <p role="status" className="rounded-lg border border-emerald-600/30 bg-emerald-600/10 p-3 text-sm text-foreground">
+        <p role="status" className="rounded-lg border border-success/30 bg-success/10 p-3 text-sm text-foreground">
           {rebuildMutation.data.existingEmbeddingsPreserved
             ? 'No rebuildable source content was found. Existing client knowledge was preserved.'
             : `Rebuild complete: ${rebuildMutation.data.embeddingsCreated} embeddings created and ${rebuildMutation.data.embeddingsReplaced} replaced.`}

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { purgePrivateCaches } from '../lib/private-cache';
 import { reloadTo } from '../lib/navigation';
+import { MFA_ENROLLMENT_REQUIRED_EVENT } from '../lib/mfa-enrollment';
 import { clearBrowserPushSubscription } from './usePushNotifications';
 
 const AuthContext = createContext(null);
@@ -241,6 +242,27 @@ export function AuthProvider({ children }) {
     navigate('/login', { replace: true, state: { reason, message, returnTo } });
   }, [cancelPendingAuthCheck, location.hash, location.pathname, location.search, navigate]);
 
+  // Organization MFA requirement: any API answer of 403
+  // MFA_ENROLLMENT_REQUIRED (the requirement was turned on during this
+  // session, or two-factor was reset) marks the signed-in user, and
+  // MfaEnrollmentGate then routes them to setup.
+  useEffect(() => {
+    const markRequired = () => {
+      setUser((current) => (current && !current.mfaEnrollmentRequired ? { ...current, mfaEnrollmentRequired: true } : current));
+    };
+    window.addEventListener(MFA_ENROLLMENT_REQUIRED_EVENT, markRequired);
+    return () => window.removeEventListener(MFA_ENROLLMENT_REQUIRED_EVENT, markRequired);
+  }, []);
+
+  // After enrolling, the same session has full access again. Reload so the
+  // queries and the realtime connection refused while it was restricted
+  // start fresh.
+  const completeMfaEnrollment = useCallback(async (to = '/dashboard') => {
+    authCheckSequenceRef.current += 1;
+    await purgePrivateCaches();
+    reloadTo(to);
+  }, []);
+
   // Support impersonation (#416): the server keeps the admin's own session
   // and adds a read-only view cookie; /auth/me then answers as the viewed
   // person with an `impersonation` block. Both transitions reload the app so
@@ -265,7 +287,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, authState, login, completeMfaLogin, logout, expireSession, checkAuth, startImpersonation, stopImpersonation }}>
+    <AuthContext.Provider value={{ user, isLoading, authState, login, completeMfaLogin, completeMfaEnrollment, logout, expireSession, checkAuth, startImpersonation, stopImpersonation }}>
       {children}
     </AuthContext.Provider>
   );

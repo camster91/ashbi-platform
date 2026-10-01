@@ -39,6 +39,8 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'auth.mfa_failed': { entityType: 'user', metadata: ['reason'] },
   'auth.reauthenticated': { entityType: 'user', metadata: ['method'] },
   'auth.reauth_failed': { entityType: 'user', metadata: ['reason'] },
+  // Organization MFA requirement (#416 follow-up, docs/privileged-actions.md).
+  'organization.mfa_requirement_changed': { entityType: 'organization', metadata: ['fromRequired', 'toRequired', 'staffWithoutMfa'] },
   'api_key.created': { entityType: 'api_key', metadata: ['ownerUserId', 'expires', 'expiresAt', 'scopes'] },
   'api_key.revoked': { entityType: 'api_key', metadata: ['ownerUserId'] },
   'settings.ai_provider_changed': { entityType: 'settings', metadata: ['fromProvider', 'toProvider', 'fromModel', 'toModel'] },

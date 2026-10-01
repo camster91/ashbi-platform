@@ -226,18 +226,18 @@ export default function Login() {
   return (
     <div className="min-h-screen flex">
       {/* Left side - Branding */}
-      <aside className="hidden lg:flex lg:w-1/2 xl:w-5/12 bg-[#2e2958] relative overflow-hidden">
+      <aside className="hidden lg:flex lg:w-1/2 xl:w-5/12 bg-brand-indigo relative overflow-hidden">
         <div className="absolute inset-0">
-          <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-[#e6f354] rounded-full blur-3xl opacity-10" />
-          <div className="absolute bottom-[-5%] right-[-5%] w-[28rem] h-[28rem] bg-[#4a4294] rounded-full blur-3xl opacity-10" />
-          <div className="absolute top-[40%] right-[10%] w-72 h-72 bg-[#d0dd9a] rounded-full blur-3xl opacity-10" />
+          <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-brand-lime rounded-full blur-3xl opacity-10" />
+          <div className="absolute bottom-[-5%] right-[-5%] w-[28rem] h-[28rem] bg-brand-indigo-soft rounded-full blur-3xl opacity-10" />
+          <div className="absolute top-[40%] right-[10%] w-72 h-72 bg-brand-sage rounded-full blur-3xl opacity-10" />
         </div>
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div>
             <div className="flex items-center gap-3 mb-8">
-              <div className="w-10 h-10 rounded-xl bg-[#e6f354] flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-[#2e2958]" />
+              <div className="w-10 h-10 rounded-xl bg-brand-lime flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-brand-indigo" />
               </div>
               <span className="text-xl font-display font-bold">{t('brand.name')}</span>
             </div>
@@ -254,7 +254,7 @@ export default function Login() {
             {features.map((feature, i) => (
               <div key={i} className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
-                  <feature.icon className="w-5 h-5 text-[#e6f354]" />
+                  <feature.icon className="w-5 h-5 text-brand-lime" />
                 </div>
                 <span className="text-white/80">{t(feature.key)}</span>
               </div>
@@ -272,8 +272,8 @@ export default function Login() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-[#2e2958] flex items-center justify-center">
-              <Sparkles className="w-5 h-6 text-[#e6f354]" />
+            <div className="w-10 h-10 rounded-xl bg-brand-indigo flex items-center justify-center">
+              <Sparkles className="w-5 h-6 text-brand-lime" />
             </div>
             <span className="text-xl font-display font-bold text-foreground">{t('brand.name')}</span>
           </div>
