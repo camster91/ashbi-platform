@@ -28,7 +28,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.verify_production_backup
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: production
+    # Recovery-only operation uses repository-scoped backup credentials.
+    # It has no Coolify token or deployment command; release environment policy
+    # remains enforced by checked-coolify-deploy.yml.
     steps:
       - name: Checkout requested revision
         uses: actions/checkout@v4
