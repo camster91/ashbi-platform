@@ -81,7 +81,7 @@ const INTENTIONALLY_PUBLIC_ROUTES = {
   'POST /api/mailgun-hitl/hitl-reply': { category: 'signed webhook', reason: 'Mailgun HMAC signature, 15-minute timestamp window and single-use token verified in the handler; the reply address must carry the notification\'s HMAC token and the reply must reference the sent Message-Id, and it is applied only when its single From address is the notified staff user or an active admin of that org, Mailgun reports an SPF/DKIM pass aligned with the From domain, and an approval is still pending.' },
   'POST /api/slack/events': { category: 'signed webhook', reason: 'Slack request signature verified before the body is trusted.' },
   'GET /api/slack/oauth/callback': { category: 'oauth callback', reason: 'OAuth state is a signed JWT verified in the handler.' },
-  'GET /api/google-calendar/oauth/callback': { category: 'oauth callback', reason: 'OAuth state is a signed JWT verified in the handler. Not tenancy-exempt, so the tenant guard also requires the staff session cookie.' },
+  'GET /api/google-calendar/oauth/callback': { category: 'oauth callback', reason: 'OAuth state is a signed, browser-bound JWT verified in the handler; tenancy-exempt like the Slack callback (no session cookie arrives with the provider redirect), so writes are scoped to the organization and user in the state.' },
 
   'GET /api/client-acquisition/config': { category: 'public intake', reason: 'Public ashbi.ca inquiry form configuration; own CORS allowlist, no cookies.' },
   'POST /api/client-acquisition/intake': { category: 'public intake', reason: 'Public ashbi.ca inquiry submission; own CORS allowlist, no cookies.' },

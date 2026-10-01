@@ -979,6 +979,18 @@
         },
         "type": "object"
       },
+      "AttachmentClientVisibility": {
+        "additionalProperties": false,
+        "properties": {
+          "clientVisible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "clientVisible"
+        ],
+        "type": "object"
+      },
       "Booking": {
         "properties": {
           "date": {
@@ -1886,6 +1898,7 @@
             "type": "string"
           },
           "signatureType": {
+            "default": "type",
             "enum": [
               "type",
               "draw"
@@ -1900,7 +1913,6 @@
         },
         "required": [
           "signerName",
-          "signatureType",
           "agreement"
         ],
         "type": "object"
@@ -9455,6 +9467,68 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/attachments/{id}/client-visibility": {
+      "patch": {
+        "operationId": "patch_api_attachments_id_client_visibility",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentClientVisibility"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PATCH /api/attachments/:id/client-visibility",
+        "tags": [
+          "attachments"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/audit-events": {
       "get": {
         "operationId": "get_api_audit_events",
@@ -9531,6 +9605,7 @@
                 "client_portal.document_deleted",
                 "client_portal.revision_responded",
                 "client_portal.feedback_submitted",
+                "attachment.client_visibility_changed",
                 "upload.rejected",
                 "ai.connection_connected",
                 "ai.connection_validated",
@@ -15522,6 +15597,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContractSign"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -18633,7 +18718,7 @@
           "google-calendar"
         ],
         "x-access": "public",
-        "x-tenancy": "scoped"
+        "x-tenancy": "exempt"
       }
     },
     "/api/google-calendar/oauth/start": {

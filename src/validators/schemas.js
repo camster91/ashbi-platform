@@ -367,9 +367,17 @@ export const bookingSchema = z.object({
   notes: z.string().max(1000).optional(),
 });
 
+// PATCH /api/attachments/:id/client-visibility: list (or stop listing) a
+// project file in the client portal's Documents.
+export const attachmentClientVisibilitySchema = z.object({
+  clientVisible: z.boolean(),
+}).strict();
+
+// Both public signing routes (POST /api/portal/contract/:signToken/sign and
+// POST /api/contracts/sign/:signToken). A typed signature is the default.
 export const contractSignSchema = z.object({
-  signerName: z.string().min(1).max(200),
-  signatureType: z.enum(['type', 'draw']),
+  signerName: z.string().trim().min(1).max(200),
+  signatureType: z.enum(['type', 'draw']).default('type'),
   signatureImage: z.string().min(1).max(50000).optional(),
   agreement: z.literal(true),
 }).superRefine((value, ctx) => {

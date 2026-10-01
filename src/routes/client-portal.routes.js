@@ -16,7 +16,8 @@ import { clearStaleSessionCookie } from '../auth/request-session.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { recordRejectedUpload, sha256Hex } from '../services/upload-integrity.service.js';
 import { contentDisposition } from '../utils/send-file.js';
-import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
+import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation, isQuarantined } from '../services/media-review.service.js';
+import { scanReviewMedia } from '../services/media-scan.service.js';
 import clientPortalReviewRoutes from './client-portal-review.routes.js';
 import { emitChatEvent, toClientChatPayload } from '../auth/project-room-access.js';
 import {
@@ -48,7 +49,55 @@ const PORTAL_DOCUMENT_SELECT = Object.freeze({
   size: true,
   checksumSha256: true,
   createdAt: true,
-  uploadedBy: { select: { id: true, name: true } },
+  // The uploader's name only, never their account id.
+  uploadedBy: { select: { name: true } },
+});
+
+// The client portal's task board (GET /projects/:id/tasks). Every value of
+// TASK_STATUS_VALUES maps to exactly one column, so no task disappears from
+// the board; WAITING_CLIENT gets its own "Waiting on you" column.
+export const CLIENT_TASK_COLUMN_STATUSES = Object.freeze({
+  TODO: Object.freeze(['PENDING', 'UPCOMING', 'IMMEDIATE', 'TODO']),
+  IN_PROGRESS: Object.freeze(['IN_PROGRESS', 'WAITING_US']),
+  WAITING_CLIENT: Object.freeze(['WAITING_CLIENT']),
+  REVIEW: Object.freeze(['REVIEW']),
+  BLOCKED: Object.freeze(['BLOCKED']),
+  DONE: Object.freeze(['COMPLETED']),
+});
+
+const CLIENT_TASK_COLUMN_BY_STATUS = new Map(
+  Object.entries(CLIENT_TASK_COLUMN_STATUSES).flatMap(([column, statuses]) => statuses.map((status) => [status, column])),
+);
+
+/** Group tasks into the portal columns; an unknown legacy status lands in TODO. */
+export function groupClientTaskColumns(tasks) {
+  const columns = Object.fromEntries(Object.keys(CLIENT_TASK_COLUMN_STATUSES).map((column) => [column, []]));
+  for (const task of tasks) columns[CLIENT_TASK_COLUMN_BY_STATUS.get(task.status) ?? 'TODO'].push(task);
+  return columns;
+}
+
+const CLIENT_TASK_SELECT = Object.freeze({
+  id: true,
+  title: true,
+  status: true,
+  priority: true,
+  category: true,
+  dueDate: true,
+  completedAt: true,
+  milestoneId: true,
+  updatedAt: true,
+  assignee: { select: { name: true } },
+});
+
+// Which PROJECT attachments the client portal shows: files staff explicitly
+// shared (`clientVisible`, which client uploads get on creation) and files
+// staff put in front of the client through a shared media review. Internal
+// staff files, including screen recordings, are never listed or downloadable.
+export const CLIENT_VISIBLE_ATTACHMENT_WHERE = Object.freeze({
+  OR: [
+    { clientVisible: true },
+    { reviewSessions: { some: { sharedWithClient: true } } },
+  ],
 });
 
 const CLIENT_VISIBLE_INVOICE_STATUSES = [...INVOICE_OPEN_STATUSES, 'PAID'];
@@ -360,8 +409,7 @@ export default async function clientPortalRoutes(fastify) {
         id: true,
         name: true,
         status: true,
-        health: true,
-        aiSummary: true,
+        // Never the internal health rating or AI summary (staff-only).
         description: true,
         startDate: true,
         endDate: true,
@@ -413,8 +461,7 @@ export default async function clientPortalRoutes(fastify) {
         id: true,
         name: true,
         status: true,
-        health: true,
-        aiSummary: true,
+        // Never the internal health rating or AI summary (staff-only).
         description: true,
         startDate: true,
         endDate: true,
@@ -545,34 +592,16 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
+    // Client-safe fields only: no internal description, ordering or the
+    // assignee's account id.
     const tasks = await request.prisma.task.findMany({
       where: { projectId: id, parentId: null },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        status: true,
-        priority: true,
-        category: true,
-        dueDate: true,
-        completedAt: true,
-        position: true,
-        assigneeId: true,
-        assignee: { select: { id: true, name: true } },
-        milestoneId: true,
-        createdAt: true,
-        updatedAt: true
-      },
+      select: CLIENT_TASK_SELECT,
       orderBy: [{ position: 'asc' }, { createdAt: 'asc' }]
     });
 
-    // Group by status for kanban columns
-    const columns = {
-      TODO: tasks.filter(t => ['PENDING', 'UPCOMING', 'IMMEDIATE'].includes(t.status)),
-      IN_PROGRESS: tasks.filter(t => t.status === 'IN_PROGRESS'),
-      DONE: tasks.filter(t => t.status === 'COMPLETED'),
-      BLOCKED: tasks.filter(t => t.status === 'BLOCKED')
-    };
+    // Group by status for kanban columns: every task status has a column.
+    const columns = groupClientTaskColumns(tasks);
 
     return { tasks, columns };
   });
@@ -780,7 +809,13 @@ export default async function clientPortalRoutes(fastify) {
     // Only what the portal shows: never the storage path or file name, the
     // organization or the uploader's account id.
     const documents = await request.prisma.attachment.findMany({
-      where: { entityType: 'PROJECT', entityId: id },
+      where: {
+        entityType: 'PROJECT',
+        entityId: id,
+        ...CLIENT_VISIBLE_ATTACHMENT_WHERE,
+        // Files moved aside by `npm run quarantine:uploads` are never listed.
+        NOT: { path: { startsWith: '/uploads/quarantine/' } },
+      },
       select: PORTAL_DOCUMENT_SELECT,
       orderBy: { createdAt: 'desc' }
     });
@@ -790,12 +825,21 @@ export default async function clientPortalRoutes(fastify) {
 
   fastify.get('/documents/:docId/download', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
-    const doc = await request.prisma.attachment.findUnique({ where: { id: request.params.docId } });
-    if (!doc || doc.entityType !== 'PROJECT' || doc.path.startsWith('/uploads/quarantine/')) {
+    // A file the portal does not list answers 404 like an unknown id.
+    const doc = await request.prisma.attachment.findFirst({
+      where: { id: request.params.docId, entityType: 'PROJECT', ...CLIENT_VISIBLE_ATTACHMENT_WHERE },
+    });
+    if (!doc || isQuarantined(doc)) {
       return reply.status(404).send({ error: 'Document not found' });
     }
     const project = await request.prisma.project.findFirst({ where: { id: doc.entityId, clientId, deletedAt: null } });
     if (!project) return reply.status(404).send({ error: 'Document not found' });
+    // The same media-scan gate as the review file routes (docs/media-review.md
+    // "Scanning seam"): a file shared through a client review must not be
+    // downloadable here when the review route would withhold it.
+    const scan = await scanReviewMedia(doc);
+    if (scan.verdict === 'blocked') return reply.status(403).send({ error: 'This file did not pass the media scan', code: 'MEDIA_BLOCKED' });
+    if (scan.verdict === 'pending') return reply.status(409).send({ error: 'This file is still being scanned', code: 'MEDIA_SCAN_PENDING' });
     try {
       const file = await fs.readFile(path.join(process.cwd(), doc.path));
       return reply
@@ -867,6 +911,8 @@ export default async function clientPortalRoutes(fastify) {
         entityId: id,
         uploadedById: authorUser.id,
         organizationId: project.organizationId,
+        // The client's own upload: listed back to them in the portal.
+        clientVisible: true,
       },
       select: PORTAL_DOCUMENT_SELECT,
     }));

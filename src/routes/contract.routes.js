@@ -4,7 +4,7 @@ import logger from '../utils/logger.js';
 import { sendContractSignEmail } from '../services/email.service.js';
 import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { renderTemplate } from '../services/contractTemplates.service.js';
-import {validateBody, createContractSchema, contractDraftUpdateSchema} from '../validators/schemas.js';
+import { validateBody, createContractSchema, contractDraftUpdateSchema, contractSignSchema } from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { recordContractSigned } from '../services/domain-event-producers.js';
@@ -224,12 +224,10 @@ export default async function contractRoutes(fastify) {
   });
 
   // POST /sign/:signToken — PUBLIC — client signs contract
-  // Body: { signerName, agreement: true }
-  fastify.post('/sign/:signToken', { config: { public: true } }, async (request, reply) => {
-    const { signerName, agreement, signatureType = 'type', signatureImage } = request.body || {};
-    if (!signerName || !agreement) return reply.status(400).send({ error: 'signerName and agreement:true required' });
-    if (!['type', 'draw'].includes(signatureType)) return reply.status(400).send({ error: 'signatureType must be type or draw' });
-    if (signatureType === 'draw' && !signatureImage) return reply.status(400).send({ error: 'signatureImage is required for drawn signatures' });
+  // Body: { signerName, agreement: true, signatureType?, signatureImage? },
+  // validated (types and sizes) by contractSignSchema.
+  fastify.post('/sign/:signToken', { config: { public: true }, preHandler: validateBody(contractSignSchema) }, async (request, reply) => {
+    const { signerName, signatureType, signatureImage } = request.body;
 
     const contract = await fastify.prisma.contract.findUnique({ where: { signToken: request.params.signToken } });
     const accessFailure = publicAccessFailure(contract);

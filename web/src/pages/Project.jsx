@@ -45,6 +45,7 @@ import { useToast } from '../hooks/useToast';
 import ProjectCommunications from '../components/project/ProjectCommunications';
 import ProjectContextCard from '../components/project/ProjectContext';
 import ProjectMedia from '../components/project/ProjectMedia';
+import ProjectFiles from '../components/project/ProjectFiles';
 import ProjectReviews from '../components/project/ProjectReviews';
 import ProjectChat from '../components/ProjectChat';
 import Milestones from '../components/Milestones';
@@ -420,6 +421,8 @@ export default function Project() {
       </div>
 
       <ProjectMedia projectId={id} />
+
+      <ProjectFiles projectId={id} />
 
       <ProjectReviews projectId={id} />
 

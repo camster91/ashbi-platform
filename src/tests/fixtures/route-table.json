@@ -548,6 +548,7 @@
   "PATCH /api/ai-connections/settings",
   "PATCH /api/approvals/:id",
   "PATCH /api/assets/:id",
+  "PATCH /api/attachments/:id/client-visibility",
   "PATCH /api/bot/approvals/:id",
   "PATCH /api/bot/project/:id",
   "PATCH /api/bot/task/:id",

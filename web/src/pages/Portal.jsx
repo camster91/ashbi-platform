@@ -134,14 +134,6 @@ export default function Portal() {
           </div>
         </div>
 
-        {/* AI Summary */}
-        {project.aiSummary && (
-          <div className="bg-card rounded-xl border border-border/40 p-6">
-            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Project Summary</h2>
-            <p className="text-foreground leading-relaxed">{project.aiSummary}</p>
-          </div>
-        )}
-
         {/* Description */}
         {project.description && (
           <div className="bg-card rounded-xl border border-border/40 p-6">
@@ -214,22 +206,6 @@ export default function Portal() {
                     {rev.notes && <p className="text-xs text-muted-foreground mt-1">{rev.notes}</p>}
                   </div>
                   <span className="text-xs text-muted-foreground">{formatDate(rev.requestedAt)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Pinned Notes */}
-        {project.pinnedNotes?.length > 0 && (
-          <div className="bg-card rounded-xl border border-border/40 p-6">
-            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-4">Updates</h2>
-            <div className="space-y-4">
-              {project.pinnedNotes.map((note) => (
-                <div key={note.id} className="p-4 rounded-lg bg-muted/50 border border-border/25">
-                  <h3 className="font-medium text-foreground mb-1">{note.title}</h3>
-                  <p className="text-sm text-muted-foreground line-clamp-3">{note.content}</p>
-                  <p className="text-xs text-muted-foreground mt-2">{formatDate(note.updatedAt)}</p>
                 </div>
               ))}
             </div>

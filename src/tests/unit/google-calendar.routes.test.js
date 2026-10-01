@@ -18,7 +18,8 @@ async function buildApp(prisma, options = {}) {
     request.user = { id: 'user-1', organizationId: 'org-1', role: 'MEMBER' };
   });
   app.addHook('preHandler', async (request) => { request.prisma = prisma; });
-  await app.register(googleCalendarRoutes, options);
+  // The organization MFA requirement is off unless a test turns it on.
+  await app.register(googleCalendarRoutes, { isMfaEnrollmentRequired: async () => false, ...options });
   return app;
 }
 
@@ -53,7 +54,9 @@ test('starts user-scoped Google OAuth with calendar-events scope and signed stat
 
 test('exchanges OAuth code, stores an encrypted refresh token, and returns to Settings', async (t) => {
   let stored;
+  let ownerWhere;
   const app = await buildApp({
+    user: { findFirst: async ({ where }) => { ownerWhere = where; return { id: 'user-1' }; } },
     googleCalendarConnection: {
       findFirst: async () => null,
       create: async ({ data }) => { stored = data; return { id: 'connection-1', ...data }; },
@@ -81,6 +84,100 @@ test('exchanges OAuth code, stores an encrypted refresh token, and returns to Se
   assert.equal(stored.userId, 'user-1');
   assert.equal(stored.refreshTokenEncrypted, 'encrypted:sensitive-refresh-token');
   assert.deepEqual(JSON.parse(stored.scopes), ['https://www.googleapis.com/auth/calendar.events']);
+  // The owner is looked up within the organization the signed state names.
+  assert.deepEqual(ownerWhere, { id: 'user-1', organizationId: 'org-1', isActive: true });
+});
+
+test('the OAuth callback refuses a state whose user is not an active member of its organization', async (t) => {
+  let written = false;
+  let exchanged = false;
+  const app = await buildApp({
+    user: { findFirst: async () => null },
+    googleCalendarConnection: {
+      findFirst: async () => null,
+      create: async () => { written = true; },
+      update: async () => { written = true; },
+    },
+  }, {
+    googleClientId: 'client-1', googleClientSecret: 'client-secret',
+    googleRedirectUri: 'https://hub.example/api/google-calendar/oauth/callback',
+    encryptSecret: (value) => `encrypted:${value}`,
+    createOAuthClient: () => ({ getToken: async () => { exchanged = true; return { tokens: { refresh_token: 'sensitive-refresh-token' } }; } }),
+  });
+  t.after(() => app.close());
+  const state = signOAuthState('google_calendar_oauth', { organizationId: 'org-other', userId: 'user-1' });
+  const nonce = verifyOAuthState('google_calendar_oauth', state).nonce;
+  const response = await app.inject({
+    method: 'GET',
+    url: `/oauth/callback?code=code-1&state=${encodeURIComponent(state)}`,
+    headers: { cookie: `${oauthStateCookieName('google_calendar_oauth')}=${nonce}` },
+  });
+  assert.equal(response.statusCode, 401);
+  assert.equal(response.json().code, 'GOOGLE_CALENDAR_OAUTH_STATE_INVALID');
+  assert.equal(written, false);
+  assert.equal(exchanged, false, 'refused before the authorization code is exchanged');
+});
+
+test('the OAuth callback never rebinds a connection that belongs to another organization', async (t) => {
+  let written = false;
+  let exchanged = false;
+  const app = await buildApp({
+    user: { findFirst: async () => ({ id: 'user-1' }) },
+    googleCalendarConnection: {
+      findFirst: async () => ({ id: 'connection-1', userId: 'user-1', organizationId: 'org-2' }),
+      create: async () => { written = true; },
+      update: async () => { written = true; },
+    },
+  }, {
+    googleClientId: 'client-1', googleClientSecret: 'client-secret',
+    googleRedirectUri: 'https://hub.example/api/google-calendar/oauth/callback',
+    encryptSecret: (value) => `encrypted:${value}`,
+    createOAuthClient: () => ({ getToken: async () => { exchanged = true; return { tokens: { refresh_token: 'sensitive-refresh-token' } }; } }),
+  });
+  t.after(() => app.close());
+  const state = signOAuthState('google_calendar_oauth', { organizationId: 'org-1', userId: 'user-1' });
+  const nonce = verifyOAuthState('google_calendar_oauth', state).nonce;
+  const response = await app.inject({
+    method: 'GET',
+    url: `/oauth/callback?code=code-1&state=${encodeURIComponent(state)}`,
+    headers: { cookie: `${oauthStateCookieName('google_calendar_oauth')}=${nonce}` },
+  });
+  assert.equal(response.statusCode, 409);
+  assert.equal(written, false);
+  assert.equal(exchanged, false, 'refused before the authorization code is exchanged');
+});
+
+test('the OAuth callback enforces the organization MFA requirement before the token exchange', async (t) => {
+  let written = false;
+  let exchanged = false;
+  let checkedUser;
+  const app = await buildApp({
+    user: { findFirst: async () => ({ id: 'user-1' }) },
+    googleCalendarConnection: {
+      findFirst: async () => null,
+      create: async () => { written = true; },
+      update: async () => { written = true; },
+    },
+  }, {
+    googleClientId: 'client-1', googleClientSecret: 'client-secret',
+    googleRedirectUri: 'https://hub.example/api/google-calendar/oauth/callback',
+    encryptSecret: (value) => `encrypted:${value}`,
+    isMfaEnrollmentRequired: async (userId) => { checkedUser = userId; return true; },
+    createOAuthClient: () => ({ getToken: async () => { exchanged = true; return { tokens: { refresh_token: 'sensitive-refresh-token' } }; } }),
+  });
+  t.after(() => app.close());
+  const state = signOAuthState('google_calendar_oauth', { organizationId: 'org-1', userId: 'user-1' });
+  const nonce = verifyOAuthState('google_calendar_oauth', state).nonce;
+  const response = await app.inject({
+    method: 'GET',
+    url: `/oauth/callback?code=code-1&state=${encodeURIComponent(state)}`,
+    headers: { cookie: `${oauthStateCookieName('google_calendar_oauth')}=${nonce}` },
+  });
+  assert.equal(response.statusCode, 302);
+  assert.equal(response.headers.location, '/settings?googleCalendar=error&code=MFA_ENROLLMENT_REQUIRED');
+  assert.equal(checkedUser, 'user-1');
+  assert.equal(exchanged, false);
+  assert.equal(written, false);
 });
 
 test('returns the current user connection without its provider token', async (t) => {

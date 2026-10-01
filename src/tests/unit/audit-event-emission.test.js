@@ -431,6 +431,8 @@ test('auth emits login_failed for known accounts only, and password changes', as
       },
       findFirst: async () => ({ ...accounts['known@x.test'] }),
       update: async () => ({}),
+      // The reset link is consumed with a guarded updateMany.
+      updateMany: async () => ({ count: 1 }),
     },
   };
   const app = await buildApp(t, authRoutes, prisma, {

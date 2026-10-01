@@ -5,6 +5,10 @@ import { validateBody, apiKeyCreateSchema } from '../validators/schemas.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { requireRecentAuth } from '../auth/reauth.js';
 import { API_KEY_SCOPES, resolveApiKeyExpiry, scopesForAudit } from '../auth/api-key-scopes.js';
+// The NAMED `prisma` (raw, not tenant-scoped): the key lookup runs in a route's
+// onRequest hook, before tenancyMiddleware (a global preHandler) has set
+// `request.prisma`, and a key hash is a global identifier anyway.
+import { prisma as rawPrisma } from '../config/db.js';
 
 const PREFIX = 'ashbi_'; // API keys start with ashbi_ for easy identification
 
@@ -129,53 +133,67 @@ export default async function apiKeyRoutes(fastify) {
   });
 }
 
-// Middleware to authenticate via API key (x-api-key header or Authorization: Bearer ashbi_...)
-export async function authenticateApiKey(request, reply) {
-  const authHeader = request.headers.authorization;
-  const apiKeyHeader = request.headers['x-api-key'];
+/**
+ * Build the API key guard (x-api-key header or Authorization: Bearer ashbi_...).
+ *
+ * It runs as a route's onRequest hook, so it reads the key with the given raw
+ * client (never `request.prisma`, which tenancyMiddleware sets later as a
+ * preHandler). It only establishes the identity: `request.user` carries the
+ * key owner's organizationId, so the tenancy middleware then scopes the request
+ * to that organization exactly as for a session, and `request.apiKeyScopes` is
+ * enforced per route by requireApiKeyScope (src/auth/api-key-scopes.js).
+ * @param {{ prisma: any }} deps
+ */
+export function createApiKeyAuthenticator({ prisma }) {
+  return async function authenticateApiKey(request, reply) {
+    const authHeader = request.headers.authorization;
+    const apiKeyHeader = request.headers['x-api-key'];
 
-  let rawKey = apiKeyHeader;
-  if (!rawKey && authHeader?.startsWith('Bearer ')) {
-    rawKey = authHeader.slice(7);
-  }
+    let rawKey = apiKeyHeader;
+    if (!rawKey && authHeader?.startsWith('Bearer ')) {
+      rawKey = authHeader.slice(7);
+    }
 
-  if (!rawKey || !rawKey.startsWith(PREFIX)) {
-    return reply.status(401).send({ error: 'API key required' });
-  }
+    if (typeof rawKey !== 'string' || !rawKey.startsWith(PREFIX)) {
+      return reply.status(401).send({ error: 'API key required' });
+    }
 
-  const hashed = hashKey(rawKey);
-  const key = await request.prisma.apiKey.findUnique({
-    where: { key: hashed },
-    include: { user: true }
-  });
+    const hashed = hashKey(rawKey);
+    const key = await prisma.apiKey.findUnique({
+      where: { key: hashed },
+      include: { user: true }
+    });
 
-  if (!key || !key.isActive || key.revokedAt) {
-    return reply.status(401).send({ error: 'Invalid API key' });
-  }
+    if (!key || !key.isActive || key.revokedAt) {
+      return reply.status(401).send({ error: 'Invalid API key' });
+    }
 
-  if (key.expiresAt && new Date() > key.expiresAt) {
-    return reply.status(401).send({ error: 'API key expired' });
-  }
+    if (key.expiresAt && new Date() > key.expiresAt) {
+      return reply.status(401).send({ error: 'API key expired' });
+    }
 
-  if (!key.user.isActive) {
-    return reply.status(401).send({ error: 'User account is disabled' });
-  }
+    if (!key.user?.isActive) {
+      return reply.status(401).send({ error: 'User account is disabled' });
+    }
 
-  // Update lastUsedAt
-  await request.prisma.apiKey.update({
-    where: { id: key.id },
-    data: { lastUsedAt: new Date() }
-  }).catch(() => {}); // Don't fail if update fails
+    // Update lastUsedAt
+    await prisma.apiKey.update({
+      where: { id: key.id },
+      data: { lastUsedAt: new Date() }
+    }).catch(() => {}); // Don't fail if update fails
 
-  // Attach user to request (same shape as JWT auth)
-  request.user = {
-    id: key.user.id,
-    email: key.user.email,
-    name: key.user.name,
-    role: key.user.role,
-    organizationId: key.user.organizationId,
-    clientId: key.user.clientId,
+    // Attach user to request (same shape as JWT auth)
+    request.user = {
+      id: key.user.id,
+      email: key.user.email,
+      name: key.user.name,
+      role: key.user.role,
+      organizationId: key.user.organizationId,
+      clientId: key.user.clientId,
+    };
+    // Enforced per route by requireApiKeyScope (src/auth/api-key-scopes.js).
+    request.apiKeyScopes = Array.isArray(key.scopes) ? [...key.scopes] : [];
   };
-  // Enforced per route by requireApiKeyScope (src/auth/api-key-scopes.js).
-  request.apiKeyScopes = Array.isArray(key.scopes) ? [...key.scopes] : [];
 }
+
+export const authenticateApiKey = createApiKeyAuthenticator({ prisma: rawPrisma });

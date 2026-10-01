@@ -57,7 +57,7 @@ describe('client portal cookie session flow', () => {
         },
       },
       attachment: {
-        findUnique: async ({ where }) => {
+        findFirst: async ({ where }) => {
           const base = {
             entityType: 'PROJECT',
             entityId: 'project-a',
