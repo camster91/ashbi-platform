@@ -54,6 +54,8 @@
     "test:browser": "playwright test",
     "test:public-routes": "playwright test --config playwright.public.config.ts",
     "test:pwa-offline": "playwright test --config playwright.pwa.config.ts",
+    "test:visual": "playwright test --config playwright.visual.config.ts",
+    "test:visual:update": "playwright test --config playwright.visual.config.ts --update-snapshots",
     "test:lighthouse:mobile": "node -e \"require('fs').rmSync('.lighthouseci/mobile',{recursive:true,force:true})\" && lhci autorun --config=lighthouserc.mobile.cjs",
     "test:lighthouse:desktop": "node -e \"require('fs').rmSync('.lighthouseci/desktop',{recursive:true,force:true})\" && lhci autorun --config=lighthouserc.desktop.cjs",
     "test:lighthouse": "npm run test:lighthouse:mobile && npm run test:lighthouse:desktop",

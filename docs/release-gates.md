@@ -53,6 +53,9 @@ scanner's negative regression fixtures; it is advisory, not a required check.
 Other workflows in `.github/workflows/` (`enterprise-compliance.yml`,
 `codeql.yml`, `pr-review.yml`, `build-and-push.yml`, `browser-e2e.yml`,
 `db-backup.yml`) are supplementary and are not part of the required contract.
+The visual-regression baselines (`npm run test:visual`, see
+[visual-baselines.md](visual-baselines.md)) are opt-in and not a release gate
+until they are regenerated and proven stable on the CI runner.
 
 The `production` and `staging` GitHub environments, if used, must restrict
 deployment to `main`. These settings live outside Git and must be verified in

@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 4 |
-| staff | 366 |
+| staff | 367 |
 | staff (inline) | 1 |
-| **total** | 549 |
+| **total** | 550 |
 
 ## Routes by prefix
 
@@ -803,6 +803,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/reviews/:id/annotations/:annotationId/resolve` | staff | scoped |  |
 | POST | `/api/reviews/:id/client-access` | staff | scoped |  |
 | POST | `/api/reviews/:id/decisions` | staff | scoped |  |
+| GET | `/api/reviews/:id/export` | staff | scoped |  |
 | POST | `/api/reviews/:id/recapture` | staff | scoped |  |
 | GET | `/api/reviews/:id/share-links` | staff | scoped |  |
 | POST | `/api/reviews/:id/share-links` | recent-auth + staff | scoped |  |
