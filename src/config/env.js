@@ -155,6 +155,9 @@ const env = {
   // means no HITL email is sent. Replies are accepted only from the Hub user
   // the notification was created for, or an active admin of that user's org.
   hitlApproverEmail: process.env.HITL_APPROVER_EMAIL?.trim() || null,
+  // Local development only: accept unsigned POST /api/mailgun when
+  // MAILGUN_SIGNING_KEY is unset. Honoured only with NODE_ENV=development.
+  mailgunAllowUnsignedInbound: process.env.MAILGUN_ALLOW_UNSIGNED_INBOUND === '1',
 
   // Stripe
   stripeSecretKey: process.env.STRIPE_SECRET_KEY,

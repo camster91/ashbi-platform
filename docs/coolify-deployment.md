@@ -73,7 +73,8 @@ stack for staging or a new environment, and to rehearse that move.
    | `TRUST_PROXY` | no (default `1`) | `1` behind Coolify's single proxy |
    | `POSTGRES_DB`, `POSTGRES_USER` | no (default `ashbi`) | database name and role |
    | `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `MAILGUN_SIGNING_KEY`, `MAILGUN_WEBHOOK_SIGNING_KEY` | for email | Mailgun sending and webhooks |
-   | `HITL_APPROVER_EMAIL` | for HITL email | recipient of human-in-the-loop task / approval emails; unset sends none. Use an active ADMIN/TEAM user's address: replies are applied only from the notified user or an admin of that user's org |
+   | `HITL_APPROVER_EMAIL` | for HITL email | email of the active ADMIN/TEAM user who receives human-in-the-loop notifications and emails; unset or unmatched creates none. Replies are applied only from that user or an admin of their org, with an SPF/DKIM pass aligned with the From domain |
+   | `MAILGUN_ALLOW_UNSIGNED_INBOUND` | never on a deployed host | local-development opt-in to unsigned inbound email when `MAILGUN_SIGNING_KEY` is unset; ignored unless `NODE_ENV=development` |
    | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | for payments | use test-mode keys until the revenue flow is verified (#378) |
    | `AI_PROVIDER` plus that provider's key (`ANTHROPIC_API_KEY`, `OLLAMA_API_KEY`, …) | for AI features | `AI_DISABLED=true` turns AI off |
    | `SENTRY_DSN`, `OBSERVABILITY_OWNER`, `CREDENTIALS_KEY_OWNER` | recommended | error reporting and named owners; missing values are logged as warnings |

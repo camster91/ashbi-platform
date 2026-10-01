@@ -588,7 +588,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| POST | `/api/mailgun-hitl/hitl-reply` | public | exempt | signed webhook: Mailgun HMAC signature, 15-minute timestamp window and single-use token verified in the handler; the reply is applied only when its From address is the notified staff user or an active admin of that org. |
+| POST | `/api/mailgun-hitl/hitl-reply` | public | exempt | signed webhook: Mailgun HMAC signature, 15-minute timestamp window and single-use token verified in the handler; the reply is applied only when its single From address is the notified staff user or an active admin of that org, Mailgun reports an SPF/DKIM pass aligned with the From domain, and an approval is still pending. |
 
 ### /api/messages
 

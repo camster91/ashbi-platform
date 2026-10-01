@@ -34,6 +34,33 @@ export function hitlApproverEmail() {
   return env.hitlApproverEmail || null;
 }
 
+/**
+ * The Hub user who receives HITL notifications: the active ADMIN or TEAM user
+ * whose email is HITL_APPROVER_EMAIL (case-insensitive). Returns null, with a
+ * warning, when the address is unset or matches no such user; callers then
+ * skip the HITL notification and email instead of picking someone else.
+ */
+export async function resolveHitlApprover(prisma, log = console) {
+  const email = hitlApproverEmail();
+  if (!email) {
+    log.warn('[hitl-email] HITL_APPROVER_EMAIL not set — skipping HITL notification');
+    return null;
+  }
+  const user = await prisma.user.findFirst({
+    where: {
+      email: { equals: email, mode: 'insensitive' },
+      isActive: true,
+      role: { in: ['ADMIN', 'TEAM'] },
+    },
+    select: { id: true, email: true, organizationId: true },
+  });
+  if (!user) {
+    log.warn('[hitl-email] HITL_APPROVER_EMAIL does not match an active ADMIN/TEAM user — skipping HITL notification');
+    return null;
+  }
+  return user;
+}
+
 /** Send a HITL email to the configured approver, or skip when none is set. */
 export function sendToHitlApprover(message) {
   const to = hitlApproverEmail();

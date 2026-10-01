@@ -78,7 +78,7 @@ const INTENTIONALLY_PUBLIC_ROUTES = {
   'POST /api/webhooks/email': { category: 'signed webhook', reason: 'Inbound email webhook; signature verified in the handler.' },
   'POST /api/mailgun': { category: 'signed webhook', reason: 'Mailgun HMAC signature, 15-minute timestamp window and single-use token verified in the handler (fails closed outside dev). Accepts Mailgun form posts (urlencoded or multipart) in its own scope only.' },
   'POST /api/mailgun/events': { category: 'signed webhook', reason: 'Mailgun HMAC signature and single-use token verified in the handler.' },
-  'POST /api/mailgun-hitl/hitl-reply': { category: 'signed webhook', reason: 'Mailgun HMAC signature, 15-minute timestamp window and single-use token verified in the handler; the reply is applied only when its From address is the notified staff user or an active admin of that org.' },
+  'POST /api/mailgun-hitl/hitl-reply': { category: 'signed webhook', reason: 'Mailgun HMAC signature, 15-minute timestamp window and single-use token verified in the handler; the reply is applied only when its single From address is the notified staff user or an active admin of that org, Mailgun reports an SPF/DKIM pass aligned with the From domain, and an approval is still pending.' },
   'POST /api/slack/events': { category: 'signed webhook', reason: 'Slack request signature verified before the body is trusted.' },
   'GET /api/slack/oauth/callback': { category: 'oauth callback', reason: 'OAuth state is a signed JWT verified in the handler.' },
   'GET /api/google-calendar/oauth/callback': { category: 'oauth callback', reason: 'OAuth state is a signed JWT verified in the handler. Not tenancy-exempt, so the tenant guard also requires the staff session cookie.' },

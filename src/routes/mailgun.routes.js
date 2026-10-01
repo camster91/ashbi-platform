@@ -18,8 +18,18 @@ import {
   addMailgunFormParser,
   authenticateMailgunWebhook,
   MAILGUN_WEBHOOK_BODY_LIMIT,
-  readMailgunWebhookFields,
+  readMailgunWebhookRequest,
 } from '../services/mailgun-webhook-request.js';
+
+/**
+ * Unsigned inbound posts (no MAILGUN_SIGNING_KEY) are accepted only under
+ * NODE_ENV=test, or NODE_ENV=development with the explicit opt-in
+ * MAILGUN_ALLOW_UNSIGNED_INBOUND=1. Deployed environments always fail closed.
+ */
+export function allowUnsignedInbound() {
+  if (env.isTest) return true;
+  return Boolean(env.isDevelopment && env.mailgunAllowUnsignedInbound);
+}
 
 /**
  * Map a Mailgun inbound route POST (multipart fields) to the pipeline's email
@@ -161,25 +171,20 @@ export default async function mailgunRoutes(fastify, opts = {}) {
         return reply.status(503).send({ error: 'Webhook tenant is not configured' });
       }
 
-      let body;
-      try {
-        body = await readMailgunWebhookFields(request);
-      } catch (err) {
-        request.log.warn({ err }, 'Unreadable Mailgun inbound webhook body');
-        return reply.status(400).send({ error: 'Unreadable webhook body' });
-      }
-      if (!body) return reply.status(406).send({ error: 'Webhook body must be Mailgun form fields' });
+      const read = await readMailgunWebhookRequest(request);
+      if (!read.ok) return reply.status(read.status).send({ error: read.error });
+      const body = read.fields;
 
-      // Signature, timestamp window and single-use token (fail closed outside
-      // development).
+      // Signature, timestamp window and single-use token. Fails closed when
+      // the key is missing unless unsigned posts were explicitly allowed.
       const prisma = request.prisma || fastify.prisma;
       const signingKey = env.mailgunSigningKey;
       let token = null;
       if (!signingKey) {
-        if (!env.isDev) {
+        if (!allowUnsignedInbound()) {
           return reply.status(503).send({ error: 'Mailgun signing key not configured' });
         }
-        // Dev mode: skip validation
+        request.log.warn('Accepting an unsigned Mailgun inbound post (MAILGUN_SIGNING_KEY unset)');
       } else {
         const auth = await authenticateMailgunWebhook({ fields: body, signingKey, prisma });
         if (!auth.ok) {
