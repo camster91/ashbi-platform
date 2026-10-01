@@ -21,7 +21,7 @@
     "build:all": "npm run build",
     "build:web": "npm --prefix web run build",
     "preview": "npm --prefix web run preview",
-    "lint": "eslint src/ --max-warnings 49",
+    "lint": "eslint src/ --max-warnings 0",
     "lint:fix": "eslint src/ --fix",
     "test": "node scripts/run-node-tests.mjs src/tests/unit src/tests/ai-eval",
     "test:ai-eval": "node scripts/run-node-tests.mjs src/tests/ai-eval",

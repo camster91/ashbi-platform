@@ -16,9 +16,7 @@ import { INVOICE_CURRENCIES } from '../utils/money.js';
 const email = z.string().email().max(255);
 const password = z.string().min(8).max(128);
 const userName = z.string().min(1).max(100);
-const uuid = z.string().uuid();
 const cuidId = z.string().min(1).max(50); // accepts cuid2, uuid, etc.
-const url = z.string().url().max(2048);
 
 // Allowlisted file extensions (prevents path traversal / XSS via stored extensions)
 

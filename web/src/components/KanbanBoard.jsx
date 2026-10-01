@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import LoadingState from './ui/LoadingState';
@@ -83,7 +83,7 @@ export default function KanbanBoard({ projectId }) {
     queryFn: () => api.getTasks({ projectId })
   });
 
-  const tasks = data?.tasks || [];
+  const tasks = useMemo(() => data?.tasks || [], [data]);
 
   // Update task mutation
   const updateMutation = useMutation({
@@ -113,15 +113,17 @@ export default function KanbanBoard({ projectId }) {
     return acc;
   }, {});
 
-  // Move task to new status
-  const moveTask = (task, newStatus) => {
+  // Move task to new status. `mutate` is referentially stable, so this
+  // callback is too; the keyboard-shortcut effect below depends on it.
+  const { mutate: mutateTask } = updateMutation;
+  const moveTask = useCallback((task, newStatus) => {
     if (task.status !== newStatus) {
-      updateMutation.mutate({
+      mutateTask({
         id: task.id,
         data: { status: newStatus }
       });
     }
-  };
+  }, [mutateTask]);
 
   // Drag handlers
   const handleDragStart = (e, task) => {
@@ -254,7 +256,7 @@ export default function KanbanBoard({ projectId }) {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [selectedTaskId, tasks]);
+  }, [selectedTaskId, tasks, moveTask]);
 
   // Handle context menu for mobile (long press)
   const handleContextMenu = (e, task) => {

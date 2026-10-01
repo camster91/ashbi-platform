@@ -276,7 +276,7 @@ export default async function milestoneRoutes(fastify) {
   fastify.delete('/milestones/:id/tasks/:taskId', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
-    const { id, taskId } = request.params;
+    const { taskId } = request.params;
 
     await request.prisma.task.update({
       where: { id: taskId },

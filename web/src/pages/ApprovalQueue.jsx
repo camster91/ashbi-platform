@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { CheckCircle, XCircle, Eye, ChevronRight, Mail, FileText, DollarSign, Megaphone, Code } from 'lucide-react';
 import { safeHtml } from '../lib/safeHtml';
 import { api } from '../lib/api';
@@ -69,13 +69,7 @@ export default function ApprovalQueue() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
-  useEffect(() => {
-    fetchApprovals();
-    const interval = setInterval(fetchApprovals, 10000);
-    return () => clearInterval(interval);
-  }, [filterStatus, filterType]);
-
-  const fetchApprovals = async () => {
+  const fetchApprovals = useCallback(async () => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
     setIsFetching(true);
@@ -93,7 +87,13 @@ export default function ApprovalQueue() {
       setIsFetching(false);
       fetchingRef.current = false;
     }
-  };
+  }, [filterStatus, filterType]);
+
+  useEffect(() => {
+    fetchApprovals();
+    const interval = setInterval(fetchApprovals, 10000);
+    return () => clearInterval(interval);
+  }, [fetchApprovals]);
 
   const handleApprove = async (id) => {
     setActionLoading(true);

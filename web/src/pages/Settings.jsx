@@ -250,8 +250,9 @@ function AIModelSection() {
   const [selectedModel, setSelectedModel] = useState('');
 
   useEffect(() => {
-    if (aiData?.ollamaModel && !selectedModel) {
-      setSelectedModel(aiData.ollamaModel);
+    // Only seed the picker; never overwrite a model the user already chose.
+    if (aiData?.ollamaModel) {
+      setSelectedModel((current) => current || aiData.ollamaModel);
     }
   }, [aiData]);
 

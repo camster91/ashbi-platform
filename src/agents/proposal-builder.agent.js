@@ -456,7 +456,6 @@ async function saveProposal(proposalData) {
       scopeOfWork,
       timeline,
       selectedTier,
-      pricingTiers,
       terms,
       html,
       leadData,

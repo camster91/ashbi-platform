@@ -89,9 +89,11 @@ export default async function slackAdminRoutes(fastify, options = {}) {
     if (existing && existing.organizationId !== oauthState.organizationId) {
       return reply.status(409).send({ error: 'Slack workspace is already connected', code: 'SLACK_WORKSPACE_CONFLICT' });
     }
-    const installation = existing
-      ? await fastify.prisma.slackInstallation.update({ where: { id: existing.id }, data })
-      : await fastify.prisma.slackInstallation.create({ data: { organizationId: oauthState.organizationId, teamId: tokenBody.team.id, ...data } });
+    if (existing) {
+      await fastify.prisma.slackInstallation.update({ where: { id: existing.id }, data });
+    } else {
+      await fastify.prisma.slackInstallation.create({ data: { organizationId: oauthState.organizationId, teamId: tokenBody.team.id, ...data } });
+    }
     // Slack redirects the administrator's browser here. Return to the
     // authenticated settings surface instead of rendering installation JSON
     // at the OAuth callback URL.
