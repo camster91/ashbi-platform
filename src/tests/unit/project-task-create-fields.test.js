@@ -31,13 +31,21 @@ async function runPreHandlers(options, request) {
   return r;
 }
 
+// The tenant-scoped request.prisma: the client exists in the caller's org.
+function scopedProjectDb(onCreate) {
+  return {
+    client: { findFirst: async ({ where }) => ({ id: where.id }) },
+    user: { findFirst: async ({ where }) => ({ id: where.id }) },
+    project: { create: async ({ data }) => { onCreate(data); return { id: 'p1', ...data }; } },
+  };
+}
+
 test('POST /projects persists status, health, budget and dates from the request', async () => {
   let created;
-  const { routes } = await capture(projectRoutes, {
-    prisma: { project: { create: async ({ data }) => { created = data; return { id: 'p1', ...data }; } } },
-  });
+  const { routes } = await capture(projectRoutes);
   const route = routes['POST /'];
   const request = {
+    prisma: scopedProjectDb((data) => { created = data; }),
     user: { id: 'u1' },
     body: {
       name: 'Northwind Brand Refresh', clientId: 'client-1', status: 'DESIGN_DEV', health: 'NEEDS_ATTENTION',
@@ -56,10 +64,8 @@ test('POST /projects persists status, health, budget and dates from the request'
 
 test('project create keeps DB defaults when optional fields are omitted and rejects unknown statuses', async () => {
   let created;
-  const { routes } = await capture(projectRoutes, {
-    prisma: { project: { create: async ({ data }) => { created = data; return { id: 'p1', ...data }; } } },
-  });
-  await routes['POST /'].handler({ user: { id: 'u1' }, body: { name: 'X', clientId: 'c1' } }, reply());
+  const { routes } = await capture(projectRoutes);
+  await routes['POST /'].handler({ prisma: scopedProjectDb((data) => { created = data; }), user: { id: 'u1' }, body: { name: 'X', clientId: 'c1' } }, reply());
   assert.equal('status' in created, false);
   assert.equal('endDate' in created, false);
   for (const status of ['STARTING_UP', 'LAUNCHED', 'ACTIVE', 'COMPLETED']) {

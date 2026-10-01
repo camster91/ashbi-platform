@@ -26,7 +26,7 @@ export default async function creativeBriefRoutes(fastify) {
   }, async (request, reply) => {
     const { clientId, projectType, notes } = request.body;
     if (!clientId) return reply.status(400).send({ error: 'clientId is required' });
-    const result = await generateCreativeBrief({ clientId, projectType, notes });
+    const result = await generateCreativeBrief({ clientId, projectType, notes, organizationId: request.user.organizationId });
     return reply.status(201).send(result);
   });
 

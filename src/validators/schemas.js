@@ -519,7 +519,9 @@ export const updateEstimateSchema = z.object({
   taxRate: estimateTaxRate.optional(),
   tax: z.number().nonnegative().optional(),
   validUntil: estimateValidUntil.nullable().optional(),
-  status: z.enum(['DRAFT', 'SENT', 'VIEWED', 'APPROVED', 'DECLINED', 'EXPIRED']).optional(),
+  // Status changes have their own routes; PUT accepts only the current status
+  // (a no-op) and answers 409 otherwise (estimateStatusChangeError).
+  status: z.enum(['DRAFT', 'SENT', 'APPROVED', 'DECLINED', 'CONVERTED', 'EXPIRED']).optional(),
 }).refine(val => Object.keys(val).length > 0, { message: 'At least one field must be provided' })
   .refine(notBothTaxFields, notBothTaxFieldsMessage);
 

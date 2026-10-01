@@ -7,6 +7,7 @@ import { validateBody, brandSettingsSchema, fileUpload } from '../validators/sch
 import {
   DEFAULT_UPLOADS_DIR, brandLogoRelativePath, removeStoredBrandLogo, sendStoredUpload, writeUploadThenPersist,
 } from '../utils/stored-upload.js';
+import { findBrandSettings, getOrCreateBrandSettings } from '../services/brand-settings.service.js';
 
 const LOGO_REPLACE_ATTEMPTS = 3;
 
@@ -43,14 +44,9 @@ export default async function brandRoutes(fastify, options = {}) {
   const uploadsDir = options.uploadsDir ?? DEFAULT_UPLOADS_DIR;
 
   // ─── GET / — get brand settings (create default if none) ────────────────────
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async () => {
-    let settings = await fastify.prisma.brandSettings.findFirst();
-
-    if (!settings) {
-      settings = await fastify.prisma.brandSettings.create({ data: {} });
-    }
-
-    return settings;
+  // Every read and write below is scoped to the caller's organization.
+  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
+    return getOrCreateBrandSettings(request.prisma, request.user.organizationId);
   });
 
   // ─── PUT / — update brand settings (admin only) ─────────────────────────────
@@ -62,13 +58,11 @@ export default async function brandRoutes(fastify, options = {}) {
       website, taxId, invoiceFooter, proposalFooter, contractHeader,
     } = request.body || {};
 
-    let settings = await fastify.prisma.brandSettings.findFirst();
-    if (!settings) {
-      settings = await fastify.prisma.brandSettings.create({ data: {} });
-    }
+    const organizationId = request.user.organizationId;
+    const settings = await getOrCreateBrandSettings(request.prisma, organizationId);
 
-    const updated = await fastify.prisma.brandSettings.update({
-      where: { id: settings.id },
+    const updated = await request.prisma.brandSettings.update({
+      where: { id: settings.id, organizationId },
       data: {
         ...(companyName !== undefined && { companyName }),
         ...(primaryColor !== undefined && { primaryColor }),
@@ -111,11 +105,9 @@ export default async function brandRoutes(fastify, options = {}) {
     // removed. The previous logo is removed only after the row points at the
     // new one, so a failure never leaves the settings naming a deleted file.
     const { updated, previousLogoUrl } = await writeUploadThenPersist(path.join(brandDir, filename), buffer, async () => {
-      let settings = await fastify.prisma.brandSettings.findFirst();
-      if (!settings) {
-        settings = await fastify.prisma.brandSettings.create({ data: {} });
-      }
-      return replaceLogoUrl(fastify.prisma, settings, logoUrl);
+      // The caller's organization's row (created if missing).
+      const settings = await getOrCreateBrandSettings(request.prisma, request.user.organizationId);
+      return replaceLogoUrl(request.prisma, settings, logoUrl);
     });
 
     // Only the logo this request's update replaced is removed, so concurrent
@@ -132,7 +124,7 @@ export default async function brandRoutes(fastify, options = {}) {
   // Only a logo stored by POST /logo is served; an external logoUrl is linked
   // directly by the client instead.
   fastify.get('/logo', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const settings = await fastify.prisma.brandSettings.findFirst({ select: { logoUrl: true } });
+    const settings = await findBrandSettings(request.prisma, request.user.organizationId);
     const relativePath = brandLogoRelativePath(settings?.logoUrl);
     if (!relativePath) return reply.status(404).send({ error: 'Logo not found' });
     const sent = await sendStoredUpload(reply, { relativePath, uploadsDir, fileName: path.basename(relativePath) });

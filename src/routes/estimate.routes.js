@@ -68,6 +68,29 @@ function storedLineItems(lineItems) {
   }));
 }
 
+// Estimate status changes each have one route, which does the side effects
+// the status implies:
+//   DRAFT -> SENT                 POST /:id/send (issues the public link, emails)
+//   SENT -> APPROVED | DECLINED   POST /view/:token/approve (the client's answer)
+//   APPROVED | SENT -> CONVERTED  POST /:id/convert (creates the proposal)
+// PUT /:id edits drafts only and may not change the status (sending `status:
+// 'DRAFT'` is accepted as a no-op), so staff can never mark an estimate
+// approved on the client's behalf.
+const PUT_STATUS_TRANSITIONS = Object.freeze({ DRAFT: Object.freeze(['DRAFT']) });
+
+/** Why PUT may not move an estimate from `from` to `to`, or null. */
+export function estimateStatusChangeError(from, to) {
+  if (to === undefined || to === from) return null;
+  if ((PUT_STATUS_TRANSITIONS[from] ?? []).includes(to)) return null;
+  const via = {
+    SENT: 'Send the estimate (POST /api/estimates/:id/send)',
+    APPROVED: 'Only the client can approve an estimate, from its link',
+    DECLINED: 'Only the client can decline an estimate, from its link',
+    CONVERTED: 'Convert the estimate (POST /api/estimates/:id/convert)',
+  }[to] ?? 'This status cannot be set directly';
+  return `An estimate cannot move from ${from} to ${to} here. ${via}.`;
+}
+
 /** Why a public link cannot be used, or null. Unknown and draft look the same. */
 function publicEstimateFailure(estimate, now = new Date()) {
   if (!estimate || !PUBLIC_ESTIMATE_STATUSES.includes(estimate.status)) {
@@ -151,6 +174,8 @@ export default async function estimateRoutes(fastify) {
     if (existing.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft estimates can be edited' });
 
     const { title, description, lineItems, tax, taxRate, validUntil, status } = request.body;
+    const statusError = estimateStatusChangeError(existing.status, status);
+    if (statusError) return reply.status(409).send({ error: statusError, code: 'ESTIMATE_STATUS_TRANSITION' });
     const items = lineItems !== undefined ? storedLineItems(lineItems) : existing.lineItems;
     // Without a new taxRate or tax the stored tax amount is kept.
     const totals = Array.isArray(items)
@@ -168,7 +193,6 @@ export default async function estimateRoutes(fastify) {
         tax: taxAmount,
         total,
         ...(validUntil !== undefined && { validUntil: validUntil ? new Date(validUntil) : null }),
-        ...(status !== undefined && { status })
       },
       include: { client: { select: { id: true, name: true } } }
     });

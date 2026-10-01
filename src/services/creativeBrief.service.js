@@ -3,6 +3,7 @@
 // Enhanced with Client Brain RAG context
 
 import prisma from '../config/db.js';
+import { findBrandSettings } from './brand-settings.service.js';
 import aiClient from '../ai/client.js';
 import { searchSimilar } from './embedding.service.js';
 
@@ -10,7 +11,8 @@ import { searchSimilar } from './embedding.service.js';
  * Generate a creative brief using AI with RAG context
  */
 export async function generateCreativeBrief(data) {
-  const { clientId, projectType, notes } = data;
+  const { clientId, projectType, notes, organizationId } = data;
+  if (!organizationId) throw new Error('organizationId is required');
 
   // Get client context
   const client = await prisma.client.findUnique({
@@ -39,7 +41,8 @@ export async function generateCreativeBrief(data) {
   }
 
   // Get brand guidelines if available
-  const brandSettings = await prisma.brandSettings.findFirst();
+  // The brief's own organization's brand, never another tenant's.
+  const brandSettings = await findBrandSettings(prisma, organizationId);
   let brandContext = '';
   if (brandSettings) {
     brandContext = `\n\nBrand: ${brandSettings.companyName}, Primary: ${brandSettings.primaryColor}, Accent: ${brandSettings.accentColor}`;

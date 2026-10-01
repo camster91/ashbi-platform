@@ -208,10 +208,9 @@ const TENANT_PATHS = {
   proposallineitem: ['proposal', 'client'],
   proposalversion:  ['proposal', 'client'],
 
-  // NOTE: brandSettings, emailTriageItem, unmatchedEmail and taskTemplate are
-  // intentionally NOT scoped here — the current schema gives them no relation
-  // path to an Organization (global config / templates / raw inbox tables).
-  // Adding a dedicated organizationId column is the correct long-term fix.
+  // NOTE: brandSettings, emailTriageItem, unmatchedEmail and taskTemplate
+  // now carry their own organizationId and are scoped directly
+  // (DIRECT_SCOPED_MODELS above), so they need no relation path here.
 
   // 1-hop to Task (via taskId FK, then task → project → client)
   taskcomment:      ['task', 'project', 'client'],

@@ -6025,9 +6025,9 @@
             "enum": [
               "DRAFT",
               "SENT",
-              "VIEWED",
               "APPROVED",
               "DECLINED",
+              "CONVERTED",
               "EXPIRED"
             ],
             "type": "string"

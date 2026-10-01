@@ -68,8 +68,8 @@ export default async function assetLibraryRoutes(fastify) {
   // Get brand settings
   fastify.get('/guidelines', {
     onRequest: [fastify.authenticate]
-  }, async () => {
-    return getBrandSettings();
+  }, async (request) => {
+    return getBrandSettings(request.user.organizationId);
   });
 
   // Update brand settings
@@ -77,6 +77,6 @@ export default async function assetLibraryRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(assetGuidelineCreateSchema),
   }, async (request) => {
-    return updateBrandSettings(request.body);
+    return updateBrandSettings(request.user.organizationId, request.body);
   });
 }
