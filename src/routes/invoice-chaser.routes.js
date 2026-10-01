@@ -4,12 +4,18 @@ import aiClient from '../ai/client.js';
 import { validateBody, invoiceChaserSchema } from '../validators/schemas.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
 
+// "Generate all" drafts one AI reminder per invoice, so a single request
+// covers at most this many (the longest overdue first).
+export const CHASE_ALL_LIMIT = 20;
+
+// Both routes serve only the admin Invoice Chaser page (AdminRoute in
+// web/src/App.jsx), so both are admin-only.
 export default async function invoiceChaserRoutes(fastify) {
   const { prisma } = fastify;
 
   // POST /invoice-chaser/chase — generate reminder emails for overdue invoices
   fastify.post('/chase', {
-    onRequest: [fastify.authenticate],
+    onRequest: [fastify.adminOnly],
     preHandler: validateBody(invoiceChaserSchema),
   }, async (request, reply) => {
     const { invoiceId } = request.body || {};
@@ -24,6 +30,7 @@ export default async function invoiceChaserRoutes(fastify) {
 
     const invoices = await prisma.invoice.findMany({
       where,
+      ...(invoiceId ? {} : { orderBy: { dueDate: 'asc' }, take: CHASE_ALL_LIMIT }),
       include: {
         client: {
           include: {
@@ -101,7 +108,7 @@ Sign off as Cameron Ashley, Ashbi Design.`;
 
   // GET /invoice-chaser/overdue — list overdue invoices
   fastify.get('/overdue', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.adminOnly]
   }, async (request) => {
     const now = new Date();
 

@@ -48,7 +48,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Access | Routes |
 | --- | --- |
-| admin | 37 |
+| admin | 39 |
 | admin + recent-auth | 14 |
 | admin + recent-auth (access change) | 1 |
 | admin + staff | 6 |
@@ -59,7 +59,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 4 |
-| staff | 368 |
+| staff | 366 |
 | staff (inline) | 1 |
 | **total** | 553 |
 
@@ -531,8 +531,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| POST | `/api/invoice-chaser/chase` | staff | scoped |  |
-| GET | `/api/invoice-chaser/overdue` | staff | scoped |  |
+| POST | `/api/invoice-chaser/chase` | admin | scoped |  |
+| GET | `/api/invoice-chaser/overdue` | admin | scoped |  |
 
 ### /api/invoices
 

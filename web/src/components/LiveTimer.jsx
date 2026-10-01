@@ -10,11 +10,22 @@ const TIMER_STORAGE_KEY = 'ashbi-live-timer';
  * LiveTimer — global Start/Pause/Stop button shown in the app header.
  * Timer state survives reload via localStorage.
  * Starting a new timer automatically stops any previous one.
- * On Stop, POSTs to /api/time-sessions to create a TimeEntry.
+ * Every timer must belong to a project (TimeSession.projectId is required),
+ * so Start opens a small picker; the last chosen project is remembered.
+ * On Stop, POSTs to /api/time-sessions/:id/stop to create a TimeEntry.
  */
 export default function LiveTimer({ socket }) {
   const queryClient = useQueryClient();
   const intervalRef = useRef(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerError, setPickerError] = useState('');
+  const [projectId, setProjectId] = useState(() => {
+    try {
+      return localStorage.getItem(`${TIMER_STORAGE_KEY}-project`) || '';
+    } catch {
+      return '';
+    }
+  });
 
   // Restore state from localStorage
   const [timerState, setTimerState] = useState(() => {
@@ -81,6 +92,28 @@ export default function LiveTimer({ socket }) {
     }
   }, [runningSession, persistTimer]);
 
+  // Shares the ['projects'] cache entry (an array) with the app shell.
+  const { data: projects = [], isLoading: projectsLoading, isSuccess: projectsLoaded } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => api.getProjects().then((r) => (Array.isArray(r) ? r : r?.projects ?? [])),
+    enabled: pickerOpen,
+  });
+  const selectableProjects = (Array.isArray(projects) ? projects : []).filter(
+    (p) => !['LAUNCHED', 'CANCELLED'].includes(p.status)
+  );
+
+  // The remembered project may since have been launched, cancelled, deleted
+  // or belong to another workspace: once the list has loaded, forget it.
+  const rememberedProjectMissing = pickerOpen && projectsLoaded && Boolean(projectId)
+    && !selectableProjects.some((p) => p.id === projectId);
+  useEffect(() => {
+    if (!rememberedProjectMissing) return;
+    setProjectId('');
+    try {
+      localStorage.removeItem(`${TIMER_STORAGE_KEY}-project`);
+    } catch {}
+  }, [rememberedProjectMissing]);
+
   // Mutations
   const startMutation = useMutation({
     mutationFn: (data) => api.startTimeSession(data),
@@ -92,11 +125,16 @@ export default function LiveTimer({ socket }) {
         elapsed: 0,
         description: session.description || '',
       });
+      setPickerOpen(false);
+      setPickerError('');
       queryClient.invalidateQueries({ queryKey: ['running-time-session'] });
       // Notify via socket
       if (socket?.emit) {
         socket.emit('timer:started', { sessionId: session.id });
       }
+    },
+    onError: (err) => {
+      setPickerError(err?.message || 'Could not start the timer');
     },
   });
 
@@ -142,7 +180,15 @@ export default function LiveTimer({ socket }) {
   }, [socket, timerState.sessionId, timerState.isRunning, persistTimer, queryClient]);
 
   const handleStart = () => {
-    startMutation.mutate({ description: timerState.description || undefined });
+    if (!projectId) {
+      setPickerError('Choose a project to start the timer.');
+      return;
+    }
+    setPickerError('');
+    try {
+      localStorage.setItem(`${TIMER_STORAGE_KEY}-project`, projectId);
+    } catch {}
+    startMutation.mutate({ projectId, description: timerState.description || undefined });
   };
 
   const handleStop = () => {
@@ -157,7 +203,7 @@ export default function LiveTimer({ socket }) {
     // Opaque card backing: the top bar is translucent (bg-card/80 +
     // backdrop-blur), and the status tints below are translucent too, so
     // without it the text contrast depends on whatever scrolls underneath.
-    <div className="flex items-center gap-1.5 rounded-lg bg-card">
+    <div className="relative flex items-center gap-1.5 rounded-lg bg-card">
       {/* Timer display */}
       {timerState.isRunning && (
         <span className={cn(
@@ -170,7 +216,7 @@ export default function LiveTimer({ socket }) {
 
       {/* Start/Stop button */}
       <button
-        onClick={timerState.isRunning ? handleStop : handleStart}
+        onClick={timerState.isRunning ? handleStop : () => setPickerOpen((open) => !open)}
         disabled={isLoading}
         className={cn(
           'flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg transition-all',
@@ -181,6 +227,7 @@ export default function LiveTimer({ socket }) {
           isLoading && 'opacity-50 cursor-not-allowed'
         )}
         title={timerState.isRunning ? 'Stop timer' : 'Start timer'}
+        aria-expanded={timerState.isRunning ? undefined : pickerOpen}
       >
         {isLoading ? (
           <Loader2 className="w-3 h-3 animate-spin" />
@@ -191,6 +238,49 @@ export default function LiveTimer({ socket }) {
         )}
         <span className="hidden sm:inline">{timerState.isRunning ? 'Stop' : 'Timer'}</span>
       </button>
+
+      {/* Project picker — a timer cannot start without a project */}
+      {!timerState.isRunning && pickerOpen && (
+        <div
+          role="dialog"
+          aria-label="Start timer"
+          onKeyDown={(e) => { if (e.key === 'Escape') setPickerOpen(false); }}
+          className="absolute right-0 top-full z-50 mt-2 w-64 space-y-2 rounded-lg border border-border bg-card p-3 shadow-lg"
+        >
+          <label htmlFor="live-timer-project" className="block text-xs font-medium text-foreground">
+            Project
+          </label>
+          <select
+            id="live-timer-project"
+            value={projectId}
+            onChange={(e) => {
+              setProjectId(e.target.value);
+              setPickerError('');
+            }}
+            className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+          >
+            <option value="">{projectsLoading ? 'Loading projects…' : 'Select a project'}</option>
+            {selectableProjects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          {!projectsLoading && selectableProjects.length === 0 && (
+            <p className="text-xs text-muted-foreground">Create a project first — every timer is logged against one.</p>
+          )}
+          {pickerError && (
+            <p role="alert" className="text-xs text-destructive">{pickerError}</p>
+          )}
+          <button
+            type="button"
+            onClick={handleStart}
+            disabled={isLoading}
+            className="flex w-full items-center justify-center gap-1 rounded-md bg-success/10 px-2 py-1 text-xs font-medium text-success hover:bg-success/20 disabled:opacity-50"
+          >
+            <Play className="w-3 h-3 fill-current" />
+            Start timer
+          </button>
+        </div>
+      )}
     </div>
   );
 }

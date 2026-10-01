@@ -69,7 +69,12 @@ export async function buildWeeklyDigest(tenantPrisma, { chat = (options) => aiCl
   });
 
   const retainers = await tenantPrisma.retainerPlan.findMany({ include: { client: true } });
-  const retainerTotal = retainers.reduce((sum, r) => sum + parseFloat(r.tier || 0), 0);
+  // Package tiers store their price ('999' | '1999' | '3999'); 'custom' and
+  // named tiers carry no price, so they add nothing instead of NaN.
+  const retainerTotal = retainers.reduce((sum, r) => {
+    const price = Number.parseFloat(r.tier);
+    return sum + (Number.isFinite(price) ? price : 0);
+  }, 0);
 
   const system = `You are the AI assistant for Ashbi Design agency. Generate a concise weekly digest email for Cameron (CEO).`;
   const prompt = `Generate a weekly digest for the week of ${weekStart.toLocaleDateString('en-CA')} to ${now.toLocaleDateString('en-CA')}:

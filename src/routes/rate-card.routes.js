@@ -7,16 +7,15 @@ export default async function rateCardRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const { clientId } = request.query;
-    const where = {};
-    if (clientId) where.clientId = clientId;
+    // With a client: its cards plus the default card. Without: every card.
+    // (Prisma treats `OR: [{}]` as matching nothing, so the unfiltered list
+    // must not be expressed as an OR with an empty branch.)
+    const where = typeof clientId === 'string' && clientId
+      ? { OR: [{ clientId }, { isDefault: true }] }
+      : {};
 
     const rateCards = await request.prisma.rateCard.findMany({
-      where: {
-        OR: [
-          where,
-          { isDefault: true }
-        ]
-      },
+      where,
       include: { client: { select: { id: true, name: true } } },
       orderBy: [{ isDefault: 'desc' }, { name: 'asc' }]
     });
@@ -55,7 +54,7 @@ export default async function rateCardRoutes(fastify) {
     const rateCard = await request.prisma.rateCard.create({
       data: {
         name,
-        clientId: clientId || null,
+        clientId,
         rates: rates || [],
         isDefault: isDefault || false
       },
@@ -89,7 +88,8 @@ export default async function rateCardRoutes(fastify) {
         ...(name !== undefined && { name }),
         ...(rates !== undefined && { rates }),
         ...(isDefault !== undefined && { isDefault }),
-        ...(clientId !== undefined && { clientId: clientId || null })
+        // The schema rejects null: a card is reachable only through its client.
+        ...(clientId !== undefined && { clientId })
       },
       include: { client: { select: { id: true, name: true } } }
     });

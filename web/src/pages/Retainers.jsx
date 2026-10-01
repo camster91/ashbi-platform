@@ -15,6 +15,11 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import useClients from '../hooks/useClients';
+import {
+  buildRetainerCreatePayload,
+  buildRetainerUpdatePayload,
+  buildRetainerLogHoursPayload,
+} from '../lib/form-payloads';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Button, Card, LoadingState } from '../components/ui';
@@ -110,10 +115,10 @@ export default function Retainers() {
   const handleEdit = (plan) => {
     setEditingId(plan.clientId);
     setEditForm({
-      tier: plan.tier,
       hoursPerMonth: plan.hoursPerMonth,
-      monthlyAmountUsd: plan.monthlyAmountUsd || '',
-      monthlyAmountCad: plan.monthlyAmountCad || '',
+      // A stored 0 stays 0; only a missing amount shows as empty.
+      monthlyAmountUsd: plan.monthlyAmountUsd ?? '',
+      monthlyAmountCad: plan.monthlyAmountCad ?? '',
     });
   };
 
@@ -169,7 +174,7 @@ export default function Retainers() {
             <h2 className="text-lg font-semibold">Add Retainer Plan</h2>
             <button type="button" onClick={() => setShowCreate(false)} aria-label="Close retainer form" className="min-h-11 min-w-11 inline-flex items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><X className="w-5 h-5 text-muted-foreground" aria-hidden="true" /></button>
           </div>
-          <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(createForm); }} className="space-y-4">
+          <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(buildRetainerCreatePayload(createForm)); }} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="retainer-client" className="block text-sm font-medium mb-1">Client</label>
@@ -257,7 +262,7 @@ export default function Retainers() {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    updateMutation.mutate({ clientId: plan.clientId, data: editForm });
+                    updateMutation.mutate({ clientId: plan.clientId, data: buildRetainerUpdatePayload(editForm) });
                   }}
                   className="space-y-4"
                 >
@@ -364,7 +369,7 @@ export default function Retainers() {
                     <form
                       onSubmit={(e) => {
                         e.preventDefault();
-                        logHoursMutation.mutate({ clientId: plan.clientId, data: logForm });
+                        logHoursMutation.mutate({ clientId: plan.clientId, data: buildRetainerLogHoursPayload(logForm) });
                       }}
                       className="flex gap-2 items-end"
                     >

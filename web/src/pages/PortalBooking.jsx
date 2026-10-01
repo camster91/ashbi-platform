@@ -225,7 +225,8 @@ export default function PortalBooking() {
       time: selectedSlot,
       name: name.trim(),
       email: email.trim(),
-      topic: topic.trim(),
+      // POST /api/portal/booking reads the topic as `notes` (bookingSchema).
+      notes: topic.trim() || undefined,
     });
   };
 
@@ -330,6 +331,9 @@ export default function PortalBooking() {
             ) : (
               <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
                 {slots.map((slot) => {
+                  // slot.time is "HH:MM" in the server's local timezone (no
+                  // booking timezone is configured), shown as-is, not
+                  // converted to the visitor's timezone.
                   const time = typeof slot === 'string' ? slot : slot.time;
                   const available = typeof slot === 'string' ? true : slot.available !== false;
                   return (
@@ -398,6 +402,7 @@ export default function PortalBooking() {
                 id="booking-topic"
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
+                maxLength={1000}
                 placeholder="Brief description of what you need help with (optional)"
                 rows={3}
                 className="w-full px-4 py-2.5 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-warning/20 focus:border-warning resize-none"

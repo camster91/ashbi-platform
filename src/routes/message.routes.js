@@ -16,6 +16,19 @@ export default async function messageRoutes(fastify) {
       return reply.status(400).send({ error: 'Content is required' });
     }
 
+    // Tasks and the thread are created on this project, so it must be visible
+    // to the caller (request.prisma is tenant-scoped) before any AI call.
+    let project = null;
+    if (projectId) {
+      project = await request.prisma.project.findUnique({
+        where: { id: projectId },
+        select: { clientId: true }
+      });
+      if (!project) {
+        return reply.status(404).send({ error: 'Project not found' });
+      }
+    }
+
     const system = `You are an AI assistant for Agency Hub, an agency client management system.
 Your task is to parse pasted content from "${source}" and extract structured information.
 
@@ -98,35 +111,28 @@ Respond with JSON:
 
       // Create a thread if there's enough context
       let createdThread = null;
-      if (projectId && extracted.summary) {
-        const project = await request.prisma.project.findUnique({
-          where: { id: projectId },
-          select: { clientId: true }
-        });
-
-        if (project) {
-          createdThread = await request.prisma.thread.create({
-            data: {
-              subject: `[${source.toUpperCase()}] ${extracted.summary.substring(0, 100)}`,
-              status: 'OPEN',
-              priority: extracted.actionItems?.[0]?.priority || 'NORMAL',
-              intent: extracted.suggestedIntent || 'general',
-              clientId: project.clientId,
-              projectId,
-              needsTriage: true,
-              messages: {
-                create: {
-                  direction: 'INBOUND',
-                  senderEmail: extracted.sender?.email || `${source}@paste.agencyhub`,
-                  senderName: extracted.sender?.name || `${source} paste`,
-                  subject: `Pasted from ${source}`,
-                  bodyText: content,
-                  aiExtracted: JSON.stringify(extracted)
-                }
+      if (project && extracted.summary) {
+        createdThread = await request.prisma.thread.create({
+          data: {
+            subject: `[${source.toUpperCase()}] ${extracted.summary.substring(0, 100)}`,
+            status: 'OPEN',
+            priority: extracted.actionItems?.[0]?.priority || 'NORMAL',
+            intent: extracted.suggestedIntent || 'general',
+            clientId: project.clientId,
+            projectId,
+            needsTriage: true,
+            messages: {
+              create: {
+                direction: 'INBOUND',
+                senderEmail: extracted.sender?.email || `${source}@paste.agencyhub`,
+                senderName: extracted.sender?.name || `${source} paste`,
+                subject: `Pasted from ${source}`,
+                bodyText: content,
+                aiExtracted: JSON.stringify(extracted)
               }
             }
-          });
-        }
+          }
+        });
       }
 
       return reply.status(201).send({
