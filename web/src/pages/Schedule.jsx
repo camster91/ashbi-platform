@@ -47,6 +47,37 @@ const TYPE_ICONS = {
   REMINDER: Bell,
 };
 
+// All-day events are calendar dates stored as that UTC day (00:00Z to
+// 23:59:59.999Z, like milestone due dates), so their day is read in UTC and
+// shown as the same local calendar day; timed events use local time.
+function utcCalendarDay(value) {
+  const d = new Date(value);
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+function eventDay(event) {
+  return event.allDay ? utcCalendarDay(event.startTime) : new Date(event.startTime);
+}
+
+function fmtEventDate(event) {
+  return eventDay(event).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+// The API stores isAllDay and returns attendee rows ({ userId, user }); the
+// page reads allDay and lists attendees by user.
+function normalizeEvent(event) {
+  return { ...event, allDay: Boolean(event?.allDay ?? event?.isAllDay) };
+}
+
+function normalizeEvents(events) {
+  return Array.isArray(events) ? events.map(normalizeEvent) : [];
+}
+
+function attendeeUserId(attendee) {
+  if (attendee && typeof attendee === 'object') return attendee.userId || attendee.user?.id || attendee.id;
+  return attendee;
+}
+
 function typeStyle(type) {
   return TYPE_MAP[type] ?? TYPE_MAP.MEETING;
 }
@@ -122,7 +153,7 @@ function EventModal({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const defaultStart = useMemo(() => {
-    if (editEvent) return new Date(editEvent.startTime);
+    if (editEvent) return eventDay(normalizeEvent(editEvent));
     if (initialDate) return roundToNextHour(initialDate);
     return roundToNextHour(new Date());
   }, [editEvent, initialDate]);
@@ -142,8 +173,8 @@ function EventModal({
     projectId: editEvent?.projectId || '',
     startTime: toLocalInput(defaultStart),
     endTime: toLocalInput(defaultEnd),
-    allDay: editEvent?.allDay || false,
-    attendeeIds: editEvent?.attendees?.map(a => a.id || a.userId || a) || [],
+    allDay: Boolean(editEvent?.allDay ?? editEvent?.isAllDay),
+    attendeeIds: editEvent?.attendees?.map(attendeeUserId).filter(Boolean) || [],
   });
 
   const createMutation = useMutation({
@@ -188,11 +219,22 @@ function EventModal({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    // Shape checked by calendarEventCreateSchema / calendarEventUpdateSchema
+    // (src/tests/unit/ui-payload-contract.test.js).
     const payload = {
-      ...form,
-      startTime: new Date(form.startTime).toISOString(),
+      title: form.title,
+      description: form.description,
+      type: form.type,
+      location: form.location,
+      projectId: form.projectId || null,
+      isAllDay: form.allDay,
+      attendeeIds: form.attendeeIds,
+      // An all-day event is the chosen calendar date as a UTC day.
+      startTime: form.allDay
+        ? `${form.startTime.slice(0, 10)}T00:00:00.000Z`
+        : new Date(form.startTime).toISOString(),
       endTime: form.allDay
-        ? new Date(new Date(form.startTime).setHours(23, 59, 59)).toISOString()
+        ? `${form.startTime.slice(0, 10)}T23:59:59.999Z`
         : new Date(form.endTime).toISOString(),
     };
     if (isEdit) {
@@ -502,7 +544,7 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
           <div className="flex items-center gap-2 text-foreground">
             <Clock className="w-4 h-4 text-muted-foreground" />
             {event.allDay ? (
-              <span>All day &middot; {new Date(event.startTime).toLocaleDateString({ month: 'short', day: 'numeric' })}</span>
+              <span>All day &middot; {fmtEventDate(event)}</span>
             ) : (
               <span>{fmtTime(event.startTime)} &ndash; {fmtTime(event.endTime)}</span>
             )}
@@ -535,7 +577,7 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
               <div className="flex flex-wrap gap-2">
                 {event.attendees.map((a, i) => (
                   <span key={a.id || i} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">
-                    {a.name || a.email || a}
+                    {a.user?.name || a.user?.email || a.name || a.email || String(attendeeUserId(a))}
                   </span>
                 ))}
               </div>
@@ -631,7 +673,7 @@ function UpcomingSidebar({ onEventClick }) {
     isFetching: upcomingFetching,
   } = useQuery({
     queryKey: ['upcoming-events'],
-    queryFn: () => api.getUpcomingEvents(10),
+    queryFn: () => api.getUpcomingEvents(10).then(normalizeEvents),
     refetchInterval: 60000,
   });
 
@@ -677,7 +719,7 @@ function UpcomingSidebar({ onEventClick }) {
                   <p className="text-sm font-medium text-foreground truncate">{event.title}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {event.allDay
-                      ? new Date(event.startTime).toLocaleDateString({ month: 'short', day: 'numeric' })
+                      ? fmtEventDate(event)
                       : fmtTime(event.startTime)}
                     {' '}
                     <span className={cn('ml-1', style.text)}>{style.label}</span>
@@ -714,10 +756,12 @@ export default function Schedule() {
     isFetching: calendarFetching,
   } = useQuery({
     queryKey: ['calendar', currentWeekStart.toISOString()],
+    // One extra day each side: an all-day event's UTC day can start before
+    // the local week does. Each day column still shows only its own events.
     queryFn: () => api.getCalendarEvents({
-      startDate: currentWeekStart.toISOString(),
-      endDate: weekEnd.toISOString(),
-    }),
+      startDate: addDays(currentWeekStart, -1).toISOString(),
+      endDate: addDays(weekEnd, 1).toISOString(),
+    }).then(normalizeEvents),
   });
 
   const {
@@ -743,7 +787,13 @@ export default function Schedule() {
   });
 
   // Separate all-day and timed events
-  const allDayEvents = useMemo(() => events.filter(e => e.allDay), [events]);
+  const allDayEvents = useMemo(
+    () => {
+      const end = addDays(currentWeekStart, 7);
+      return events.filter(e => e.allDay && eventDay(e) >= currentWeekStart && eventDay(e) < end);
+    },
+    [events, currentWeekStart],
+  );
   const timedEvents = useMemo(() => events.filter(e => !e.allDay), [events]);
 
   // Build days array
@@ -757,7 +807,7 @@ export default function Schedule() {
   }, [timedEvents]);
 
   const getAllDayEventsForDay = useCallback((day) => {
-    return allDayEvents.filter(e => sameDay(new Date(e.startTime), day));
+    return allDayEvents.filter(e => sameDay(eventDay(e), day));
   }, [allDayEvents]);
 
   // Navigation

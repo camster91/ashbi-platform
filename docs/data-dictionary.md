@@ -54,7 +54,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [EmailTriageDraft](#model-emailtriagedraft) | `email_triage_drafts` | no | no | 10 |
 | [EmailTriageItem](#model-emailtriageitem) | `email_triage_items` | yes | no | 14 |
 | [EmailWebhookReceipt](#model-emailwebhookreceipt) | `email_webhook_receipts` | no | no | 3 |
-| [Estimate](#model-estimate) | `estimates` | no | yes | 23 |
+| [Estimate](#model-estimate) | `estimates` | no | yes | 24 |
 | [EventAttendee](#model-eventattendee) | `event_attendees` | no | no | 7 |
 | [Expense](#model-expense) | `expenses` | yes | yes | 22 |
 | [FormDraft](#model-formdraft) | `form_drafts` | yes | no | 13 |
@@ -486,13 +486,11 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `brand_settings`
 - Tenant-scoped: yes (`organizationId`)
 - Soft-deletable: no
-- Constraints and indexes:
-  - `@@index([organizationId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `id` | String | id, required | `cuid()` |  |  |
-| `organizationId` | String | required |  |  |  |
+| `organizationId` | String | unique, required |  |  | one brand per organization |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `companyName` | String | required | `"Ashbi Design"` |  |  |
 | `logoUrl` | String | optional |  |  |  |
@@ -1047,6 +1045,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `lineItems` | Json | required | `"[]"` |  | [{description, quantity, rate, amount}] |
 | `subtotal` | Float | required | `0` |  |  |
 | `tax` | Float | required | `0` |  |  |
+| `taxRate` | Float | optional |  |  | Percent staff entered (tax = round2(subtotal * taxRate / 100)); NULL on estimates from before it was stored |
 | `total` | Float | required | `0` |  |  |
 | `validUntil` | DateTime | optional |  |  |  |
 | `viewToken` | String | unique, required | `cuid()` |  |  |

@@ -10,6 +10,11 @@ import { cn } from '../lib/utils';
 import QueryErrorState from '../components/QueryErrorState';
 import { useToast } from '../hooks/useToast';
 
+const BRAND_EDITABLE_FIELDS = [
+  'companyName', 'primaryColor', 'accentColor', 'address', 'phone', 'email',
+  'website', 'taxId', 'invoiceFooter', 'proposalFooter', 'contractHeader',
+];
+
 export default function BrandSettings() {
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -69,7 +74,11 @@ export default function BrandSettings() {
 
   function handleSave() {
     if (!form) return;
-    const { id, createdAt, updatedAt, ...data } = form;
+    // Only the columns PUT /api/brand writes (brandSettingsSchema); the logo
+    // is saved by its own upload route, and id/organizationId are not editable.
+    const data = Object.fromEntries(
+      BRAND_EDITABLE_FIELDS.map((key) => [key, form[key] ?? null]),
+    );
     saveMutation.mutate(data);
   }
 

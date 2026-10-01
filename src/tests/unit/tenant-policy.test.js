@@ -24,7 +24,8 @@ test('formerly ownerless application roots require indexed organization ownershi
     const model = schema.match(new RegExp(`model ${root} \\{[\\s\\S]*?\\n\\}`))?.[0] || '';
     assert.match(model, /organizationId\s+String\b/, `${root} must require organizationId`);
     assert.doesNotMatch(model, /organizationId\s+String\?/, `${root} ownership cannot be nullable`);
-    assert.match(model, /@@index\(\[organizationId\]\)/, `${root} ownership must be indexed`);
+    // A unique organizationId (one row per organization) is indexed too.
+    assert.match(model, /@@index\(\[organizationId\]\)|organizationId\s+String\s+@unique\b/, `${root} ownership must be indexed`);
   }
 });
 

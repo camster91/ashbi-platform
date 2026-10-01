@@ -39,6 +39,81 @@ export function publicEstimateView(estimate) {
   };
 }
 
+const roundMoney = (value) => parseFloat((Number(value) || 0).toFixed(2));
+
+// A date-only "valid until" (the Estimates page's date input) is stored as
+// 23:59:59.999Z of that calendar day. The client may be anywhere, so the
+// estimate stays answerable, and its public link open, until that calendar
+// day has ended everywhere: the end of the day in UTC-12, 12 hours later.
+// An exact datetime from an API caller is used as given.
+const LATEST_TIMEZONE_OFFSET_MS = 12 * 60 * 60 * 1000;
+
+/** When an estimate with this validUntil stops being answerable, or null. */
+export function estimateValidThrough(validUntil) {
+  if (!validUntil) return null;
+  const at = new Date(validUntil);
+  if (Number.isNaN(at.getTime())) return null;
+  const endOfUtcDay = at.getUTCHours() === 23 && at.getUTCMinutes() === 59
+    && at.getUTCSeconds() === 59 && at.getUTCMilliseconds() === 999;
+  return endOfUtcDay ? new Date(at.getTime() + LATEST_TIMEZONE_OFFSET_MS) : at;
+}
+
+/** A line's amount as stored and shown: round2(quantity * rate). */
+export function estimateLineAmount(item) {
+  return roundMoney((Number(item?.quantity) || 0) * (Number(item?.rate) || 0));
+}
+
+/**
+ * Estimate money, computed exactly as the Estimates page shows it (and the
+ * way invoices apply taxRate): each line is round2(quantity * rate), the
+ * subtotal is the sum of those line amounts, tax = round2(subtotal * taxRate
+ * / 100) and total = round2(subtotal + tax). A fixed `tax` amount is used
+ * only when no taxRate is given.
+ * @param {Array<{ quantity: number, rate: number }>} lineItems
+ * @param {{ taxRate?: number | null, tax?: number }} [options]
+ */
+export function computeEstimateTotals(lineItems, { taxRate, tax } = {}) {
+  const items = Array.isArray(lineItems) ? lineItems : [];
+  const subtotal = roundMoney(items.reduce((sum, item) => sum + estimateLineAmount(item), 0));
+  const taxAmount = taxRate !== undefined && taxRate !== null
+    ? roundMoney((subtotal * Number(taxRate)) / 100)
+    : roundMoney(tax);
+  return { subtotal, tax: taxAmount, total: roundMoney(subtotal + taxAmount) };
+}
+
+/** Line items as stored: the client's fields plus the computed amount. */
+function storedLineItems(lineItems) {
+  return (lineItems || []).map((item) => ({
+    description: item.description,
+    quantity: item.quantity,
+    rate: item.rate,
+    amount: estimateLineAmount(item),
+  }));
+}
+
+// Estimate status changes each have one route, which does the side effects
+// the status implies:
+//   DRAFT -> SENT                 POST /:id/send (issues the public link, emails)
+//   SENT -> APPROVED | DECLINED   POST /view/:token/approve (the client's answer)
+//   APPROVED | SENT -> CONVERTED  POST /:id/convert (creates the proposal)
+// PUT /:id edits drafts only and may not change the status (sending `status:
+// 'DRAFT'` is accepted as a no-op), so staff can never mark an estimate
+// approved on the client's behalf.
+const PUT_STATUS_TRANSITIONS = Object.freeze({ DRAFT: Object.freeze(['DRAFT']) });
+
+/** Why PUT may not move an estimate from `from` to `to`, or null. */
+export function estimateStatusChangeError(from, to) {
+  if (to === undefined || to === from) return null;
+  if ((PUT_STATUS_TRANSITIONS[from] ?? []).includes(to)) return null;
+  const via = {
+    SENT: 'Send the estimate (POST /api/estimates/:id/send)',
+    APPROVED: 'Only the client can approve an estimate, from its link',
+    DECLINED: 'Only the client can decline an estimate, from its link',
+    CONVERTED: 'Convert the estimate (POST /api/estimates/:id/convert)',
+  }[to] ?? 'This status cannot be set directly';
+  return `An estimate cannot move from ${from} to ${to} here. ${via}.`;
+}
+
 /** Why a public link cannot be used, or null. Unknown and draft look the same. */
 function publicEstimateFailure(estimate, now = new Date()) {
   if (!estimate || !PUBLIC_ESTIMATE_STATUSES.includes(estimate.status)) {
@@ -86,15 +161,16 @@ export default async function estimateRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: [validateBody(createEstimateSchema)]
   }, async (request, reply) => {
-    const { clientId, title, description, lineItems, tax, validUntil } = request.body;
+    const { clientId, title, description, lineItems, tax, taxRate, validUntil } = request.body;
     if (!clientId || !title) {
       return reply.status(400).send({ error: 'Client and title are required' });
     }
 
-    const items = lineItems || [];
-    const subtotal = items.reduce((sum, i) => sum + (i.quantity * i.rate), 0);
-    const taxAmount = tax || 0;
-    const total = subtotal + taxAmount;
+    const items = storedLineItems(lineItems);
+    const { subtotal, tax: taxAmount, total } = computeEstimateTotals(items, { taxRate, tax });
+    // The rate is stored so the page reopens with exactly what staff entered;
+    // null when the caller sent a fixed tax amount instead.
+    const storedTaxRate = taxRate ?? null;
 
     const estimate = await request.prisma.estimate.create({
       data: {
@@ -104,6 +180,7 @@ export default async function estimateRoutes(fastify) {
         lineItems: items,
         subtotal,
         tax: taxAmount,
+        taxRate: storedTaxRate,
         total,
         validUntil: validUntil ? new Date(validUntil) : null
       },
@@ -123,28 +200,44 @@ export default async function estimateRoutes(fastify) {
     if (!existing) return reply.status(404).send({ error: 'Estimate not found' });
     if (existing.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft estimates can be edited' });
 
-    const { title, description, lineItems, tax, validUntil, status } = request.body;
-    const items = lineItems || existing.lineItems;
-    const subtotal = Array.isArray(items) ? items.reduce((sum, i) => sum + (i.quantity * i.rate), 0) : existing.subtotal;
-    const taxAmount = tax ?? existing.tax;
-    const total = subtotal + taxAmount;
+    const { title, description, lineItems, tax, taxRate, validUntil, status } = request.body;
+    const statusError = estimateStatusChangeError(existing.status, status);
+    if (statusError) return reply.status(409).send({ error: statusError, code: 'ESTIMATE_STATUS_TRANSITION' });
+    const items = lineItems !== undefined ? storedLineItems(lineItems) : (Array.isArray(existing.lineItems) ? existing.lineItems : []);
+    // The tax follows a new taxRate, else a new fixed tax, else the stored
+    // rate; an estimate from before rates were stored keeps its tax amount.
+    let nextTaxRate = existing.taxRate ?? null;
+    if (taxRate !== undefined) nextTaxRate = taxRate;
+    else if (tax !== undefined) nextTaxRate = null;
+    const { subtotal, tax: taxAmount, total } = computeEstimateTotals(
+      items,
+      nextTaxRate !== null ? { taxRate: nextTaxRate } : { tax: tax ?? existing.tax },
+    );
 
-    const estimate = await request.prisma.estimate.update({
-      where: { id },
+    // Lines, totals and fields are one row (lineItems is JSON), written by a
+    // single conditional update: if the estimate was sent (or changed status)
+    // since it was read, nothing is written and the edit is refused.
+    const written = await request.prisma.estimate.updateMany({
+      where: { id, status: 'DRAFT' },
       data: {
         ...(title !== undefined && { title }),
         ...(description !== undefined && { description }),
         ...(lineItems !== undefined && { lineItems: items }),
         subtotal,
         tax: taxAmount,
+        taxRate: nextTaxRate,
         total,
         ...(validUntil !== undefined && { validUntil: validUntil ? new Date(validUntil) : null }),
-        ...(status !== undefined && { status })
       },
+    });
+    if (written.count !== 1) {
+      return reply.status(409).send({ error: 'This estimate is no longer a draft, so it cannot be edited', code: 'ESTIMATE_NOT_DRAFT' });
+    }
+
+    return request.prisma.estimate.findUnique({
+      where: { id },
       include: { client: { select: { id: true, name: true } } }
     });
-
-    return estimate;
   });
 
   // Delete estimate
@@ -177,9 +270,11 @@ export default async function estimateRoutes(fastify) {
 
     // Issue a fresh 256-bit link that expires with the estimate (or in 30
     // days); the placeholder token created with the draft is never public.
-    const access = createPublicAccessWindow(estimate.validUntil);
-    const updated = await request.prisma.estimate.update({
-      where: { id },
+    const access = createPublicAccessWindow(estimateValidThrough(estimate.validUntil));
+    // Conditional on DRAFT so two concurrent sends (or a send racing an
+    // edit) cannot both issue a link and email the client.
+    const claimed = await request.prisma.estimate.updateMany({
+      where: { id, status: 'DRAFT' },
       data: {
         status: 'SENT',
         sentAt: new Date(),
@@ -187,6 +282,12 @@ export default async function estimateRoutes(fastify) {
         publicAccessExpiresAt: access.expiresAt,
         publicAccessRevokedAt: null,
       },
+    });
+    if (claimed.count !== 1) {
+      return reply.status(409).send({ error: 'This estimate was already sent', code: 'ESTIMATE_NOT_DRAFT' });
+    }
+    const updated = await request.prisma.estimate.findUnique({
+      where: { id },
       include: { client: { select: { id: true, name: true } } }
     });
 
@@ -269,7 +370,7 @@ export default async function estimateRoutes(fastify) {
     if (failure) return reply.status(failure.statusCode).send({ error: failure.error });
     if (estimate.status !== 'SENT') return reply.status(400).send({ error: 'Estimate is not in a state that can be responded to' });
     const now = new Date();
-    if (action === 'approve' && estimate.validUntil && new Date(estimate.validUntil) < now) {
+    if (action === 'approve' && estimate.validUntil && estimateValidThrough(estimate.validUntil) < now) {
       return reply.status(410).send({ error: 'This estimate has expired. Contact us for an updated estimate.', code: 'ESTIMATE_EXPIRED' });
     }
 
@@ -307,7 +408,7 @@ export default async function estimateRoutes(fastify) {
     if (existing.status !== 'SENT') {
       return reply.status(400).send({ error: 'Only a sent estimate awaiting an answer can get a new link' });
     }
-    const access = createPublicAccessWindow(existing.validUntil);
+    const access = createPublicAccessWindow(estimateValidThrough(existing.validUntil));
     const updated = await request.prisma.estimate.update({
       where: { id },
       data: { viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null },

@@ -4,6 +4,7 @@
 // staff allowed it. The routes get the raw (unscoped) database, exactly as
 // the tenancy-exempt /api/client-portal prefix does in the application.
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -198,14 +199,17 @@ describe('client portal reviews', () => {
   });
 
   it('serves only the session\'s own file', async (t) => {
-    const { client, createSession } = await setup(t);
+    const { db, client, createSession } = await setup(t);
     const session = await createSession('teamA', 'project-a', 'image-a', 'Homepage');
+    // A unique file name: node --test runs test files in parallel and other
+    // files also serve the fixture attachments from <cwd>/uploads.
     const uploads = path.join(process.cwd(), 'uploads');
     fs.mkdirSync(uploads, { recursive: true });
-    const stored = path.join(uploads, 'image-a.bin');
-    const existed = fs.existsSync(stored);
-    if (!existed) fs.writeFileSync(stored, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-    t.after(() => { if (!existed) fs.rmSync(stored, { force: true }); });
+    const name = `image-a-${randomUUID()}.bin`;
+    const stored = path.join(uploads, name);
+    fs.writeFileSync(stored, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    t.after(() => fs.rmSync(stored, { force: true }));
+    db.tables.attachment.find((row) => row.id === 'image-a').path = `/uploads/${name}`;
     const file = await client('a', 'GET', `/${session.id}/file`);
     assert.equal(file.statusCode, 200);
     assert.equal(file.headers['content-type'], 'image/png');

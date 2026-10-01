@@ -1765,7 +1765,7 @@ model IntakeFormResponse {
 
 model BrandSettings {
   id             String       @id @default(cuid())
-  organizationId String
+  organizationId String       @unique // one brand per organization
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   companyName    String       @default("Ashbi Design")
   logoUrl        String?
@@ -1780,7 +1780,6 @@ model BrandSettings {
   proposalFooter String?
   contractHeader String?
 
-  @@index([organizationId])
   @@map("brand_settings")
 }
 
@@ -2116,6 +2115,7 @@ model Estimate {
   lineItems   Json      @default("[]") // [{description, quantity, rate, amount}]
   subtotal    Float     @default(0)
   tax         Float     @default(0)
+  taxRate     Float? // Percent staff entered (tax = round2(subtotal * taxRate / 100)); NULL on estimates from before it was stored
   total       Float     @default(0)
   validUntil  DateTime?
   // Public link capability: rotated to a 256-bit token on send and valid only

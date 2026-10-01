@@ -115,19 +115,24 @@ test('brand logo upload: a failed settings write leaves no new file and keeps th
     await fs.writeFile(path.join(root, 'brand', oldName), PNG);
     const settings = { id: 'brand-1', logoUrl: `/uploads/brand/${oldName}` };
     let failUpdate = true;
-    app.decorate('prisma', {
+    // The tenant-scoped request.prisma: the caller's organization's row.
+    const db = {
       brandSettings: {
+        upsert: async () => settings,
         findFirst: async () => settings,
-        create: async () => settings,
         updateMany: async ({ data }) => {
           if (failUpdate) throw new Error('database unavailable');
           Object.assign(settings, data);
           return { count: 1 };
         },
       },
-    });
-    app.decorate('authenticate', async () => {});
-    app.decorate('adminOnly', async () => {});
+    };
+    const signIn = async (request) => {
+      request.user = { id: 'admin-1', organizationId: 'org-1', role: 'ADMIN' };
+      request.prisma = db;
+    };
+    app.decorate('authenticate', signIn);
+    app.decorate('adminOnly', signIn);
     await app.register(multipart);
     await app.register(brandRoutes, { prefix: '/api/brand', uploadsDir: root });
 

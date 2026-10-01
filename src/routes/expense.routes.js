@@ -5,11 +5,22 @@ import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { validateBody, createExpenseSchema, fileUpload, expenseUpdateSchema } from '../validators/schemas.js';
 import { softDelete } from '../services/trash.service.js';
+import { clampTake } from '../utils/query-limits.js';
 import { recordRejectedUpload, sha256Hex } from '../services/upload-integrity.service.js';
 import { DEFAULT_UPLOADS_DIR, hashStoredUpload, receiptRelativePath, sendStoredUpload } from '../utils/stored-upload.js';
 
 const RECEIPT_REFUSED = 'receiptUrl must be a receipt uploaded through /api/expenses/upload-receipt';
 const RECEIPT_TAKEN_MESSAGE = 'expense receipt belongs to another organization';
+
+// The list's ?sort= and ?order= come from the query string; anything outside
+// these allowlists falls back to the default rather than reaching Prisma.
+export const EXPENSE_SORT_FIELDS = Object.freeze(['date', 'amount', 'description', 'category', 'createdAt', 'updatedAt']);
+
+export function expenseListOrderBy(sort, order) {
+  const field = EXPENSE_SORT_FIELDS.includes(sort) ? sort : 'date';
+  const direction = order === 'asc' || order === 'desc' ? order : 'desc';
+  return { [field]: direction };
+}
 
 /**
  * The receipt columns for a write that sets `receiptUrl`. The checksum is
@@ -45,7 +56,7 @@ export default async function expenseRoutes(fastify, options = {}) {
 
   // ─── GET / — list expenses with filters ────────────────────────────────────
   fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
-    const { category, clientId, projectId, startDate, endDate, search, sort = 'date', order = 'desc', limit, offset } = request.query;
+    const { category, clientId, projectId, startDate, endDate, search, sort, order, limit, offset } = request.query;
 
     const where = {};
     if (category) where.category = category;
@@ -70,9 +81,9 @@ export default async function expenseRoutes(fastify, options = {}) {
           client: { select: { id: true, name: true } },
           project: { select: { id: true, name: true } },
         },
-        orderBy: { [sort]: order },
-        ...(limit ? { take: parseInt(limit) } : {}),
-        ...(offset ? { skip: parseInt(offset) } : {}),
+        orderBy: expenseListOrderBy(sort, order),
+        ...(limit ? { take: clampTake(limit) } : {}),
+        ...(Number.parseInt(offset, 10) > 0 ? { skip: Number.parseInt(offset, 10) } : {}),
       }),
       request.prisma.expense.count({ where }),
     ]);

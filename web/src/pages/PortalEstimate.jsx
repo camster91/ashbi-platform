@@ -176,7 +176,7 @@ export default function PortalEstimate() {
               {(estimate.validUntil || estimate.validUntilDate) && (
                 <div className="text-primary flex items-center gap-1.5 text-sm">
                   <Clock className="w-3.5 h-3.5" />
-                  <span>Valid until {formatDate(estimate.validUntil || estimate.validUntilDate)}</span>
+                  <span>Valid until {formatDate(estimate.validUntil || estimate.validUntilDate, { dateOnly: true })}</span>
                 </div>
               )}
             </div>

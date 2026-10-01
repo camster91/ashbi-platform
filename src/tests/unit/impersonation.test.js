@@ -523,7 +523,7 @@ describe('ending a support view', () => {
     const { app, db, startOk, cookiesFor, stepUp } = await buildApp(t);
     const cases = [
       ['POST', '/api/team/team-a/reset-password', { newPassword: 'Another-Pass-99' }, 'revoked_password_reset'],
-      ['PUT', '/api/team/team-a', { role: 'CLIENT' }, 'revoked_role_change'],
+      ['PUT', '/api/team/team-a', { role: 'ADMIN' }, 'revoked_role_change'],
       ['PUT', '/api/team/team-a', { isActive: false }, 'revoked_deactivated'],
     ];
     for (const [method, url, payload, reason] of cases) {

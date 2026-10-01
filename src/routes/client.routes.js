@@ -188,8 +188,9 @@ export default async function clientRoutes(fastify) {
     if (communicationPrefs) data.communicationPrefs = JSON.stringify(communicationPrefs);
     if (knowledgeBase) data.knowledgeBase = JSON.stringify(knowledgeBase);
     if (phone !== undefined) data.phone = phone;
-    if (notes !== undefined) data.notes = notes;
+    // Client has no `notes` column: `notes` is the older name for clientNotes.
     if (clientNotes !== undefined) data.clientNotes = clientNotes;
+    else if (notes !== undefined) data.clientNotes = notes;
     if (address !== undefined) data.address = address;
     if (city !== undefined) data.city = city;
     if (country !== undefined) data.country = country;

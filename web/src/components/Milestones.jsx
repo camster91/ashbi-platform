@@ -7,6 +7,7 @@ import ConfirmDialog from './ConfirmDialog';
 import Skeleton from './ui/Skeleton';
 import QueryErrorState from './QueryErrorState';
 import { DEFAULT_EVENT_COLOR } from '../lib/data-colors';
+import { calendarDaysUntil, formatDate as formatCalendarDate } from '../lib/format';
 
 export default function Milestones({ projectId }) {
   const queryClient = useQueryClient();
@@ -80,22 +81,10 @@ export default function Milestones({ projectId }) {
     },
   });
 
-  // Format date
-  const formatDate = (date) => {
-    return new Date(date).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
-
-  // Get days until due
-  const getDaysUntil = (date) => {
-    const now = new Date();
-    const due = new Date(date);
-    const diff = Math.ceil((due - now) / (1000 * 60 * 60 * 24));
-    return diff;
-  };
+  // Due dates are calendar dates stored at 00:00Z: show and compare them as
+  // UTC calendar days so viewers west of UTC do not see the previous day.
+  const formatDate = (date) => formatCalendarDate(date, { dateOnly: true });
+  const getDaysUntil = (date) => calendarDaysUntil(date) ?? 0;
 
   if (isLoading) {
     return (

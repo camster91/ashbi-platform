@@ -4,7 +4,8 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import { Alert, Button, Card, LoadingState } from '../../components/ui';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
 import { cn } from '../../lib/utils';
-import { portalFetch, downloadPortalDocument, deletePortalDocument, fmtDate, fmtRelative, projectStatusLabel, projectStatusColor, priorityLabel, priorityColor, Icons, useProjectChat, PortalChatComposer, PortalMessageAttachments, canSendPortalMessage, PortalProgress, PortalDocumentList, PortalUploadZone, StatusBadge, portalFieldStyles, pageTitleClass, sectionTitleClass, labelClass } from './shared';
+import { portalFetch, downloadPortalDocument, deletePortalDocument, fmtRelative, projectStatusLabel, projectStatusColor, priorityLabel, priorityColor, Icons, useProjectChat, PortalChatComposer, PortalMessageAttachments, canSendPortalMessage, PortalProgress, PortalDocumentList, PortalUploadZone, StatusBadge, portalFieldStyles, pageTitleClass, sectionTitleClass, labelClass } from './shared';
+import { formatDate } from '../../lib/format';
 
 // ── Project Detail (Kanban + Chat + Documents) ────────────────────────────────
 export default function ProjectDetail({ projectId, token, onBack }) {
@@ -236,7 +237,7 @@ export default function ProjectDetail({ projectId, token, onBack }) {
                 </div>
                 <div className="text-right">
                   <StatusBadge color={milestone.status === 'COMPLETED' ? 'success' : 'info'}>{milestone.status.replaceAll('_', ' ')}</StatusBadge>
-                  <p className="mt-1 text-xs text-muted-foreground">Due {fmtDate(milestone.dueDate)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Due {formatDate(milestone.dueDate, { dateOnly: true })}</p>
                 </div>
               </div>
             ))}

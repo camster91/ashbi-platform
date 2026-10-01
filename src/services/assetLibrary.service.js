@@ -2,6 +2,7 @@
 // Migrated from ashbi-hub raw SQL to Prisma
 
 import prisma from '../config/db.js';
+import { getOrCreateBrandSettings } from './brand-settings.service.js';
 
 /**
  * Get assets for a client with optional filters
@@ -89,24 +90,20 @@ export async function searchAssets(query, limit = 20) {
 }
 
 /**
- * Get brand settings (singleton)
+ * Get the organization's brand settings (created with defaults if missing).
+ * @param {string} organizationId
  */
-export async function getBrandSettings() {
-  let settings = await prisma.brandSettings.findFirst();
-  if (!settings) {
-    settings = await prisma.brandSettings.create({ data: {} });
-  }
-  return settings;
+export async function getBrandSettings(organizationId) {
+  return getOrCreateBrandSettings(prisma, organizationId);
 }
 
 /**
- * Update brand settings
+ * Update the organization's brand settings.
+ * @param {string} organizationId
+ * @param {Record<string, unknown>} data
  */
-export async function updateBrandSettings(data) {
-  const current = await prisma.brandSettings.findFirst();
-  if (!current) {
-    return prisma.brandSettings.create({ data: data });
-  }
+export async function updateBrandSettings(organizationId, data) {
+  const current = await getOrCreateBrandSettings(prisma, organizationId);
 
   const allowedFields = ['companyName', 'logoUrl', 'primaryColor', 'accentColor', 'address', 'phone', 'email', 'website', 'taxId', 'invoiceFooter', 'proposalFooter', 'contractHeader'];
   const updateData = {};
@@ -115,7 +112,7 @@ export async function updateBrandSettings(data) {
   }
 
   return prisma.brandSettings.update({
-    where: { id: current.id },
+    where: { id: current.id, organizationId },
     data: updateData
   });
 }

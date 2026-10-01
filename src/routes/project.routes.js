@@ -13,9 +13,32 @@ import {
   projectAiPlanSchema,
   projectTemplateSaveSchema,
   projectFromTemplateSchema,
+  TEAM_MEMBER_ROLES,
 } from '../validators/schemas.js';
 import bus, { EVENTS } from '../utils/events.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
+
+/**
+ * Check that a project's client and default owner belong to the caller's
+ * organization. `db` is the tenant-scoped request.prisma, so a record of
+ * another organization reads as missing. Returns an error to send, or null.
+ * @param {any} db
+ * @param {{ clientId?: string | null, defaultOwnerId?: string | null }} refs
+ */
+export async function projectReferenceError(db, { clientId, defaultOwnerId }) {
+  if (clientId) {
+    const client = await db.client.findFirst({ where: { id: clientId }, select: { id: true } });
+    if (!client) return { statusCode: 404, error: 'Client not found' };
+  }
+  if (defaultOwnerId) {
+    const owner = await db.user.findFirst({
+      where: { id: defaultOwnerId, isActive: true, role: { in: TEAM_MEMBER_ROLES } },
+      select: { id: true },
+    });
+    if (!owner) return { statusCode: 400, error: 'Default owner must be an active team member' };
+  }
+  return null;
+}
 
 export default async function projectRoutes(fastify) {
   // List all projects
@@ -88,7 +111,11 @@ export default async function projectRoutes(fastify) {
       status, health, hourlyBudget, startDate, endDate,
     } = request.body;
 
-    const data = { name, description, clientId, defaultOwnerId };
+    const refError = await projectReferenceError(request.prisma, { clientId, defaultOwnerId });
+    if (refError) return reply.status(refError.statusCode).send({ error: refError.error });
+
+    // null (the create modal's "no default owner") and omitted both store none.
+    const data = { name, description, clientId, defaultOwnerId: defaultOwnerId ?? null };
     // Optional fields the schema validates; omitted ones keep the DB defaults.
     if (status) data.status = status;
     if (health) data.health = health;
@@ -96,7 +123,7 @@ export default async function projectRoutes(fastify) {
     if (startDate) data.startDate = new Date(startDate);
     if (endDate) data.endDate = new Date(endDate);
 
-    const project = await fastify.prisma.project.create({ data });
+    const project = await request.prisma.project.create({ data });
 
     // Decoupled side-effects via Event Bus
     bus.emit(EVENTS.PROJECT_CREATED, { project, user: request.user });
@@ -156,6 +183,11 @@ export default async function projectRoutes(fastify) {
       budget, hourlyBudget, health, startDate, endDate,
       isRetainer, serviceType, notes
     } = request.body;
+
+    if (clientId || defaultOwnerId) {
+      const refError = await projectReferenceError(request.prisma, { clientId, defaultOwnerId });
+      if (refError) return reply.status(refError.statusCode).send({ error: refError.error });
+    }
 
     const data = {};
     if (name) data.name = name;
