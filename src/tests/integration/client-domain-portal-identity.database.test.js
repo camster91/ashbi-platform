@@ -1,7 +1,7 @@
 // Client domains and portal identities against a real PostgreSQL schema:
 //
 // - Client.domain is unique per organization (migration
-//   20261001120000_client_domain_per_org): two organizations may use the same
+//   20261001150000_client_domain_per_org): two organizations may use the same
 //   domain, any number of clients may have none ('' is stored as NULL), and a
 //   duplicate inside one organization is a 409. The migration's normalize and
 //   dedupe statements are also run on a temporary copy of "clients".
@@ -134,7 +134,7 @@ test('insensitiveEquals is an exact, case-insensitive match on PostgreSQL', { sk
 });
 
 function migrationStatements(table) {
-  const sql = readFileSync(new URL('../../../prisma/migrations/20261001120000_client_domain_per_org/migration.sql', import.meta.url), 'utf8');
+  const sql = readFileSync(new URL('../../../prisma/migrations/20261001150000_client_domain_per_org/migration.sql', import.meta.url), 'utf8');
   const statement = (marker) => {
     const start = sql.indexOf(marker);
     assert.ok(start >= 0, marker);
@@ -168,7 +168,7 @@ test('the migration normalizes domains and keeps the oldest live client per orga
     assert.equal(byId.a1.clientNotes, null);
     assert.equal(byId.a0.domain, null);
     assert.equal(byId.a2.domain, null);
-    assert.match(byId.a2.clientNotes, /^kept note\n\[migration 20261001120000_client_domain_per_org\] Domain "acme\.com" was cleared/);
+    assert.match(byId.a2.clientNotes, /^kept note\n\[migration 20261001150000_client_domain_per_org\] Domain "acme\.com" was cleared/);
     assert.equal(byId.a3.domain, null);
     assert.equal(byId.a4.domain, null);
     assert.equal(byId.a3.clientNotes, null, 'blank domains are not duplicates');

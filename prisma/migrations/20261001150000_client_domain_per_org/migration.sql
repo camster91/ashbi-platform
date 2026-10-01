@@ -59,7 +59,7 @@ SET "domain" = NULL,
     "clientNotes" = concat_ws(
       E'\n',
       NULLIF(c."clientNotes", ''),
-      '[migration 20261001120000_client_domain_per_org] Domain "' || ranked."domain"
+      '[migration 20261001150000_client_domain_per_org] Domain "' || ranked."domain"
         || '" was cleared: another client in this organization keeps this domain.'
     )
 FROM ranked

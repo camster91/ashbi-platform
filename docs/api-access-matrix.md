@@ -48,7 +48,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Access | Routes |
 | --- | --- |
-| admin | 35 |
+| admin | 36 |
 | admin + recent-auth | 14 |
 | admin + recent-auth (access change) | 1 |
 | admin + staff | 6 |
@@ -59,7 +59,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 4 |
-| staff | 369 |
+| staff | 368 |
 | staff (inline) | 1 |
 | **total** | 552 |
 
@@ -487,7 +487,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/gmail/draft-reply` | staff | scoped |  |
 | POST | `/api/gmail/send` | staff | scoped |  |
 | GET | `/api/gmail/status` | staff | scoped |  |
-| POST | `/api/gmail/sync-now` | staff | scoped |  |
+| POST | `/api/gmail/sync-now` | admin | scoped |  |
 
 ### /api/google-calendar
 
