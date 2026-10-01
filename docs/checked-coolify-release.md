@@ -66,9 +66,15 @@ does not approve a release. Public probes never carry the Coolify token.
    `COOLIFY_URL`, `COOLIFY_TOKEN`, `COOLIFY_APP_UUID` securely; existing secret
    names do not prove correct values. Use the normal authorized Coolify API,
    never database edits to create access or alter resources.
-   The backup transport also requires existing `VPS_SSH_KEY` access and the
+   The backup transport requires a dedicated `ASHBI_BACKUP_SSH_KEY` and the
    `ASHBI_VPS_KNOWN_HOSTS` repository variable, pinned from a trusted existing
    SSH host record for `187.77.26.99`. Do not use runtime `ssh-keyscan` trust.
+   Its authorized-key entry uses `restrict` and the forced
+   `/usr/local/sbin/ashbi-ci-backup` command. That root-owned dispatcher allows
+   only the installed verifier and downloads of root-owned encrypted Ashbi
+   archives; shell, arbitrary file access, forwarding and PTY are denied.
+   It sanitizes the execution environment. Install the reviewed verifier at
+   `/usr/local/libexec/ashbi-ci-backup-verify.py`; it never executes runner stdin.
    Prove this runner's actual access and artifact persistence before enabling.
    Run `Required release gates` manually on the preparation branch with
    `verify_production_backup=true` to exercise that exact transport and retain

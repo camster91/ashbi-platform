@@ -45,7 +45,7 @@ export function validateBackupProof(proof, sha, nonce, now = Date.now()) {
 }
 
 export async function productionBackup(env) {
-  if (!env.VPS_SSH_KEY || !env.ASHBI_VPS_KNOWN_HOSTS || !env.RUNNER_TEMP) {
+  if (!env.ASHBI_BACKUP_SSH_KEY || !env.ASHBI_VPS_KNOWN_HOSTS || !env.RUNNER_TEMP) {
     const error = new Error('Missing verified backup SSH configuration');
     error.safeReason = 'Required backup SSH configuration missing';
     throw error;
@@ -57,11 +57,10 @@ export async function productionBackup(env) {
   const key = path.join(temporary, 'key');
   const hosts = path.join(temporary, 'known_hosts');
   try {
-    await fs.writeFile(key, env.VPS_SSH_KEY + '\n', { mode: 0o600 });
+    await fs.writeFile(key, env.ASHBI_BACKUP_SSH_KEY.replace(/\r\n/g, '\n').trim() + '\n', { mode: 0o600 });
     await fs.writeFile(hosts, env.ASHBI_VPS_KNOWN_HOSTS + '\n', { mode: 0o600 });
     const options = ['-i', key, '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=yes', '-o', `UserKnownHostsFile=${hosts}`, '-o', 'ConnectTimeout=15'];
-    const script = await fs.readFile(new URL('./verify-production-backup.py', import.meta.url), 'utf8');
-    const proof = JSON.parse(await command('ssh', [...options, 'root@187.77.26.99', `python3 - ${sha} ${nonce}`], script));
+    const proof = JSON.parse(await command('ssh', [...options, 'root@187.77.26.99', `ashbi-backup ${sha} ${nonce}`]));
     validateBackupProof(proof, sha, nonce);
     const destination = path.join(env.RUNNER_TEMP, 'ashbi-release-backup');
     await fs.mkdir(destination, { recursive: true, mode: 0o700 });

@@ -48,12 +48,14 @@ jobs:
           node-version: '22'
       - name: Test release safety checks
         if: steps.source.outputs.current == 'true'
-        run: node --test src/tests/unit/coolify-release.test.mjs src/tests/unit/production-backup.test.mjs
+        run: |
+          node --test src/tests/unit/coolify-release.test.mjs src/tests/unit/production-backup.test.mjs
+          python3 scripts/deploy/test-backup-ssh-command.py
       - name: Create and verify encrypted production backup
         if: steps.source.outputs.current == 'true'
         env:
           RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          ASHBI_BACKUP_SSH_KEY: ${{ secrets.ASHBI_BACKUP_SSH_KEY }}
           ASHBI_VPS_KNOWN_HOSTS: ${{ vars.ASHBI_VPS_KNOWN_HOSTS }}
         run: node scripts/deploy/production-backup.mjs
       - name: Retain verified encrypted pre-deployment backup
