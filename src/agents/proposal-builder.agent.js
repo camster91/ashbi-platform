@@ -7,6 +7,7 @@ import { createDraftWithAttachment } from './gmail-draft.agent.js';
 import prisma from '../config/db.js';
 import logger from '../utils/logger.js';
 import PDFDocument from 'pdfkit';
+import { computeProposalLineItems, proposalTotals } from '../utils/proposal-totals.js';
 
 // Pricing tiers (hardcoded for now, can be updated via UI)
 const PRICING_TIERS = {
@@ -34,13 +35,15 @@ const PROPOSAL_TEMPLATES = [
   { id: 'generic', name: 'Generic', description: 'General-purpose proposal template' }
 ];
 
-// Proposal statuses
+// Proposal statuses, as stored on Proposal.status. The client's answer is
+// APPROVED or DECLINED (the stats below still report them as accepted and
+// rejected).
 const PROPOSAL_STATUS = {
   DRAFT: 'DRAFT',
   SENT: 'SENT',
   VIEWED: 'VIEWED',
-  ACCEPTED: 'ACCEPTED',
-  REJECTED: 'REJECTED'
+  APPROVED: 'APPROVED',
+  DECLINED: 'DECLINED'
 };
 
 // AI Client import — try ESM import, fall back gracefully
@@ -459,8 +462,14 @@ async function saveProposal(proposalData) {
       terms,
       html,
       leadData,
-      status = PROPOSAL_STATUS.DRAFT
     } = proposalData;
+
+    // The selected tier is stored as the proposal's line item, so the totals
+    // are derived from line items like every other proposal.
+    const lineItems = selectedTier?.price
+      ? computeProposalLineItems([{ description: selectedTier.name || 'Selected package', quantity: 1, unitPrice: Number(selectedTier.price) || 0 }])
+      : [];
+    const { subtotal, total } = proposalTotals(lineItems, 0);
 
     const proposal = await prisma.proposal.create({
       data: {
@@ -473,14 +482,15 @@ async function saveProposal(proposalData) {
           terms,
           html: html?.substring(0, 10000)
         }),
-        subtotal: selectedTier?.price || 0,
+        subtotal,
         discount: 0,
-        total: selectedTier?.price || 0,
+        total,
         validUntil: new Date(Date.now() + 30 * 86400000),
-        status,
+        // Always a draft: a proposal only leaves DRAFT through send.
+        status: PROPOSAL_STATUS.DRAFT,
         clientId: leadData?.clientId || null,
         createdById: leadData?.userId || null,
-        ...(leadData && !leadData.clientId ? {} : {})
+        ...(lineItems.length > 0 ? { lineItems: { create: lineItems } } : {}),
       },
       include: {
         client: { select: { id: true, name: true } },
@@ -505,32 +515,80 @@ async function saveProposal(proposalData) {
   }
 }
 
+/** An error the proposal-builder routes answer with its statusCode. */
+export class ProposalBuilderError extends Error {
+  constructor(message, statusCode, code) {
+    super(message);
+    this.name = 'ProposalBuilderError';
+    this.statusCode = statusCode;
+    this.code = code;
+  }
+}
+
+const PROPOSAL_INCLUDE = {
+  client: { select: { id: true, name: true } },
+  createdBy: { select: { id: true, name: true } },
+  lineItems: true,
+};
+
 /**
- * Update proposal content
+ * Update a DRAFT proposal's content. Status and money are never taken from
+ * the caller: the status only changes through send (here) or the client's
+ * answer on the portal, and subtotal/total are derived from the line items.
+ * The edit is a compare-and-set on status DRAFT, so a proposal that was sent
+ * (or answered) meanwhile is refused with 409 instead of being rewritten.
  */
 async function updateProposal(proposalId, updateData) {
-  try {
-    const proposal = await prisma.proposal.update({
-      where: { id: proposalId },
-      data: {
-        ...(updateData.title && { title: updateData.title }),
-        ...(updateData.notes && { notes: updateData.notes }),
-        ...(updateData.status && { status: updateData.status }),
-        ...(updateData.subtotal !== undefined && { subtotal: updateData.subtotal }),
-        ...(updateData.total !== undefined && { total: updateData.total }),
-        ...(updateData.validUntil && { validUntil: new Date(updateData.validUntil) })
-      },
-      include: {
-        client: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, name: true } }
-      }
-    });
+  const data = {};
+  if (updateData.title) data.title = updateData.title;
+  if (updateData.notes) data.notes = updateData.notes;
+  if (updateData.validUntil !== undefined) data.validUntil = updateData.validUntil ? new Date(updateData.validUntil) : null;
+  if (updateData.discount !== undefined) data.discount = updateData.discount;
+  const computedLineItems = updateData.lineItems ? computeProposalLineItems(updateData.lineItems) : null;
 
-    return proposal;
-  } catch (error) {
-    console.error('Error updating proposal:', error);
-    throw error;
-  }
+  return prisma.$transaction(async (tx) => {
+    // Claim first: the compare-and-set takes the row lock, so a concurrent
+    // send or approval either committed before it (count 0) or waits for
+    // this edit, and the line items read below are the ones this edit owns.
+    const claimed = await tx.proposal.updateMany({
+      where: { id: proposalId, status: PROPOSAL_STATUS.DRAFT },
+      data: { ...data, updatedAt: new Date() },
+    });
+    if (claimed.count !== 1) {
+      const exists = await tx.proposal.findUnique({ where: { id: proposalId }, select: { id: true } });
+      if (!exists) throw new ProposalBuilderError('Proposal not found', 404, 'NOT_FOUND');
+      throw new ProposalBuilderError('Only DRAFT proposals can be updated', 409, 'PROPOSAL_NOT_DRAFT');
+    }
+
+    if (computedLineItems) {
+      await tx.proposalLineItem.deleteMany({ where: { proposalId } });
+      if (computedLineItems.length > 0) {
+        await tx.proposalLineItem.createMany({ data: computedLineItems.map(item => ({ ...item, proposalId })) });
+      }
+    }
+    if (computedLineItems || data.discount !== undefined) {
+      const stored = await tx.proposal.findUnique({ where: { id: proposalId }, include: { lineItems: true } });
+      const totals = proposalTotals(stored.lineItems || [], stored.discount ?? 0);
+      await tx.proposal.update({ where: { id: proposalId }, data: { subtotal: totals.subtotal, total: totals.total } });
+    }
+    return tx.proposal.findUnique({ where: { id: proposalId }, include: PROPOSAL_INCLUDE });
+  });
+}
+
+/**
+ * Record that a proposal was sent: DRAFT -> SENT, compare-and-set. A proposal
+ * that is already SENT or VIEWED stays as it is (re-sending the email is
+ * allowed); an answered proposal is never moved back.
+ */
+async function markProposalSent(proposalId) {
+  const claimed = await prisma.proposal.updateMany({
+    where: { id: proposalId, status: PROPOSAL_STATUS.DRAFT },
+    data: { status: PROPOSAL_STATUS.SENT, sentAt: new Date() },
+  });
+  if (claimed.count === 1) return PROPOSAL_STATUS.SENT;
+  const current = await prisma.proposal.findUnique({ where: { id: proposalId }, select: { status: true } });
+  if (!current) throw new ProposalBuilderError('Proposal not found', 404, 'NOT_FOUND');
+  return current.status;
 }
 
 /**
@@ -589,8 +647,8 @@ async function getProposalStats() {
       prisma.proposal.count(),
       prisma.proposal.count({ where: { status: PROPOSAL_STATUS.SENT } }),
       prisma.proposal.count({ where: { status: PROPOSAL_STATUS.VIEWED } }),
-      prisma.proposal.count({ where: { status: PROPOSAL_STATUS.ACCEPTED } }),
-      prisma.proposal.count({ where: { status: PROPOSAL_STATUS.REJECTED } }),
+      prisma.proposal.count({ where: { status: PROPOSAL_STATUS.APPROVED } }),
+      prisma.proposal.count({ where: { status: PROPOSAL_STATUS.DECLINED } }),
       prisma.proposal.count({ where: { status: PROPOSAL_STATUS.DRAFT } })
     ]);
 
@@ -607,40 +665,6 @@ async function getProposalStats() {
   }
 }
 
-/**
- * Mark proposal as accepted — triggers contract generation
- */
-async function acceptProposal(proposalId) {
-  try {
-    const proposal = await prisma.proposal.update({
-      where: { id: proposalId },
-      data: {
-        status: PROPOSAL_STATUS.ACCEPTED,
-        approvedAt: new Date()
-      },
-      include: {
-        client: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, name: true } }
-      }
-    });
-
-    return {
-      proposal: {
-        id: proposal.id,
-        title: proposal.title,
-        status: proposal.status,
-        total: proposal.total,
-        client: proposal.client,
-        acceptedAt: proposal.approvedAt
-      },
-      message: 'Proposal accepted. Ready for contract generation.'
-    };
-  } catch (error) {
-    console.error('Error accepting proposal:', error);
-    throw error;
-  }
-}
-
 export {
   generateProposal,
   generatePdf,
@@ -648,10 +672,10 @@ export {
   getProposalTemplates,
   saveProposal,
   updateProposal,
+  markProposalSent,
   trackProposalView,
   getProposal,
   getProposalStats,
-  acceptProposal,
   PRICING_TIERS,
   PROPOSAL_STATUS,
   PROPOSAL_TEMPLATES

@@ -48,7 +48,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Access | Routes |
 | --- | --- |
-| admin | 39 |
+| admin | 40 |
 | admin + recent-auth | 14 |
 | admin + recent-auth (access change) | 1 |
 | admin + staff | 6 |
@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 4 |
-| staff | 366 |
+| staff | 364 |
 | staff (inline) | 1 |
-| **total** | 553 |
+| **total** | 552 |
 
 ## Routes by prefix
 
@@ -553,7 +553,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/invoices/:id/resend` | staff | scoped |  |
 | POST | `/api/invoices/:id/send` | staff | scoped |  |
 | POST | `/api/invoices/:id/undo-void` | admin | scoped |  |
-| POST | `/api/invoices/bulk/archive` | staff | scoped |  |
+| POST | `/api/invoices/bulk/archive` | admin | scoped |  |
 | POST | `/api/invoices/bulk/mark-paid` | staff | scoped |  |
 | POST | `/api/invoices/bulk/send` | staff | scoped |  |
 | GET | `/api/invoices/client/:viewToken` | public | exempt | capability token: Invoice view link (legacy path). |
@@ -712,7 +712,6 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | --- | --- | --- | --- | --- |
 | GET | `/api/proposal-builder/:id` | staff | scoped |  |
 | PUT | `/api/proposal-builder/:id` | staff | scoped |  |
-| POST | `/api/proposal-builder/:id/accept` | staff | scoped |  |
 | GET | `/api/proposal-builder/:id/pdf` | staff | scoped |  |
 | POST | `/api/proposal-builder/:id/send` | staff | scoped |  |
 | POST | `/api/proposal-builder/:id/send-pdf` | staff | scoped |  |

@@ -23,6 +23,8 @@ const ACTOR_TYPE_SET = new Set(AUDIT_ACTOR_TYPES);
 export const AUDIT_EVENT_CATALOG = Object.freeze({
   'invoice.sent': { entityType: 'invoice', metadata: ['fromStatus', 'toStatus', 'deliveryAccepted', 'paymentLinkAttached', 'total', 'currency', 'bulk'] },
   'invoice.paid': { entityType: 'invoice', metadata: ['fromStatus', 'toStatus', 'method', 'bulk', 'total', 'currency', 'stripeEventId'] },
+  'invoice.voided': { entityType: 'invoice', metadata: ['fromStatus', 'toStatus', 'total', 'currency', 'bulk'] },
+  'payment.refused': { entityType: 'invoice', metadata: ['code', 'amount', 'currency', 'stripeEventId', 'transactionId'] },
   'payment.recorded': { entityType: 'invoice_payment', metadata: ['invoiceId', 'amount', 'method', 'source', 'bulk', 'currency', 'stripeEventId'] },
   'proposal.approved': { entityType: 'proposal', metadata: ['fromStatus', 'toStatus', 'total', 'via'] },
   'contract.signed': { entityType: 'contract', metadata: ['fromStatus', 'toStatus', 'signingMethod', 'documentHash', 'via'] },

@@ -404,7 +404,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
           {(invoice.status === 'SENT' || invoice.isOverdue) && (
             <Button size="sm" variant="outline" onClick={onMarkPaid} leftIcon={<DollarSign className="w-3 h-3" />}>Mark Paid</Button>
           )}
-          {isAdmin && invoice.status !== 'PAID' && (
+          {isAdmin && invoice.status !== 'PAID' && !(invoice.amountPaid > 0) && (
             <Button size="sm" variant="ghost" onClick={onDelete} leftIcon={<Trash2 className="w-3 h-3" />} className="text-destructive hover:text-destructive/80">Void</Button>
           )}
         </div>
@@ -472,7 +472,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
             className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title="View" aria-label="View invoice">
             <Eye className="w-4 h-4" />
           </button>
-          {isAdmin && invoice.status !== 'PAID' && (
+          {isAdmin && invoice.status !== 'PAID' && !(invoice.amountPaid > 0) && (
             <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }}
               className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-destructive rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title="Void invoice" aria-label="Void invoice">
               <Trash2 className="w-4 h-4" />

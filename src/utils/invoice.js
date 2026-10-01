@@ -66,3 +66,16 @@ export async function createNumberedInvoice(db, { data, include, organizationId 
     });
   });
 }
+
+// Prisma reports the violated unique constraint as meta.target (field list
+// or index name) or, through the pg driver adapter, as
+// meta.driverAdapterError.cause.constraint.
+export function isUniqueViolationOn(error, { index, fields = [] }) {
+  if (error?.code !== 'P2002') return false;
+  const target = error.meta?.target;
+  const targets = Array.isArray(target) ? target : (target ? [target] : []);
+  const constraint = error.meta?.driverAdapterError?.cause?.constraint;
+  if (constraint?.index) targets.push(constraint.index);
+  if (Array.isArray(constraint?.fields)) targets.push(...constraint.fields);
+  return targets.some((value) => value === index || fields.includes(String(value).replace(/"/g, '')));
+}

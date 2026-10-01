@@ -16,17 +16,27 @@ function fakePrisma({ invoicesByStatus }) {
   const model = (overrides = {}) => new Proxy(overrides, {
     get: (target, prop) => target[prop] ?? (async () => (prop === 'count' ? 0 : prop === 'aggregate' ? { _sum: {} } : [])),
   });
+  // Evaluates the invoice filters the route sends to the database.
+  const matchingInvoices = (where) => {
+    const statuses = typeof where.status === 'string' ? [where.status] : where.status.in;
+    return statuses
+      .flatMap((status) => (invoicesByStatus[status] || []).map((row) => ({ status, ...row })))
+      .filter((row) => !where.OR || where.OR.some((clause) => (clause.status && row.status === clause.status)
+        || (clause.dueDate && row.dueDate && row.dueDate < clause.dueDate.lt)));
+  };
   return {
     retainerPlan: model({ aggregate: async () => ({ _sum: { monthlyAmountUsd: null }, _count: { _all: 0 } }) }),
     invoice: model({
-      // Evaluates the filters the route sends to the database.
       aggregate: async ({ where }) => {
-        const statuses = typeof where.status === 'string' ? [where.status] : where.status.in;
-        const rows = statuses
-          .flatMap((status) => (invoicesByStatus[status] || []).map((row) => ({ status, ...row })))
-          .filter((row) => !where.OR || where.OR.some((clause) => (clause.status && row.status === clause.status)
-            || (clause.dueDate && row.dueDate && row.dueDate < clause.dueDate.lt)));
+        const rows = matchingInvoices(where);
         return { _sum: { total: rows.length ? rows.reduce((sum, r) => sum + r.total, 0) : null }, _count: { _all: rows.length } };
+      },
+    }),
+    // Payments recorded on the matching invoices (row.paid).
+    invoicePayment: model({
+      aggregate: async ({ where }) => {
+        const paid = matchingInvoices(where.invoice).reduce((sum, r) => sum + (r.paid || 0), 0);
+        return { _sum: { amount: paid || null } };
       },
     }),
     project: model(),
@@ -92,4 +102,22 @@ test('money and counts come from database aggregates, never from a capped list r
   const stats = await handler({ user: { id: 'u1', role: 'ADMIN' }, organizationId: 'org-1', prisma });
   assert.equal(stats.mrr, 150000);
   assert.equal(stats.activeRetainerCount, 150);
+});
+
+test('outstanding and overdue amounts are balances after partial payments', async () => {
+  const handler = await statsHandler();
+  const stats = await handler({
+    user: { id: 'u1', role: 'ADMIN' },
+    organizationId: 'org-1',
+    prisma: fakePrisma({
+      invoicesByStatus: {
+        DRAFT: [],
+        SENT: [{ total: 1000, paid: 400, status: 'SENT', dueDate: new Date(Date.now() + 864e5) }],
+        OVERDUE: [{ total: 250, paid: 50, status: 'OVERDUE', dueDate: new Date(Date.now() - 864e5) }],
+      },
+    }),
+  });
+  assert.equal(stats.totalOutstanding, 800);
+  assert.equal(stats.overdueAmount ?? stats.overdueTotal, 200);
+  assert.equal(stats.outstandingCount, 2);
 });

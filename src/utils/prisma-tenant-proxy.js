@@ -1,6 +1,6 @@
 // @ts-check
 import logger from './logger.js';
-import { withSoftDelete } from '../services/soft-delete.service.js';
+import { WITH_DELETED, withSoftDelete } from '../services/soft-delete.service.js';
 import { relationsFor } from './tenant-relations.js';
 
 /**
@@ -142,6 +142,20 @@ const DIRECT_PARENT_RELATIONS = {
     { relation: 'attachment', field: 'attachmentId', model: 'attachment', delegate: 'attachment', required: true },
     { relation: 'previousSession', field: 'previousSessionId', model: 'reviewsession', delegate: 'reviewSession' },
   ],
+};
+
+// Foreign-key scalars that have no Prisma relation (so relationsFor() cannot
+// see them) but still name a tenant-owned record. Every write of one is
+// checked like a relation foreign key: the referenced record must belong to
+// this organization. Invoice.projectId and Invoice.proposalId predate
+// relations on Invoice; without this an invoice could point at another
+// organization's project or proposal.
+// Ownership is checked including soft-deleted records (a project in the
+// trash still belongs to this organization, e.g. when the recurring job
+// copies an invoice whose project was trashed), and an update that keeps the
+// stored value is not re-checked.
+const SCALAR_REFERENCES = {
+  invoice: { projectId: 'project', proposalId: 'proposal' },
 };
 
 const RESTRICTED_MODELS = new Set([]);
@@ -352,11 +366,11 @@ export function createScopedPrisma(prisma, organizationId) {
    * belongs to this organization. Each distinct record is checked once per
    * call (`verified`).
    */
-  async function verifyOwned(label, modelKey, where, verified) {
+  async function verifyOwned(label, modelKey, where, verified, { includeDeleted = false } = {}) {
     if (!isPlainObject(where) || Object.keys(where).length === 0) {
       throw new TenancyError(`${label} reference is not a unique record`, 400);
     }
-    const cacheKey = `${modelKey}:${JSON.stringify(where)}`;
+    const cacheKey = `${modelKey}:${includeDeleted ? 'any:' : ''}${JSON.stringify(where)}`;
     if (verified.has(cacheKey)) return;
     if (modelKey === 'organization') {
       if (where.id !== organizationId || Object.keys(where).length !== 1) {
@@ -372,7 +386,8 @@ export function createScopedPrisma(prisma, organizationId) {
       throw new TenancyError(`${label} references ${modelKey}, which is not classified for tenant access`);
     }
     const meta = relationsFor(modelKey);
-    const delegate = softPrisma[meta?.delegate ?? modelKey];
+    const source = includeDeleted ? softPrisma[WITH_DELETED]() : softPrisma;
+    const delegate = source[meta?.delegate ?? modelKey];
     if (!delegate || typeof delegate.findFirst !== 'function') {
       throw new TenancyError(`${label} references ${modelKey}, which cannot be verified`);
     }
@@ -389,7 +404,7 @@ export function createScopedPrisma(prisma, organizationId) {
    * stay inside this organization. Nested creates of direct-scoped models get
    * this organization injected, like top-level creates.
    */
-  async function validateWriteData(modelKey, data, verified, { creating, nested = false }) {
+  async function validateWriteData(modelKey, data, verified, { creating, nested = false, existing = null }) {
     if (!isPlainObject(data)) return;
     const meta = relationsFor(modelKey);
     if (!meta) throw new TenancyError(`no relation metadata for ${modelKey}; the write cannot be validated`);
@@ -397,7 +412,15 @@ export function createScopedPrisma(prisma, organizationId) {
       data.organizationId = organizationId;
     }
 
+    const scalarReferences = SCALAR_REFERENCES[modelKey] || {};
     for (const [key, value] of Object.entries(data)) {
+      if (scalarReferences[key]) {
+        const ownerId = scalarKeyValue(value);
+        if (ownerId !== null && !(existing && existing[key] === ownerId)) {
+          await verifyOwned(key, scalarReferences[key], { id: ownerId }, verified, { includeDeleted: true });
+        }
+        continue;
+      }
       const relationName = meta.foreignKeys[key];
       if (relationName) {
         const ownerId = scalarKeyValue(value);
@@ -459,7 +482,7 @@ export function createScopedPrisma(prisma, organizationId) {
   }
 
   /** Validate the data rows of a top-level write call. */
-  async function validateWriteArgs(modelKey, methodName, queryArgs, verified) {
+  async function validateWriteArgs(modelKey, methodName, queryArgs, verified, existing = null) {
     if (methodName === 'upsert') {
       await validateWriteData(modelKey, queryArgs.create, verified, { creating: true });
       await validateWriteData(modelKey, queryArgs.update, verified, { creating: false });
@@ -478,7 +501,7 @@ export function createScopedPrisma(prisma, organizationId) {
           if (typeof row?.id === 'string') verified.add(`${modelKey}:${JSON.stringify({ id: row.id })}`);
         }
       }
-      for (const row of rows) await validateWriteData(modelKey, row, verified, { creating });
+      for (const row of rows) await validateWriteData(modelKey, row, verified, { creating, existing });
     }
   }
 
@@ -634,12 +657,13 @@ export function createScopedPrisma(prisma, organizationId) {
             if (methodName === 'update' || methodName === 'delete') {
               const scopedTarget = await modelTarget.findFirst({
                 where: { AND: [queryArgs.where ?? {}, tenantWhere] },
-                select: { id: true },
+                // Stored scalar references, so an unchanged one is not re-checked.
+                select: { id: true, ...Object.fromEntries(Object.keys(SCALAR_REFERENCES[modelKey] || {}).map((field) => [field, true])) },
               });
               if (!scopedTarget) {
                 throw new TenancyError(`${String(modelName)} record is unavailable in this organization`, 404);
               }
-              if (methodName === 'update') await validateWriteArgs(modelKey, methodName, queryArgs, verified);
+              if (methodName === 'update') await validateWriteArgs(modelKey, methodName, queryArgs, verified, scopedTarget);
               logger.debug({ modelName, methodName, organizationId, tenantPath }, 'Tenant-path Unique Mutation');
               return method.apply(modelTarget, [queryArgs, ...args.slice(1)]);
             }

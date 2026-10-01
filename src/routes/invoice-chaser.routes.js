@@ -3,6 +3,21 @@
 import aiClient from '../ai/client.js';
 import { validateBody, invoiceChaserSchema } from '../validators/schemas.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
+import { withInvoiceBalance } from '../utils/invoice-balance.js';
+import { invoicePublicAccessFailure } from '../utils/public-document-access.js';
+
+function hubUrl() {
+  return process.env.APP_URL || process.env.HUB_URL || 'https://hub.ashbi.ca';
+}
+
+// Like the overdue reminder job: chase what is still owed (the balance after
+// partial payments), and link the public invoice page, which creates or
+// refreshes a Checkout session for that balance on demand. A stored Checkout
+// URL may be priced from an older balance, so it is never quoted.
+function payLink(invoice) {
+  if (!invoice.viewToken || invoicePublicAccessFailure(invoice)) return null;
+  return `${hubUrl()}/portal/invoice/${invoice.viewToken}`;
+}
 
 // "Generate all" drafts one AI reminder per invoice, so a single request
 // covers at most this many (the longest overdue first).
@@ -38,6 +53,7 @@ export default async function invoiceChaserRoutes(fastify) {
           }
         },
         lineItems: true,
+        payments: { select: { amount: true } },
       }
     });
 
@@ -47,7 +63,10 @@ export default async function invoiceChaserRoutes(fastify) {
 
     const reminders = [];
 
-    for (const invoice of invoices) {
+    for (const loaded of invoices) {
+      const invoice = await withInvoiceBalance(prisma, loaded);
+      if (!(invoice.balanceDue > 0)) continue;
+      const link = payLink(invoice);
       const daysOverdue = invoice.dueDate
         ? Math.floor((Date.now() - new Date(invoice.dueDate).getTime()) / 86400000)
         : 0;
@@ -65,12 +84,12 @@ Details:
 - Client: ${invoice.client?.name || 'Client'}
 - Contact: ${contactName}
 - Invoice #: ${invoice.invoiceNumber}
-- Amount: $${invoice.total.toLocaleString()}
+- Amount due: $${invoice.balanceDue.toLocaleString()}${invoice.amountPaid > 0 ? ` (of $${invoice.total.toLocaleString()}; $${invoice.amountPaid.toLocaleString()} already received)` : ''}
 - Due date: ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-CA') : 'N/A'}
 - Days overdue: ${daysOverdue}
 - Items: ${invoice.lineItems.map(li => li.description).join(', ')}
 
-${invoice.stripePaymentLink ? `Payment link: ${invoice.stripePaymentLink}` : 'Payment: bank transfer or check'}
+${link ? `Payment link: ${link}` : 'Payment: bank transfer or check'}
 
 Return JSON:
 {
@@ -88,7 +107,9 @@ Sign off as Cameron Ashley, Ashbi Design.`;
           invoiceNumber: invoice.invoiceNumber,
           clientName: invoice.client?.name,
           contactEmail,
-          amount: invoice.total,
+          amount: invoice.balanceDue,
+          total: invoice.total,
+          amountPaid: invoice.amountPaid,
           daysOverdue,
           ...result,
         });
@@ -119,12 +140,14 @@ Sign off as Cameron Ashley, Ashbi Design.`;
       },
       include: {
         client: { select: { id: true, name: true } },
+        payments: { select: { amount: true } },
         _count: { select: { lineItems: true } }
       },
       orderBy: { dueDate: 'asc' }
     });
 
-    return invoices.map(inv => ({
+    const withBalances = await Promise.all(invoices.map((inv) => withInvoiceBalance(prisma, inv)));
+    return withBalances.map(({ payments: _payments, ...inv }) => ({
       ...inv,
       daysOverdue: Math.floor((now.getTime() - new Date(inv.dueDate).getTime()) / 86400000),
     }));

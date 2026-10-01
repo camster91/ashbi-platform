@@ -51,18 +51,25 @@ function fakeStripe() {
 function invoiceStore(overrides = {}) {
   const state = {
     invoice: {
-      id: 'inv-1', invoiceNumber: 'INV-1', total: 100, currency: 'CAD', viewToken: 'tok-1', notes: null,
+      id: 'inv-1', invoiceNumber: 'INV-1', status: 'SENT', total: 100, currency: 'CAD', viewToken: 'tok-1', notes: null,
       stripePaymentLink: null, stripeCheckoutSessionId: null, stripeCheckoutAmountMinor: null,
       stripeCheckoutCurrency: null, stripeCheckoutExpiresAt: null, stripeCheckoutAttempt: 0,
       ...overrides,
     },
   };
   const prisma = {
+    // Checkout charges the balance after recorded payments (none here).
+    invoicePayment: { aggregate: async () => ({ _sum: { amount: state.paid ?? null } }) },
     invoice: {
-      update: async ({ where, data }) => {
+      findUnique: async () => ({ ...state.invoice }),
+      // The session is stored with a compare-and-set on the attempt counter.
+      updateMany: async ({ where, data }) => {
         assert.equal(where.id, state.invoice.id);
+        if (!where.status.in.includes(state.invoice.status) || where.stripeCheckoutAttempt !== state.invoice.stripeCheckoutAttempt) {
+          return { count: 0 };
+        }
         Object.assign(state.invoice, data);
-        return { ...state.invoice };
+        return { count: 1 };
       },
     },
   };
@@ -169,4 +176,63 @@ test('revoking or rotating a link clears every stored checkout field but keeps t
   assert.equal(state.invoice.stripeCheckoutExpiresAt, null);
   assert.equal(state.invoice.stripeCheckoutAttempt, 1);
   assert.equal(reusableCheckoutLink(state.invoice, NOW), null);
+});
+
+test('a session priced before a payment landed is expired, and the next one charges the new balance', async () => {
+  const stripe = fakeStripe();
+  const { state, prisma } = invoiceStore();
+  const expired = [];
+  // A manual payment of 40 commits between the balance read and the store:
+  // it bumps the attempt counter, so the first store loses.
+  let raced = false;
+  const updateMany = prisma.invoice.updateMany;
+  prisma.invoice.updateMany = async (args) => {
+    if (!raced) {
+      raced = true;
+      state.paid = 40;
+      state.invoice.stripeCheckoutAttempt += 1;
+    }
+    return updateMany(args);
+  };
+  const result = await ensureCheckoutSession(prisma, state.invoice, {
+    stripeClient: stripe.client, now: NOW, expireSession: async (sessionId) => { expired.push(sessionId); return true; },
+  });
+  assert.deepEqual(expired, ['cs_1'], 'the stale session is expired at Stripe');
+  assert.equal(stripe.calls[0].params.line_items[0].price_data.unit_amount, 10000);
+  assert.equal(stripe.calls[1].params.line_items[0].price_data.unit_amount, 6000);
+  assert.equal(result.paymentLink, 'https://checkout.stripe.example/cs_2');
+  assert.equal(state.invoice.stripeCheckoutSessionId, 'cs_2');
+  assert.equal(state.invoice.stripeCheckoutAmountMinor, 6000);
+});
+
+test('a concurrent request that stored the same session is not a lost store', async () => {
+  const stripe = fakeStripe();
+  const { state, prisma } = invoiceStore();
+  const expired = [];
+  const updateMany = prisma.invoice.updateMany;
+  let first = true;
+  prisma.invoice.updateMany = async (args) => {
+    if (first) {
+      first = false;
+      // The other request stored this very session (same idempotency key).
+      Object.assign(state.invoice, args.data);
+      return { count: 0 };
+    }
+    return updateMany(args);
+  };
+  const result = await ensureCheckoutSession(prisma, state.invoice, {
+    stripeClient: stripe.client, now: NOW, expireSession: async (sessionId) => { expired.push(sessionId); return true; },
+  });
+  assert.equal(result.paymentLink, 'https://checkout.stripe.example/cs_1');
+  assert.deepEqual(expired, []);
+});
+
+test('no Checkout session is created for a settled invoice or one with nothing owed', async () => {
+  const stripe = fakeStripe();
+  const paid = invoiceStore({ status: 'PAID' });
+  await assert.rejects(ensureCheckoutSession(paid.prisma, paid.state.invoice, { stripeClient: stripe.client, now: NOW }), { code: 'INVOICE_NOT_PAYABLE' });
+  const covered = invoiceStore();
+  covered.state.paid = 100;
+  await assert.rejects(ensureCheckoutSession(covered.prisma, covered.state.invoice, { stripeClient: stripe.client, now: NOW }), { code: 'INVOICE_NOT_PAYABLE' });
+  assert.equal(stripe.calls.length, 0);
 });

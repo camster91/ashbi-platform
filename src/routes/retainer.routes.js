@@ -1,7 +1,18 @@
 import { validateBody, createRetainerSchema, updateRetainerSchema, logRetainerHoursSchema, retainerGenerateInvoiceSchema } from '../validators/schemas.js';
 // Retainer plan routes — track hours & revision rounds per client
-import { createNumberedInvoice } from '../utils/invoice.js';
+import { allocateInvoiceNumber, isUniqueViolationOn } from '../utils/invoice.js';
 import { clampTake } from '../utils/query-limits.js';
+
+export const RETAINER_PERIOD_INDEX = 'invoices_clientId_retainerPeriod_live_key';
+
+/**
+ * The retainer billing period a date falls in: its UTC month, "YYYY-MM".
+ * UTC is deliberate (the server has no per-organization time zone); the
+ * generate-invoice route accepts an explicit `period` to override it.
+ */
+export function retainerBillingPeriod(date = new Date()) {
+  return date.toISOString().slice(0, 7);
+}
 
 export default async function retainerRoutes(fastify) {
   // GET /retainer — list all retainer plans with client info
@@ -225,7 +236,7 @@ export default async function retainerRoutes(fastify) {
     }
 
     const { clientId } = request.params;
-    const { currency = 'CAD', daysUntilDue = 30, resetHours = false } = request.body || {};
+    const { currency = 'CAD', daysUntilDue = 30, resetHours = false, period: requestedPeriod } = request.body || {};
 
     const plan = await fastify.prisma.retainerPlan.findUnique({
       where: { clientId },
@@ -248,7 +259,27 @@ export default async function retainerRoutes(fastify) {
     const dueDate = new Date(now);
     dueDate.setDate(dueDate.getDate() + daysUntilDue);
 
-    const monthLabel = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    // The billing period defaults to the current UTC calendar month. The
+    // server has no reliable per-organization time zone, so near a month
+    // boundary the UTC month can differ from the agency's local month; staff
+    // then pass `period` (YYYY-MM) explicitly. At most one live (not VOID)
+    // retainer invoice exists per client and period (unique index
+    // invoices_clientId_retainerPeriod_live_key).
+    const period = requestedPeriod ?? retainerBillingPeriod(now);
+    const monthLabel = new Date(`${period}-01T00:00:00.000Z`).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+    const alreadyBilled = () => fastify.prisma.invoice.findFirst({
+      where: { clientId, retainerPeriod: period, status: { not: 'VOID' } },
+      select: { id: true, invoiceNumber: true, status: true },
+    });
+    const conflict = (existing) => reply.status(409).send({
+      error: `This retainer was already invoiced for ${monthLabel}`,
+      code: 'RETAINER_PERIOD_ALREADY_INVOICED',
+      period,
+      invoice: existing ?? null,
+    });
+    const existing = await alreadyBilled();
+    if (existing) return conflict(existing);
 
     // HST 13% if CAD, no tax if USD (adjust as needed)
     const taxRate = currency === 'CAD' ? 13 : 0;
@@ -256,45 +287,64 @@ export default async function retainerRoutes(fastify) {
     const tax = Math.round((subtotal * taxRate / 100) * 100) / 100;
     const total = Math.round((subtotal + tax) * 100) / 100;
 
-    const invoice = await createNumberedInvoice(fastify.prisma, {
-      organizationId: request.user.organizationId,
-      data: {
-        clientId,
-        createdById: request.user.id,
-        status: 'DRAFT',
-        currency,
-        title: `Monthly Retainer — ${monthLabel}`,
-        issueDate: now,
-        dueDate,
-        subtotal,
-        taxRate,
-        taxType: currency === 'CAD' ? 'HST' : 'NONE',
-        tax,
-        total,
-        notes: `Monthly retainer: ${plan.hoursPerMonth} hours included.`,
-        lineItems: {
-          create: [{
-            description: `Monthly Retainer (${plan.hoursPerMonth}h/mo) — ${monthLabel}`,
-            itemType: 'RETAINER',
-            quantity: 1,
-            unitPrice: amount,
-            total: amount,
-            position: 0
-          }]
-        }
-      }
-    });
+    let invoice;
+    try {
+      // The invoice and the optional hours reset commit together: a failed
+      // create never resets hours, and a reset never happens without its
+      // invoice.
+      invoice = await fastify.prisma.$transaction(async (tx) => {
+        const allocated = await allocateInvoiceNumber(tx, { clientId, organizationId: request.user.organizationId });
+        const created = await tx.invoice.create({
+          data: {
+            invoiceNumber: allocated.invoiceNumber,
+            organizationId: allocated.organizationId,
+            clientId,
+            createdById: request.user.id,
+            status: 'DRAFT',
+            currency,
+            retainerPeriod: period,
+            title: `Monthly Retainer — ${monthLabel}`,
+            issueDate: now,
+            dueDate,
+            subtotal,
+            taxRate,
+            taxType: currency === 'CAD' ? 'HST' : 'NONE',
+            tax,
+            total,
+            notes: `Monthly retainer: ${plan.hoursPerMonth} hours included.`,
+            lineItems: {
+              create: [{
+                description: `Monthly Retainer (${plan.hoursPerMonth}h/mo) — ${monthLabel}`,
+                itemType: 'RETAINER',
+                quantity: 1,
+                unitPrice: amount,
+                total: amount,
+                position: 0
+              }]
+            }
+          }
+        });
 
-    // Optionally reset hours for new cycle
-    if (resetHours) {
-      await fastify.prisma.retainerPlan.update({
-        where: { clientId },
-        data: { hoursUsed: 0, billingCycleStart: now }
+        // Optionally reset hours for the new cycle, in the same transaction.
+        if (resetHours) {
+          await tx.retainerPlan.update({
+            where: { clientId },
+            data: { hoursUsed: 0, billingCycleStart: now }
+          });
+        }
+        return created;
       });
+    } catch (error) {
+      // A concurrent request for the same period won the unique index.
+      if (isUniqueViolationOn(error, { index: RETAINER_PERIOD_INDEX, fields: ['retainerPeriod'] })) {
+        return conflict(await alreadyBilled());
+      }
+      throw error;
     }
 
     return {
       invoice,
+      period,
       resetHours,
       message: `Invoice ${invoice.invoiceNumber} created for ${plan.client.name}`
     };

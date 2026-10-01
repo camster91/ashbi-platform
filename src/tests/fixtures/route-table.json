@@ -739,7 +739,6 @@
   "POST /api/projects/:id|:projectId/tasks",
   "POST /api/projects/from-template",
   "POST /api/projects/templates",
-  "POST /api/proposal-builder/:id/accept",
   "POST /api/proposal-builder/:id/send",
   "POST /api/proposal-builder/:id/send-pdf",
   "POST /api/proposal-builder/:id/track",

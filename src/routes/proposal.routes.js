@@ -17,6 +17,7 @@ import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { recordProposalApproved } from '../services/domain-event-producers.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { deliveryFieldsFromSend, mailgunTrackingFields, withDeliveryState } from '../services/mailgun-delivery.service.js';
+import { computeProposalLineItems, proposalTotals } from '../utils/proposal-totals.js';
 
 // Returns the provider result ({ ok, id?, error? }), or null when no send was
 // attempted (test mode).
@@ -68,30 +69,6 @@ async function recordProposalDelivery(prisma, proposalId, delivery) {
   const data = deliveryFieldsFromSend(delivery);
   await prisma.proposal.update({ where: { id: proposalId }, data });
   return data;
-}
-
-function roundMoney(value) {
-  return Math.round((Number(value) || 0) * 100) / 100;
-}
-
-function computeProposalLineItems(lineItems) {
-  return lineItems.map(item => {
-    const quantity = item.quantity ?? 1;
-    return {
-      description: item.description,
-      quantity,
-      unitPrice: item.unitPrice,
-      total: roundMoney(quantity * item.unitPrice),
-    };
-  });
-}
-
-// Subtotal from the line items; a discount can reduce the total to zero but
-// never below it.
-function proposalTotals(lineItems, discount = 0) {
-  const subtotal = roundMoney(lineItems.reduce((sum, item) => sum + (Number(item.total) || 0), 0));
-  const total = roundMoney(Math.max(0, subtotal - (Number(discount) || 0)));
-  return { subtotal, total };
 }
 
 export const PROPOSAL_BULK_SEND_MAX = 25;
@@ -637,16 +614,22 @@ export default async function proposalRoutes(fastify) {
       return reply.status(409).send({ error: 'Proposal is not awaiting a decision' });
     }
 
-    const updated = await request.prisma.proposal.update({
-      where: { id: proposal.id },
+    // Compare-and-set: a decline racing an approval (or a second decline)
+    // must never overwrite the decision that landed first.
+    const declinedAt = new Date();
+    const transitioned = await request.prisma.proposal.updateMany({
+      where: { id: proposal.id, status: { in: ['SENT', 'VIEWED'] }, publicAccessRevokedAt: null },
       data: {
         status: 'DECLINED',
-        declinedAt: new Date(),
-        publicAccessRevokedAt: new Date(),
+        declinedAt,
+        publicAccessRevokedAt: declinedAt,
       }
     });
+    if (transitioned.count !== 1) {
+      return reply.status(409).send({ error: 'Proposal is not awaiting a decision' });
+    }
 
-    return { status: updated.status, declinedAt: updated.declinedAt };
+    return { status: 'DECLINED', declinedAt };
   });
 
   fastify.post('/:id/public-link/revoke', { onRequest: [fastify.authenticate] }, async (request, reply) => {

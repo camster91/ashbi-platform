@@ -30,6 +30,9 @@ export function invoiceAmounts(invoice) {
     discount: amount(invoice.discountAmount),
     tax: amount(invoice.tax),
     total: amount(invoice.total),
+    // Partial payments leave a balance; the pay button charges only that.
+    amountPaid: amount(invoice.amountPaid),
+    balanceDue: invoice.balanceDue === undefined || invoice.balanceDue === null ? amount(invoice.total) : amount(invoice.balanceDue),
   };
 }
 
@@ -69,9 +72,9 @@ export default function PortalInvoice() {
   }
 
   const isPaid = invoice.status === 'PAID';
-  const { subtotal, discount, tax, total } = invoiceAmounts(invoice);
-  // Nothing to collect on a zero (or negative) total.
-  const showPayButton = (invoice.status === 'SENT' || invoice.status === 'OVERDUE') && total > 0;
+  const { subtotal, discount, tax, total, amountPaid, balanceDue } = invoiceAmounts(invoice);
+  // Nothing to collect on a zero (or negative) balance.
+  const showPayButton = (invoice.status === 'SENT' || invoice.status === 'OVERDUE') && balanceDue > 0;
   const currency = invoice.currency;
   const taxLabel = invoice.taxType && invoice.taxType !== 'NONE'
     ? `${invoice.taxType}${invoice.taxRate != null ? ` (${invoice.taxRate}%)` : ''}`
@@ -198,6 +201,18 @@ export default function PortalInvoice() {
               <span className="text-sm font-semibold text-foreground">Total</span>
               <span className="text-xl font-bold text-foreground">{formatInvoiceMoney(total, currency)}</span>
             </div>
+            {invoice.status !== 'PAID' && amountPaid > 0 && (
+              <>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Paid</span>
+                  <span className="text-foreground">-{formatInvoiceMoney(amountPaid, currency)}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm font-semibold">
+                  <span className="text-foreground">Balance due</span>
+                  <span className="text-foreground">{formatInvoiceMoney(balanceDue, currency)}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -222,7 +237,7 @@ export default function PortalInvoice() {
               ) : (
                 <CreditCard className="w-4 h-4" />
               )}
-              Pay Now - {formatInvoiceMoney(total, currency)}
+              Pay Now - {formatInvoiceMoney(balanceDue, currency)}
             </button>
             {payMutation.isError && (
               <p role="alert" className="text-sm text-destructive text-center mt-3">Payment initiation failed. Please try again.</p>

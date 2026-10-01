@@ -279,7 +279,10 @@ export const createInvoiceSchema = z.object({
   isRecurring: z.boolean().optional(),
   recurringInterval: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUALLY']).optional(),
   lineItems: z.array(invoiceRouteLineItemSchema).min(1),
-});
+}).refine(
+  (val) => !val.isRecurring || Boolean(val.recurringInterval),
+  { message: 'recurringInterval is required when isRecurring is true', path: ['recurringInterval'] },
+);
 
 // ── Expense schemas ────────────────────────────────────────────────────────
 // The Expenses page sends <input type="date"> values ("YYYY-MM-DD", stored as
@@ -1248,14 +1251,17 @@ export const proposalBuilderEmailSchema = z.object({
   email: z.string().email().max(255),
 });
 
+// Content edits to a DRAFT proposal. Strict: status, subtotal and total are
+// refused (400) rather than silently dropped. Totals are always computed on
+// the server from lineItems and discount; the status changes only through
+// send or the client's answer.
 export const proposalBuilderUpdateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   notes: z.string().max(10_000).optional(),
-  status: z.enum(['DRAFT', 'SENT', 'VIEWED', 'APPROVED', 'DECLINED']).optional(),
-  subtotal: z.number().nonnegative().max(10_000_000).optional(),
-  total: z.number().nonnegative().max(10_000_000).optional(),
   validUntil: z.string().datetime().nullable().optional(),
-});
+  lineItems: z.array(proposalLineItemInput).min(1).max(100).optional(),
+  discount: proposalDiscount.optional(),
+}).strict();
 
 // ── Project context + AI planner + templates ───────────────────────────────
 export const projectContextUpdateSchema = z.object({
@@ -2138,6 +2144,10 @@ export const retainerGenerateInvoiceSchema = z.object({
   currency: z.enum(['CAD', 'USD']).default('CAD'),
   daysUntilDue: z.number().int().positive().max(180).default(30),
   resetHours: z.boolean().default(false),
+  // Billing month to invoice ("YYYY-MM"); defaults to the current UTC month.
+  // Lets staff bill a month explicitly, e.g. near a month boundary where the
+  // UTC month differs from the local one.
+  period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Expected a month as YYYY-MM').optional(),
 });
 
 // ── Media review (#417, docs/media-review.md) ─────────────────────────────

@@ -120,7 +120,68 @@ Retainer plans hold a monthly CAD and/or USD amount. A retainer invoice
 defaults to CAD and bills only the amount in its currency; it is refused
 (`RETAINER_RATE_MISSING`) when that amount is not set.
 
+Each retainer invoice records its billing month (`retainerPeriod`, the UTC
+month, `YYYY-MM`). A partial unique index allows one live (not VOID, not
+deleted) retainer invoice per client and month (migration
+`20261001180000_invoice_retainer_period`), so a double click or retry answers
+409 `RETAINER_PERIOD_ALREADY_INVOICED` with the existing invoice. The optional
+hours reset commits in the same transaction as the invoice. A voided month can
+be billed again; undoing that void is then refused (409). The period defaults
+to the current UTC month (the server has no per-organization time zone); staff
+can pass `period` (`YYYY-MM`) to bill a month explicitly.
+
+## Recurring invoices
+
+`recurringNextDate` is set when an invoice is created or edited with
+`isRecurring` (the first date one interval after the issue date that is in the
+future, always on the issue date's day of month, clamped in short months) and
+cleared when recurrence is turned off. The hourly job copies only invoices that
+were issued to the client (SENT, OVERDUE or PAID): a DRAFT may never be sent
+and a VOID one was cancelled. Each occurrence is claimed with a
+compare-and-set on `recurringNextDate` in a serializable transaction, so a
+retry or a second worker never creates a second copy, and a source that missed
+several periods is billed once and moved to its next future date. Migration
+`20261001180000_invoice_retainer_period` backfilled the date for issued
+recurring invoices created before it was set; a recurring draft without a
+date gets one when it is sent.
+
 ## Payments
+
+An invoice's balance is its total minus the sum of its payment rows.
+`POST /api/invoices/:id/mark-paid` takes an optional `amount` (default: the
+remaining balance; the payment dialog always sends it). Only SENT or OVERDUE
+invoices take payments (a DRAFT answers 400 `INVOICE_NOT_SENT`). A payment
+that leaves a balance keeps the invoice open and writes only
+`payment.recorded`; the one that covers the total moves it to PAID and writes
+`invoice.paid`. More than the balance is refused (400
+`PAYMENT_EXCEEDS_BALANCE`), as is zero or less (400 `PAYMENT_AMOUNT_INVALID`).
+The invoice API, the public portal, the invoice stats, the dashboard and the
+invoice chaser report the balance (`amountPaid`, `balanceDue`).
+
+Every payment, manual or Stripe, claims the invoice row first and then reads
+the balance (src/services/invoice-settlement.js), so concurrent payments run
+one after the other, and bumps `stripeCheckoutAttempt`. Checkout sessions are
+priced from the balance and stored with a compare-and-set on that counter: a
+session priced before a payment landed is expired at Stripe and a new one is
+created. A Checkout completion that pays at most the balance is recorded (a
+stale, smaller session is a partial payment); one that pays more is not
+recorded and is alerted as `CHECKOUT_BALANCE_CHANGED` (staff refund the
+excess), next to the existing `INVOICE_ALREADY_PAID` and `INVOICE_VOID`
+alerts. An invoice with recorded payments cannot be voided (409
+`INVOICE_HAS_PAYMENTS`; bulk archive reports `has_payments`).
+
+### Refused Stripe charges
+
+A Checkout charge the webhook refuses (`CHECKOUT_BALANCE_CHANGED`,
+`INVOICE_ALREADY_PAID`, `INVOICE_VOID`) is acknowledged to Stripe, alerted
+(`stripe_checkout_balance_changed`, `stripe_checkout_invoice_already_paid`,
+`stripe_checkout_invoice_void`) and recorded as a `payment.refused` audit
+event on the invoice with the code, amount, currency, Stripe event id and
+payment intent. Operators find them in the audit log
+(`GET /api/audit-events?action=payment.refused`, admin) or by invoice
+(`entityType=invoice&entityId=<invoice id>`), then refund the payment intent
+in Stripe or record it against the right invoice. A replayed delivery of a
+charge that was recorded is a duplicate, not a refusal.
 
 Manual payment references (bank, cheque) may repeat across invoices. Stripe
 transaction ids remain unique (partial unique index, migration
