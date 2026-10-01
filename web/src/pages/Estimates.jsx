@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Send, ArrowRightLeft, Trash2, Search, Pencil, CalendarDays, Clock } from 'lucide-react';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import { useToast } from '../hooks/useToast';
 import { Button, Card, EmptyState, LoadingState, StatusBadge } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
@@ -96,10 +97,7 @@ export default function Estimates() {
     }),
   });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
-  });
+  const { data: clients } = useClients();
 
   // Mutations
   const createMutation = useMutation({
@@ -170,6 +168,8 @@ export default function Estimates() {
     mutationFn: (id) => api.convertEstimate(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['estimates'] });
+      // Converting creates a proposal.
+      queryClient.invalidateQueries({ queryKey: ['proposals'] });
       toast.success('Estimate converted to proposal');
     },
     onError: (err) => toast.error('Failed to convert estimate', err.message),

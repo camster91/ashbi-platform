@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ScrollText, Plus, Send, ExternalLink, CheckCircle, Download, Sparkles, Wand2 } from 'lucide-react';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import { useToast } from '../hooks/useToast';
 import { Button, Card, EmptyState, LoadingState, StatusBadge } from '../components/ui';
 import Modal from '../components/Modal';
@@ -46,10 +47,7 @@ export default function Contracts() {
     queryFn: () => api.getContracts(filterStatus ? { status: filterStatus } : {}),
   });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
-  });
+  const { data: clients } = useClients();
 
   const {
     data: approvedProposals = [],

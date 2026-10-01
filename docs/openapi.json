@@ -3532,54 +3532,16 @@
       },
       "PipelineDealCreate": {
         "properties": {
-          "amount": {
-            "maximum": 10000000,
-            "minimum": 0,
-            "type": "number"
-          },
           "clientId": {
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
           },
-          "expectedCloseDate": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "type": "string"
-          },
-          "notes": {
-            "maxLength": 10000,
-            "type": "string"
-          },
-          "projectId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
-          },
-          "stageId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "stageId"
-        ],
-        "type": "object"
-      },
-      "PipelineDealUpdate": {
-        "properties": {
-          "amount": {
+          "contactPerson": {
             "anyOf": [
               {
-                "maximum": 10000000,
-                "minimum": 0,
-                "type": "number"
+                "maxLength": 200,
+                "type": "string"
               },
               {
                 "type": "null"
@@ -3597,27 +3559,149 @@
               }
             ]
           },
-          "name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "type": "string"
-          },
           "notes": {
-            "maxLength": 10000,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "probability": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "UPWORK",
+                  "REFERRAL",
+                  "WEBSITE",
+                  "COLD_OUTREACH",
+                  "OTHER"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "stageId": {
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
           },
-          "status": {
-            "enum": [
-              "OPEN",
-              "WON",
-              "LOST"
-            ],
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
             "type": "string"
+          },
+          "value": {
+            "maximum": 10000000,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "title",
+          "clientId",
+          "stageId"
+        ],
+        "type": "object"
+      },
+      "PipelineDealUpdate": {
+        "properties": {
+          "clientId": {
+            "maxLength": 50,
+            "minLength": 1,
+            "type": "string"
+          },
+          "contactPerson": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expectedCloseDate": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lostReason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "probability": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "UPWORK",
+                  "REFERRAL",
+                  "WEBSITE",
+                  "COLD_OUTREACH",
+                  "OTHER"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stageId": {
+            "maxLength": 50,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "value": {
+            "maximum": 10000000,
+            "minimum": 0,
+            "type": "number"
           }
         },
         "type": "object"

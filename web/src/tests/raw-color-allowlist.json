@@ -5,10 +5,6 @@
       "count": 71,
       "reason": "Deliberately dark (slate-950/900) public intake form. It needs a dark-surface token set before it can move to tokens; light tokens would invert it. See portal-text-contrast-guard.test.js."
     },
-    "src/pages/Pipeline.jsx": {
-      "count": 18,
-      "reason": "Categorical pipeline-stage colours (six gradient stage headers plus the invoiced/paid chips). Six categories cannot be expressed with the four status tokens without losing the distinction; each stage also has an icon and a label."
-    },
     "src/pages/Expenses.jsx": {
       "count": 12,
       "reason": "Categorical expense-category chips (pink/teal/lime) that have no status meaning. The chip text states the category."

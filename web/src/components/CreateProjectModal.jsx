@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Modal, { ModalFooter } from './Modal';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 
 export default function CreateProjectModal({ isOpen, onClose, preselectedClientId }) {
   const queryClient = useQueryClient();
@@ -14,11 +15,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
   const [error, setError] = useState('');
 
   // Fetch clients for dropdown
-  const { data: clients, isError: clientsFailed, refetch: refetchClients } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.getClients(),
-    enabled: isOpen,
-  });
+  const { data: clientOptions, isSuccess: clientsLoaded, isError: clientsFailed, refetch: refetchClients } = useClients({ enabled: isOpen });
 
   // Fetch team members for default owner
   const { data: team, isError: teamFailed, refetch: refetchTeam } = useQuery({
@@ -27,8 +24,6 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
     enabled: isOpen,
   });
 
-  const clientOptions = useMemo(() => clients?.clients || [], [clients]);
-  const clientsLoaded = Array.isArray(clients?.clients);
   const preselectedClientIsValid = useMemo(
     () => !preselectedClientId || clientOptions.some((client) => client.id === preselectedClientId),
     [clientOptions, preselectedClientId],

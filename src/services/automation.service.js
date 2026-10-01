@@ -13,6 +13,7 @@ import { invoicePublicAccessFailure } from '../utils/public-document-access.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
 import { emitNotification } from './notification.service.js';
 import { getRealtimeEmitter } from '../realtime/emitter.js';
+import { wonStageFor } from './dealPipeline.service.js';
 
 // ==================== EMAIL HELPER ====================
 
@@ -178,20 +179,18 @@ export async function onProposalApproved(proposalId) {
 
     // Action 2: Auto-create pipeline deal from approved proposal
     try {
-      // Find the first pipeline stage (usually "New" or similar)
-      const defaultStage = await prisma.pipelineStage.findFirst({
-        where: { organizationId: proposal.client.organizationId },
-        orderBy: { order: 'asc' },
-        select: { id: true }
-      });
+      // An approved proposal is a won deal: it goes in the organization's
+      // won stage (probability 100, else the last stage), after seeding the
+      // default stages for an organization that never opened the pipeline.
+      const wonStage = await wonStageFor(prisma, proposal.client.organizationId);
 
-      if (defaultStage) {
+      if (wonStage) {
         const deal = await prisma.pipelineDeal.create({
           data: {
             title: proposal.title,
             value: proposal.total,
             clientId: proposal.clientId,
-            stageId: defaultStage.id,
+            stageId: wonStage.id,
             probability: 100, // Won
             expectedCloseDate: new Date(),
             notes: `Auto-created from approved proposal ${proposalId}`

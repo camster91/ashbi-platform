@@ -6,6 +6,7 @@ import {
   FileText, Search, Download, Trash2, Eye,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import {
@@ -84,10 +85,7 @@ export default function Invoices() {
     }),
   });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
-  });
+  const { data: clients } = useClients();
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -511,8 +509,9 @@ function InvoiceCreateForm({
         {/* Client / Project / Title */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Client *</label>
+            <label htmlFor="invoice-client" className="block text-sm font-medium mb-1">Client *</label>
             <select
+              id="invoice-client"
               value={form.clientId}
               onChange={(e) => onFormChange(f => ({ ...f, clientId: e.target.value, projectId: '' }))}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -522,8 +521,9 @@ function InvoiceCreateForm({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Project (optional)</label>
+            <label htmlFor="invoice-project" className="block text-sm font-medium mb-1">Project (optional)</label>
             <select
+              id="invoice-project"
               value={form.projectId}
               onChange={(e) => onFormChange(f => ({ ...f, projectId: e.target.value }))}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -533,8 +533,9 @@ function InvoiceCreateForm({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Invoice Title (optional)</label>
+            <label htmlFor="invoice-title" className="block text-sm font-medium mb-1">Invoice Title (optional)</label>
             <input
+              id="invoice-title"
               type="text"
               value={form.title}
               onChange={(e) => onFormChange(f => ({ ...f, title: e.target.value }))}
@@ -561,9 +562,9 @@ function InvoiceCreateForm({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Tax</label>
+            <label htmlFor="invoice-tax-type" className="block text-sm font-medium mb-1">Tax</label>
             <div className="flex gap-2">
-              <select value={form.taxType}
+              <select id="invoice-tax-type" value={form.taxType}
                 onChange={(e) => onFormChange(f => ({ ...f, taxType: e.target.value,
                   taxRate: e.target.value === 'HST' ? 13 : e.target.value === 'GST' ? 5 : e.target.value === 'NONE' ? 0 : f.taxRate
                 }))}
@@ -574,6 +575,7 @@ function InvoiceCreateForm({
                 <option value="NONE">None</option>
               </select>
               <input type="number" value={form.taxRate} min="0" max="30" step="0.5"
+                aria-label="Tax rate (%)"
                 onChange={(e) => onFormChange(f => ({ ...f, taxRate: e.target.value }))}
                 className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm"
                 placeholder="Rate %" />
@@ -584,7 +586,7 @@ function InvoiceCreateForm({
         {/* Line Items */}
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-            <label className="text-sm font-medium">Line Items</label>
+            <h3 id="invoice-line-items-heading" className="text-sm font-medium">Line Items</h3>
             {templates.length > 0 && (
               <div className="flex gap-1 flex-wrap">
                 {templates.slice(0, 4).map(t => (
@@ -615,6 +617,7 @@ function InvoiceCreateForm({
                 {/* Desktop Layout */}
                 <div className="hidden sm:grid grid-cols-12 gap-2 items-center">
                   <select value={li.itemType}
+                    aria-label={`Line item ${idx + 1} type`}
                     onChange={(e) => onLineItemUpdate(idx, 'itemType', e.target.value)}
                     className="col-span-1 px-1 py-1.5 rounded border border-border bg-background text-xs">
                     <option value="LABOR">Labor</option>
@@ -626,12 +629,15 @@ function InvoiceCreateForm({
                   <input type="text" value={li.description}
                     onChange={(e) => onLineItemUpdate(idx, 'description', e.target.value)}
                     placeholder="Description"
+                    aria-label={`Line item ${idx + 1} description`}
                     className="col-span-4 px-2 py-1.5 rounded border border-border bg-background text-sm"
                     required />
                   <input type="number" value={li.quantity} min="0" step="0.5"
+                    aria-label={`Line item ${idx + 1} quantity`}
                     onChange={(e) => onLineItemUpdate(idx, 'quantity', e.target.value)}
                     className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-center" />
                   <input type="number" value={li.unitPrice} min="0" step="0.01"
+                    aria-label={`Line item ${idx + 1} unit price`}
                     onChange={(e) => onLineItemUpdate(idx, 'unitPrice', e.target.value)}
                     className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-right" />
                   <span className="col-span-2 text-sm text-right font-medium">
@@ -651,9 +657,11 @@ function InvoiceCreateForm({
                       <input type="text" value={li.description}
                         onChange={(e) => onLineItemUpdate(idx, 'description', e.target.value)}
                         placeholder="Description"
+                        aria-label={`Line item ${idx + 1} description`}
                         className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm mb-2"
                         required />
                       <select value={li.itemType}
+                        aria-label={`Line item ${idx + 1} type`}
                         onChange={(e) => onLineItemUpdate(idx, 'itemType', e.target.value)}
                         className="w-full px-2 py-1.5 rounded border border-border bg-background text-xs">
                         <option value="LABOR">Labor</option>
@@ -671,19 +679,19 @@ function InvoiceCreateForm({
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-xs text-muted-foreground mb-0.5">Qty</label>
-                      <input type="number" value={li.quantity} min="0" step="0.5"
+                      <label htmlFor={`invoice-line-${idx}-qty`} className="block text-xs text-muted-foreground mb-0.5">Qty</label>
+                      <input id={`invoice-line-${idx}-qty`} type="number" value={li.quantity} min="0" step="0.5"
                         onChange={(e) => onLineItemUpdate(idx, 'quantity', e.target.value)}
                         className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm text-center" />
                     </div>
                     <div>
-                      <label className="block text-xs text-muted-foreground mb-0.5">Unit Price</label>
-                      <input type="number" value={li.unitPrice} min="0" step="0.01"
+                      <label htmlFor={`invoice-line-${idx}-price`} className="block text-xs text-muted-foreground mb-0.5">Unit Price</label>
+                      <input id={`invoice-line-${idx}-price`} type="number" value={li.unitPrice} min="0" step="0.01"
                         onChange={(e) => onLineItemUpdate(idx, 'unitPrice', e.target.value)}
                         className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
                     </div>
                     <div>
-                      <label className="block text-xs text-muted-foreground mb-0.5">Total</label>
+                      <span className="block text-xs text-muted-foreground mb-0.5">Total</span>
                       <div className="px-2 py-1.5 text-sm font-medium">
                         {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), form.currency)}
                       </div>
@@ -704,14 +712,14 @@ function InvoiceCreateForm({
         {/* Discount */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Discount ({form.currency || 'CAD'})</label>
-            <input type="number" value={form.discountAmount} min="0" step="0.01"
+            <label htmlFor="invoice-discount" className="block text-sm font-medium mb-1">Discount ({form.currency || 'CAD'})</label>
+            <input id="invoice-discount" type="number" value={form.discountAmount} min="0" step="0.01"
               onChange={(e) => onFormChange(f => ({ ...f, discountAmount: e.target.value }))}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Notes</label>
-            <input type="text" value={form.notes}
+            <label htmlFor="invoice-notes" className="block text-sm font-medium mb-1">Notes</label>
+            <input id="invoice-notes" type="text" value={form.notes}
               onChange={(e) => onFormChange(f => ({ ...f, notes: e.target.value }))}
               placeholder="Payment terms, references..."
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
@@ -728,6 +736,7 @@ function InvoiceCreateForm({
           </label>
           {form.isRecurring && (
             <select value={form.recurringInterval}
+              aria-label="Recurring interval"
               onChange={(e) => onFormChange(f => ({ ...f, recurringInterval: e.target.value }))}
               className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
               <option value="MONTHLY">Monthly</option>

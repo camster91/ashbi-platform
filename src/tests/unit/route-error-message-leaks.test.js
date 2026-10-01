@@ -17,6 +17,7 @@ const ALLOWED = {
   'ai-tool.routes.js': [1, 'only ToolError instances reach the reply (anything else is rethrown)'],
   'ai-connection.routes.js': [1, 'AI connection validation errors with fixed messages (400)'],
   'auth.routes.js': [1, 'AccountWithoutOrganizationError has a fixed message (403)'],
+  'pipeline.routes.js': [1, 'only PipelineError instances (fixed 4xx messages of the deal pipeline service) reach the reply; anything else is rethrown'],
   'privileged-access.routes.js': [1, 'BreakGlassError has fixed, caller-safe messages (4xx)'],
   'review.routes.js': [2, 'ReviewSessionClosedError has a fixed message (409); WebCaptureError 4xx messages are fixed strings of the capture service (5xx use a fixed per-code message)'],
   'settings.routes.js': [1, 'MfaPolicyError has a fixed, caller-safe message (409)'],

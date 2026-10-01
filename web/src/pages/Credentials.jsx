@@ -19,6 +19,7 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import LoadingState from '../components/ui/LoadingState';
 import { cn, formatDate } from '../lib/utils';
 import QueryErrorState from '../components/QueryErrorState';
@@ -80,12 +81,7 @@ export default function Credentials() {
     },
   });
 
-  const { data: clientsData = {} } = useQuery({
-    queryKey: ['clients'],
-    queryFn: async () => api.getClients(),
-  });
-
-  const clients = clientsData.clients || [];
+  const { data: clients } = useClients();
 
   const createMutation = useMutation({
     mutationFn: (data) => api.createCredential(data),
@@ -262,8 +258,8 @@ export default function Credentials() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Label *</label>
-                <input
+                <label htmlFor="credential-label" className="block text-sm font-medium text-foreground mb-1">Label *</label>
+                <input id="credential-label"
                   type="password"
                   value={form.label}
                   onChange={(e) => setForm({ ...form, label: e.target.value })}
@@ -273,8 +269,8 @@ export default function Credentials() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Category</label>
-                <select aria-label="Category"
+                <label htmlFor="credential-category" className="block text-sm font-medium text-foreground mb-1">Category</label>
+                <select id="credential-category" aria-label="Category"
                   value={form.category}
                   onChange={(e) => setForm({ ...form, category: e.target.value })}
                   className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -285,8 +281,8 @@ export default function Credentials() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Username</label>
-                <input
+                <label htmlFor="credential-username" className="block text-sm font-medium text-foreground mb-1">Username</label>
+                <input id="credential-username"
                   type="text"
                   value={form.username}
                   onChange={(e) => setForm({ ...form, username: e.target.value })}
@@ -295,8 +291,8 @@ export default function Credentials() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Password *</label>
-                <input
+                <label htmlFor="credential-password" className="block text-sm font-medium text-foreground mb-1">Password *</label>
+                <input id="credential-password"
                   type="text"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -306,8 +302,8 @@ export default function Credentials() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">URL</label>
-                <input
+                <label htmlFor="credential-url" className="block text-sm font-medium text-foreground mb-1">URL</label>
+                <input id="credential-url"
                   type="text"
                   value={form.url}
                   onChange={(e) => setForm({ ...form, url: e.target.value })}
@@ -316,8 +312,8 @@ export default function Credentials() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Client</label>
-                <select aria-label="Client"
+                <label htmlFor="credential-client" className="block text-sm font-medium text-foreground mb-1">Client</label>
+                <select id="credential-client" aria-label="Client"
                   value={form.clientId}
                   onChange={(e) => setForm({ ...form, clientId: e.target.value })}
                   className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -330,8 +326,8 @@ export default function Credentials() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
-              <textarea
+              <label htmlFor="credential-notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+              <textarea id="credential-notes"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 rows={2}
