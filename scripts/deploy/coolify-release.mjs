@@ -17,6 +17,21 @@ export async function release(env, { fetchImpl = fetch, sleep = ms => new Promis
     throw new Error('Coolify URL must be a trusted HTTPS origin');
   }
   const health = new URL('https://hub.ashbi.ca/api/health?strict=1');
+  if (!env.GITHUB_TOKEN) throw new Error('Read access to checked main is required');
+  async function currentMain() {
+    const response = await fetchImpl('https://api.github.com/repos/camster91/ashbi-platform/git/ref/heads/main', {
+      method: 'GET', redirect: 'error', signal: AbortSignal.timeout(15000),
+      headers: { Authorization: 'Bearer ' + env.GITHUB_TOKEN, Accept: 'application/vnd.github+json', 'Cache-Control': 'no-cache' },
+    });
+    if (!response.ok) throw new Error('Cannot verify current main');
+    const ref = await response.json();
+    if (ref.ref !== 'refs/heads/main' || ref.object?.type !== 'commit' || !/^[a-f0-9]{40}$/.test(ref.object.sha || '')) throw new Error('Unexpected current-main reference');
+    return ref.object.sha === sha;
+  }
+  function superseded(sourcePinChanged = false) {
+    log('Superseded checked build skipped; no deployment queued' + (sourcePinChanged ? '; persisted source pin requires inspection' : ''));
+    return { sha, skipped: 'superseded', sourcePinChanged, deploymentQueued: false };
+  }
   const normalize = value => String(value || '').replace(/\r\n/g, '\n').trim();
   const approvedCompose = normalize(await readFile(new URL('../../docker-compose.coolify-production.yml', import.meta.url), 'utf8'));
   if (!approvedCompose.includes("ports: ['127.0.0.1:3002:3002']")) throw new Error('Approved production source lacks the existing proxy upstream');
@@ -50,15 +65,18 @@ export async function release(env, { fetchImpl = fetch, sleep = ms => new Promis
       throw new Error('Source revision metadata must be enabled for the API and worker');
     }
   }
+  if (!(await currentMain())) return superseded();
   const original = await api(`/applications/${uuid}`);
   validateResource(original);
   const recovery = await backup(env);
   if (recovery?.releaseSha !== sha || recovery.offServerCopyVerified !== true) throw new Error('Verified off-server pre-deployment backup required');
   log(`Verified encrypted pre-deployment backup for ${sha}`);
+  if (!(await currentMain())) return superseded();
   await api(`/applications/${uuid}`, 'PATCH', { git_commit_sha: sha });
   const pinned = await api(`/applications/${uuid}`);
   validateResource(pinned);
   if (pinned.git_commit_sha !== sha) throw new Error('Coolify did not retain the verified release SHA');
+  if (!(await currentMain())) return superseded(true);
   const queued = await api('/deploy', 'POST', { uuid });
   const deployment = queued.deployments?.find(item => item.resource_uuid === uuid);
   if (!/^[a-zA-Z0-9]+$/.test(deployment?.deployment_uuid || '')) throw new Error('Coolify did not return a matching deployment');

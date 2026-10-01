@@ -5,17 +5,60 @@ import { release } from '../../../scripts/deploy/coolify-release.mjs';
 
 const sha = 'a'.repeat(40);
 const env = { RELEASE_SHA: sha, RELEASE_BRANCH: 'main', COOLIFY_RELEASE_ENABLED: 'true', COOLIFY_APP_UUID: 'app123', COOLIFY_TOKEN: 'test-only-token', COOLIFY_URL: 'https://coolify.example.test' };
+env.GITHUB_TOKEN = 'readonly-github-test-token';
 const app = { uuid: 'app123', git_repository: 'https://github.com/camster91/ashbi-platform.git', git_branch: 'main', build_pack: 'dockercompose', docker_compose_location: '/docker-compose.coolify-production.yml', docker_compose_raw: readFileSync(new URL('../../../docker-compose.coolify-production.yml', import.meta.url), 'utf8'), docker_compose_domains: JSON.stringify({ app: { domain: 'https://hub.ashbi.ca' } }), domain_port_overrides: { 'https://hub.ashbi.ca': 3002 }, git_commit_sha: 'HEAD', settings: { is_auto_deploy_enabled: false, include_source_commit_in_build: true } };
-function harness({ resource = app, retainedSha = sha, deployedSha = sha, publicSha = sha, status = 'finished', healthStatus = 'ok', queueUuid = 'app123', ready = true, checks = { database: { status: 'ok' }, redis: { status: 'ok' }, worker: { status: 'ok' } } } = {}) {
+function harness({ resource = app, retainedSha = sha, deployedSha = sha, publicSha = sha, status = 'finished', healthStatus = 'ok', queueUuid = 'app123', ready = true, mainShas = [sha, sha, sha], mainStatuses = [200, 200, 200], refType = 'commit', checks = { database: { status: 'ok' }, redis: { status: 'ok' }, worker: { status: 'ok' } } } = {}) {
   const calls = [];
+  const githubCalls = [];
   const responses = [resource, { uuid: 'app123' }, { ...resource, git_commit_sha: retainedSha }, { deployments: [{ resource_uuid: queueUuid, deployment_uuid: 'release123' }] }, { status, commit: deployedSha }, { status: healthStatus, revision: publicSha, ready, checks }];
-  return { calls, fetchImpl: async (url, options) => {
+  return { calls, githubCalls, fetchImpl: async (url, options) => {
+    if (new URL(url).hostname === 'api.github.com') {
+      assert.equal(String(url), 'https://api.github.com/repos/camster91/ashbi-platform/git/ref/heads/main');
+      assert.equal(options.headers.Authorization, 'Bearer ' + env.GITHUB_TOKEN);
+      assert.equal(options.redirect, 'error');
+      const index = githubCalls.length;
+      githubCalls.push({ url: String(url), ...options });
+      const code = mainStatuses[Math.min(index, mainStatuses.length - 1)];
+      return { ok: code === 200, status: code, json: async () => ({ ref: 'refs/heads/main', object: { type: refType, sha: mainShas[Math.min(index, mainShas.length - 1)] } }) };
+    }
+    assert.notEqual(options.headers?.Authorization, 'Bearer ' + env.GITHUB_TOKEN);
     calls.push({ url: String(url), ...options });
     const payload = responses.shift();
     if (!payload) throw new Error('Unexpected network request');
     return { ok: true, status: 200, json: async () => payload };
   }, sleep: async () => {}, log: () => {}, backup: async () => ({ releaseSha: sha, offServerCopyVerified: true }) };
 }
+
+test('new main before access, after backup or after pinning skips the stale deployment', async () => {
+  for (const changedAt of [0, 1, 2]) {
+    const mainShas = [sha, sha, sha]; mainShas[changedAt] = 'b'.repeat(40);
+    const h = harness({ mainShas });
+    const result = await release(env, h);
+    assert.equal(result.skipped, 'superseded');
+    assert.equal(result.sourcePinChanged, changedAt === 2);
+    assert.equal(result.deploymentQueued, false);
+    assert.equal(h.calls.filter(call => call.method === 'PATCH').length, changedAt === 2 ? 1 : 0);
+    assert.equal(h.calls.filter(call => call.method === 'POST').length, 0);
+  }
+});
+
+test('unavailable main at any check and malformed refs fail closed without queuing', async () => {
+  for (const failedAt of [0, 1, 2]) {
+    const mainStatuses = [200, 200, 200]; mainStatuses[failedAt] = 403;
+    const h = harness({ mainStatuses }); await assert.rejects(release(env, h), /Cannot verify/);
+    assert.equal(h.calls.filter(call => call.method === 'POST').length, 0);
+    assert.equal(h.calls.filter(call => call.method === 'PATCH').length, failedAt === 2 ? 1 : 0);
+  }
+  for (const options of [{ refType: 'tag' }, { mainShas: ['short'] }]) {
+    const h = harness(options); await assert.rejects(release(env, h), /Unexpected current-main/);
+    assert.equal(h.calls.length, 0);
+  }
+});
+
+test('missing GitHub credential makes no requests', async () => {
+  const h = harness(); await assert.rejects(release({ ...env, GITHUB_TOKEN: undefined }, h), /Read access/);
+  assert.equal(h.calls.length, 0); assert.equal(h.githubCalls.length, 0);
+});
 test('disabled adoption makes no network requests', async () => {
   const h = harness();
   await assert.rejects(release({ ...env, COOLIFY_RELEASE_ENABLED: 'false' }, h), /not been enabled/);
