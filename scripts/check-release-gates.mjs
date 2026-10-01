@@ -2,6 +2,32 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+export function validateCoolifyReleaseWorkflow(source) {
+  const required = [
+    'workflow_run:', 'workflows: [Required release gates]', 'types: [completed]', 'branches: [main]',
+    "vars.COOLIFY_RELEASE_ENABLED == 'true'", "github.event.workflow_run.conclusion == 'success'",
+    "github.event.workflow_run.event == 'push'",
+    'github.event.workflow_run.head_repository.full_name == github.repository',
+    'github.event.workflow_run.head_branch == github.event.repository.default_branch',
+    'group: ashbi-production-release', 'cancel-in-progress: false', 'environment: production',
+    'ref.data.object.sha === run.head_sha', 'ref: ${{ github.event.workflow_run.head_sha }}',
+    'persist-credentials: false', 'node --test src/tests/unit/coolify-release.test.mjs',
+    'RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}', 'node scripts/deploy/coolify-release.mjs',
+    'node scripts/deploy/production-backup.mjs', 'uses: actions/upload-artifact@v4',
+    'ASHBI_VPS_KNOWN_HOSTS: ${{ vars.ASHBI_VPS_KNOWN_HOSTS }}', 'if-no-files-found: error',
+  ];
+  const failures = required.filter(value => !source.includes(value)).map(value => `checked-coolify-deploy.yml lacks ${value}`);
+  if (!(source.indexOf('node scripts/deploy/production-backup.mjs') < source.indexOf('name: Retain verified encrypted pre-deployment backup')
+    && source.indexOf('name: Retain verified encrypted pre-deployment backup') < source.indexOf('name: Deploy verified revision and await readiness'))) {
+    failures.push('Encrypted backup must be verified and uploaded before production deployment');
+  }
+  if (/^\s+(push|pull_request|workflow_dispatch|schedule|repository_dispatch):/m.test(source)
+    || /appleboy\/ssh-action|curl.*\/api\/|continue-on-error:\s*true/.test(source)) {
+    failures.push('checked-coolify-deploy.yml has a trigger or deployment path outside checked CI');
+  }
+  return failures;
+}
+
 export function validateReleaseGates(root = process.cwd()) {
   const workflowsDir = path.join(root, '.github', 'workflows');
   const read = (name) => fs.readFileSync(path.join(workflowsDir, name), 'utf8');
@@ -63,12 +89,12 @@ export function validateReleaseGates(root = process.cwd()) {
   if (!/TENANT_INTEGRATION_DATABASE_URL:\s*postgresql:\/\/postgres:testpass@localhost:5432\/testdb/.test(release)) {
     failures.push('release-gates.yml does not enable dedicated-database policy integration tests');
   }
-  const qualityJob = release.split(/^  quality:/m)[1]?.split(/^  browser:/m)[0] ?? '';
+  const qualityJob = release.split(/^ {2}quality:/m)[1]?.split(/^ {2}browser:/m)[0] ?? '';
   if (!/^\s{6}redis:\s*$/m.test(qualityJob) || !/REDIS_URL:\s*redis:\/\/localhost:6379/.test(qualityJob)
     || !/REQUIRE_REDIS_TESTS:\s*'1'/.test(qualityJob)) {
     failures.push('release-gates.yml quality job does not run the Redis realtime integration tests (redis service, REDIS_URL, REQUIRE_REDIS_TESTS)');
   }
-  const browserJob = release.split(/^  browser:/m)[1]?.split(/^  stack-e2e:/m)[0] ?? '';
+  const browserJob = release.split(/^ {2}browser:/m)[1]?.split(/^ {2}stack-e2e:/m)[0] ?? '';
   if (!browserJob.includes('npm run build')) failures.push('release-gates.yml browser job does not build the production frontend');
 
   if (!/uses:\s*\.\/\.github\/workflows\/release-gates\.yml/.test(ci)) {
@@ -109,6 +135,10 @@ export function validateReleaseGates(root = process.cwd()) {
   }
 
   for (const [name, source] of allWorkflows) {
+    if (name === 'checked-coolify-deploy.yml') {
+      failures.push(...validateCoolifyReleaseWorkflow(source));
+      continue;
+    }
     if (/appleboy\/ssh-action|COOLIFY_TOKEN|applications\/.*\/start|deploy-vps\.yml/.test(source)) {
       failures.push(`${name} can mutate production outside the direct VPS controller`);
     }

@@ -1,5 +1,11 @@
 # Deploying Ashbi Hub with Coolify
 
+Existing VPS production adoption uses `docker-compose.coolify-production.yml`
+and the preserved external database, Redis and `/opt/ashbi-platform/data`
+directories. Follow [checked-coolify-release.md](checked-coolify-release.md)
+for its ownership transfer and required backup gate. The production release
+controller rejects the fresh-database staging file.
+
 `docker-compose.coolify.yml` is a complete Ashbi Hub stack for Coolify's
 **Docker Compose** build pack. It contains the API, the background worker, a
 one-shot migration runner, PostgreSQL 16 with pgvector, and Redis 7.
@@ -103,7 +109,14 @@ release gates ([release-gates.md](release-gates.md)). The safe setup is:
 
 1. Branch protection on `main` requires the three release-gate checks, so
    nothing reaches `main` without them.
-2. Coolify deploys on push to `main` (its GitHub App or the deploy webhook).
+2. After adoption, the disabled-by-default **Checked Coolify release** workflow
+   listens to successful **Required release gates** runs for same-repository
+   pushes to the current default branch. It skips superseded revisions, pins
+   the verified full SHA in Coolify, waits for the matching deployment and
+   checks public strict readiness plus the serving revision.
+3. Keep Coolify's direct Git auto-deploy disabled. Direct push deployment would
+   bypass post-merge CI. Follow [checked-coolify-release.md](checked-coolify-release.md)
+   before setting `COOLIFY_RELEASE_ENABLED=true`.
 
 The direct-VPS script also enforces a pre-migration backup and a rollback
 floor; Coolify does not. Before switching production:
