@@ -100,6 +100,8 @@ docker() { echo "$1" >> "$LOG"; echo "Cannot connect to the Docker daemon" >&2; 
   const gone = `: > "$LOG"
 docker() { echo "$1" >> "$LOG"; case $1 in inspect) echo "Error: No such object: api" >&2; return 1 ;; *) return 1 ;; esac; }`;
   assert.match(stopProbe(gone), /^stopped\n/);
+  const goneDocker29 = gone.replace('Error: No such object:', 'error: no such object:');
+  assert.match(stopProbe(goneDocker29), /^stopped\n/);
   // A normal stop that takes: no force-remove needed.
   const clean = `: > "$LOG"
 docker() { echo "$1" >> "$LOG"; case $1 in inspect) echo false ;; esac; }`;
@@ -120,5 +122,7 @@ test('container_image distinguishes a missing container from an unreadable one',
   const run = (dockerBody) => execFileSync('bash', ['-c', `set -euo pipefail\nRELEASE_DIR=/nonexistent\n${dockerBody}\n${floorBlock}\nprintf '[%s]' "$(container_image api)"`], { encoding: 'utf8' });
   assert.equal(run('docker() { echo "ashbi:old"; }'), '[ashbi:old]');
   assert.equal(run('docker() { echo "Error: No such object: api" >&2; return 1; }'), '[]');
+  assert.equal(run('docker() { echo "error: no such object: api" >&2; return 1; }'), '[]');
+  assert.equal(run('docker() { echo "Error response from daemon: No such container: api" >&2; return 1; }'), '[]');
   assert.equal(run('docker() { echo "Cannot connect to the Docker daemon" >&2; return 1; }'), '[unknown]');
 });
