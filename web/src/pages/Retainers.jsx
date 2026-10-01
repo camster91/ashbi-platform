@@ -14,6 +14,7 @@ import {
   Receipt,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Button, Card, LoadingState } from '../components/ui';
@@ -55,10 +56,7 @@ export default function Retainers() {
     queryFn: () => api.getRetainerList(),
   });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
-  });
+  const { data: clients } = useClients();
 
   const createMutation = useMutation({
     mutationFn: (data) => api.createRetainerPlan(data),
@@ -174,8 +172,8 @@ export default function Retainers() {
           <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(createForm); }} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Client</label>
-                <select
+                <label htmlFor="retainer-client" className="block text-sm font-medium mb-1">Client</label>
+                <select id="retainer-client"
                   value={createForm.clientId}
                   onChange={(e) => setCreateForm({ ...createForm, clientId: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -188,8 +186,8 @@ export default function Retainers() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Hours / Month</label>
-                <input
+                <label htmlFor="retainer-hours" className="block text-sm font-medium mb-1">Hours / Month</label>
+                <input id="retainer-hours"
                   type="number"
                   min="1"
                   value={createForm.hoursPerMonth}
@@ -199,8 +197,8 @@ export default function Retainers() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Monthly Rate (USD)</label>
-                <input
+                <label htmlFor="retainer-rate-usd" className="block text-sm font-medium mb-1">Monthly Rate (USD)</label>
+                <input id="retainer-rate-usd"
                   type="number"
                   min="0"
                   step="0.01"
@@ -211,8 +209,8 @@ export default function Retainers() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Monthly Rate (CAD)</label>
-                <input
+                <label htmlFor="retainer-rate-cad" className="block text-sm font-medium mb-1">Monthly Rate (CAD)</label>
+                <input id="retainer-rate-cad"
                   type="number"
                   min="0"
                   step="0.01"
@@ -265,8 +263,8 @@ export default function Retainers() {
                 >
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div>
-                      <label className="block text-xs font-medium mb-1">Hours/Month</label>
-                      <input
+                      <label htmlFor={`retainer-edit-hours-${plan.clientId}`} className="block text-xs font-medium mb-1">Hours/Month</label>
+                      <input id={`retainer-edit-hours-${plan.clientId}`}
                         type="number" min="1"
                         value={editForm.hoursPerMonth}
                         onChange={(e) => setEditForm({ ...editForm, hoursPerMonth: e.target.value })}
@@ -274,8 +272,8 @@ export default function Retainers() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Rate USD</label>
-                      <input
+                      <label htmlFor={`retainer-edit-rate-usd-${plan.clientId}`} className="block text-xs font-medium mb-1">Rate USD</label>
+                      <input id={`retainer-edit-rate-usd-${plan.clientId}`}
                         type="number" min="0" step="0.01"
                         value={editForm.monthlyAmountUsd}
                         onChange={(e) => setEditForm({ ...editForm, monthlyAmountUsd: e.target.value })}
@@ -283,8 +281,8 @@ export default function Retainers() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Rate CAD</label>
-                      <input
+                      <label htmlFor={`retainer-edit-rate-cad-${plan.clientId}`} className="block text-xs font-medium mb-1">Rate CAD</label>
+                      <input id={`retainer-edit-rate-cad-${plan.clientId}`}
                         type="number" min="0" step="0.01"
                         value={editForm.monthlyAmountCad}
                         onChange={(e) => setEditForm({ ...editForm, monthlyAmountCad: e.target.value })}
@@ -371,8 +369,8 @@ export default function Retainers() {
                       className="flex gap-2 items-end"
                     >
                       <div>
-                        <label className="block text-xs font-medium mb-1">Hours</label>
-                        <input
+                        <label htmlFor={`retainer-log-hours-${plan.clientId}`} className="block text-xs font-medium mb-1">Hours</label>
+                        <input id={`retainer-log-hours-${plan.clientId}`}
                           type="number" min="0.25" step="0.25"
                           value={logForm.hours}
                           onChange={(e) => setLogForm({ ...logForm, hours: e.target.value })}
@@ -382,8 +380,8 @@ export default function Retainers() {
                         />
                       </div>
                       <div className="flex-1">
-                        <label className="block text-xs font-medium mb-1">Description</label>
-                        <input
+                        <label htmlFor={`retainer-log-description-${plan.clientId}`} className="block text-xs font-medium mb-1">Description</label>
+                        <input id={`retainer-log-description-${plan.clientId}`}
                           type="text"
                           value={logForm.description}
                           onChange={(e) => setLogForm({ ...logForm, description: e.target.value })}

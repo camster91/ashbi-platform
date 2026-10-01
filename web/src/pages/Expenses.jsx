@@ -5,6 +5,7 @@ import {
   X, TrendingUp, Tag, Calendar, Building2, FolderOpen,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import { Button, Card, EmptyState, TablePageSkeleton } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -103,10 +104,7 @@ export default function Expenses() {
     queryFn: () => api.getExpenseSummary(),
   });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
-  });
+  const { data: clients } = useClients();
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -359,7 +357,7 @@ export default function Expenses() {
             className="py-2 px-3 text-sm bg-background border border-border rounded-md focus:ring-2 focus:ring-primary/20 focus:border-primary"
           >
             <option value="">All Clients</option>
-            {(Array.isArray(clients) ? clients : clients?.clients || []).map(c => (
+            {clients.map(c => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
@@ -485,7 +483,7 @@ export default function Expenses() {
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 >
                   <option value="">No client</option>
-                  {(Array.isArray(clients) ? clients : clients?.clients || []).map(c => (
+                  {clients.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>

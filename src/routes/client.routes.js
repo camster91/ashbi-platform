@@ -1,6 +1,7 @@
 // Client routes
 
 import { safeParse } from '../utils/safeParse.js';
+import { clampTake } from '../utils/query-limits.js';
 import { clientStateRevokesPortal, revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
 import { validateBody, createClientSchema, updateClientSchema, clientContactSchema, clientNoteCreateSchema } from '../validators/schemas.js';
 import { normalizeClientDomain, normalizeContactEmail } from '../utils/client-identity.js';
@@ -12,20 +13,25 @@ export default async function clientRoutes(fastify) {
   fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const { status, search, limit = '50', offset = '0' } = request.query;
+    const { status, search, limit, offset = '0' } = request.query;
 
+    // request.prisma is the organization-scoped client, so the search and the
+    // count only ever see this tenant's clients.
     const where = {};
     if (status) where.status = status;
-    if (search) {
+    const term = typeof search === 'string' ? search.trim().slice(0, 200) : '';
+    if (term) {
       where.OR = [
-        { name: { contains: search } },
-        { domain: { contains: search } }
+        { name: { contains: term, mode: 'insensitive' } },
+        { domain: { contains: term, mode: 'insensitive' } }
       ];
     }
     where.deletedAt = null;
 
-    const take = Math.min(parseInt(limit) || 50, 200);
-    const skip = parseInt(offset) || 0;
+    // Default 50, hard cap 200 (MAX_TAKE). Pickers ask for the cap; the
+    // Clients page pages through with offset and shows `total`.
+    const take = clampTake(limit);
+    const skip = Math.max(parseInt(offset, 10) || 0, 0);
 
     const [clients, total] = await Promise.all([
       request.prisma.client.findMany({

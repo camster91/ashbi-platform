@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, X, Star, DollarSign } from 'lucide-react';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import { Card, CardContent, Skeleton, LoadingState } from '../components/ui';
 import Button from '../components/ui/Button';
 import Modal, { ModalFooter } from '../components/Modal';
@@ -30,18 +31,14 @@ export default function RateCards() {
   });
 
   const {
-    data: clientsData,
+    data: clients,
     isLoading: clientsLoading,
     isFetching: clientsFetching,
     error: clientsError,
     refetch: refetchClients,
-  } = useQuery({
-    queryKey: ['clients-for-ratecards'],
-    queryFn: () => api.getClients(),
-  });
+  } = useClients();
 
   const rateCards = rateCardsData?.rateCards ?? [];
-  const clients = clientsData?.clients ?? [];
 
   const createMutation = useMutation({
     mutationFn: (data) => api.createRateCard(data),

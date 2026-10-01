@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import { api } from '../lib/api';
+import { invalidateNotifications, PAGE_NOTIFICATIONS_LIMIT, pageNotificationsKey } from '../lib/notificationKeys';
 import { EmptyState, ListPageSkeleton } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 
@@ -8,18 +9,20 @@ export default function Notifications() {
   const queryClient = useQueryClient();
 
   const { data: notifications = [], isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => api.getNotifications().then((r) => r?.notifications ?? []),
+    queryKey: pageNotificationsKey,
+    queryFn: () => api.getNotifications({ limit: PAGE_NOTIFICATIONS_LIMIT }).then((r) => r?.notifications ?? []),
   });
 
   const markReadMutation = useMutation({
     mutationFn: (id) => api.markNotificationRead(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    // Refresh the page list, the header dropdown and the unread badge.
+    onSuccess: () => invalidateNotifications(queryClient),
   });
 
   const markAllReadMutation = useMutation({
     mutationFn: () => api.markAllNotificationsRead(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    // Refresh the page list, the header dropdown and the unread badge.
+    onSuccess: () => invalidateNotifications(queryClient),
   });
 
   return (

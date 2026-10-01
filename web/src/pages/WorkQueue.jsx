@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import { useAuth } from '../hooks/useAuth';
 import { formatDate, formatDateTime } from '../lib/format';
 import { cn } from '../lib/utils';
@@ -24,8 +25,6 @@ export const QUEUE_VIEWS = [
 // Matches WORK_QUEUE_SOURCE_LIMIT in src/services/work-queue.service.js.
 const QUEUE_SOURCE_LIMIT = 100;
 
-// The clients route caps a page at 200 (src/routes/client.routes.js).
-const CLIENT_OPTIONS_LIMIT = 200;
 
 const TYPE_LABELS = {
   task: 'Task',
@@ -128,11 +127,7 @@ export default function WorkQueue() {
     queryFn: () => api.getWorkQueue({ owner, clientId: clientId || undefined }),
   });
 
-  const { data: clients = [], isSuccess: clientsLoaded } = useQuery({
-    queryKey: ['work-queue-client-options', CLIENT_OPTIONS_LIMIT],
-    queryFn: () => api.getClients({ limit: CLIENT_OPTIONS_LIMIT }).then((r) => r?.clients ?? []),
-  });
-  const clientOptions = Array.isArray(clients) ? clients : [];
+  const { data: clientOptions, isSuccess: clientsLoaded } = useClients();
   // A deep link can name a client beyond the loaded options (or not yet
   // loaded): keep it selectable instead of silently showing "All clients".
   const selectedClientMissing = Boolean(clientId) && !clientOptions.some((client) => client.id === clientId);

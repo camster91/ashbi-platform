@@ -1148,23 +1148,33 @@ export const pipelineStageUpdateSchema = z.object({
   probability: z.number().int().min(0).max(100).optional(),
 });
 
+// Field names follow the Prisma PipelineDeal model (title, value, clientId,
+// stageId, ...). clientId is required there, so it is required here too.
+const PIPELINE_DEAL_SOURCES = ['UPWORK', 'REFERRAL', 'WEBSITE', 'COLD_OUTREACH', 'OTHER'];
+
 export const pipelineDealCreateSchema = z.object({
-  name: z.string().min(1).max(200),
-  clientId: cuidId.optional(),
-  projectId: cuidId.optional(),
+  title: z.string().trim().min(1).max(200),
+  clientId: cuidId,
   stageId: cuidId,
-  amount: z.number().nonnegative().max(10_000_000).optional(),
-  expectedCloseDate: z.string().datetime().optional(),
-  notes: z.string().max(10_000).optional(),
+  value: z.number().nonnegative().max(10_000_000).optional(),
+  probability: z.number().int().min(0).max(100).optional(),
+  expectedCloseDate: z.string().datetime().nullable().optional(),
+  notes: z.string().max(10_000).nullable().optional(),
+  contactPerson: z.string().max(200).nullable().optional(),
+  source: z.enum(PIPELINE_DEAL_SOURCES).nullable().optional(),
 });
 
 export const pipelineDealUpdateSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
+  clientId: cuidId.optional(),
   stageId: cuidId.optional(),
-  amount: z.number().nonnegative().max(10_000_000).nullable().optional(),
+  value: z.number().nonnegative().max(10_000_000).optional(),
+  probability: z.number().int().min(0).max(100).optional(),
   expectedCloseDate: z.string().datetime().nullable().optional(),
-  notes: z.string().max(10_000).optional(),
-  status: z.enum(['OPEN', 'WON', 'LOST']).optional(),
+  notes: z.string().max(10_000).nullable().optional(),
+  contactPerson: z.string().max(200).nullable().optional(),
+  source: z.enum(PIPELINE_DEAL_SOURCES).nullable().optional(),
+  lostReason: z.string().max(2_000).nullable().optional(),
 });
 
 // ── Response (AI-drafted reply) ───────────────────────────────────────────

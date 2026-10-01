@@ -6,6 +6,7 @@ import {
   Save, RefreshCw, Pencil,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Button, Card, EmptyState, LoadingState, SlowNotice, StatusBadge } from '../components/ui';
@@ -41,10 +42,7 @@ export default function Proposals() {
     queryFn: () => api.getProposals(filterStatus ? { status: filterStatus } : {}),
   });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
-  });
+  const { data: clients } = useClients();
 
   const createMutation = useMutation({
     mutationFn: (data) => api.createProposal(data),

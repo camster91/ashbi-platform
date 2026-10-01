@@ -67,6 +67,7 @@ export default function ProposalDetail() {
     onSuccess: () => {
       void formDraft.clearDraft();
       queryClient.invalidateQueries({ queryKey: ['proposal', id] });
+      queryClient.invalidateQueries({ queryKey: ['proposals'] });
       setEditing(false);
       toast.success('Proposal saved');
     },
@@ -77,6 +78,8 @@ export default function ProposalDetail() {
     mutationFn: () => api.sendProposal(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['proposal', id] });
+      // The list shows the status (DRAFT -> SENT).
+      queryClient.invalidateQueries({ queryKey: ['proposals'] });
       toast.success('Proposal sent', 'Client will receive a review link');
     },
     onError: () => toast.error('Failed to send proposal'),
@@ -86,6 +89,8 @@ export default function ProposalDetail() {
     mutationFn: () => api.createContractFromProposal(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['proposal', id] });
+      queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      queryClient.invalidateQueries({ queryKey: ['contracts'] });
       toast.success('Contract generated');
     },
     onError: (error) => toast.error('Failed to generate contract', error.message),

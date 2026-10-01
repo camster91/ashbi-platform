@@ -5,6 +5,7 @@ import { CheckSquare, FolderOpen, Users } from 'lucide-react';
 import Modal, { ModalFooter } from './Modal';
 import QueryErrorState from './QueryErrorState';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import { cn } from '../lib/utils';
 
 const TAB_OPTIONS = [
@@ -41,14 +42,10 @@ export default function QuickAdd({ open, onClose }) {
     error: clientsError,
     isFetching: clientsFetching,
     refetch: retryClients,
-  } = useQuery({
-    queryKey: ['clients', 'quick-add'],
-    queryFn: () => api.getClients({ limit: '50' }),
-    enabled: open,
-  });
+  } = useClients({ enabled: open });
 
   const projects = projectsData?.projects || [];
-  const clients = clientsData?.clients || [];
+  const clients = clientsData;
 
   useEffect(() => {
     if (!open) return;

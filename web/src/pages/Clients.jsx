@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Building,
@@ -24,9 +24,15 @@ import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { formatDate } from '../lib/format';
 import { useToast } from '../hooks/useToast';
+import { normalizeClients } from '../hooks/useClients';
 import { Button, Card, EmptyState, SlowNotice, TablePageSkeleton } from '../components/ui';
 import CreateClientModal from '../components/CreateClientModal';
 import QueryErrorState from '../components/QueryErrorState';
+
+// One page of the client list. The server clamps `limit` (max 200) and
+// returns `total`, so the page can say how many clients exist and load more.
+export const CLIENTS_PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
 
 const TIER_HOURS = { '999': 20, '1999': 40, '3999': 80 };
 const TIER_LABEL = { '999': '$999/mo · 20 hrs', '1999': '$1,999/mo · 40 hrs', '3999': '$3,999/mo · 80 hrs' };
@@ -92,16 +98,49 @@ export default function Clients() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showHealth, setShowHealth] = useState(false);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [expandedClient, setExpandedClient] = useState(null);
   const [onboardForm, setOnboardForm] = useState({
     name: '', email: '', contactName: '', retainerTier: '1999', notes: ''
   });
   const [onboardResult, setOnboardResult] = useState(null);
 
-  const { data: clients = [], isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // The list page keeps its own key (under the shared ['clients'] root, so
+  // client mutations still refresh it): it needs `total` and the server-side
+  // search, which the picker hook (useClients) does not.
+  const {
+    data: clientPages,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['clients', 'list', { search: debouncedSearch }],
+    queryFn: ({ pageParam }) => api.getClients({
+      limit: String(CLIENTS_PAGE_SIZE),
+      offset: String(pageParam),
+      ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((sum, page) => sum + normalizeClients(page).length, 0);
+      const total = typeof lastPage?.total === 'number' ? lastPage.total : loaded;
+      return normalizeClients(lastPage).length > 0 && loaded < total ? loaded : undefined;
+    },
+    placeholderData: (previous) => previous,
   });
+  const clients = clientPages?.pages?.flatMap((page) => normalizeClients(page)) ?? [];
+  const lastPage = clientPages?.pages?.[clientPages.pages.length - 1];
+  const totalClients = typeof lastPage?.total === 'number' ? lastPage.total : clients.length;
 
   const { data: healthData, isLoading: healthLoading, refetch: refetchHealth } = useQuery({
     queryKey: ['client-health'],
@@ -122,14 +161,12 @@ export default function Clients() {
   // Show real API data only. (Previously fell back to hardcoded demo clients
   // when the response looked empty, which — combined with the wrapper-unwrap
   // bug — meant real clients were never shown.)
-  const displayClients = Array.isArray(clients) ? clients : [];
+  // Search runs on the server (name/domain, case-insensitive) across every
+  // client, not only the loaded page.
+  const displayClients = clients;
 
-  const filtered = displayClients.filter(c =>
-    !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.domain?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  // Sort: AT_RISK first, then by last contact date (oldest first)
-  const sorted = [...filtered].sort((a, b) => {
+  // Sort the loaded rows: AT_RISK first, then by last contact date (oldest first)
+  const sorted = [...displayClients].sort((a, b) => {
     const aRisk = a.health === 'AT_RISK' ? -1 : 0;
     const bRisk = b.health === 'AT_RISK' ? -1 : 0;
     if (aRisk !== bRisk) return aRisk - bRisk;
@@ -151,7 +188,9 @@ export default function Clients() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground">Clients</h1>
-          <p className="text-sm text-muted-foreground mt-1">{displayClients.length} total</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {debouncedSearch ? `${totalClients} matching` : `${totalClients} total`}
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -363,6 +402,7 @@ export default function Clients() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search clients by name or domain..."
+          aria-label="Search clients by name or domain"
           className="w-full pl-9 pr-4 py-2 rounded-lg border border-border bg-background text-sm"
         />
       </div>
@@ -539,6 +579,19 @@ export default function Clients() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {sorted.length > 0 && (
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-xs text-muted-foreground" role="status">
+            Showing {displayClients.length} of {totalClients}
+          </p>
+          {hasNextPage && (
+            <Button variant="outline" onClick={() => fetchNextPage()} loading={isFetchingNextPage} slowAfterMs={false}>
+              Load more clients
+            </Button>
+          )}
         </div>
       )}
     </div>

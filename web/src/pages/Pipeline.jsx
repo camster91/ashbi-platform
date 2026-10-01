@@ -2,12 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
-  Target, FileText, ScrollText, FolderOpen, Receipt, DollarSign,
-  ChevronRight, ArrowRight, X, ExternalLink, TrendingUp,
+  Target, ChevronRight, ArrowRight, X, TrendingUp,
   Plus, Trash2, MoveRight, Sparkles, Loader2,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { Card, LoadingState } from '../components/ui';
+import useClients from '../hooks/useClients';
+import { Card, Field, Input, LoadingState, Select } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import Modal, { ModalFooter } from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -19,34 +19,36 @@ function fmt(n) {
   return formatMoney(n, undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-const STAGE_CONFIG = {
-  leads: { icon: Target, color: 'from-violet-500 to-purple-600', bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/30' },
-  proposals: { icon: FileText, color: 'from-blue-500 to-cyan-500', bg: 'bg-info/10', text: 'text-info', border: 'border-info/30' },
-  contracts: { icon: ScrollText, color: 'from-amber-500 to-orange-500', bg: 'bg-warning/10', text: 'text-warning', border: 'border-warning/30' },
-  projects: { icon: FolderOpen, color: 'from-emerald-500 to-green-600', bg: 'bg-success/10', text: 'text-success', border: 'border-success/30' },
-  invoiced: { icon: Receipt, color: 'from-pink-500 to-rose-500', bg: 'bg-pink-500/10', text: 'text-pink-500', border: 'border-pink-500/30' },
-  paid: { icon: DollarSign, color: 'from-emerald-400 to-teal-500', bg: 'bg-teal-500/10', text: 'text-teal-500', border: 'border-teal-500/30' },
-};
+/**
+ * GET /pipeline returns the organization's stages as
+ * `{ id, name, color, probability, order, deals: [...] }`. Add the derived
+ * deal count and total value the board shows; anything malformed becomes an
+ * empty stage list rather than a crash.
+ */
+export function normalizePipelineStages(data) {
+  const list = Array.isArray(data) ? data : (Array.isArray(data?.stages) ? data.stages : []);
+  return list
+    .filter((stage) => stage && stage.id)
+    .map((stage) => {
+      const deals = Array.isArray(stage.deals) ? stage.deals : [];
+      return {
+        ...stage,
+        deals,
+        count: deals.length,
+        value: deals.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0),
+      };
+    });
+}
 
-const CONVERSION_LABELS = {
-  leadToProposal: 'Lead > Proposal',
-  proposalToContract: 'Proposal > Contract',
-  contractToProject: 'Contract > Project',
-  invoiceToPaid: 'Invoice > Paid',
-};
+const EMPTY_DEAL = { title: '', clientId: '', value: '', stageId: '' };
 
 // ── Create Deal Modal ──────────────────────────────────────────────────
 function CreateDealModal({ isOpen, onClose, stages }) {
   const queryClient = useQueryClient();
-  const [formData, setFormData] = useState({ name: '', clientId: '', value: '', stageId: '' });
+  const [formData, setFormData] = useState(EMPTY_DEAL);
   const [error, setError] = useState('');
 
-  const { data: clientsData } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.getClients(),
-    enabled: isOpen,
-  });
-  const clients = clientsData?.clients || clientsData || [];
+  const { data: clients, isSuccess: clientsLoaded } = useClients({ enabled: isOpen });
 
   // Set default stage when stages load
   useEffect(() => {
@@ -59,7 +61,7 @@ function CreateDealModal({ isOpen, onClose, stages }) {
     mutationFn: (data) => api.createPipelineDeal(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pipeline'] });
-      setFormData({ name: '', clientId: '', value: '', stageId: stages[0]?.id || '' });
+      setFormData({ ...EMPTY_DEAL, stageId: stages[0]?.id || '' });
       setError('');
       onClose();
     },
@@ -68,12 +70,15 @@ function CreateDealModal({ isOpen, onClose, stages }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.name.trim()) { setError('Deal name is required'); return; }
+    if (!formData.title.trim()) { setError('Deal name is required'); return; }
+    // PipelineDeal.clientId is required in the data model.
+    if (!formData.clientId) { setError('Choose the client this deal is for'); return; }
+    if (!formData.stageId) { setError('Choose a stage'); return; }
     mutation.mutate({
-      name: formData.name,
-      clientId: formData.clientId || undefined,
-      value: formData.value ? Number(formData.value) : undefined,
-      stageId: formData.stageId || undefined,
+      title: formData.title.trim(),
+      clientId: formData.clientId,
+      stageId: formData.stageId,
+      ...(formData.value !== '' ? { value: Number(formData.value) } : {}),
     });
   };
 
@@ -82,46 +87,49 @@ function CreateDealModal({ isOpen, onClose, stages }) {
     setError('');
   };
 
+  const noClients = clientsLoaded && clients.length === 0;
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="New Deal">
-      <form onSubmit={handleSubmit}>
-        {error && <div className="mb-4 p-3 text-sm text-destructive bg-destructive/5 rounded-lg">{error}</div>}
+      <form onSubmit={handleSubmit} noValidate>
+        {error && <div role="alert" className="mb-4 p-3 text-sm text-destructive bg-destructive/5 rounded-lg">{error}</div>}
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Deal Name *</label>
-            <input type="text" name="name" value={formData.name} onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring" placeholder="Website Redesign" autoFocus />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Client</label>
-            <select name="clientId" value={formData.clientId} onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2">
-              <option value="">-- No client --</option>
+          <Field label="Deal name" required id="deal-title">
+            <Input type="text" name="title" value={formData.title} onChange={handleChange}
+              placeholder="Website Redesign" autoFocus />
+          </Field>
+          <Field
+            label="Client"
+            required
+            id="deal-client"
+            hint={noClients ? 'Add a client first: every deal belongs to a client.' : undefined}
+          >
+            <Select name="clientId" value={formData.clientId} onChange={handleChange}>
+              <option value="">Select a client</option>
               {clients.map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Value ($)</label>
-            <input type="number" name="value" value={formData.value} onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
+            </Select>
+          </Field>
+          {noClients && (
+            <Link to="/clients" className="text-sm text-primary underline">Go to Clients</Link>
+          )}
+          <Field label="Value ($)" id="deal-value">
+            <Input type="number" name="value" value={formData.value} onChange={handleChange}
               placeholder="5000" min="0" step="100" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Stage</label>
-            <select name="stageId" value={formData.stageId} onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2">
+          </Field>
+          <Field label="Stage" required id="deal-stage">
+            <Select name="stageId" value={formData.stageId} onChange={handleChange}>
               {stages.map(s => (
-                <option key={s.id} value={s.id}>{s.label || s.name}</option>
+                <option key={s.id} value={s.id}>{s.name}</option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </Field>
         </div>
         <ModalFooter>
           <button type="button" onClick={onClose}
             className="px-4 py-2 text-sm text-muted-foreground hover:bg-muted rounded-lg">Cancel</button>
-          <button type="submit" disabled={mutation.isPending}
+          <button type="submit" disabled={mutation.isPending || noClients}
             className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50">
             {mutation.isPending ? 'Creating...' : 'Create Deal'}
           </button>
@@ -149,7 +157,7 @@ function MoveToDropdown({ deal, stages, currentStageId, onMove }) {
     <div className="relative" ref={ref}>
       <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
         aria-expanded={open}
-        aria-label={`Move ${deal.name} to another stage`}
+        aria-label={`Move ${deal.title} to another stage`}
         className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         title="Move to stage">
         <MoveRight className="w-4 h-4 text-muted-foreground" />
@@ -161,7 +169,7 @@ function MoveToDropdown({ deal, stages, currentStageId, onMove }) {
             <button key={s.id} type="button" role="menuitem"
               className="min-h-11 w-full text-left px-3 py-1.5 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={(e) => { e.stopPropagation(); setOpen(false); onMove(deal.id, s.id); }}>
-              {s.label || s.name}
+              {s.name}
             </button>
           ))}
         </div>
@@ -191,7 +199,7 @@ function AIScoreButton({ deal, stageLabel }) {
     setShow(true);
     try {
       const res = await api.aiChat({
-        message: `Rate this deal's likelihood of closing on a scale of 1-10 based on: name="${deal.name}", value=${deal.value ?? 'unknown'}, stage="${stageLabel}". Give a brief reasoning in 1-2 sentences. Format: Score: X/10 - Reasoning`,
+        message: `Rate this deal's likelihood of closing on a scale of 1-10 based on: title="${deal.title}", value=${deal.value ?? 'unknown'}, stage="${stageLabel}". Give a brief reasoning in 1-2 sentences. Format: Score: X/10 - Reasoning`,
       });
       setScore(typeof res === 'string' ? res : res?.reply || res?.message || res?.content || JSON.stringify(res));
     } catch {
@@ -204,7 +212,7 @@ function AIScoreButton({ deal, stageLabel }) {
     <div className="relative" ref={ref}>
       <button type="button" onClick={fetchScore}
         aria-expanded={show}
-        aria-label={`Show AI lead score for ${deal.name}`}
+        aria-label={`Show AI lead score for ${deal.title}`}
         className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         title="AI Lead Score">
         {loading ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
@@ -225,6 +233,21 @@ function AIScoreButton({ deal, stageLabel }) {
   );
 }
 
+// ── Stage chip ─────────────────────────────────────────────────────────
+// Each stage carries its own colour (PipelineStage.color), so the chip is
+// painted from the data rather than from a fixed palette.
+function StageIcon({ stage, className = '' }) {
+  return (
+    <div
+      className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-primary ${className}`}
+      style={stage.color ? { backgroundColor: stage.color } : undefined}
+      aria-hidden="true"
+    >
+      <Target className="w-5 h-5 text-white" />
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────
 export default function Pipeline() {
   const [expandedStage, setExpandedStage] = useState(null);
@@ -239,16 +262,17 @@ export default function Pipeline() {
     isFetching: pipelineFetching,
   } = useQuery({
     queryKey: ['pipeline'],
-    // There is no /reports/pipeline endpoint; the deal pipeline lives at
-    // /pipeline (stages+deals) and /pipeline/analytics (conversion metrics).
+    // /pipeline returns the stages with their deals (default stages are
+    // created on an organization's first read); /pipeline/analytics returns
+    // the totals.
     queryFn: async () => {
       const [stages, analytics] = await Promise.all([
         api.getPipelineStages(),
-        api.getPipelineAnalytics().catch(() => ({})),
+        api.getPipelineAnalytics().catch(() => null),
       ]);
       return {
-        stages: Array.isArray(stages) ? stages : (stages?.stages ?? []),
-        conversionRates: analytics?.conversionRates ?? {},
+        stages: normalizePipelineStages(stages),
+        analytics,
       };
     },
     refetchInterval: 60000,
@@ -278,7 +302,15 @@ export default function Pipeline() {
   }
 
   const stages = data?.stages || [];
-  const rates = data?.conversionRates || {};
+  const analytics = data?.analytics;
+  const totalDeals = stages.reduce((sum, stage) => sum + stage.count, 0);
+  const totalValue = stages.reduce((sum, stage) => sum + stage.value, 0);
+  const summary = [
+    { key: 'deals', label: 'Deals', value: String(analytics?.totalDeals ?? totalDeals) },
+    { key: 'value', label: 'Pipeline value', value: fmt(analytics?.totalPipelineValue ?? totalValue) },
+    { key: 'probability', label: 'Average win probability', value: `${Math.round(analytics?.averageWinProbability ?? 0)}%` },
+    { key: 'win', label: 'Win rate', value: `${Math.round(analytics?.winRate ?? 0)}%` },
+  ];
 
   return (
     <div className="space-y-6">
@@ -286,7 +318,7 @@ export default function Pipeline() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground">Pipeline</h1>
-          <p className="text-sm text-muted-foreground mt-1">Track deals from lead to payment</p>
+          <p className="text-sm text-muted-foreground mt-1">Track deals from lead to close</p>
         </div>
         <button
           type="button"
@@ -310,34 +342,32 @@ export default function Pipeline() {
           Sales Funnel
         </h2>
 
+        {stages.length === 0 && (
+          <p className="text-sm text-muted-foreground">No pipeline stages yet.</p>
+        )}
+
         {/* Desktop: horizontal funnel */}
         <div className="hidden lg:block">
           <div className="flex items-stretch gap-0">
             {stages.map((stage, i) => {
-              const config = STAGE_CONFIG[stage.key] || STAGE_CONFIG.leads;
-              const Icon = config.icon;
-              const isExpanded = expandedStage === stage.key;
+              const isExpanded = expandedStage === stage.id;
 
               return (
-                <div key={stage.key} className="flex items-stretch flex-1">
+                <div key={stage.id} className="flex items-stretch flex-1">
                   <button
                     type="button"
                     aria-expanded={isExpanded}
-                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${stage.label} stage`}
-                    onClick={() => setExpandedStage(isExpanded ? null : stage.key)}
+                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${stage.name} stage`}
+                    onClick={() => setExpandedStage(isExpanded ? null : stage.id)}
                     className={`flex-1 relative p-4 rounded-xl border-2 transition-all duration-200 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                      isExpanded ? `${config.border} shadow-lg` : 'border-border hover:border-primary/30'
+                      isExpanded ? 'border-primary/40 shadow-lg' : 'border-border hover:border-primary/30'
                     }`}
                   >
-                    <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${config.color} flex items-center justify-center mx-auto mb-2`}>
-                      <Icon className="w-5 h-5 text-white" />
-                    </div>
+                    <StageIcon stage={stage} className="mx-auto mb-2" />
                     <div className="text-center">
-                      <p className="text-xs text-muted-foreground font-medium">{stage.label}</p>
+                      <p className="text-xs text-muted-foreground font-medium">{stage.name}</p>
                       <p className="text-2xl font-bold text-foreground mt-0.5">{stage.count}</p>
-                      {stage.value != null && (
-                        <p className={`text-sm font-semibold ${config.text} mt-0.5`}>{fmt(stage.value)}</p>
-                      )}
+                      <p className="text-sm font-semibold text-foreground mt-0.5">{fmt(stage.value)}</p>
                     </div>
                   </button>
                   {i < stages.length - 1 && (
@@ -354,33 +384,27 @@ export default function Pipeline() {
         {/* Mobile: vertical funnel */}
         <div className="lg:hidden space-y-3">
           {stages.map((stage, i) => {
-            const config = STAGE_CONFIG[stage.key] || STAGE_CONFIG.leads;
-            const Icon = config.icon;
-            const isExpanded = expandedStage === stage.key;
+            const isExpanded = expandedStage === stage.id;
             // Width decreases through funnel for visual effect
-            const widthPct = 100 - (i * 6);
+            const widthPct = Math.max(100 - (i * 6), 60);
 
             return (
-              <div key={stage.key} style={{ width: `${widthPct}%` }} className="mx-auto">
+              <div key={stage.id} style={{ width: `${widthPct}%` }} className="mx-auto">
                 <button
                   type="button"
                   aria-expanded={isExpanded}
-                  aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${stage.label} stage`}
-                  onClick={() => setExpandedStage(isExpanded ? null : stage.key)}
+                  aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${stage.name} stage`}
+                  onClick={() => setExpandedStage(isExpanded ? null : stage.id)}
                   className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                    isExpanded ? `${config.border} shadow-lg` : 'border-border'
+                    isExpanded ? 'border-primary/40 shadow-lg' : 'border-border'
                   }`}
                 >
-                  <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${config.color} flex items-center justify-center shrink-0`}>
-                    <Icon className="w-5 h-5 text-white" />
-                  </div>
+                  <StageIcon stage={stage} />
                   <div className="flex-1 text-left">
-                    <p className="text-xs text-muted-foreground">{stage.label}</p>
+                    <p className="text-xs text-muted-foreground">{stage.name}</p>
                     <p className="text-lg font-bold text-foreground">{stage.count}</p>
                   </div>
-                  {stage.value != null && (
-                    <p className={`text-sm font-semibold ${config.text}`}>{fmt(stage.value)}</p>
-                  )}
+                  <p className="text-sm font-semibold text-foreground">{fmt(stage.value)}</p>
                   <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                 </button>
               </div>
@@ -389,45 +413,33 @@ export default function Pipeline() {
         </div>
       </Card>
 
-      {/* Expanded stage items */}
+      {/* Expanded stage deals */}
       {expandedStage && (
         <StageDetail
-          stage={stages.find(s => s.key === expandedStage)}
+          stage={stages.find(s => s.id === expandedStage)}
           stages={stages}
-          config={STAGE_CONFIG[expandedStage]}
           onClose={() => setExpandedStage(null)}
         />
       )}
 
-      {/* Conversion Rates */}
+      {/* Summary */}
       <Card className="p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Conversion Rates (All-Time)</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {Object.entries(CONVERSION_LABELS).map(([key, label]) => {
-            const rate = rates[key] || 0;
-            return (
-              <div key={key} className="text-center p-3 rounded-lg bg-muted/50">
-                <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                <p className={`text-xl font-bold ${rate >= 50 ? 'text-success' : rate >= 25 ? 'text-warning' : 'text-destructive'}`}>
-                  {rate}%
-                </p>
-                <div className="w-full h-1.5 bg-muted rounded-full mt-2 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${rate >= 50 ? 'bg-success' : rate >= 25 ? 'bg-warning' : 'bg-destructive'}`}
-                    style={{ width: `${Math.min(rate, 100)}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <h2 className="text-lg font-semibold text-foreground mb-4">Pipeline summary</h2>
+        <dl className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {summary.map(({ key, label, value }) => (
+            <div key={key} className="text-center p-3 rounded-lg bg-muted/50">
+              <dt className="text-xs text-muted-foreground mb-1">{label}</dt>
+              <dd className="text-xl font-bold text-foreground">{value}</dd>
+            </div>
+          ))}
+        </dl>
       </Card>
     </div>
   );
 }
 
 // ── Stage Detail (with deal actions) ──────────────────────────────────
-function StageDetail({ stage, stages, config, onClose }) {
+function StageDetail({ stage, stages, onClose }) {
   const queryClient = useQueryClient();
   const [itemToDelete, setItemToDelete] = useState(null);
 
@@ -450,102 +462,77 @@ function StageDetail({ stage, stages, config, onClose }) {
   };
 
   if (!stage) return null;
-  const Icon = config?.icon || Target;
-
-  const linkFor = (item) => {
-    switch (stage.key) {
-      case 'leads': return null;
-      case 'proposals': return `/proposal/${item.id}`;
-      case 'contracts': return `/contracts`;
-      case 'projects': return `/project/${item.id}`;
-      case 'invoiced':
-      case 'paid': return `/invoices/${item.id}`;
-      default: return null;
-    }
-  };
-
-  const nameFor = (item) => {
-    if (item.name) return item.name;
-    if (item.title) return item.title;
-    if (item.invoiceNumber) return item.invoiceNumber;
-    return 'Unnamed';
-  };
 
   return (
-    <Card className={`p-6 border-2 ${config?.border || 'border-border'}`}>
+    <Card className="p-6 border-2 border-primary/40">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-          <Icon className={`w-5 h-5 ${config?.text || 'text-primary'}`} />
-          {stage.label} ({stage.count})
-          {stage.value != null && <span className={`text-sm font-normal ${config?.text}`}> -- {fmt(stage.value)}</span>}
+          {stage.name} ({stage.count})
+          <span className="text-sm font-normal text-muted-foreground"> -- {fmt(stage.value)}</span>
         </h3>
-        <button onClick={onClose} className="p-1 rounded hover:bg-muted transition-colors">
+        <button type="button" onClick={onClose} aria-label={`Close ${stage.name} stage`}
+          className="p-1 rounded hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <X className="w-4 h-4 text-muted-foreground" />
         </button>
       </div>
 
-      {!stage.items?.length ? (
-        <p className="text-sm text-muted-foreground">No items in this stage</p>
+      {moveMutation.isError && (
+        <p role="alert" className="mb-3 text-sm text-destructive">
+          {moveMutation.error?.message || 'The deal could not be moved'}
+        </p>
+      )}
+
+      {!stage.deals.length ? (
+        <p className="text-sm text-muted-foreground">No deals in this stage</p>
       ) : (
-        <div className="space-y-2">
-          {stage.items.map((item, i) => {
-            const link = linkFor(item);
-            const name = nameFor(item);
-            const Wrapper = link ? Link : 'div';
-            const wrapperProps = link ? { to: link } : {};
-
-            return (
-              <Wrapper
-                key={item.id || i}
-                {...wrapperProps}
-                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors group"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{name}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                    {item.clientName && <span>{item.clientName}</span>}
-                    {item.status && <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{item.status}</span>}
-                    {item.company && <span>{item.company}</span>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {(item.total != null || item.budget != null) && (
-                    <span className={`text-sm font-semibold ${config?.text || 'text-foreground'}`}>
-                      {fmt(item.total ?? item.budget)}
-                    </span>
+        <ul className="space-y-2" aria-label={`${stage.name} deals`}>
+          {stage.deals.map((deal) => (
+            <li
+              key={deal.id}
+              className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors group"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{deal.title || 'Untitled deal'}</p>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                  {deal.client?.name && (
+                    <Link to={`/client/${deal.client.id}`} className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">
+                      {deal.client.name}
+                    </Link>
                   )}
-                  {link && <ExternalLink className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />}
-
-                  {/* Action buttons — only for pipeline deals with an id */}
-                  {item.id && (
-                    <div className="flex items-center gap-0.5 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => e.preventDefault()}>
-                      <MoveToDropdown deal={item} stages={stages} currentStageId={stage.id}
-                        onMove={(id, stageId) => moveMutation.mutate({ id, stageId })} />
-                      <AIScoreButton deal={item} stageLabel={stage.label || stage.name} />
-                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(item); }}
-                        className="p-1.5 rounded-md hover:bg-destructive/5 hover:text-destructive transition-colors"
-                        title="Delete deal">
-                        <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
-                      </button>
-                    </div>
-                  )}
+                  {deal.probability != null && <span>{deal.probability}% likely</span>}
                 </div>
-              </Wrapper>
-            );
-          })}
-        </div>
-       )}
-       <ConfirmDialog
-         isOpen={Boolean(itemToDelete)}
-         title="Delete pipeline item"
-         description={itemToDelete ? `Permanently delete “${nameFor(itemToDelete)}”? This cannot be undone.` : ''}
-         confirmLabel="Permanently delete"
-         onConfirm={() => itemToDelete && deleteMutation.mutate(itemToDelete.id)}
-         onCancel={() => { deleteMutation.reset(); setItemToDelete(null); }}
-         pending={deleteMutation.isPending}
-         error={deleteMutation.error?.message}
-       />
-     </Card>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-foreground">{fmt(deal.value ?? 0)}</span>
+
+                {/* Hidden until hover on pointer devices, but always shown
+                    while any action has keyboard focus. */}
+                <div className="flex items-center gap-0.5 ml-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 transition-opacity">
+                  <MoveToDropdown deal={deal} stages={stages} currentStageId={stage.id}
+                    onMove={(id, stageId) => moveMutation.mutate({ id, stageId })} />
+                  <AIScoreButton deal={deal} stageLabel={stage.name} />
+                  <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(deal); }}
+                    aria-label={`Delete ${deal.title}`}
+                    className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-destructive/5 hover:text-destructive transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    title="Delete deal">
+                    <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <ConfirmDialog
+        isOpen={Boolean(itemToDelete)}
+        title="Delete pipeline item"
+        description={itemToDelete ? `Permanently delete “${itemToDelete.title || 'this deal'}”? This cannot be undone.` : ''}
+        confirmLabel="Permanently delete"
+        onConfirm={() => itemToDelete && deleteMutation.mutate(itemToDelete.id)}
+        onCancel={() => { deleteMutation.reset(); setItemToDelete(null); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
+    </Card>
   );
 }
