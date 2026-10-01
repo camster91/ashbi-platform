@@ -2,10 +2,13 @@ import IORedis from 'ioredis';
 
 import { redisConnectionArgs } from './redis.js';
 import { isUserSessionPayload } from '../auth/session.js';
+import { requestPath } from './http.js';
 
 export function isNonApiRequest(request) {
-  const url = request?.raw?.url || request?.url || '';
-  return !/^\/api(?:[/?]|$)/.test(url) || /^\/api\/(?:health|live)(?:[?]|$)/.test(url);
+  // The matched route (falling back to the parsed path for 404s), so an
+  // encoded or absolute-form spelling cannot skip the limiter.
+  const path = requestPath(request);
+  return !/^\/api(?:[/?]|$)/.test(path) || /^\/api\/(?:health|live)(?:[?]|$)/.test(path);
 }
 
 export const DEFAULT_API_RATE_LIMIT_MAX = 100;

@@ -34,6 +34,7 @@
 import defaultLogger from '../utils/logger.js';
 import { isMfaEligible, isMfaRequired } from './mfa.js';
 import { normalizedPath } from './impersonation.js';
+import { requestPath } from '../config/http.js';
 import { isUserSessionPayload } from './session.js';
 
 export const MFA_ENROLLMENT_REQUIRED_CODE = 'MFA_ENROLLMENT_REQUIRED';
@@ -192,7 +193,7 @@ export function requestPrincipalId(request, verifySessionToken) {
  */
 export function createMfaEnforcementHook({ prisma, verifySessionToken, logger = defaultLogger }) {
   return async function mfaEnforcementHook(request, reply) {
-    const path = normalizedPath(request.url);
+    const path = normalizedPath(requestPath(request));
     if (!path.startsWith('/api/')) return undefined;
     // Unmatched URLs answer 404 anyway. Matching on the router's pattern
     // (not the raw URL) means an encoded or doubled path cannot pass as an
