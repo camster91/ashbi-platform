@@ -21,6 +21,11 @@ model Organization {
   // Per-organization AI kill switch (#413): when true every AI call for this
   // organization fails with AI_DISABLED before any provider is contacted.
   aiDisabled Boolean @default(false)
+  // Organization-level MFA enforcement (#416 follow-up): when true every
+  // active staff member must enroll in two-factor authentication. A staff
+  // session without it can reach only the enrollment endpoints
+  // (src/auth/mfa-enforcement.js, docs/privileged-actions.md).
+  mfaRequired Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -752,6 +757,10 @@ model Attachment {
   entityType     String
   entityId       String
   uploadedById   String
+  // Lowercase hex SHA-256 of the stored bytes, computed while the file is
+  // written (docs/media-review.md "Upload checksums"). Null for rows stored
+  // before migration 20261001090000_attachment_checksum (CHECK constraint).
+  checksumSha256 String?
   createdAt      DateTime @default(now())
 
   // Relations

@@ -20,16 +20,16 @@ const REFRESH_INTERVAL = 60_000; // 60 seconds
 
 // ─── Status dot helpers ────────────────────────────────────────────────────────
 const healthClasses = {
-  green: 'bg-green-500',
-  yellow: 'bg-yellow-400',
-  red: 'bg-red-500',
+  green: 'bg-success',
+  yellow: 'bg-warning',
+  red: 'bg-destructive',
   unknown: 'bg-muted-foreground/50',
 };
 
 const healthBorder = {
-  green: 'border-green-500/30',
-  yellow: 'border-yellow-400/30',
-  red: 'border-red-500/30',
+  green: 'border-success/30',
+  yellow: 'border-warning/30',
+  red: 'border-destructive/30',
   unknown: 'border-border',
 };
 
@@ -122,10 +122,10 @@ function GithubPanel({ data, loading, onRefresh }) {
         </button>
       }
     >
-      {data?.error && <p role="alert" className="text-red-700 dark:text-red-400 text-sm">{data.error}</p>}
+      {data?.error && <p role="alert" className="text-destructive text-sm">{data.error}</p>}
       <div className="flex gap-4 mb-3 text-sm">
-        <span className="text-muted-foreground">Open PRs: <strong className={data?.openPRCount > 0 ? 'text-yellow-800 dark:text-yellow-400' : 'text-foreground'}>{data?.openPRCount ?? '—'}</strong></span>
-        <span className="text-muted-foreground">Failing CI: <strong className={data?.failingCI > 0 ? 'text-red-700 dark:text-red-400' : 'text-foreground'}>{data?.failingCI ?? 0}</strong></span>
+        <span className="text-muted-foreground">Open PRs: <strong className={data?.openPRCount > 0 ? 'text-warning' : 'text-foreground'}>{data?.openPRCount ?? '—'}</strong></span>
+        <span className="text-muted-foreground">Failing CI: <strong className={data?.failingCI > 0 ? 'text-destructive' : 'text-foreground'}>{data?.failingCI ?? 0}</strong></span>
       </div>
       {data?.recentRepos?.length > 0 && (
         <div className="space-y-1.5">
@@ -168,7 +168,7 @@ function VpsPanel({ data, loading, onRefresh }) {
         </button>
       }
     >
-      {data?.error && <p role="alert" className="text-red-700 dark:text-red-400 text-sm">{data.error}</p>}
+      {data?.error && <p role="alert" className="text-destructive text-sm">{data.error}</p>}
       {data && !data.error && (
         <>
           <div className="flex gap-3 mb-3 text-sm flex-wrap">
@@ -318,7 +318,7 @@ export default function CommandCenter() {
       </div>
 
       {error && (
-        <div role="alert" className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-400 text-sm">
+        <div role="alert" className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
           ⚠ {error}
         </div>
       )}
@@ -408,9 +408,9 @@ export default function CommandCenter() {
 
 function SummaryTile({ label, icon: Icon, health, value, sub }) {
   const bg = {
-    green: 'bg-green-500/5 border-green-500/20',
-    yellow: 'bg-yellow-400/5 border-yellow-400/20',
-    red: 'bg-red-500/5 border-red-500/20',
+    green: 'bg-success/5 border-success/20',
+    yellow: 'bg-warning/5 border-warning/20',
+    red: 'bg-destructive/5 border-destructive/20',
     unknown: 'bg-muted/30 border-border',
   };
   return (

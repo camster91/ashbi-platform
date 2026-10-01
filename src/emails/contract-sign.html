@@ -5,53 +5,53 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Contract Ready to Sign</title>
 </head>
-<body style="margin:0;padding:0;background-color:#faf9f2;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#faf9f2;">
+<body style="margin:0;padding:0;background-color:{{theme.cream}};font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:{{theme.cream}};">
   <tr>
     <td align="center" style="padding:24px 16px;">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 
         <!-- Header -->
         <tr>
-          <td style="background-color:#2e2958;border-radius:12px 12px 0 0;padding:32px 40px;text-align:center;">
-            <h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:#ffffff;letter-spacing:0.5px;">ashbi</h1>
-            <p style="margin:4px 0 0;font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:#e6f354;text-transform:uppercase;letter-spacing:3px;">Design &amp; Development</p>
+          <td style="background-color:{{theme.indigo}};border-radius:12px 12px 0 0;padding:32px 40px;text-align:center;">
+            <h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:{{theme.white}};letter-spacing:0.5px;">ashbi</h1>
+            <p style="margin:4px 0 0;font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:{{theme.lime}};text-transform:uppercase;letter-spacing:3px;">Design &amp; Development</p>
           </td>
         </tr>
 
         <!-- Accent bar -->
         <tr>
           <td style="padding:0;">
-            <div style="height:4px;background:linear-gradient(90deg,#e6f354 0%,#2e2958 100%);"></div>
+            <div style="height:4px;background:linear-gradient(90deg,{{theme.lime}} 0%,{{theme.indigo}} 100%);"></div>
           </td>
         </tr>
 
         <!-- Body -->
         <tr>
-          <td style="background-color:#ffffff;padding:40px;">
+          <td style="background-color:{{theme.white}};padding:40px;">
             <!-- Contract badge -->
             <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
               <tr>
-                <td style="background-color:#ede9fe;border-radius:6px;padding:8px 16px;">
-                  <p style="margin:0;font-size:13px;font-weight:700;color:#2e2958;text-transform:uppercase;letter-spacing:1px;">Ready to Sign</p>
+                <td style="background-color:{{theme.infoBg}};border-radius:6px;padding:8px 16px;">
+                  <p style="margin:0;font-size:13px;font-weight:700;color:{{theme.indigo}};text-transform:uppercase;letter-spacing:1px;">Ready to Sign</p>
                 </td>
               </tr>
             </table>
 
-            <h2 style="margin:0 0 8px;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;color:#2e2958;">Your contract is ready, {{clientName}}</h2>
-            <p style="margin:0 0 28px;font-size:15px;color:#555555;line-height:1.6;">Please review and sign the contract below. Once signed, we'll get started right away.</p>
+            <h2 style="margin:0 0 8px;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;color:{{theme.indigo}};">Your contract is ready, {{clientName}}</h2>
+            <p style="margin:0 0 28px;font-size:15px;color:{{theme.text}};line-height:1.6;">Please review and sign the contract below. Once signed, we'll get started right away.</p>
 
             <!-- Contract info card -->
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
               <tr>
-                <td style="background-color:#faf9f2;border:1px solid #e8e6dd;border-radius:8px;padding:24px;">
-                  <p style="margin:0 0 4px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#888888;">Contract</p>
-                  <p style="margin:0 0 16px;font-size:20px;font-weight:700;color:#2e2958;font-family:Georgia,'Times New Roman',serif;">{{contractTitle}}</p>
+                <td style="background-color:{{theme.cream}};border:1px solid {{theme.border}};border-radius:8px;padding:24px;">
+                  <p style="margin:0 0 4px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:{{theme.textMuted}};">Contract</p>
+                  <p style="margin:0 0 16px;font-size:20px;font-weight:700;color:{{theme.indigo}};font-family:Georgia,'Times New Roman',serif;">{{contractTitle}}</p>
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                     <tr>
                       <td>
-                        <p style="margin:0;font-size:13px;color:#666665;">Signing deadline</p>
-                        <p style="margin:4px 0 0;font-size:14px;font-weight:600;color:#2e2958;">{{expiresDate}}</p>
+                        <p style="margin:0;font-size:13px;color:{{theme.textSoft}};">Signing deadline</p>
+                        <p style="margin:4px 0 0;font-size:14px;font-weight:600;color:{{theme.indigo}};">{{expiresDate}}</p>
                       </td>
                     </tr>
                   </table>
@@ -63,21 +63,21 @@
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td align="center" style="padding:8px 0 32px;">
-                  <a href="{{signLink}}" style="display:inline-block;background-color:#e6f354;color:#2e2958;text-decoration:none;font-family:system-ui,-apple-system,sans-serif;font-size:15px;font-weight:600;padding:14px 36px;border-radius:50px;box-shadow:0 4px 14px rgba(230,243,84,0.35);">Review &amp; Sign</a>
+                  <a href="{{signLink}}" style="display:inline-block;background-color:{{theme.lime}};color:{{theme.indigo}};text-decoration:none;font-family:system-ui,-apple-system,sans-serif;font-size:15px;font-weight:600;padding:14px 36px;border-radius:50px;box-shadow:0 4px 14px {{theme.limeGlow}};">Review &amp; Sign</a>
                 </td>
               </tr>
             </table>
 
-            <p style="margin:0;font-size:13px;color:#888888;line-height:1.6;">This signing link expires on {{expiresDate}}. If you have any questions about the terms, don't hesitate to reach out.</p>
+            <p style="margin:0;font-size:13px;color:{{theme.textMuted}};line-height:1.6;">This signing link expires on {{expiresDate}}. If you have any questions about the terms, don't hesitate to reach out.</p>
           </td>
         </tr>
 
         <!-- Footer -->
         <tr>
-          <td style="background-color:#2e2958;border-radius:0 0 12px 12px;padding:24px 40px;text-align:center;">
-            <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:16px;font-weight:700;color:#ffffff;letter-spacing:0.5px;">ashbi</p>
-            <p style="margin:4px 0 16px;font-size:12px;color:rgba(255,255,255,0.6);"><a href="https://ashbi.ca" style="color:#e6f354;text-decoration:none;">ashbi.ca</a></p>
-            <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.4);">Sent with care from Ashbi Hub</p>
+          <td style="background-color:{{theme.indigo}};border-radius:0 0 12px 12px;padding:24px 40px;text-align:center;">
+            <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:16px;font-weight:700;color:{{theme.white}};letter-spacing:0.5px;">ashbi</p>
+            <p style="margin:4px 0 16px;font-size:12px;color:{{theme.footerText}};"><a href="https://ashbi.ca" style="color:{{theme.lime}};text-decoration:none;">ashbi.ca</a></p>
+            <p style="margin:0;font-size:11px;color:{{theme.footerTextSoft}};">Sent with care from Ashbi Hub</p>
           </td>
         </tr>
 

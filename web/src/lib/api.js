@@ -1,6 +1,9 @@
 // API client for Agency Hub
 
 import { uploadFileWithProgress } from './upload';
+import { announceMfaEnrollmentRequired, MFA_ENROLLMENT_REQUIRED } from './mfa-enrollment';
+
+export { MFA_ENROLLMENT_REQUIRED };
 
 // Use VITE_API_URL for production (external backend), fallback to /api for dev (proxied)
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -171,6 +174,12 @@ async function request(endpoint, options = {}) {
       // person (#416): reload so nothing continues under the wrong identity.
       if (response.status === 409 && data.code === IMPERSONATION_ENDED && typeof window !== 'undefined') {
         window.location.reload();
+        throw error;
+      }
+      // The organization requires two-factor authentication and this person
+      // has not set it up: route them to setup instead of showing an error.
+      if (response.status === 403 && data.code === MFA_ENROLLMENT_REQUIRED) {
+        announceMfaEnrollmentRequired();
         throw error;
       }
       if (response.status === 403 && data.code === REAUTH_REQUIRED && onReauthRequired && !options.reauthRetried) {
@@ -400,6 +409,13 @@ export const api = {
   // Dashboard command center
   getDashboardStats: () =>
     request('/dashboard/stats'),
+
+  // Daily operator queue (#461): { rows, counts, partial, failedSources, ... }
+  getWorkQueue: (params = {}) => {
+    const entries = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '');
+    const query = new URLSearchParams(entries).toString();
+    return request(`/work-queue${query ? `?${query}` : ''}`);
+  },
 
   // AI
   draftResponse: (threadId) =>
@@ -663,6 +679,9 @@ export const api = {
     request(`/reviews/${encodeURIComponent(id)}/decisions`, { method: 'POST', body: data }),
   getReviewCapabilities: () =>
     request('/reviews/capabilities'),
+  // Evidence export (docs/media-review.md "Evidence export"): a JSON download
+  // served with Content-Disposition, opened as a plain link.
+  reviewEvidenceExportUrl: (id) => `${API_BASE}/reviews/${encodeURIComponent(id)}/export`,
   captureReviewPage: (data) =>
     request('/reviews/capture', { method: 'POST', body: data }),
   recaptureReviewPage: (id, data = {}) =>
@@ -729,6 +748,13 @@ export const api = {
   updateAiConnectionSettings: (settings) => request('/ai-connections/settings', { method: 'PATCH', body: settings }),
   setOrganizationAiDisabled: (disabled) =>
     request(disabled ? '/ai-connections/disable' : '/ai-connections/enable', { method: 'POST' }),
+
+  // Organization MFA requirement (admins). Changing it needs step-up
+  // re-authentication (the 403 opens ReauthDialog); turning it on answers
+  // 409 MFA_SELF_ENROLLMENT_REQUIRED until the admin has two-factor on.
+  getMfaRequirement: () => request('/settings/mfa-requirement'),
+  setMfaRequirement: (required) =>
+    request('/settings/mfa-requirement', { method: 'PUT', body: { required } }),
 
   // Governed AI tool approvals and receipts (#413 slice 2). Approve and
   // reject need step-up re-authentication; the 403 opens ReauthDialog.

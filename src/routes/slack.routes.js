@@ -50,7 +50,10 @@ export default async function slackAdminRoutes(fastify, options = {}) {
     return reply.redirect(authorizeUrl.toString());
   });
 
-  fastify.get('/oauth/callback', { config: { public: true } }, async (request, reply) => {
+  // No route guard (the signed OAuth state authenticates the browser), but
+  // it completes a connection for the staff member who started it
+  // (`actsForStaff`), so the organization MFA requirement still applies.
+  fastify.get('/oauth/callback', { config: { public: true, actsForStaff: true } }, async (request, reply) => {
     if (!slackClientId || !slackClientSecret || !slackRedirectUri) {
       return reply.status(503).send({ error: 'Slack OAuth is not configured', code: 'SLACK_OAUTH_UNAVAILABLE' });
     }

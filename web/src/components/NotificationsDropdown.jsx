@@ -33,18 +33,18 @@ const TYPE_ROUTES = {
 };
 
 const TYPE_BADGES = {
-  'APPROVAL_NEEDED': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  'THREAD_ASSIGNED': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  'CLIENT_REPLIED': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  'RESPONSE_APPROVED': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  'RESPONSE_REJECTED': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  'PROJECT_HEALTH_CHANGED': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  'project.update': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  'invoice.created': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-  'invoice.overdue': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  'SLA_WARNING': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  'SLA_BREACH': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  'ESCALATION': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  'APPROVAL_NEEDED': 'bg-warning/10 text-warning',
+  'THREAD_ASSIGNED': 'bg-info/10 text-info',
+  'CLIENT_REPLIED': 'bg-success/10 text-success',
+  'RESPONSE_APPROVED': 'bg-success/10 text-success',
+  'RESPONSE_REJECTED': 'bg-destructive/10 text-destructive',
+  'PROJECT_HEALTH_CHANGED': 'bg-primary/10 text-primary',
+  'project.update': 'bg-primary/10 text-primary',
+  'invoice.created': 'bg-success/10 text-success',
+  'invoice.overdue': 'bg-destructive/10 text-destructive',
+  'SLA_WARNING': 'bg-warning/10 text-warning',
+  'SLA_BREACH': 'bg-destructive/10 text-destructive',
+  'ESCALATION': 'bg-destructive/10 text-destructive',
 };
 
 // Rows written before the single notify() path stored `data` as a JSON
@@ -159,14 +159,14 @@ export default function NotificationsDropdown() {
       >
         <Bell className="w-4 h-4" />
         {count > 0 && (
-          <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[10px] font-bold bg-[#e6f354] text-[#2e2958] rounded-full">
+          <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[10px] font-bold bg-brand-lime text-brand-indigo rounded-full">
             {count > 9 ? '9+' : count}
           </span>
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-card border border-border shadow-xl rounded-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+        <div className="absolute right-0 mt-2 w-80 bg-card dark:bg-card border border-border shadow-xl rounded-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
@@ -175,7 +175,7 @@ export default function NotificationsDropdown() {
                 type="button"
                 onClick={() => markAllReadMutation.mutate()}
                 disabled={markAllReadMutation.isPending}
-                className="min-h-11 min-w-11 flex items-center justify-center gap-1 text-xs font-medium text-[#2e2958] hover:text-[#e6f354] dark:text-foreground dark:hover:text-[#e6f354] transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="min-h-11 min-w-11 flex items-center justify-center gap-1 text-xs font-medium text-brand-indigo hover:text-brand-lime dark:text-foreground dark:hover:text-brand-lime transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Mark all as read"
                 title="Mark all as read"
               >
@@ -202,7 +202,7 @@ export default function NotificationsDropdown() {
             ) : (
               <ul className="divide-y divide-border">
                 {notifications?.map((notification) => {
-                  const badgeStyle = TYPE_BADGES[notification.type] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
+                  const badgeStyle = TYPE_BADGES[notification.type] || 'bg-muted text-muted-foreground';
 
                   return (
                     <li key={notification.id}>
@@ -218,13 +218,13 @@ export default function NotificationsDropdown() {
                         }}
                         className={cn(
                           'w-full min-h-11 text-left flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-                          !notification.read && 'bg-[#e6f354]/5'
+                          !notification.read && 'bg-brand-lime/5'
                         )}
                       >
                         {/* Unread dot */}
                         <div className="flex-shrink-0 mt-1.5">
                           {!notification.read ? (
-                            <span className="block w-2 h-2 rounded-full bg-[#e6f354]" />
+                            <span className="block w-2 h-2 rounded-full bg-brand-lime" />
                           ) : (
                             <span className="block w-2 h-2 rounded-full bg-transparent" />
                           )}
@@ -260,7 +260,7 @@ export default function NotificationsDropdown() {
                               e.stopPropagation();
                               markReadMutation.mutate(notification.id);
                             }}
-                            className="flex-shrink-0 min-h-11 min-w-11 p-1 text-muted-foreground hover:text-[#2e2958] dark:hover:text-[#e6f354] rounded transition-colors mt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            className="flex-shrink-0 min-h-11 min-w-11 p-1 text-muted-foreground hover:text-brand-indigo dark:hover:text-brand-lime rounded transition-colors mt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             aria-label="Mark as read"
                             title="Mark as read"
                           >
@@ -280,7 +280,7 @@ export default function NotificationsDropdown() {
             <Link
               to="/notifications"
               onClick={() => setIsOpen(false)}
-              className="block text-center text-xs font-medium text-[#2e2958] hover:text-[#e6f354] dark:text-foreground dark:hover:text-[#e6f354] transition-colors"
+              className="block text-center text-xs font-medium text-brand-indigo hover:text-brand-lime dark:text-foreground dark:hover:text-brand-lime transition-colors"
             >
               View all notifications
             </Link>

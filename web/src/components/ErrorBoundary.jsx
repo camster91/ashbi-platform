@@ -3,7 +3,7 @@ import { AlertTriangle, RefreshCw, RotateCcw, Copy } from 'lucide-react';
 import { createErrorReference, getSupportContact } from '../lib/support';
 
 const buttonBase =
-  'min-h-11 min-w-11 inline-flex items-center justify-center gap-2 px-5 py-3 font-medium rounded-lg transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2';
+  'min-h-11 min-w-11 inline-flex items-center justify-center gap-2 px-5 py-3 font-medium rounded-lg transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-offset-2';
 
 /**
  * "Fatal" workflow state (docs/workflow-state-matrix.md).
@@ -124,14 +124,14 @@ class ErrorBoundary extends Component {
     const support = this.props.support || getSupportContact();
     if (support.url || support.email) {
       return (
-        <p className="text-sm text-slate-600 dark:text-slate-400">
+        <p className="text-sm text-muted-foreground">
           If this keeps happening,{' '}
           {support.url && (
             <a
               href={support.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-medium text-blue-700 dark:text-blue-400 underline underline-offset-2"
+              className="font-medium text-info underline underline-offset-2"
             >
               contact support
             </a>
@@ -141,7 +141,7 @@ class ErrorBoundary extends Component {
           {support.email && (
             <a
               href={`mailto:${support.email}`}
-              className="font-medium text-blue-700 dark:text-blue-400 underline underline-offset-2 break-all"
+              className="font-medium text-info underline underline-offset-2 break-all"
             >
               {support.email}
             </a>
@@ -150,7 +150,7 @@ class ErrorBoundary extends Component {
         </p>
       );
     }
-    return <p className="text-sm text-slate-600 dark:text-slate-400">If this keeps happening, {support.fallbackText.charAt(0).toLowerCase() + support.fallbackText.slice(1)}</p>;
+    return <p className="text-sm text-muted-foreground">If this keeps happening, {support.fallbackText.charAt(0).toLowerCase() + support.fallbackText.slice(1)}</p>;
   }
 
   render() {
@@ -159,52 +159,52 @@ class ErrorBoundary extends Component {
       const { reference, copyStatus } = this.state;
 
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4">
+        <div className="min-h-screen flex items-center justify-center bg-background p-4">
           <section
             aria-labelledby="fatal-error-title"
-            className="max-w-md w-full bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 p-6 sm:p-8 text-center"
+            className="max-w-md w-full bg-card rounded-2xl shadow-xl border border-border/40 p-6 sm:p-8 text-center"
           >
             <div className="mb-6">
-              <div className="mx-auto w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
-                <AlertTriangle aria-hidden="true" className="w-8 h-8 text-red-500" />
+              <div className="mx-auto w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
+                <AlertTriangle aria-hidden="true" className="w-8 h-8 text-destructive" />
               </div>
             </div>
 
-            <h1 id="fatal-error-title" ref={this.titleRef} tabIndex={-1} className="focus:outline-none text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+            <h1 id="fatal-error-title" ref={this.titleRef} tabIndex={-1} className="focus:outline-none text-2xl font-bold text-foreground mb-2">
               Something went wrong
             </h1>
 
-            <p className="text-slate-600 dark:text-slate-400 mb-1">
+            <p className="text-muted-foreground mb-1">
               {isPromiseError
                 ? 'An unexpected error occurred while processing your request.'
                 : 'The application encountered an unexpected error.'}
             </p>
-            <p className="text-slate-600 dark:text-slate-400 mb-6">
+            <p className="text-muted-foreground mb-6">
               This view cannot continue. Try again, or reload the application.
             </p>
 
-            <div className="bg-slate-100 dark:bg-slate-900/50 rounded-lg p-4 mb-4 text-left">
-              <p id="fatal-error-reference-label" className="text-xs font-medium text-slate-600 dark:text-slate-400">
+            <div className="bg-muted rounded-lg p-4 mb-4 text-left">
+              <p id="fatal-error-reference-label" className="text-xs font-medium text-muted-foreground">
                 Error reference
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <code
                   aria-labelledby="fatal-error-reference-label"
                   data-testid="error-reference"
-                  className="font-mono text-sm text-slate-900 dark:text-slate-100 break-all select-all"
+                  className="font-mono text-sm text-foreground break-all select-all"
                 >
                   {reference}
                 </code>
                 <button
                   type="button"
                   onClick={this.handleCopyReference}
-                  className={`${buttonBase} px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 hover:bg-slate-200 dark:hover:bg-slate-700`}
+                  className={`${buttonBase} px-3 py-2 text-sm border border-border/60 text-foreground hover:bg-border/30`}
                 >
                   <Copy aria-hidden="true" className="w-4 h-4" />
                   Copy reference
                 </button>
               </div>
-              <p role="status" aria-live="polite" className="mt-1 text-xs text-slate-600 dark:text-slate-400 min-h-4">
+              <p role="status" aria-live="polite" className="mt-1 text-xs text-muted-foreground min-h-4">
                 {copyStatus === 'copied' && 'Reference copied.'}
                 {copyStatus === 'failed' && 'Could not copy automatically. Select the reference and copy it manually.'}
               </p>
@@ -212,7 +212,7 @@ class ErrorBoundary extends Component {
 
             <div className="mb-6">{this.renderSupport()}</div>
 
-            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+            <p className="text-xs text-muted-foreground mb-4">
               Reloading may discard unsaved changes. Copy anything you need to keep before reloading.
             </p>
 
@@ -220,7 +220,7 @@ class ErrorBoundary extends Component {
               <button
                 type="button"
                 onClick={this.handleTryAgain}
-                className={`${buttonBase} border-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700`}
+                className={`${buttonBase} border-2 border-border/60 text-foreground hover:bg-muted`}
               >
                 <RotateCcw aria-hidden="true" className="w-4 h-4" />
                 Try again
@@ -228,7 +228,7 @@ class ErrorBoundary extends Component {
               <button
                 type="button"
                 onClick={this.handleRetry}
-                className={`${buttonBase} px-6 bg-blue-600 hover:bg-blue-700 text-white`}
+                className={`${buttonBase} px-6 bg-info hover:bg-info/90 text-info-foreground`}
               >
                 <RefreshCw aria-hidden="true" className="w-4 h-4" />
                 Reload application

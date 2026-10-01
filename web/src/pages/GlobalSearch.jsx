@@ -7,10 +7,10 @@ import LoadingState from '../components/ui/LoadingState';
 const TYPE_ICON = { project: Folder, task: CheckSquare, client: User, thread: MessageSquare, message: Mail };
 
 const TYPE_COLORS = {
-  project: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  task: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  client: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  thread: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  project: 'bg-info/10 text-info',
+  task: 'bg-success/10 text-success',
+  client: 'bg-primary/10 text-primary',
+  thread: 'bg-warning/10 text-warning',
   message: 'bg-muted text-muted-foreground',
 };
 
@@ -180,7 +180,7 @@ export default function GlobalSearch() {
       </div>
 
       {error && (
-        <div role="alert" className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 text-sm">
+        <div role="alert" className="p-4 bg-destructive/5 border border-destructive/30 rounded-lg text-destructive text-sm">
           {error}
         </div>
       )}

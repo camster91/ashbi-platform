@@ -5,6 +5,7 @@ import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { fileUpload } from '../validators/schemas.js';
 import { sendStoredFile } from '../utils/send-file.js';
+import { recordRejectedUpload, sha256Hex } from '../services/upload-integrity.service.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
@@ -74,7 +75,13 @@ export default async function attachmentRoutes(fastify) {
 
     const buffer = await data.toBuffer();
     const validation = fileUpload.validate(data.filename, data.mimetype, buffer);
-    if (!validation.valid) return reply.status(400).send({ error: validation.error });
+    if (!validation.valid) {
+      await recordRejectedUpload(request.prisma, request, {
+        surface: 'attachments', validation, filename: data.filename, mimeType: data.mimetype, size: buffer.length,
+        projectId: entityType.value === 'PROJECT' ? entityId.value : null,
+      });
+      return reply.status(400).send({ error: validation.error });
+    }
     const filename = `${randomUUID()}${validation.ext}`;
     const filepath = path.join(UPLOAD_DIR, filename);
     await fs.writeFile(filepath, buffer);
@@ -86,6 +93,8 @@ export default async function attachmentRoutes(fastify) {
         mimeType: validation.mimetype,
         size: buffer.length,
         path: `/uploads/${filename}`,
+        // Hashed from the buffer just written (never re-read from disk).
+        checksumSha256: sha256Hex(buffer),
         entityType: entityType.value,
         entityId: entityId.value,
         uploadedById: request.user.id,

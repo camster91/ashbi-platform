@@ -50,21 +50,114 @@ SlowMessage, page skeletons), `hover-lift` (interactive Card), `glass-card`
 (Card `glass`), `skeleton-shimmer` (Skeleton) and `stagger-children`
 (AnimatedList).
 
-Known token gaps:
+`glass-card` is `bg-card/70` in light mode and the fixed `brand-indigo` at
+70% in dark mode.
 
-- Alert's `warning`, `success` and `info` variants use raw Tailwind palette
-  colours (`amber-*`, `green-*`, `blue-*`) with explicit `dark:` overrides
-  instead of the `--warning`, `--success` and `--info` tokens.
-- `glass-card` hardcodes the brand indigo `#2e2958` for dark mode.
+<a id="raw-colours"></a>**Raw colours and exceptions (#315, #118)**
+
+Use the semantic tokens above, not Tailwind palette classes. Common
+replacements (the ones `scripts/codemods/raw-colors-to-tokens.mjs` applies):
+
+| Instead of | Use |
+|---|---|
+| `bg-white` | `bg-card` (or `bg-background` for a page) |
+| `text-gray-900`/`-800`/`-700` | `text-foreground` |
+| `text-gray-600`/`-500`/`-400` | `text-muted-foreground` |
+| `bg-gray-50` / `bg-gray-100` / `bg-gray-200` | `bg-muted/50` / `bg-muted` / `bg-border/30` |
+| `border-gray-100` / `-200` / `-300` | `border-border/25` / `border-border/40` / `border-border/60` |
+| `focus:ring-gray-500`, `ring-slate-800` | `ring-ring` |
+| `text-red-600`, `bg-red-100`, `bg-red-50`, `border-red-200` | `text-destructive`, `bg-destructive/10`, `bg-destructive/5`, `border-destructive/30` |
+| green / emerald | `success` in the same pattern |
+| amber / yellow / orange | `warning` |
+| blue / sky / cyan | `info` |
+| indigo / violet / purple | `primary` |
+| `bg-blue-600 text-white hover:bg-blue-700` | `bg-info text-info-foreground hover:bg-info/90` (use the fill's `-foreground`, never `text-white`, because `primary` turns lime in dark mode) |
+| any `dark:` palette override | nothing: tokens already switch under `.dark` |
+
+Deliberate exceptions:
+
+- **Brand surfaces.** The staff sidebar, the top-bar quick-add button and the
+  login brand panel are fixed brand colours in both themes. They use the
+  `brand-indigo`, `brand-indigo-soft`, `brand-lime`, `brand-sage` and
+  `brand-cream` colours from `web/tailwind.config.js` (never hex arbitrary
+  values) and translucent white tints (`bg-white/10`, `text-white/60`).
+  Use `brand-*` only on these fixed surfaces; everywhere else use tokens.
+- **Light-only client pages.** The client portal and the public `Portal*`
+  token pages call `usePortalLightTheme()` (`web/src/hooks`), so their tokens
+  always resolve to the light set.
+- **Allowlisted files.** `web/src/tests/raw-color-guard.test.js` fails on any
+  raw palette class, opaque `bg-white` or hex colour in `web/src` outside
+  `web/src/tests/raw-color-allowlist.json`. Each allowlist entry has a reason
+  (categorical colours, colours stored as data, canvas drawing, the dark
+  intake form) and an exact count that can only go down.
+- **Emails.** Email clients need inline hex, so `src/emails/*.html` reference
+  `{{theme.<name>}}` placeholders that `loadTemplate` fills from the single
+  email theme in `src/emails/theme.js`, whose brand values match the web
+  brand colours (`src/tests/unit/email-theme.test.js`).
 
 Shared accessibility conventions:
 
 - Interactive targets are at least 44px tall (`min-h-11`, or `h-12`/`h-14`).
 - Animations carry `motion-reduce:animate-none` / `motion-reduce:transition-none`.
+  The per-primitive behaviour is in [Motion](#motion).
 - Decorative icons get `aria-hidden="true"`.
 - Pending states become "Slow" after `SLOW_THRESHOLD_MS` (8000 ms, from
   `web/src/hooks/useSlowState.js`). They explain the delay inside a polite live
   region; see `docs/workflow-state-matrix.md`.
+
+<a id="motion"></a>**Motion**
+
+Two layers honour `prefers-reduced-motion: reduce`. Per-component
+`motion-reduce:` classes stop a primitive's own animation. A global rule in
+`web/src/index.css` backs them up: it disables every animation, cuts
+transitions to 0.01 ms, shows `animate-fade-in` / `animate-slide-up` /
+`animate-scale-in` and `stagger-children` content in its final state, and
+removes hover transforms (`hover-lift`, `hover:-translate-*`, `hover:scale-*`,
+`group-hover:scale-*`). What each primitive does:
+
+| Primitive | Default motion | Under reduced motion |
+|---|---|---|
+| `Button` | Colour transition (200 ms). The `loading` spinner spins. | `motion-reduce:transition-none`; the spinner has `motion-reduce:animate-none` and stays visible, static. |
+| `Input` | None (focus ring appears without a transition). | Unchanged. |
+| `Card` | `hover-lift` lift and shadow, `transition-all` 300 ms, when interactive. | The global rule removes the lift; the shadow change is instant. |
+| `CardHeader` … `CardFooter` | None. | Unchanged. |
+| `StatCard` | `hover:-translate-y-1` lift, `transition-all` 200 ms. | The global rule removes the lift; changes are instant. |
+| `Modal` | None in practice: the backdrop carries `transition-opacity`, but no opacity changes, so the backdrop and dialog appear immediately. | Unchanged (`motion-reduce:transition-none` is already set). |
+| `ModalFooter`, `ConfirmDialog` | None of their own (ConfirmDialog inherits `Modal`). | As `Modal`. |
+| `Badge` | None. | Unchanged. |
+| `Alert` | Fades in (`animate-fade-in`); colour transition on the dismiss button. | `motion-reduce:animate-none`; shown fully, no fade. |
+| `EmptyState` and its presets | None. | Unchanged. |
+| `LoadingState` | Spinner spins. | `motion-reduce:animate-none`; a static spinner and the text label stay. |
+| `SlowNotice`, `SlowMessage`, `SlowLoadingStatus` | Fade in when the slow threshold passes. | `motion-reduce:animate-none`; shown fully. The live-region announcement is unchanged. |
+| `Skeleton` family | Pulse (`animate-pulse`). | `motion-reduce:animate-none`; static placeholder blocks. |
+| `TablePageSkeleton`, `KanbanPageSkeleton`, `ListPageSkeleton`, `AnimatedList` | Fade in; `AnimatedList` staggers its children. | `motion-reduce:animate-none`; the global rule shows staggered children at once. |
+
+No primitive conveys state only through motion: a spinner always has a text
+label or an `aria-busy` container, and a fade never hides content once it
+has ended.
+
+<a id="forced-colours"></a>**Forced colours**
+
+In forced-colours mode (Windows contrast themes; `@media (forced-colors:
+active)`) the browser swaps author colours for the user's system palette and
+drops box-shadows and most background fills. Tailwind's `ring-*` focus
+indicators are box-shadows and many controls are drawn only by their fill, so
+a block at the end of `web/src/index.css` restores each cue with CSS system
+colours (#317). `web/src/tests/forced-colors.test.js` checks it.
+
+| Cue | Forced-colours rule |
+|---|---|
+| Focus on any `a`, `button`, `input`, `select`, `textarea`, `summary`, `[tabindex]`, `[contenteditable]` | `outline: 3px solid Highlight` with a 2px offset (`!important`, so it beats `focus-visible:outline-none`) |
+| `Button`, native buttons, `[role="button"]`, `Tab`, `[role="menuitem"]` | `1px solid ButtonText` border, so the control keeps its boundary without its fill; disabled ones use `GrayText` for border and text |
+| Selected `Tab` (`aria-selected`), pressed toggles (`aria-pressed`), current nav item (`aria-current="page"`/`"step"`) | `Highlight` border plus a 2px inset `Highlight` outline |
+| `Badge` / `StatusBadge` (and any element with `status-indicator`) | `1px solid CanvasText` border; the label text carries the meaning, as it must in every mode |
+| Fields with `aria-invalid="true"` (Input, Select, Textarea via `Field`) | `Mark` border and outline |
+| Spinners (`animate-spin`) | `Highlight` top border, so the moving segment stays visible |
+| Skeletons (`skeleton-shimmer`) | `1px solid GrayText` outline |
+
+Icons use `currentColor`, so they follow the forced text colour. Status dots
+and progress fills are decorative (`aria-hidden`) and may disappear; they
+always sit next to text that states the same thing.
 
 ---
 
@@ -157,14 +250,143 @@ Accessibility:
   `aria-label`.
 - Focus shows `focus:ring-2 focus:ring-ring` with a 1px offset. `disabled`
   lowers the opacity and uses a `not-allowed` cursor.
-- Pass `aria-invalid` and `aria-describedby` yourself for errors. They are
-  forwarded unchanged.
+- Wrap it in [`Field`](#field) to get the label, hint, error,
+  `aria-describedby` and `aria-invalid` wired for you. Without Field, pass
+  `aria-invalid` and `aria-describedby` yourself; they are forwarded unchanged.
+- `aria-invalid="true"` switches the border and focus ring to `destructive`
+  (`aria-[invalid=true]:` utilities in `inputStyles`), so Input, Select and
+  Textarea all show the error state the same way.
 
-Tokens: `border`, `background`, `muted-foreground` (placeholder), `ring`.
+Tokens: `border`, `background`, `muted-foreground` (placeholder), `ring`,
+`destructive` (invalid).
 
 ```jsx
 <label htmlFor="client-name" className="text-sm font-medium">Name</label>
 <Input id="client-name" value={name} onChange={(e) => setName(e.target.value)} />
+```
+
+<a id="field"></a>
+
+### `Field`
+
+Source: `web/src/components/ui/Field.jsx`
+
+A labelled form field: `<label>`, the control, an optional hint and an
+optional error. It wires them to its single child control.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `label` | node | none | Rendered in a `<label htmlFor>` |
+| `hint` | node | none | Muted help text under the control, linked through `aria-describedby` |
+| `error` | node | none | Destructive text with an `aria-hidden` icon, linked through `aria-describedby`; also sets `aria-invalid="true"` on the control |
+| `required` | boolean | `false` | Sets `required` on the control and shows an `aria-hidden` asterisk |
+| `id` | string | generated (`useId`) | The control's id; hint and error ids are `${id}-hint` / `${id}-error` |
+| `className`, `labelClassName` | string | none | Root (`space-y-1.5`) and label classes |
+| `children` | one element, or `(controlProps) => node` | none | An element is cloned with `id`, `aria-describedby`, `aria-invalid` and `required`. A function receives those props to spread |
+
+Accessibility:
+
+- The control's accessible name is the label, and its description is the hint
+  followed by the error. A child's own `aria-describedby` is kept and put first.
+- The error text is not a live region, so it is not announced as the user
+  types. On submit, move focus to the first invalid control so its
+  description is read.
+- The asterisk is visual only; `required` carries the meaning.
+
+Tokens: `foreground` (label), `muted-foreground` (hint), `destructive` (error).
+
+```jsx
+<Field label="Email" hint="We send invoices here." error={errors.email} required>
+  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+</Field>
+```
+
+### `Select`
+
+Source: `web/src/components/ui/Select.jsx`
+
+A `forwardRef` native `<select>` with the Input look (`inputStyles`) and a
+44px minimum height.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `options` | `{ value, label, disabled }[]` | none | Rendered as `<option>`s. Without it, `children` are rendered |
+| `placeholder` | string | none | Adds a first, disabled `<option value="">` |
+| `className`, `ref`, `...props` | | | Passed through to `<select>` |
+
+Accessibility: a native select, so keyboard and screen-reader behaviour is the
+platform's. Label it with `Field`, a `<label htmlFor>` or `aria-label`.
+
+```jsx
+<Field label="Currency">
+  <Select value={currency} onChange={(e) => setCurrency(e.target.value)} options={INVOICE_CURRENCY_OPTIONS} />
+</Field>
+```
+
+### `Textarea`
+
+Source: `web/src/components/ui/Textarea.jsx`
+
+A `forwardRef` native `<textarea>` with the Input look, `rows={4}` by default,
+`min-h-20` and vertical resize. `className`, `ref` and other props are passed
+through.
+
+```jsx
+<Field label="Notes" hint="Shown on the invoice.">
+  <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
+</Field>
+```
+
+---
+
+## Navigation
+
+### `Tabs`, `TabList`, `Tab`, `TabPanel`
+
+Source: `web/src/components/ui/Tabs.jsx`
+
+The [WAI-ARIA tabs pattern](https://www.w3.org/WAI/ARIA/apg/patterns/tabs/)
+with automatic activation. First adopted by the Invoices "All Invoices" /
+"Collections Dashboard" views.
+
+- `Tabs({ value, defaultValue, onValueChange, orientation = 'horizontal', id })`:
+  the root `<div>`. Controlled with `value` + `onValueChange`, or uncontrolled
+  with `defaultValue`. `id` seeds the tab and panel ids (generated otherwise).
+- `TabList`: the `role="tablist"` row with `aria-orientation`. Give it an
+  `aria-label` or `aria-labelledby`. Horizontal lists have a bottom
+  `border-border` rule and scroll sideways when they overflow.
+- `Tab({ value, disabled })`: a `type="button"` `role="tab"` with
+  `aria-selected`, `aria-controls` (while selected) and a roving `tabIndex`
+  (only the selected tab is in the Tab order).
+- `TabPanel({ value, forceMount = false })`: `role="tabpanel"`,
+  `aria-labelledby` its tab, `tabIndex={0}`. Inactive panels unmount unless
+  `forceMount`, which keeps them in the DOM with `hidden`.
+
+All four forward `ref`, `className` and other props. `Tab`, `TabList` and
+`TabPanel` throw if rendered outside `Tabs`.
+
+Accessibility:
+
+- Left/Right (Up/Down when `orientation="vertical"`) move focus to the
+  previous/next enabled tab and select it, wrapping at the ends. Home and End
+  jump to the first and last enabled tab. Disabled tabs are skipped.
+- Tabs are at least 44px tall (`min-h-11`) with a `focus-visible:ring-2
+  ring-ring` focus ring; the selected tab has a `primary` underline and text,
+  so selection is shown by more than colour (the underline) and exposed via
+  `aria-selected`.
+- The colour transition carries `motion-reduce:transition-none`.
+
+Tokens: `border`, `primary`, `muted-foreground`, `foreground`, `ring`.
+
+```jsx
+<Tabs value={view} onValueChange={setView}>
+  <TabList aria-label="Invoice views">
+    <Tab value="list">All Invoices</Tab>
+    <Tab value="collections">Collections Dashboard</Tab>
+  </TabList>
+  <TabPanel value="list">…</TabPanel>
+  <TabPanel value="collections">…</TabPanel>
+</Tabs>
 ```
 
 ---
@@ -248,7 +470,9 @@ Accessibility:
 - StatCard is not interactive: it has no role or focus handling.
 - The icon and trend glyph are not marked `aria-hidden`. Read order is label,
   value, then trend.
-- The hover lift (`hover:-translate-y-1`) has no `motion-reduce` guard.
+- The hover lift (`hover:-translate-y-1`) has no per-component `motion-reduce`
+  class; the global reduced-motion rule in `web/src/index.css` removes it (see
+  [Motion](#motion)).
 
 Tokens: `card`, `border`, `muted`, `primary`, `success`, `warning`, `destructive`.
 
@@ -370,6 +594,51 @@ Accessibility:
 <Badge color="success" variant="subtle" dot>Paid</Badge>
 ```
 
+### `StatusBadge`
+
+Source: `web/src/components/ui/StatusBadge.jsx`
+
+A `forwardRef` `Badge` for a domain status. Every label, colour and icon comes
+from the shared map in `web/src/lib/status.js`, so a status means the same
+thing on every page (#315, #316). The map replaces the per-page
+`STATUS_CONFIG` objects that Invoices, InvoiceDetail, PortalInvoice, Estimates,
+Proposals, Contracts, PortalEstimate, Portal, ApprovalQueue and the review
+screens used to keep.
+
+Domains in `STATUS_DOMAINS`: `invoice`, `estimate`, `proposal`, `contract`,
+`project`, `task`, `approval`, `priority`, `health`, `thread`, `review`.
+
+| Prop | Type / values | Default | Notes |
+|---|---|---|---|
+| `domain` | a `STATUS_DOMAINS` key | none | An unknown domain throws |
+| `status` | string | none | An unknown status renders its text (underscores as spaces) in the neutral colour. Also set as `data-status` |
+| `audience` | `'staff'` or `'client'` | `'staff'` | `client` uses the entry's `clientLabel` when it has one (for example an invoice `SENT` reads "Awaiting Payment") |
+| `size` | a Badge size | `'sm'` | |
+| `showIcon` | boolean | `true` | |
+| `label` | node | the map's label | Overrides the text only |
+| `variant` | a Badge variant | the map's (`subtle` unless set) | For example `default` on the indigo portal header |
+| `className`, `ref`, `...props` | | | Passed through to `Badge` |
+
+`lib/status.js` also exports `getStatus(domain, status, { audience })`,
+`statusLabel`, `statusColor`, and `statusClasses`, which returns the subtle
+token classes (`bg-success/10 text-success`) for legacy pills that cannot
+render a Badge. `getPriorityColor`, `getHealthColor`, `getStatusColor` and
+`getProjectStatusColor` in `lib/utils.js`, and `projectStatusColor` /
+`taskStatusColor` / `priorityColor` in the client portal, now read from it.
+
+Accessibility:
+
+- The label always states the status and the icon is a second, `aria-hidden`
+  cue, so status is never conveyed by colour alone (WCAG 1.4.1).
+- The root carries the `status-indicator` class, which gives it a
+  `CanvasText` border in forced-colours mode (see
+  [Forced colours](#forced-colours)).
+
+```jsx
+<StatusBadge domain="invoice" status={invoice.isOverdue ? 'OVERDUE' : invoice.status} />
+<StatusBadge domain="invoice" status={invoice.status} audience="client" />
+```
+
 ### `Alert`
 
 Source: `web/src/components/ui/Alert.jsx`
@@ -403,8 +672,9 @@ Accessibility:
 - The icon is `aria-hidden`, and the entrance animation respects
   `motion-reduce`.
 
-Tokens: `destructive` for `error`, raw `amber` / `green` / `blue` for the
-others (see Known token gaps), plus `foreground`, `muted-foreground` and `ring`.
+Tokens: `destructive`, `warning`, `success` and `info` for the four variants
+(border at 30%, fill at 5%, 10% in dark mode, icon at full strength), plus
+`foreground`, `muted-foreground` and `ring`.
 
 ```jsx
 <Alert variant="error" title="Could not save" onDismiss={clearError}
@@ -600,11 +870,15 @@ where a primitive exists.
 
 `main.jsx` applies the visitor's stored or OS theme to `<html>` before React
 renders. The portal is client-facing and light-only, so `usePortalLightTheme`
-(in `client-portal/shared.jsx`) removes `.dark` while the portal is mounted
-and restores it on unmount. Every portal colour is a token, so this one
-switch keeps the whole route, including `ConfirmDialog`, on the light token
-set. The other public portal pages (`Portal*.jsx`) still use a hardcoded
-light slate palette; see `portal-text-contrast-guard.test.js`.
+(in `web/src/hooks/usePortalLightTheme.js`, re-exported from
+`client-portal/shared.jsx`) removes `.dark` while the portal is mounted and
+restores it on unmount. Every portal colour is a token, so this one switch
+keeps the whole route, including `ConfirmDialog`, on the light token set. The
+public token pages (`Portal.jsx`, `PortalBooking`, `PortalContract`,
+`PortalEstimate`, `PortalInvoice`, `PortalProposal`) now use tokens and the
+same hook; `portal-text-contrast-guard.test.js` checks both.
+`PortalIntakeForm` is a deliberately dark page and stays on the raw-colour
+allowlist.
 
 #### Converged
 
@@ -667,7 +941,7 @@ primitive covers them yet. Remove each one when its primitive lands.
 |---|---|
 | `.cp-root` | Scopes the portal focus contract: a 3px solid `--ring` outline on every focusable control, stronger than the primitives' `ring-4` at 20% opacity. Aligning `Button`'s own focus ring is follow-up work |
 | `.cp-header` | Switches that outline to `--accent` on the indigo header, where the ring colour would be invisible |
-| `.cp-tab` | No Tabs primitive. Native `role="tab"` buttons; selected styling follows `aria-selected` |
+| `.cp-tab` | Native `role="tab"` buttons; selected styling follows `aria-selected`. The shared `Tabs` primitive now exists; moving the portal tab bar onto it is follow-up work |
 | `.cp-kanban` | No kanban primitive for read-only client boards (`KanbanBoard` is the staff drag-and-drop board) |
 | `.cp-kanban-col` | Kanban column surface |
 | `.cp-kanban-col-header` | Kanban column header row |

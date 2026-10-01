@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import Modal from './Modal';
 import { QueryErrorState } from './QueryErrorState';
+import { DEFAULT_EVENT_COLOR } from '../lib/data-colors';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -108,7 +109,7 @@ export default function Calendar({ projectId }) {
             type="button"
             aria-label="Go to today"
             onClick={goToToday}
-            className="min-h-11 px-2 text-sm text-blue-600 hover:text-blue-800 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            className="min-h-11 px-2 text-sm text-info hover:text-info/80 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info"
           >
             Today
           </button>
@@ -118,7 +119,7 @@ export default function Calendar({ projectId }) {
             type="button"
             aria-label="Previous month"
             onClick={prevMonth}
-            className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 hover:bg-muted rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 hover:bg-muted rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -128,7 +129,7 @@ export default function Calendar({ projectId }) {
             type="button"
             aria-label="Next month"
             onClick={nextMonth}
-            className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 hover:bg-muted rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 hover:bg-muted rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -141,7 +142,7 @@ export default function Calendar({ projectId }) {
               setSelectedDate(new Date());
               setShowCreateModal(true);
             }}
-            className="ml-4 min-h-11 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            className="ml-4 min-h-11 bg-info text-info-foreground px-4 py-2 rounded-lg hover:bg-info/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info"
           >
             + New Event
           </button>
@@ -167,12 +168,12 @@ export default function Calendar({ projectId }) {
               onClick={() => handleDayClick(day)}
               className={`min-h-[100px] border rounded-lg p-1 cursor-pointer hover:bg-muted/50 ${
                 !day.date ? 'bg-muted/50' : ''
-              } ${isToday(day.date) ? 'border-blue-500 border-2' : ''}`}
+              } ${isToday(day.date) ? 'border-info border-2' : ''}`}
             >
               {day.date && (
                 <>
                   <div className={`text-sm font-medium mb-1 ${
-                    isToday(day.date) ? 'text-blue-600' : 'text-muted-foreground'
+                    isToday(day.date) ? 'text-info' : 'text-muted-foreground'
                   }`}>
                     {day.date.getDate()}
                   </div>
@@ -267,7 +268,7 @@ function CreateEventModal({ date, projectId, onClose, onSubmit, isLoading }) {
     type: 'MEETING',
     location: '',
     isAllDay: false,
-    color: '#3B82F6'
+    color: DEFAULT_EVENT_COLOR
   });
 
   const handleSubmit = (e) => {
@@ -380,7 +381,7 @@ function CreateEventModal({ date, projectId, onClose, onSubmit, isLoading }) {
           <button
             type="submit"
             disabled={isLoading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-info text-info-foreground rounded-lg hover:bg-info/90 disabled:opacity-50"
           >
             {isLoading ? 'Creating...' : 'Create Event'}
           </button>

@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, MapPin, MessageSquare, RotateCcw, XCircle } from 'lucide-react';
 import { cn, formatDateTime } from '../../lib/utils';
+import { STATUS_DOMAINS } from '../../lib/status';
+import DomainStatusBadge from '../ui/StatusBadge';
 import AnnotationOverlay from './AnnotationOverlay';
 import ReviewTimeline from './ReviewTimeline';
 import { DEFAULT_COLOR, MARKUP_COLORS, MARKUP_TOOLS, describeShape, isOnSurface, mentionedIds, shapeOf, shapePayload } from './markup';
@@ -22,19 +24,9 @@ const PdfViewer = lazy(() => import('./PdfViewer'));
 export const BODY_LIMIT = 5000;
 const NOTE_LIMIT = 2000;
 
-export const REVIEW_STATUS_LABELS = {
-  open: 'Open',
-  approved: 'Approved',
-  changes_requested: 'Changes requested',
-  closed: 'Closed',
-};
-
-const STATUS_STYLES = {
-  open: 'bg-muted text-foreground',
-  approved: 'bg-success text-success-foreground',
-  changes_requested: 'bg-warning text-warning-foreground',
-  closed: 'bg-muted text-muted-foreground',
-};
+export const REVIEW_STATUS_LABELS = Object.fromEntries(
+  Object.entries(STATUS_DOMAINS.review).map(([status, { label }]) => [status, label]),
+);
 
 /** Who wrote a comment or decision: team members, or clients (portal or share link). */
 export function authorRole(type) {
@@ -49,11 +41,7 @@ const buttonOutline = cn(buttonBase, 'border border-border text-foreground hover
 const buttonPrimary = cn(buttonBase, 'bg-primary text-primary-foreground hover:bg-primary/90');
 
 export function StatusBadge({ status }) {
-  return (
-    <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium', STATUS_STYLES[status] || STATUS_STYLES.open)}>
-      {REVIEW_STATUS_LABELS[status] || status}
-    </span>
-  );
+  return <DomainStatusBadge domain="review" status={status} className="px-2.5" />;
 }
 
 /** 65432 ms -> "1:05"; 3723000 ms -> "1:02:03". */

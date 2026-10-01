@@ -16,7 +16,7 @@ export default function TimeTrackerWidget({ data }) {
     <Card>
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Timer className="w-4 h-4 text-blue-500" />
+          <Timer className="w-4 h-4 text-info" />
           <h2 className="font-semibold text-foreground">Time Tracking</h2>
         </div>
         <span className="text-xs text-muted-foreground">{capacity}% capacity</span>
@@ -26,11 +26,11 @@ export default function TimeTrackerWidget({ data }) {
         <div>
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm font-medium text-foreground">Today</span>
-            <span className="text-sm font-bold text-foreground">{todayHours}h <span className="text-xs font-normal text-emerald-700 dark:text-emerald-400">({todayBillableHours}h billable)</span></span>
+            <span className="text-sm font-bold text-foreground">{todayHours}h <span className="text-xs font-normal text-success">({todayBillableHours}h billable)</span></span>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div
-              className={cn('h-full rounded-full transition-all duration-500', todayProgress >= 100 ? 'bg-emerald-500' : 'bg-blue-500')}
+              className={cn('h-full rounded-full transition-all duration-500', todayProgress >= 100 ? 'bg-success' : 'bg-info')}
               style={{ width: `${todayProgress}%` }}
             />
           </div>
@@ -39,11 +39,11 @@ export default function TimeTrackerWidget({ data }) {
         <div>
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm font-medium text-foreground">This Week</span>
-            <span className="text-sm font-bold text-foreground">{weekHours}h <span className="text-xs font-normal text-emerald-700 dark:text-emerald-400">({weekBillableHours}h billable)</span></span>
+            <span className="text-sm font-bold text-foreground">{weekHours}h <span className="text-xs font-normal text-success">({weekBillableHours}h billable)</span></span>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div
-              className={cn('h-full rounded-full transition-all duration-500', weekProgress >= 100 ? 'bg-emerald-500' : 'bg-blue-500')}
+              className={cn('h-full rounded-full transition-all duration-500', weekProgress >= 100 ? 'bg-success' : 'bg-info')}
               style={{ width: `${weekProgress}%` }}
             />
           </div>

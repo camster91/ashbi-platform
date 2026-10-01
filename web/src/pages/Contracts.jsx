@@ -1,30 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  ScrollText,
-  Plus,
-  Send,
-  ExternalLink,
-  CheckCircle,
-  FileText,
-  Download,
-  Sparkles,
-  Wand2,
-} from 'lucide-react';
+import { ScrollText, Plus, Send, ExternalLink, CheckCircle, Download, Sparkles, Wand2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, EmptyState, LoadingState } from '../components/ui';
+import { Button, Card, EmptyState, LoadingState, StatusBadge } from '../components/ui';
 import Modal from '../components/Modal';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import QueryErrorState from '../components/QueryErrorState';
-
-const statusConfig = {
-  DRAFT: { label: 'Draft', color: 'bg-muted text-muted-foreground' },
-  SENT: { label: 'Sent', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-  SIGNED: { label: 'Signed', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-  VOID: { label: 'Void', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
-};
 
 const templateTypes = [
   { value: 'RETAINER', label: 'Retainer Agreement' },
@@ -247,7 +230,6 @@ export default function Contracts() {
             onClick={handleAiRefine}
             loading={aiLoading}
             disabled={!aiInstruction.trim()}
-            style={{ backgroundColor: '#2e2958' }}
             leftIcon={<Wand2 className="w-4 h-4" />}
           >
             Refine
@@ -266,8 +248,7 @@ export default function Contracts() {
                 type="button"
                 onClick={() => navigator.clipboard.writeText(aiResult)}
                 aria-label="Copy AI result to clipboard"
-                className="min-h-11 inline-flex items-center mt-1 text-xs underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                style={{ color: '#2e2958' }}
+                className="min-h-11 inline-flex items-center mt-1 text-xs underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-primary"
               >
                 Copy to clipboard
               </button>
@@ -362,7 +343,6 @@ export default function Contracts() {
       ) : (
         <div className="space-y-3">
           {contracts.map((contract) => {
-            const config = statusConfig[contract.status] || statusConfig.DRAFT;
             const isExpanded = expandedId === contract.id;
             return (
               <Card key={contract.id} className="p-4">
@@ -386,9 +366,7 @@ export default function Contracts() {
                       )}
                     </div>
                   </div>
-                  <span className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${config.color}`}>
-                    {config.label}
-                  </span>
+                  <StatusBadge domain="contract" status={contract.status} className="px-2.5 py-1" />
                   <div className="flex items-center gap-1">
                     {contract.status === 'DRAFT' && (
                       <Button
@@ -409,7 +387,7 @@ export default function Contracts() {
                       title="AI Refine"
                       style={{ '--tw-text-opacity': 1 }}
                     >
-                      <Wand2 className="w-4 h-4" style={{ color: '#2e2958' }} />
+                      <Wand2 className="w-4 h-4 text-primary" />
                     </button>
                     {(contract.status === 'SENT' || contract.status === 'SIGNED') && (
                       <button
@@ -432,7 +410,7 @@ export default function Contracts() {
                   </div>
                 </div>
                 {contract.status === 'SIGNED' && contract.clientSigName && (
-                  <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
+                  <div className="mt-2 flex items-center gap-1 text-xs text-success">
                     <CheckCircle className="w-3 h-3" />
                     Signed by {contract.clientSigName} on {new Date(contract.signedAt).toLocaleDateString('en-CA')}
                   </div>

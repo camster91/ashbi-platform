@@ -1,0 +1,104 @@
+# Production adoption on the existing Ashbi VPS. Keep the current PostgreSQL,
+# Redis, uploads and configuration; staging uses docker-compose.coolify.yml.
+# Do not start alongside the old worker: both use the same Redis heartbeat.
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_REVISION: ${SOURCE_COMMIT:-unknown}
+    restart: unless-stopped
+    command: ["sh", "scripts/start.sh"]
+    stop_grace_period: 30s
+    expose: ["3002"]
+    # Existing host-network Traefik's file route uses this loopback upstream.
+    ports: ['127.0.0.1:3002:3002']
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: '3002'
+      HEALTH_DETAILS_LOOPBACK: 'false'
+      DATABASE_URL: '${DATABASE_URL:?}'
+      REDIS_URL: '${REDIS_URL:?}'
+      JWT_SECRET: '${JWT_SECRET:?}'
+      CREDENTIALS_KEY: '${CREDENTIALS_KEY:?}'
+      # Live bootstrap registration is disabled; preserve an unset token.
+      ADMIN_INVITE_TOKEN: '${ADMIN_INVITE_TOKEN:-}'
+      WEBHOOK_SECRET: '${WEBHOOK_SECRET:?}'
+      APP_URL: '${APP_URL:?}'
+      HUB_URL: '${HUB_URL:?}'
+      PORTAL_BASE_URL: '${PORTAL_BASE_URL:?}'
+      CORS_ORIGIN: '${CORS_ORIGIN:?}'
+      TRUST_PROXY: '${TRUST_PROXY:-1}'
+    volumes:
+      - /opt/ashbi-platform/data/uploads:/app/uploads
+      - /opt/ashbi-platform/data/config:/app/config
+    networks: [default, production-data]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3002/api/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_REVISION: ${SOURCE_COMMIT:-unknown}
+    restart: unless-stopped
+    command: ["npm", "run", "start:worker"]
+    stop_grace_period: 120s
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: '${DATABASE_URL:?}'
+      REDIS_URL: '${REDIS_URL:?}'
+      JWT_SECRET: '${JWT_SECRET:?}'
+      CREDENTIALS_KEY: '${CREDENTIALS_KEY:?}'
+      WEBHOOK_SECRET: '${WEBHOOK_SECRET:?}'
+      APP_URL: '${APP_URL:?}'
+      HUB_URL: '${HUB_URL:?}'
+      PORTAL_BASE_URL: '${PORTAL_BASE_URL:?}'
+    volumes:
+      - /opt/ashbi-platform/data/uploads:/app/uploads
+      - /opt/ashbi-platform/data/config:/app/config
+    networks: [default, production-data]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "npm", "run", "health:worker"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: 'no'
+    # Root only for the one-shot host rollback-floor record. API/worker retain
+    # the image's unprivileged node user and cannot write release history.
+    user: '0:0'
+    command: ["node", "scripts/deploy/migrate-with-floor.mjs"]
+    environment:
+      DATABASE_URL: '${DATABASE_URL:?}'
+    volumes:
+      - /opt/ashbi-platform/releases:/release-state
+    networks: [production-data]
+
+networks:
+  production-data:
+    external: true
+    name: ashbi-hub-src_default

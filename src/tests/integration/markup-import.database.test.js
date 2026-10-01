@@ -12,6 +12,7 @@ import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 import { importScopeLockKey } from '../../services/operator-import-common.js';
 import { readMarkupImport, runMarkupImport } from '../../services/markup-import.service.js';
 import { setMediaScanner } from '../../services/media-scan.service.js';
+import { UPLOAD_DIR } from '../../services/chat-attachment.service.js';
 
 // Runs the real MarkUp.io comments importer CLI against a real PostgreSQL
 // database (built with `prisma migrate deploy`) to prove the reconciliation
@@ -472,11 +473,12 @@ test('a MarkUp review whose file the media scanner blocks is reported, and its c
   fs.cpSync(path.join(fixtures, 'markup-import-basic'), inputDir, { recursive: true });
   const csv = path.join(inputDir, 'markup-comments.csv');
   fs.writeFileSync(csv, fs.readFileSync(csv, 'utf8').replaceAll('{{ALICE_EMAIL}}', `alice+scan-${suffix}@example.test`));
-  // In-process, uploads land in the repository's uploads directory (UPLOAD_DIR
-  // is fixed at load time); this test removes exactly the files it stored.
-  const uploadsDir = path.join(repoRoot, 'uploads');
-  const listUploads = () => new Set(fs.existsSync(uploadsDir) ? fs.readdirSync(uploadsDir) : []);
-  const uploadsBefore = listUploads();
+  // In-process, uploads land in the shared UPLOAD_DIR while other test files
+  // run concurrently, so this test tracks only the files its own import
+  // stored: the scanner sees every stored path for this tenant.
+  const scannedPaths = new Set();
+  // Stored paths are public URLs (`/uploads/<name>`); map them onto the disk.
+  const resolveUpload = (stored) => path.join(UPLOAD_DIR, path.basename(stored));
   try {
     await raw.organization.create({ data: { id: ids.org, name: 'MarkUp scan tenant', slug: `markup-scan-${suffix}` } });
     await raw.client.create({ data: { id: ids.client, organizationId: ids.org, name: 'Client' } });
@@ -487,7 +489,10 @@ test('a MarkUp review whose file the media scanner blocks is reported, and its c
     // What importing only the unblocked review (brief.pdf) would count.
     const briefOnly = await runMarkupImport(raw, { ...options, importData: { ...importData, sessions: importData.sessions.filter((session) => session.fileName === 'brief.pdf') } });
 
-    setMediaScanner({ scan: async ({ mimeType }) => ({ verdict: mimeType === 'image/png' ? 'blocked' : 'clean' }) });
+    setMediaScanner({ scan: async ({ organizationId, path: storedPath, mimeType }) => {
+      if (organizationId === ids.org) scannedPaths.add(resolveUpload(storedPath));
+      return { verdict: mimeType === 'image/png' ? 'blocked' : 'clean' };
+    } });
     const applied = await runMarkupImport(raw, { ...options, importData, apply: true });
     assert.equal(applied.complete, true);
     assert.deepEqual(applied.unsupported.filter((item) => item.code === 'MEDIA_BLOCKED').map((item) => item.fileName), ['homepage.png']);
@@ -497,13 +502,15 @@ test('a MarkUp review whose file the media scanner blocks is reported, and its c
       assert.equal(applied.totals[key], briefOnly.totals[key], `${key} counts only imported comments`);
     }
     assert.equal(await raw.reviewAnnotation.count({ where: { session: { projectId: ids.project } } }), briefOnly.totals.commentsPlanned);
-    const stored = [...listUploads()].filter((name) => !uploadsBefore.has(name) && name !== 'quarantine');
+    assert.equal(scannedPaths.size, 2, 'both review files were stored and scanned');
+    const stored = [...scannedPaths].filter((storedPath) => fs.existsSync(storedPath));
     assert.equal(stored.length, 1, 'the blocked file is removed; only the imported review keeps its file');
     assert.match(stored[0], /\.pdf$/);
+    const attachments = await raw.attachment.findMany({ where: { organizationId: ids.org }, select: { path: true } });
+    assert.deepEqual(attachments.map((attachment) => resolveUpload(attachment.path)), stored);
   } finally {
     setMediaScanner(null);
-    for (const name of listUploads()) if (!uploadsBefore.has(name) && name !== 'quarantine') fs.rmSync(path.join(uploadsDir, name), { force: true });
-    if (!uploadsBefore.size && fs.existsSync(uploadsDir) && !fs.readdirSync(uploadsDir).length) fs.rmdirSync(uploadsDir);
+    for (const storedPath of scannedPaths) fs.rmSync(storedPath, { force: true });
     await raw.reviewSession.deleteMany({ where: { projectId: ids.project } });
     await raw.markupImportRecord.deleteMany({ where: { organizationId: ids.org } });
     await raw.importRun.deleteMany({ where: { organizationId: ids.org } });

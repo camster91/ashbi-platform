@@ -174,7 +174,7 @@ export default function Timesheets() {
         </Card>
         <Card className="p-4">
           <p className="text-xs text-muted-foreground uppercase tracking-wide">Billable</p>
-          <p className="text-2xl font-bold mt-1 text-green-600 dark:text-green-400">
+          <p className="text-2xl font-bold mt-1 text-success">
             {formatHours(grandTotals.billable)}h
           </p>
         </Card>
@@ -257,7 +257,7 @@ export default function Timesheets() {
                       <td className="px-4 py-3">
                         <div className="text-sm font-medium text-foreground">{user.name || 'Unknown'}</div>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-green-600 dark:text-green-400">
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-success">
                             <DollarSign className="w-2.5 h-2.5" />{formatHours(weeklyBillable)}h
                           </span>
                           <span className="text-[10px] text-muted-foreground">
@@ -293,11 +293,11 @@ export default function Timesheets() {
                                     {formatHours(totalMin)}h
                                   </span>
                                   <div className="flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" title="Billable" />
-                                    <span className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-gray-500" title="Non-billable" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-success" title="Billable" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60" title="Non-billable" />
                                   </div>
                                   <div className="flex items-center gap-1 text-[9px]">
-                                    <span className="text-green-600 dark:text-green-400">{formatHours(dayBillable)}</span>
+                                    <span className="text-success">{formatHours(dayBillable)}</span>
                                     <span className="text-muted-foreground">/</span>
                                     <span className="text-muted-foreground">{formatHours(dayNonBillable)}</span>
                                   </div>
@@ -356,7 +356,7 @@ export default function Timesheets() {
                         <div className="text-sm font-bold text-foreground tabular-nums">
                           {formatHours(dt.total)}h
                         </div>
-                        <div className="text-[10px] text-green-600 dark:text-green-400">
+                        <div className="text-[10px] text-success">
                           {formatHours(dt.billable)} billable
                         </div>
                       </td>
@@ -366,7 +366,7 @@ export default function Timesheets() {
                     <div className="text-base font-bold text-foreground tabular-nums">
                       {formatHours(grandTotals.total)}h
                     </div>
-                    <div className="text-[10px] text-green-600 dark:text-green-400">
+                    <div className="text-[10px] text-success">
                       {formatHours(grandTotals.billable)} billable
                     </div>
                   </td>
@@ -380,11 +380,11 @@ export default function Timesheets() {
       {/* Legend */}
       <div className="flex items-center gap-6 text-xs text-muted-foreground">
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
+          <span className="w-2.5 h-2.5 rounded-full bg-success" />
           Billable hours
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-gray-400 dark:bg-gray-500" />
+          <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground/60" />
           Non-billable hours
         </div>
         <div className="flex items-center gap-1.5">
@@ -417,12 +417,12 @@ function EntryDetail({ entry, onApprove, onReject, isApproving, isRejecting, can
           )}
         </div>
         <div className="flex flex-col items-end flex-shrink-0">
-          <span className={`font-semibold tabular-nums ${isBillable ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+          <span className={`font-semibold tabular-nums ${isBillable ? 'text-success' : 'text-muted-foreground'}`}>
             {hours}h
           </span>
           <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
             isBillable
-              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+              ? 'bg-success/10 text-success'
               : 'bg-muted text-muted-foreground'
           }`}>
             {isBillable ? 'Billable' : 'Non-bill'}
@@ -432,7 +432,7 @@ function EntryDetail({ entry, onApprove, onReject, isApproving, isRejecting, can
 
       {(isApproved || isRejected) ? (
         <div className="pt-1 border-t border-border">
-          <span className={`text-[10px] font-semibold ${isApproved ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+          <span className={`text-[10px] font-semibold ${isApproved ? 'text-success' : 'text-destructive'}`}>
             {isApproved ? 'Approved' : 'Rejected'}
           </span>
           {isRejected && entry.rejectionReason && (
@@ -462,7 +462,7 @@ function EntryDetail({ entry, onApprove, onReject, isApproving, isRejecting, can
             className="w-full rounded border border-border bg-background px-2 py-1 text-[11px] text-foreground"
           />
           <div className="flex gap-1.5">
-            <button type="submit" disabled={!rejectionReason.trim() || isRejecting} className="rounded bg-red-600 px-2 py-1 text-[10px] font-medium text-white disabled:opacity-50">
+            <button type="submit" disabled={!rejectionReason.trim() || isRejecting} className="rounded bg-destructive px-2 py-1 text-[10px] font-medium text-destructive-foreground disabled:opacity-50">
               {isRejecting ? 'Rejecting…' : 'Confirm rejection'}
             </button>
             <button type="button" onClick={() => { setShowReject(false); setRejectionReason(''); }} disabled={isRejecting} className="rounded px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted">
@@ -475,14 +475,14 @@ function EntryDetail({ entry, onApprove, onReject, isApproving, isRejecting, can
         <button
           onClick={onApprove}
           disabled={isApproving}
-          className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded bg-success/10 text-success hover:bg-success/20 transition-colors disabled:opacity-50"
         >
           <CheckCircle2 className="w-2.5 h-2.5" /> Approve
         </button>
         <button
           onClick={() => setShowReject(true)}
           disabled={isRejecting}
-          className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50"
         >
           <XCircle className="w-2.5 h-2.5" /> Reject
         </button>

@@ -143,7 +143,7 @@ export default function QuickAdd({ open, onClose }) {
             className={cn(
               'flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors motion-reduce:transition-none',
               activeTab === tab.id
-                ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
+                ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:bg-muted',
             )}
           >
@@ -165,7 +165,7 @@ export default function QuickAdd({ open, onClose }) {
             onChange={(event) => setName(event.target.value)}
             disabled={saving || done}
             placeholder={activeTab === 'project' ? 'New website redesign' : activeTab === 'task' ? 'Design homepage hero' : 'Acme Corporation'}
-            className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary"
             autoComplete="off"
           />
         </div>
@@ -180,7 +180,7 @@ export default function QuickAdd({ open, onClose }) {
         {activeTab === 'project' && !clientsError && (
           <div>
             <label htmlFor="quick-add-client" className="mb-1.5 block text-sm font-medium">Client</label>
-            <select id="quick-add-client" value={clientId} onChange={(event) => setClientId(event.target.value)} disabled={saving || clientsFetching} className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <select id="quick-add-client" value={clientId} onChange={(event) => setClientId(event.target.value)} disabled={saving || clientsFetching} className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary">
               <option value="">Select a client</option>
               {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
             </select>
@@ -191,7 +191,7 @@ export default function QuickAdd({ open, onClose }) {
         {activeTab === 'task' && !projectsError && (
           <div>
             <label htmlFor="quick-add-project" className="mb-1.5 block text-sm font-medium">Project</label>
-            <select id="quick-add-project" value={projectId} onChange={(event) => setProjectId(event.target.value)} disabled={saving || projectsFetching} className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <select id="quick-add-project" value={projectId} onChange={(event) => setProjectId(event.target.value)} disabled={saving || projectsFetching} className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary">
               <option value="">Select a project</option>
               {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
@@ -202,16 +202,16 @@ export default function QuickAdd({ open, onClose }) {
         {activeTab === 'client' && (
           <div>
             <label htmlFor="quick-add-email" className="mb-1.5 block text-sm font-medium">Primary contact email</label>
-            <input id="quick-add-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving || done} placeholder="hello@acmecorp.com" className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500" autoComplete="email" />
+            <input id="quick-add-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving || done} placeholder="hello@acmecorp.com" className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary" autoComplete="email" />
           </div>
         )}
 
-        {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{error}</p>}
-        {done && <p role="status" className="flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/30 dark:text-green-300"><CheckSquare className="h-4 w-4" aria-hidden="true" />Task created.</p>}
+        {error && <p role="alert" className="rounded-lg bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p>}
+        {done && <p role="status" className="flex items-center gap-2 rounded-lg bg-success/5 px-3 py-2 text-sm text-success"><CheckSquare className="h-4 w-4" aria-hidden="true" />Task created.</p>}
 
         <ModalFooter>
           <button type="button" onClick={closeQuickAdd} disabled={saving} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50">Cancel</button>
-          <button type="submit" disabled={submitDisabled} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="submit" disabled={submitDisabled} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50">
             {saving ? 'Creating…' : `Create ${TAB_OPTIONS.find((tab) => tab.id === activeTab)?.label}`}
           </button>
         </ModalFooter>

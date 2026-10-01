@@ -15,14 +15,14 @@ export default function DraftRecoveryNotice({
 }) {
   if (draft) {
     return (
-      <div role="status" aria-live="polite" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+      <div role="status" aria-live="polite" className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm text-warning">
         <p className="font-semibold">Unsaved draft found</p>
         <p className="mt-0.5 text-xs">{savedTime(draftSavedAt) ? `Saved ${savedTime(draftSavedAt)}` : 'Review it before replacing the current form.'}</p>
         <div className="mt-2 flex flex-wrap gap-2">
-          <button type="button" onClick={() => onRecover?.(draft)} className="rounded-full bg-amber-900 px-3 py-1.5 text-xs font-semibold text-white">
+          <button type="button" onClick={() => onRecover?.(draft)} className="rounded-full bg-warning px-3 py-1.5 text-xs font-semibold text-warning-foreground">
             Recover draft
           </button>
-          <button type="button" onClick={onDiscard} className="rounded-full border border-amber-500 px-3 py-1.5 text-xs font-semibold">
+          <button type="button" onClick={onDiscard} className="rounded-full border border-warning px-3 py-1.5 text-xs font-semibold">
             Discard draft
           </button>
         </div>
@@ -31,11 +31,11 @@ export default function DraftRecoveryNotice({
   }
 
   if (status === 'conflict') {
-    return <p role="alert" className="text-sm font-medium text-red-700">A newer draft exists in another tab. Reload and choose which version to keep.</p>;
+    return <p role="alert" className="text-sm font-medium text-destructive">A newer draft exists in another tab. Reload and choose which version to keep.</p>;
   }
   if (status === 'error') {
     return (
-      <div role="alert" className="flex flex-wrap items-center gap-2 text-sm font-medium text-red-700">
+      <div role="alert" className="flex flex-wrap items-center gap-2 text-sm font-medium text-destructive">
         <span>Your draft could not be saved. Keep this page open and try again.</span>
         {onRetry && <button type="button" onClick={onRetry} className="underline">Try saving again</button>}
       </div>

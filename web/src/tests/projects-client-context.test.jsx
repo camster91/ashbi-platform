@@ -80,7 +80,7 @@ describe('Projects client-origin creation', () => {
 
     const board = await screen.findByRole('region', { name: 'Project status board' });
     expect(board).toHaveAttribute('tabindex', '0');
-    expect(screen.getByRole('heading', { name: 'Review' }).parentElement).toHaveClass('text-yellow-700');
+    expect(screen.getByRole('heading', { name: 'Review' }).parentElement).toHaveClass('text-warning');
   });
 
   it('fails safely when the URL names an unavailable client', async () => {

@@ -33,6 +33,10 @@ const LIFECYCLE_HOOKS = ['onRequest', 'preParsing', 'preValidation', 'preHandler
  * @property {'exempt' | 'scoped'} tenancy
  * @property {RouteValidators} zod
  * @property {Record<string, any>} jsonSchema Fastify `schema` route option (body, querystring, params), if any.
+ * @property {boolean} public Whether the route declares `config: { public: true }`.
+ * @property {boolean} actsForStaff Whether it declares `config: { actsForStaff: true }`
+ *   (a public route that still acts for the signed-in staff member; see
+ *   isPublicRoute in src/auth/mfa-enforcement.js).
  */
 
 /**
@@ -121,7 +125,11 @@ export async function collectRouteInventory({ jwtSecret = 'test-only-jwt-secret'
       }
       const jsonSchema = opts.schema && typeof opts.schema === 'object' ? opts.schema : {};
       for (const method of methods) {
-        routes.push({ method, url, guards, tenancy: isTenancyExemptUrl(url) ? 'exempt' : 'scoped', zod, jsonSchema });
+        routes.push({
+          method, url, guards, tenancy: isTenancyExemptUrl(url) ? 'exempt' : 'scoped', zod, jsonSchema,
+          public: opts.config?.public === true,
+          actsForStaff: opts.config?.actsForStaff === true,
+        });
       }
     }
 

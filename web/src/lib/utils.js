@@ -1,6 +1,7 @@
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { formatDate } from './format';
+import { statusClasses, statusLabel } from './status';
 
 export function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -32,81 +33,26 @@ export function truncate(str, length = 100) {
   return str.substring(0, length) + '...';
 }
 
+// Status and priority pills share one vocabulary with `StatusBadge`; see
+// `lib/status.js`. These return token classes for legacy pill markup.
 export function getPriorityColor(priority) {
-  switch (priority) {
-    case 'CRITICAL':
-      return 'text-red-700 bg-red-50';
-    case 'HIGH':
-      return 'text-orange-800 bg-orange-50';
-    case 'NORMAL':
-      return 'text-blue-700 bg-blue-50';
-    case 'LOW':
-      return 'text-gray-700 bg-gray-50';
-    default:
-      return 'text-gray-700 bg-gray-50';
-  }
+  return statusClasses('priority', priority);
 }
 
 export function getHealthColor(health) {
-  switch (health) {
-    case 'ON_TRACK':
-      return 'text-green-800 bg-green-50';
-    case 'NEEDS_ATTENTION':
-      return 'text-yellow-800 bg-yellow-50';
-    case 'AT_RISK':
-      return 'text-red-700 bg-red-50';
-    default:
-      return 'text-gray-700 bg-gray-50';
-  }
+  return statusClasses('health', health);
 }
 
 export function getStatusColor(status) {
-  switch (status) {
-    case 'OPEN':
-      return 'text-blue-700 bg-blue-50';
-    case 'AWAITING_RESPONSE':
-      return 'text-orange-800 bg-orange-50';
-    case 'RESOLVED':
-      return 'text-green-800 bg-green-50';
-    case 'SNOOZED':
-      return 'text-gray-700 bg-gray-50';
-    default:
-      return 'text-gray-700 bg-gray-50';
-  }
+  return statusClasses('thread', status);
 }
 
 export function getProjectStatusColor(status) {
-  switch (status) {
-    case 'STARTING_UP':
-      return 'text-gray-700 bg-gray-100 dark:bg-gray-900/30 dark:text-gray-400';
-    case 'DESIGN_DEV':
-      return 'text-blue-700 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400';
-    case 'ADDING_CONTENT':
-      return 'text-yellow-800 bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-400';
-    case 'FINALIZING':
-      return 'text-orange-800 bg-orange-100 dark:bg-orange-900/30 dark:text-orange-400';
-    case 'LAUNCHED':
-      return 'text-green-800 bg-green-100 dark:bg-green-900/30 dark:text-green-400';
-    case 'ON_HOLD':
-      return 'text-slate-700 bg-slate-100 dark:bg-slate-900/30 dark:text-slate-400';
-    case 'CANCELLED':
-      return 'text-red-700 bg-red-100 dark:bg-red-900/30 dark:text-red-400';
-    default:
-      return 'text-gray-700 bg-gray-100';
-  }
+  return statusClasses('project', status);
 }
 
 export function getProjectStatusLabel(status) {
-  switch (status) {
-    case 'STARTING_UP': return 'Starting Up';
-    case 'DESIGN_DEV': return 'Design & Dev';
-    case 'ADDING_CONTENT': return 'Adding Content';
-    case 'FINALIZING': return 'Finalizing';
-    case 'LAUNCHED': return 'Launched';
-    case 'ON_HOLD': return 'On Hold';
-    case 'CANCELLED': return 'Cancelled';
-    default: return status?.replace(/_/g, ' ') || 'Unknown';
-  }
+  return statusLabel('project', status);
 }
 
 export function getSentimentIcon(sentiment) {

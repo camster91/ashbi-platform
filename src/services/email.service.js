@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import { mailgunTrackingFields } from './mailgun-delivery.service.js';
 import { formatMoney } from '../utils/money.js';
+import { renderEmailTheme } from '../emails/theme.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = path.join(__dirname, '..', 'emails');
@@ -36,7 +37,8 @@ export function replaceVariables(html, variables = {}) {
 }
 
 /**
- * Load an HTML email template and replace {{variable}} placeholders.
+ * Load an HTML email template, fill its {{theme.*}} colours from the shared
+ * email theme (src/emails/theme.js) and replace {{variable}} placeholders.
  * @param {string} templateName - Filename in src/emails/ (e.g. 'welcome.html')
  * @param {object} variables - Key-value pairs to substitute
  * @returns {Promise<string>} Rendered HTML
@@ -44,7 +46,8 @@ export function replaceVariables(html, variables = {}) {
 export async function loadTemplate(templateName, variables = {}) {
   const filePath = path.join(TEMPLATE_DIR, templateName);
   const html = await readFile(filePath, 'utf-8');
-  return replaceVariables(html, variables);
+  // Theme colours first, so user-supplied values can never inject a theme token.
+  return replaceVariables(renderEmailTheme(html), variables);
 }
 
 /**

@@ -4,6 +4,8 @@ import { useAuth, AuthProvider } from './hooks/useAuth';
 import RateLimitNotice from './components/RateLimitNotice';
 import ErrorBoundary from './components/ErrorBoundary';
 import ImpersonationBanner from './components/ImpersonationBanner';
+import MfaEnrollmentGate from './components/MfaEnrollmentGate';
+import { MFA_ENROLLMENT_PATH } from './lib/mfa-enrollment';
 import { getPreloadedLogin } from './lib/initial-route';
 import { ToastProvider, useToast } from './hooks/useToast';
 import { apiErrorToast } from './lib/apiErrorToast';
@@ -31,6 +33,7 @@ const PortalEstimate = lazy(() => import('./pages/PortalEstimate'));
 const PortalReview = lazy(() => import('./pages/PortalReview'));
 const ClientPortal = lazy(() => import('./pages/ClientPortal'));
 const ClientInvite = lazy(() => import('./pages/ClientInvite'));
+const MfaEnrollmentRequired = lazy(() => import('./pages/MfaEnrollmentRequired'));
 const Layout = lazy(() => import('./components/Layout'));
 const QueryProvider = lazy(() => import('./components/QueryProvider'));
 
@@ -67,6 +70,7 @@ const InvoiceDetail = lazy(() => import('./pages/InvoiceDetail'));
 const Expenses = lazy(() => import('./pages/Expenses'));
 const Pipeline = lazy(() => import('./pages/Pipeline'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const WorkQueue = lazy(() => import('./pages/WorkQueue'));
 const Credentials = lazy(() => import('./pages/Credentials'));
 const Chat = lazy(() => import('./pages/Chat'));
 const AiContextSettings = lazy(() => import('./pages/AiContextSettings'));
@@ -192,7 +196,10 @@ function AppRoutes() {
         <Suspense fallback={<RouteLoader />}>
           <Routes>
           <Route path="/login" element={<LoginRoute />} />
-          {import.meta.env.DEV && (
+          {/* Dev-only gallery. The visual-regression build (playwright.visual.config.ts)
+              sets VITE_ENABLE_UI_LAB=true so its baselines can capture it; production
+              builds never set it. */}
+          {(import.meta.env.DEV || import.meta.env.VITE_ENABLE_UI_LAB === 'true') && (
             <Route path="/ui-lab" element={<UiLab />} />
           )}
           <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -212,16 +219,21 @@ function AppRoutes() {
           <Route path="/client/login" element={<ClientPortal />} />
           <Route path="/client/dashboard" element={<ClientPortal />} />
           <Route path="/" element={<RootRedirect />} />
+          {/* Organization MFA requirement: outside Layout, whose requests the API refuses until setup. */}
+          <Route path={MFA_ENROLLMENT_PATH} element={<PrivateRoute><QueryRoute><MfaEnrollmentRequired /></QueryRoute></PrivateRoute>} />
       <Route
         path="/*"
         element={
           <PrivateRoute>
+            {/* Organization MFA requirement: a session that must set up two-factor sees only the setup page. */}
+            <MfaEnrollmentGate>
             <QueryRoute>
               <Layout>
                 <ErrorBoundary>
                   <Suspense fallback={<PageLoader />}>
                   <Routes>
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/queue" element={<WorkQueue />} />
                   <Route path="/" element={<Navigate to="/dashboard" />} />
                   <Route path="/inbox" element={<Inbox />} />
                   <Route path="/thread/:id" element={<Thread />} />
@@ -270,6 +282,7 @@ function AppRoutes() {
                 </ErrorBoundary>
               </Layout>
             </QueryRoute>
+            </MfaEnrollmentGate>
           </PrivateRoute>
         }
       />
