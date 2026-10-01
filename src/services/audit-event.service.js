@@ -48,6 +48,8 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'client_portal.revision_responded': { entityType: 'revision_round', metadata: ['projectId', 'clientId', 'contactId', 'response', 'roundNumber', 'activityId'] },
   'client_portal.feedback_submitted': { entityType: 'project', metadata: ['clientId', 'contactId', 'activityId', 'messageLength'] },
   // A file the upload policy refused (docs/media-review.md "Upload checksums").
+  // A staff member shared a project file with the client portal, or stopped sharing it.
+  'attachment.client_visibility_changed': { entityType: 'attachment', metadata: ['projectId', 'fromVisible', 'toVisible'] },
   'upload.rejected': { entityType: 'attachment', metadata: ['surface', 'reason', 'mimeType', 'size', 'extension', 'projectId'] },
   'ai.connection_connected': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'baseUrlHost', 'defaultModel', 'allowedModelCount', 'monthlyBudgetCents', 'replacedStatus'] },
   'ai.connection_validated': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'baseUrlHost', 'result', 'errorType', 'fromStatus', 'toStatus'] },

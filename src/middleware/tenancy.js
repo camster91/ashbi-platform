@@ -56,7 +56,12 @@ export function isTenancyExemptUrl(url) {
     url.startsWith('/api/invoices/stripe-webhook') ||
     url.startsWith('/api/mailgun') ||
     url.startsWith('/api/slack/events') ||
+    // OAuth provider callbacks: the provider redirects the browser here, often
+    // without the session cookie (SameSite=Strict in production). The signed,
+    // browser-bound state (src/auth/oauth-state.js) authenticates the request
+    // and names the organization; each handler scopes its writes to it.
     url.startsWith('/api/slack/oauth/callback') ||
+    url.startsWith('/api/google-calendar/oauth/callback') ||
     // Probes read no tenant data; match the path so `?strict=1` and the
     // staff/loopback detail view are covered too.
     /^\/api\/(?:live|health(?:\/details)?)(?:\?|$)/.test(url)

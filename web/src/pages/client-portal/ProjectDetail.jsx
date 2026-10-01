@@ -7,10 +7,23 @@ import { cn } from '../../lib/utils';
 import { portalFetch, downloadPortalDocument, deletePortalDocument, fmtRelative, projectStatusLabel, projectStatusColor, priorityLabel, priorityColor, Icons, useProjectChat, PortalChatComposer, PortalMessageAttachments, canSendPortalMessage, PortalProgress, PortalDocumentList, PortalUploadZone, StatusBadge, portalFieldStyles, pageTitleClass, sectionTitleClass, labelClass } from './shared';
 import { formatDate } from '../../lib/format';
 
+// The task board's columns, in order. The server maps every task status to
+// one of these keys (GET /api/client-portal/projects/:id/tasks); tasks waiting
+// on the client get their own column.
+const TASK_COLUMNS = Object.freeze([
+  { key: 'WAITING_CLIENT', label: 'Waiting on you', dot: 'bg-warning' },
+  { key: 'TODO', label: 'To Do', dot: 'bg-muted-foreground' },
+  { key: 'IN_PROGRESS', label: 'In Progress', dot: 'bg-accent' },
+  { key: 'REVIEW', label: 'In Review', dot: 'bg-info' },
+  { key: 'BLOCKED', label: 'Blocked', dot: 'bg-destructive' },
+  { key: 'DONE', label: 'Done', dot: 'bg-success' },
+]);
+const EMPTY_TASK_COLUMNS = Object.freeze(Object.fromEntries(TASK_COLUMNS.map(({ key }) => [key, []])));
+
 // ── Project Detail (Kanban + Chat + Documents) ────────────────────────────────
 export default function ProjectDetail({ projectId, token, onBack }) {
   const [project, setProject] = useState(null);
-  const [tasks, setTasks] = useState({ TODO: [], IN_PROGRESS: [], DONE: [], BLOCKED: [] });
+  const [tasks, setTasks] = useState(EMPTY_TASK_COLUMNS);
   const [activeView, setActiveView] = useState('kanban'); // kanban | chat | documents
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -44,7 +57,7 @@ export default function ProjectDetail({ projectId, token, onBack }) {
         const tasksData = await tasksRes.json();
         const docsData = await docsRes.json();
         setProject(projData);
-        setTasks(tasksData.columns || { TODO: [], IN_PROGRESS: [], DONE: [], BLOCKED: [] });
+        setTasks({ ...EMPTY_TASK_COLUMNS, ...(tasksData.columns || {}) });
         setDocuments(Array.isArray(docsData) ? docsData : []);
       } catch (err) {
         setError(err.message);
@@ -189,12 +202,7 @@ export default function ProjectDetail({ projectId, token, onBack }) {
     );
   }
 
-  const kanbanColumns = [
-    { key: 'TODO', label: 'To Do', tasks: tasks.TODO, dot: 'bg-warning' },
-    { key: 'IN_PROGRESS', label: 'In Progress', tasks: tasks.IN_PROGRESS, dot: 'bg-accent' },
-    { key: 'DONE', label: 'Done', tasks: tasks.DONE, dot: 'bg-success' },
-    { key: 'BLOCKED', label: 'Blocked', tasks: tasks.BLOCKED || [], dot: 'bg-destructive' },
-  ];
+  const kanbanColumns = TASK_COLUMNS.map((column) => ({ ...column, tasks: tasks[column.key] || [] }));
 
   const detailTabs = [
     { id: 'kanban', label: 'Tasks', icon: Icons.projects },
@@ -213,7 +221,6 @@ export default function ProjectDetail({ projectId, token, onBack }) {
           <h2 className={cn(pageTitleClass, 'mb-0')}>{project.name}</h2>
           <StatusBadge color={projectStatusColor(project.status)}>{projectStatusLabel(project.status)}</StatusBadge>
         </div>
-        {project.aiSummary && <p className="mt-2 text-sm text-muted-foreground">{project.aiSummary}</p>}
       </div>
 
       {/* Progress */}
@@ -317,7 +324,6 @@ export default function ProjectDetail({ projectId, token, onBack }) {
                   col.tasks.map(task => (
                     <Card key={task.id} padding="sm" className="rounded-xl">
                       <h4 className="font-heading text-sm font-medium text-foreground">{task.title}</h4>
-                      {task.description && <p className="mt-1 text-xs text-muted-foreground">{task.description}</p>}
                       <div className="mt-2 flex flex-wrap items-center justify-between gap-1">
                         <StatusBadge color={priorityColor(task.priority)}>{priorityLabel(task.priority)}</StatusBadge>
                         {task.assignee && <span className="text-xs text-muted-foreground">{task.assignee.name}</span>}

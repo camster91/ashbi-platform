@@ -214,7 +214,6 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
                   <span className="font-semibold text-foreground">{p.name}</span>
                   <StatusBadge color={projectStatusColor(p.status)}>{projectStatusLabel(p.status)}</StatusBadge>
                 </div>
-                {p.aiSummary && <p className="mb-2 text-sm text-muted-foreground">{p.aiSummary}</p>}
                 <div className="mb-1.5 flex justify-between text-xs text-muted-foreground">
                   <span>Progress</span>
                   <span className="font-semibold text-foreground">{p.progressPct}%</span>
@@ -282,7 +281,6 @@ function ProjectsTab({ projects, setSelectedProject }) {
                 </div>
                 <StatusBadge color={projectStatusColor(p.status)}>{projectStatusLabel(p.status)}</StatusBadge>
               </div>
-              {p.aiSummary && <p className="mb-3 text-sm text-muted-foreground">{p.aiSummary}</p>}
               {p.totalTasks > 0 && (
                 <div>
                   <div className="mb-1.5 flex justify-between text-xs text-muted-foreground">

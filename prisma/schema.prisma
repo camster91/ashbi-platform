@@ -763,6 +763,11 @@ model Attachment {
   // written (docs/media-review.md "Upload checksums"). Null for rows stored
   // before migration 20261001090000_attachment_checksum (CHECK constraint).
   checksumSha256 String?
+  // Listed in the client portal's project Documents (PROJECT files only).
+  // Opt-in: staff uploads, including screen recordings, stay internal until a
+  // staff member shares them; client portal uploads are visible
+  // (migration 20261001170000_attachment_client_visible).
+  clientVisible  Boolean  @default(false)
   createdAt      DateTime @default(now())
 
   // Relations

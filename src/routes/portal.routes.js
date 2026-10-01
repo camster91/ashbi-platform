@@ -26,24 +26,23 @@ export default async function portalRoutes(fastify) {
   fastify.get('/:token', LEGACY_LINK_VIEW_RATE_LIMIT, async (request, reply) => {
     const { token } = request.params;
 
-    const project = await request.prisma.project.findUnique({
-      where: { viewToken: token },
-      include: {
+    // A trashed or cancelled project is not shown, as in the signed-in
+    // client portal.
+    const project = await request.prisma.project.findFirst({
+      where: { viewToken: token, deletedAt: null, status: { not: 'CANCELLED' } },
+      // An explicit select: the internal health rating, AI summary and notes
+      // are never loaded for this public view.
+      select: {
+        name: true,
+        description: true,
+        status: true,
+        updatedAt: true,
         client: { select: { name: true } },
         revisionRounds: {
           orderBy: { roundNumber: 'desc' },
-          take: 10
-        },
-        notes: {
-          where: { isPinned: true },
-          orderBy: { updatedAt: 'desc' },
-          take: 5,
-          select: {
-            id: true,
-            title: true,
-            content: true,
-            updatedAt: true
-          }
+          take: 10,
+          // The same client-facing fields as the signed-in portal.
+          select: { id: true, roundNumber: true, status: true, notes: true, requestedAt: true, approvedAt: true, updatedAt: true },
         },
         milestones: {
           orderBy: { dueDate: 'asc' },
@@ -75,16 +74,16 @@ export default async function portalRoutes(fastify) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
+    // Client-facing: never the internal health rating, the AI summary, or
+    // project notes (pinning a note is a staff feature, not a publish action;
+    // notes have no client-visible flag).
     return {
       name: project.name,
       description: project.description,
       status: project.status,
-      health: project.health,
       clientName: project.client?.name,
-      aiSummary: project.aiSummary,
       milestones: project.milestones,
       revisionRounds: project.revisionRounds,
-      pinnedNotes: project.notes,
       activeTasks: project.tasks.map(t => ({
         title: t.title,
         status: t.status,

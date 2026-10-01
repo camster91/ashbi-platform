@@ -3,7 +3,8 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
-import { fileUpload } from '../validators/schemas.js';
+import { attachmentClientVisibilitySchema, fileUpload, validateBody } from '../validators/schemas.js';
+import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { sendStoredFile } from '../utils/send-file.js';
 import { writeUploadThenPersist } from '../utils/stored-upload.js';
 import { recordRejectedUpload, sha256Hex } from '../services/upload-integrity.service.js';
@@ -128,6 +129,42 @@ export default async function attachmentRoutes(fastify) {
     }
 
     return reply.status(201).send(attachment);
+  });
+
+  // Share a project file with the client portal (or stop sharing it). Files
+  // are internal by default (Attachment.clientVisible); only PROJECT files
+  // appear in the portal's Documents. Like delete: the uploader or an admin.
+  fastify.patch('/:id/client-visibility', {
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(attachmentClientVisibilitySchema)],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { clientVisible } = request.body;
+
+    const existing = await request.prisma.attachment.findFirst({
+      where: { id, entityType: 'PROJECT' },
+      select: { id: true, entityId: true, uploadedById: true, clientVisible: true },
+    });
+    if (!existing) {
+      return reply.status(404).send({ error: 'Attachment not found' });
+    }
+    if (existing.uploadedById !== request.user.id && request.user.role !== 'ADMIN') {
+      return reply.status(403).send({ error: 'Only the uploader or an admin can change who sees this file' });
+    }
+
+    const updated = await request.prisma.attachment.update({
+      where: { id },
+      data: { clientVisible },
+      include: { uploadedBy: { select: { id: true, name: true } } },
+    });
+    if (existing.clientVisible !== clientVisible) {
+      await recordRequestAuditEvent(request.prisma, request, {
+        action: 'attachment.client_visibility_changed',
+        entityId: id,
+        metadata: { projectId: existing.entityId, fromVisible: existing.clientVisible, toVisible: clientVisible },
+      });
+    }
+    return updated;
   });
 
   // Delete attachment

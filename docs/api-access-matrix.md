@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 4 |
-| staff | 367 |
+| staff | 368 |
 | staff (inline) | 1 |
-| **total** | 552 |
+| **total** | 553 |
 
 ## Routes by prefix
 
@@ -183,6 +183,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/attachments` | staff | scoped |  |
 | POST | `/api/attachments` | staff | scoped |  |
 | DELETE | `/api/attachments/:id` | staff | scoped |  |
+| PATCH | `/api/attachments/:id/client-visibility` | staff | scoped |  |
 | GET | `/api/attachments/uploads/:filename` | staff | scoped |  |
 
 ### /api/audit-events
@@ -496,7 +497,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/google-calendar/connection` | staff | scoped |  |
 | POST | `/api/google-calendar/connection/disconnect` | staff | scoped |  |
 | POST | `/api/google-calendar/events/:eventId/sync` | staff | scoped |  |
-| GET | `/api/google-calendar/oauth/callback` | public | scoped | oauth callback: OAuth state is a signed JWT verified in the handler. Not tenancy-exempt, so the tenant guard also requires the staff session cookie. |
+| GET | `/api/google-calendar/oauth/callback` | public | exempt | oauth callback: OAuth state is a signed, browser-bound JWT verified in the handler; tenancy-exempt like the Slack callback (no session cookie arrives with the provider redirect), so writes are scoped to the organization and user in the state. |
 | GET | `/api/google-calendar/oauth/start` | staff | scoped |  |
 
 ### /api/health

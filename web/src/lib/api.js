@@ -655,6 +655,9 @@ export const api = {
   },
   deleteAttachment: (id) =>
     request(`/attachments/${id}`, { method: 'DELETE' }),
+  // Share a project file with the client portal's Documents (or stop sharing).
+  setAttachmentClientVisibility: (id, clientVisible) =>
+    request(`/attachments/${id}/client-visibility`, { method: 'PATCH', body: { clientVisible } }),
   // Chat media (docs/chat-media.md): upload first as a pending chat upload,
   // then send the message with its `attachmentIds`.
   uploadChatFile: (projectId, file, options = {}) => {

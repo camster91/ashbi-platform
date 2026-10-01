@@ -14,7 +14,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'unit-test-secret-at-least-32
 process.env.CREDENTIALS_KEY = process.env.CREDENTIALS_KEY || 'unit-test-credentials-key';
 
 const { default: mfaRoutes, REAUTH_PASSWORD_MAX_FAILURES, resetReauthPasswordFailures } = await import('../../routes/mfa.routes.js');
-const { default: apiKeyRoutes, authenticateApiKey } = await import('../../routes/api-key.routes.js');
+const { default: apiKeyRoutes, createApiKeyAuthenticator } = await import('../../routes/api-key.routes.js');
 const { default: aiBridgeRoutes } = await import('../../routes/ai-bridge.routes.js');
 const { isCurrentUserSession, signUserSession } = await import('../../auth/session.js');
 const { generateTotpSecret, totp } = await import('../../auth/totp.js');
@@ -137,7 +137,7 @@ async function buildApp(t, db) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
   });
-  app.decorate('authenticateWithApiKey', authenticateApiKey);
+  app.decorate('authenticateWithApiKey', createApiKeyAuthenticator({ prisma: db.client }));
   app.addHook('onRequest', async (request) => { request.prisma = db.client; });
   await app.register(mfaRoutes, { prefix: '/api/auth' });
   await app.register(apiKeyRoutes, { prefix: '/api/api-keys' });
