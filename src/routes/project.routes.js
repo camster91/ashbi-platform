@@ -88,7 +88,8 @@ export default async function projectRoutes(fastify) {
       status, health, hourlyBudget, startDate, endDate,
     } = request.body;
 
-    const data = { name, description, clientId, defaultOwnerId };
+    // null (the create modal's "no default owner") and omitted both store none.
+    const data = { name, description, clientId, defaultOwnerId: defaultOwnerId ?? null };
     // Optional fields the schema validates; omitted ones keep the DB defaults.
     if (status) data.status = status;
     if (health) data.health = health;

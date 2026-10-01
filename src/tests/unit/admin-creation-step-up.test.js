@@ -112,6 +112,6 @@ test('POST /api/team: an ADMIN needs step-up re-authentication and is audited', 
   assert.equal(db.audits.at(-1).action, 'user.created');
   assert.equal(db.audits.at(-1).metadata.role, 'ADMIN');
 
-  const team = await app.inject({ method: 'POST', url: '/', payload: { ...NEW_MEMBER, email: 'team@agency.test', role: 'STAFF' } });
+  const team = await app.inject({ method: 'POST', url: '/', payload: { ...NEW_MEMBER, email: 'team@agency.test', role: 'TEAM' } });
   assert.equal(team.statusCode, 201, team.body);
 });

@@ -22,6 +22,16 @@ function formatDate(date) {
   return new Date(date).toLocaleDateString({ month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// Estimates store the tax amount, not the rate; recover the rate the amount
+// was computed from (round2(subtotal * rate / 100)) when editing.
+function estimateTaxRate(estimate) {
+  if (estimate.taxRate !== undefined && estimate.taxRate !== null) return estimate.taxRate;
+  const subtotal = Number(estimate.subtotal) || 0;
+  const tax = Number(estimate.tax) || 0;
+  if (subtotal <= 0) return tax > 0 ? 0 : 13;
+  return Math.round((tax / subtotal) * 100 * 100) / 100;
+}
+
 function defaultLineItem() {
   return { description: '', quantity: 1, rate: 0 };
 }
@@ -196,12 +206,13 @@ export default function Estimates() {
 
   const handleUpdate = (e) => {
     e.preventDefault();
+    // updateEstimateSchema: the client cannot change; an emptied
+    // "Valid until" clears it (null).
     const payload = {
-      clientId: form.clientId,
       title: form.title || undefined,
       description: form.description || undefined,
       taxRate: parseFloat(form.taxRate) || 0,
-      validUntil: form.validUntil || undefined,
+      validUntil: form.validUntil || null,
       lineItems: form.lineItems.map(li => ({
         description: li.description,
         quantity: parseFloat(li.quantity) || 0,
@@ -217,7 +228,7 @@ export default function Estimates() {
       clientId: estimate.clientId || '',
       title: estimate.title || '',
       description: estimate.description || '',
-      taxRate: estimate.taxRate ?? 13,
+      taxRate: estimateTaxRate(estimate),
       validUntil: estimate.validUntil ? estimate.validUntil.split('T')[0] : '',
       lineItems: estimate.lineItems?.length
         ? estimate.lineItems.map(li => ({

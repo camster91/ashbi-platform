@@ -2,6 +2,7 @@
 // docs/media-review.md), against an in-memory database wrapped by the real
 // tenant proxy.
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -23,6 +24,21 @@ const USERS = {
   adminB: { id: 'admin-b', role: 'ADMIN', organizationId: 'org-b', name: 'Blake Admin', email: 'blake@b.test' },
   botA: { id: 'bot-a', role: 'BOT', organizationId: 'org-a', name: 'Bot' },
 };
+
+// node --test runs test files in parallel and the portal routes read
+// <cwd>/uploads/<basename of attachment.path>, so every stored test file gets
+// a unique name (and the attachment row points at it) instead of sharing
+// fixed names like image-a.bin with other test files.
+function storeAttachmentFile(t, db, attachmentId, bytes) {
+  const dir = path.join(process.cwd(), 'uploads');
+  fs.mkdirSync(dir, { recursive: true });
+  const name = `${attachmentId}-${randomUUID()}.bin`;
+  const file = path.join(dir, name);
+  fs.writeFileSync(file, bytes);
+  t.after(() => fs.rmSync(file, { force: true }));
+  db.tables.attachment.find((row) => row.id === attachmentId).path = `/uploads/${name}`;
+  return name;
+}
 
 async function setup(t) {
   const db = seedReviewOrganizations(createFakeReviewDb());
@@ -327,12 +343,7 @@ describe('media review share links', () => {
     const { app, guest, db, createSession, createLink } = await setup(t);
     const session = await createSession();
     const { token } = await createLink(session.id);
-    const dir = path.join(process.cwd(), 'uploads');
-    fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, 'image-a.bin');
-    const created = !fs.existsSync(file);
-    fs.writeFileSync(file, Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]));
-    t.after(() => { if (created) fs.rmSync(file, { force: true }); });
+    const stored = storeAttachmentFile(t, db, 'image-a', Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]));
 
     const response = await guest('GET', `${token}/file`);
     assert.equal(response.statusCode, 200);
@@ -345,7 +356,7 @@ describe('media review share links', () => {
     assert.equal(response.headers['content-security-policy'], "default-src 'none'; sandbox");
     assert.equal(response.rawPayload.length, 7);
 
-    db.tables.attachment.find((row) => row.id === 'image-a').path = '/uploads/quarantine/image-a.bin';
+    db.tables.attachment.find((row) => row.id === 'image-a').path = `/uploads/quarantine/${stored}`;
     assert.equal((await guest('GET', `${token}/file`)).statusCode, 404);
   });
 
@@ -508,19 +519,11 @@ describe('media review guest write bounds', () => {
 });
 
 describe('media review share-link file downloads', () => {
-  function storedFile(t, name, bytes) {
-    const dir = path.join(process.cwd(), 'uploads');
-    fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, name);
-    fs.writeFileSync(file, bytes);
-    t.after(() => fs.rmSync(file, { force: true }));
-  }
-
   it('serves non-Latin-1 file names with an ASCII fallback and RFC 5987 name', async (t) => {
     const { guest, db, createSession, createLink } = await setup(t);
     const session = await createSession();
     const { token } = await createLink(session.id);
-    storedFile(t, 'image-a.bin', Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    storeAttachmentFile(t, db, 'image-a', Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     const image = db.tables.attachment.find((row) => row.id === 'image-a');
     image.originalName = '日本.png';
     const japanese = await guest('GET', `${token}/file`);
@@ -529,7 +532,7 @@ describe('media review share-link file downloads', () => {
 
     const pdf = await createSession('teamA', { attachmentId: 'pdf-a', title: 'Brief' });
     const { token: pdfToken } = await createLink(pdf.id);
-    storedFile(t, 'pdf-a.bin', Buffer.from('%PDF-1.4'));
+    storeAttachmentFile(t, db, 'pdf-a', Buffer.from('%PDF-1.4'));
     db.tables.attachment.find((row) => row.id === 'pdf-a').originalName = 'brief\u2014v2.pdf';
     const brief = await guest('GET', `${pdfToken}/file`);
     assert.equal(brief.statusCode, 200, brief.body);
@@ -537,11 +540,11 @@ describe('media review share-link file downloads', () => {
   });
 
   it('honours single byte ranges for video, confined to the linked file', async (t) => {
-    const { app, createSession, createLink } = await setup(t);
+    const { app, db, createSession, createLink } = await setup(t);
     const session = await createSession('teamA', { attachmentId: 'video-a', title: 'Walkthrough' });
     const { token } = await createLink(session.id);
     const bytes = Buffer.from('0123456789abcdefghij');
-    storedFile(t, 'video-a.bin', bytes);
+    storeAttachmentFile(t, db, 'video-a', bytes);
     const get = (range) => app.inject({ method: 'GET', url: `/api/portal/review/${token}/file`, headers: range ? { range } : {} });
 
     const full = await get();

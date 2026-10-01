@@ -215,12 +215,20 @@ export default function Expenses() {
       setUploading(false);
     }
 
+    // Shape checked by createExpenseSchema / expenseUpdateSchema
+    // (src/tests/unit/ui-payload-contract.test.js): a "YYYY-MM-DD" date, null
+    // for no client/project, '' or null for no receipt.
     const payload = {
-      ...form,
+      description: form.description,
       amount: parseFloat(form.amount),
-      receiptUrl,
+      currency: form.currency,
+      category: form.category,
+      date: form.date,
+      billable: Boolean(form.billable),
+      notes: form.notes,
       clientId: form.clientId || null,
       projectId: form.projectId || null,
+      receiptUrl: receiptUrl || null,
     };
 
     if (editingId) {
@@ -460,6 +468,7 @@ export default function Expenses() {
                   value={form.date}
                   onChange={(e) => setForm({ ...form, date: e.target.value })}
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  required
                 />
               </div>
 

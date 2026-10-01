@@ -1108,31 +1108,115 @@
       },
       "BrandSettings": {
         "properties": {
+          "accentColor": {
+            "pattern": "^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$",
+            "type": "string"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "companyName": {
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
           },
-          "fontFamily": {
-            "maxLength": 100,
-            "type": "string"
+          "contractHeader": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
-          "logoUrl": {
-            "format": "uri",
-            "maxLength": 2048,
-            "type": "string"
+          "email": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "",
+                    "type": "string"
+                  },
+                  {
+                    "format": "email",
+                    "maxLength": 255,
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "invoiceFooter": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "primaryColor": {
-            "pattern": "^#[0-9a-fA-F]{6}$",
+            "pattern": "^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$",
             "type": "string"
           },
-          "secondaryColor": {
-            "pattern": "^#[0-9a-fA-F]{6}$",
-            "type": "string"
+          "proposalFooter": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
-          "tagline": {
-            "maxLength": 500,
-            "type": "string"
+          "taxId": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "website": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object"
@@ -1181,18 +1265,41 @@
       },
       "CalendarEventCreate": {
         "properties": {
+          "attendeeIds": {
+            "items": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
           "clientId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "color": {
             "maxLength": 20,
             "type": "string"
           },
           "description": {
-            "maxLength": 10000,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "endTime": {
             "format": "date-time",
@@ -1203,13 +1310,27 @@
             "type": "boolean"
           },
           "location": {
-            "maxLength": 500,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "projectId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "startTime": {
             "format": "date-time",
@@ -1224,8 +1345,11 @@
             "default": "MEETING",
             "enum": [
               "MEETING",
-              "TASK",
+              "CALL",
+              "DEADLINE",
               "REMINDER",
+              "MILESTONE",
+              "TASK",
               "BLOCKED_TIME",
               "OTHER"
             ],
@@ -1241,35 +1365,71 @@
       },
       "CalendarEventUpdate": {
         "properties": {
+          "attendeeIds": {
+            "items": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
           "clientId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "color": {
             "maxLength": 20,
             "type": "string"
           },
           "description": {
-            "maxLength": 10000,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "endTime": {
             "format": "date-time",
             "type": "string"
           },
           "isAllDay": {
-            "default": false,
             "type": "boolean"
           },
           "location": {
-            "maxLength": 500,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "projectId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "startTime": {
             "format": "date-time",
@@ -1281,11 +1441,13 @@
             "type": "string"
           },
           "type": {
-            "default": "MEETING",
             "enum": [
               "MEETING",
-              "TASK",
+              "CALL",
+              "DEADLINE",
               "REMINDER",
+              "MILESTONE",
+              "TASK",
               "BLOCKED_TIME",
               "OTHER"
             ],
@@ -1789,6 +1951,8 @@
             "default": "ACTIVE",
             "enum": [
               "ACTIVE",
+              "PAUSED",
+              "CHURNED",
               "INACTIVE",
               "PROSPECT"
             ],
@@ -1873,10 +2037,15 @@
               ],
               "type": "object"
             },
+            "maxItems": 100,
             "type": "array"
           },
           "tax": {
-            "default": 0,
+            "minimum": 0,
+            "type": "number"
+          },
+          "taxRate": {
+            "maximum": 50,
             "minimum": 0,
             "type": "number"
           },
@@ -1886,8 +2055,14 @@
             "type": "string"
           },
           "validUntil": {
-            "format": "date-time",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -1900,7 +2075,11 @@
         "properties": {
           "amount": {
             "exclusiveMinimum": 0,
+            "maximum": 10000000,
             "type": "number"
+          },
+          "billable": {
+            "type": "boolean"
           },
           "category": {
             "maxLength": 50,
@@ -1908,12 +2087,27 @@
             "type": "string"
           },
           "clientId": {
-            "maxLength": 50,
-            "minLength": 1,
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "CAD",
+              "EUR",
+              "GBP"
+            ],
             "type": "string"
           },
           "date": {
-            "format": "date-time",
             "type": "string"
           },
           "description": {
@@ -1922,13 +2116,27 @@
             "type": "string"
           },
           "notes": {
-            "maxLength": 2000,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "projectId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "receiptUrl": {
             "anyOf": [
@@ -2089,9 +2297,16 @@
             "type": "string"
           },
           "defaultOwnerId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "description": {
             "maxLength": 5000,
@@ -2463,6 +2678,18 @@
             "minLength": 1,
             "type": "string"
           },
+          "clientId": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "currency": {
             "enum": [
               "USD",
@@ -2473,7 +2700,6 @@
             "type": "string"
           },
           "date": {
-            "format": "date-time",
             "type": "string"
           },
           "description": {
@@ -2482,8 +2708,27 @@
             "type": "string"
           },
           "notes": {
-            "maxLength": 5000,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projectId": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "receiptUrl": {
             "anyOf": [
@@ -2980,15 +3225,21 @@
       "MilestoneCreate": {
         "properties": {
           "color": {
-            "maxLength": 20,
+            "pattern": "^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$",
             "type": "string"
           },
           "description": {
-            "maxLength": 2000,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "dueDate": {
-            "format": "date-time",
             "type": "string"
           },
           "name": {
@@ -3005,15 +3256,21 @@
       "MilestoneUpdate": {
         "properties": {
           "color": {
-            "maxLength": 20,
+            "pattern": "^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$",
             "type": "string"
           },
           "description": {
-            "maxLength": 2000,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "dueDate": {
-            "format": "date-time",
             "type": "string"
           },
           "name": {
@@ -3023,17 +3280,13 @@
           },
           "status": {
             "enum": [
-              "PLANNED",
+              "PENDING",
               "IN_PROGRESS",
-              "COMPLETED",
-              "BLOCKED"
+              "COMPLETED"
             ],
             "type": "string"
           }
         },
-        "required": [
-          "name"
-        ],
         "type": "object"
       },
       "NoteFromTemplate": {
@@ -5141,11 +5394,10 @@
             "type": "string"
           },
           "role": {
-            "default": "STAFF",
+            "default": "TEAM",
             "enum": [
               "ADMIN",
-              "STAFF",
-              "CLIENT"
+              "TEAM"
             ],
             "type": "string"
           },
@@ -5196,8 +5448,7 @@
           "role": {
             "enum": [
               "ADMIN",
-              "STAFF",
-              "CLIENT"
+              "TEAM"
             ],
             "type": "string"
           },
@@ -5599,20 +5850,138 @@
       },
       "UpdateClient": {
         "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "city": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clientNotes": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "communicationPrefs": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "contactPerson": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "country": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
           "domain": {
             "maxLength": 255,
             "type": "string"
+          },
+          "knowledgeBase": {
+            "anyOf": [
+              {
+                "items": {},
+                "maxItems": 500,
+                "type": "array"
+              },
+              {
+                "additionalProperties": {},
+                "type": "object"
+              }
+            ]
           },
           "name": {
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
           },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "relationshipStatus": {
+            "enum": [
+              "ACTIVE",
+              "ARCHIVED",
+              "LEAD",
+              "CHURNED"
+            ],
+            "type": "string"
+          },
+          "serviceType": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "status": {
             "enum": [
               "ACTIVE",
+              "PAUSED",
+              "CHURNED",
               "INACTIVE",
               "PROSPECT"
+            ],
+            "type": "string"
+          },
+          "tier": {
+            "enum": [
+              "T1",
+              "T2",
+              "T3"
             ],
             "type": "string"
           }
@@ -5649,6 +6018,7 @@
               ],
               "type": "object"
             },
+            "maxItems": 100,
             "type": "array"
           },
           "status": {
@@ -5666,6 +6036,11 @@
             "minimum": 0,
             "type": "number"
           },
+          "taxRate": {
+            "maximum": 50,
+            "minimum": 0,
+            "type": "number"
+          },
           "title": {
             "maxLength": 200,
             "minLength": 1,
@@ -5674,7 +6049,6 @@
           "validUntil": {
             "anyOf": [
               {
-                "format": "date-time",
                 "type": "string"
               },
               {
@@ -5858,6 +6232,18 @@
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
+          },
+          "defaultOwnerId": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "description": {
             "maxLength": 5000,

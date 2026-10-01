@@ -121,7 +121,8 @@ export const createProjectSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(5000).optional(),
   clientId: cuidId,
-  defaultOwnerId: cuidId.optional(),
+  // The create modal sends null for "no default owner".
+  defaultOwnerId: cuidId.nullable().optional(),
   status: z.enum(PROJECT_STATUS_VALUES).optional(),
   health: z.enum(PROJECT_HEALTH_VALUES).optional(),
   hourlyBudget: z.number().positive().optional(),
@@ -135,6 +136,7 @@ export const updateProjectSchema = z.object({
   status: z.enum(PROJECT_STATUS_VALUES).optional(),
   health: z.enum(PROJECT_HEALTH_VALUES).optional(),
   clientId: cuidId.optional(),
+  defaultOwnerId: cuidId.nullable().optional(),
   hourlyBudget: z.number().positive().optional(),
   startDate: z.string().datetime().nullable().optional(),
   endDate: z.string().datetime().nullable().optional(),
@@ -169,10 +171,20 @@ export const updateTaskSchema = z.object({
 });
 
 // ── Client schemas ─────────────────────────────────────────────────────────
+// Client.status (prisma/schema.prisma) is ACTIVE | PAUSED | CHURNED, which is
+// what the staff UI offers. INACTIVE and PROSPECT were the only non-ACTIVE
+// values the API accepted before, so they stay accepted for existing API
+// clients. Any non-ACTIVE status (and an ARCHIVED or CHURNED relationship)
+// ends portal access (clientStateRevokesPortal).
+export const CLIENT_STATUS_VALUES = ['ACTIVE', 'PAUSED', 'CHURNED', 'INACTIVE', 'PROSPECT'];
+export const CLIENT_RELATIONSHIP_STATUS_VALUES = ['ACTIVE', 'ARCHIVED', 'LEAD', 'CHURNED'];
+export const CLIENT_TIER_VALUES = ['T1', 'T2', 'T3'];
+const optionalClientText = (max) => z.string().trim().max(max).nullable().optional();
+
 export const createClientSchema = z.object({
   name: z.string().min(1).max(200),
   domain: z.string().max(255).optional(),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'PROSPECT']).optional().default('ACTIVE'),
+  status: z.enum(CLIENT_STATUS_VALUES).optional().default('ACTIVE'),
   contacts: z.array(z.object({
     email: z.string().email().max(255),
     name: z.string().min(1).max(200),
@@ -181,10 +193,24 @@ export const createClientSchema = z.object({
   })).max(10).optional(),
 });
 
+// Every field the update handler (client.routes.js PUT /:id) writes.
 export const updateClientSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   domain: z.string().max(255).optional(),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'PROSPECT']).optional(),
+  status: z.enum(CLIENT_STATUS_VALUES).optional(),
+  relationshipStatus: z.enum(CLIENT_RELATIONSHIP_STATUS_VALUES).optional(),
+  tier: z.enum(CLIENT_TIER_VALUES).optional(),
+  communicationPrefs: z.record(z.string(), z.unknown()).optional(),
+  knowledgeBase: z.union([z.array(z.unknown()).max(500), z.record(z.string(), z.unknown())]).optional(),
+  phone: optionalClientText(50),
+  // `notes` is the older name for clientNotes; the handler stores it there.
+  notes: optionalClientText(10_000),
+  clientNotes: optionalClientText(10_000),
+  address: optionalClientText(500),
+  city: optionalClientText(200),
+  country: z.string().trim().min(1).max(100).optional(),
+  contactPerson: optionalClientText(200),
+  serviceType: optionalClientText(200),
 });
 
 // ── Invoice schemas ───────────────────────────────────────────────────────
@@ -254,15 +280,33 @@ export const createInvoiceSchema = z.object({
 });
 
 // ── Expense schemas ────────────────────────────────────────────────────────
+// The Expenses page sends <input type="date"> values ("YYYY-MM-DD", stored as
+// the start of that day in UTC, which is how the page reads them back), null
+// for "no client/project", '' or null for "no receipt", and the receipt URL
+// that POST /api/expenses/upload-receipt returned. The route decides whether
+// a receiptUrl is acceptable (receiptColumns in expense.routes.js: only
+// /uploads/receipt-<uuid>.<ext> stored by this server, see
+// src/utils/stored-upload.js, or the expense's current value) and computes
+// its checksum.
+export const EXPENSE_CURRENCIES = ['USD', 'CAD', 'EUR', 'GBP'];
+const expenseDate = invoiceDateInput({ endOfDay: false });
+const expenseCurrency = z.preprocess(
+  (value) => (typeof value === 'string' ? value.trim().toUpperCase() : value),
+  z.enum(EXPENSE_CURRENCIES),
+);
+const expenseReceiptUrl = z.string().max(500).nullable();
+
 export const createExpenseSchema = z.object({
-  description: z.string().min(1).max(500),
-  amount: z.number().positive(),
-  date: z.string().datetime(),
+  description: z.string().trim().min(1).max(500),
+  amount: z.number().positive().max(10_000_000),
+  currency: expenseCurrency.optional(),
+  date: expenseDate,
   category: z.string().min(1).max(50),
-  clientId: cuidId.optional(),
-  projectId: cuidId.optional(),
-  notes: z.string().max(2000).optional(),
-  receiptUrl: z.string().max(500).nullable().optional(),
+  billable: z.boolean().optional(),
+  clientId: cuidId.nullable().optional(),
+  projectId: cuidId.nullable().optional(),
+  receiptUrl: expenseReceiptUrl.optional(),
+  notes: z.string().max(5_000).nullable().optional(),
 });
 
 // ── Invoice update schema ─────────────────────────────────────────────────
@@ -447,23 +491,37 @@ const estimateLineItemSchema = z.object({
   rate: z.number().nonnegative(),
 });
 
+// The Estimates page sends a tax *rate* (percent, like invoices' taxRate) and
+// shows tax = round2(subtotal * taxRate / 100); the route stores that same
+// amount (computeEstimateTotals in estimate.routes.js). A fixed tax amount
+// (`tax`) is still accepted for API clients, but not together with taxRate.
+// validUntil may be a date ("YYYY-MM-DD", valid through the end of that UTC
+// day) or an ISO datetime.
+const estimateTaxRate = z.number().min(0).max(50);
+const estimateValidUntil = invoiceDateInput({ endOfDay: true });
+const notBothTaxFields = (value) => !(value.taxRate !== undefined && value.tax !== undefined);
+const notBothTaxFieldsMessage = { message: 'Send either taxRate (percent) or tax (amount), not both', path: ['taxRate'] };
+
 export const createEstimateSchema = z.object({
   clientId: cuidId,
-  title: z.string().min(1).max(200),
+  title: z.string().trim().min(1, 'Title is required').max(200),
   description: z.string().max(5000).optional(),
-  lineItems: z.array(estimateLineItemSchema).optional().default([]),
-  tax: z.number().nonnegative().optional().default(0),
-  validUntil: z.string().datetime().optional(),
-});
+  lineItems: z.array(estimateLineItemSchema).max(100).optional().default([]),
+  taxRate: estimateTaxRate.optional(),
+  tax: z.number().nonnegative().optional(),
+  validUntil: estimateValidUntil.nullable().optional(),
+}).refine(notBothTaxFields, notBothTaxFieldsMessage);
 
 export const updateEstimateSchema = z.object({
-  title: z.string().min(1).max(200).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
   description: z.string().max(5000).optional(),
-  lineItems: z.array(estimateLineItemSchema).optional(),
+  lineItems: z.array(estimateLineItemSchema).max(100).optional(),
+  taxRate: estimateTaxRate.optional(),
   tax: z.number().nonnegative().optional(),
-  validUntil: z.string().datetime().nullable().optional(),
+  validUntil: estimateValidUntil.nullable().optional(),
   status: z.enum(['DRAFT', 'SENT', 'VIEWED', 'APPROVED', 'DECLINED', 'EXPIRED']).optional(),
-}).refine(val => Object.keys(val).length > 0, { message: 'At least one field must be provided' });
+}).refine(val => Object.keys(val).length > 0, { message: 'At least one field must be provided' })
+  .refine(notBothTaxFields, notBothTaxFieldsMessage);
 
 // ── Retainer schemas ───────────────────────────────────────────────────────
 export const createRetainerSchema = z.object({
@@ -1294,14 +1352,16 @@ export const estimateActionSchema = z.object({
 
 // ── Expense (already has createExpenseSchema, add update + bulk) ─────────
 export const expenseUpdateSchema = z.object({
-  description: z.string().min(1).max(500).optional(),
+  description: z.string().trim().min(1).max(500).optional(),
   amount: z.number().positive().max(10_000_000).optional(),
-  currency: z.enum(['USD', 'CAD', 'EUR', 'GBP']).optional(),
+  currency: expenseCurrency.optional(),
   category: z.string().min(1).max(50).optional(),
-  date: z.string().datetime().optional(),
+  date: expenseDate.optional(),
   billable: z.boolean().optional(),
-  notes: z.string().max(5_000).optional(),
-  receiptUrl: z.string().max(500).nullable().optional(),
+  notes: z.string().max(5_000).nullable().optional(),
+  clientId: cuidId.nullable().optional(),
+  projectId: cuidId.nullable().optional(),
+  receiptUrl: expenseReceiptUrl.optional(),
 });
 
 // ── Gmail drafts / replies ────────────────────────────────────────────────
@@ -1335,11 +1395,16 @@ export const integrationUpdateSchema = z.object({
 });
 
 // ── Milestone ────────────────────────────────────────────────────────────
+// Milestone.status (prisma/schema.prisma) is PENDING | IN_PROGRESS |
+// COMPLETED; "overdue" is derived from dueDate, never stored. The milestone
+// modal sends <input type="date"> values ("YYYY-MM-DD", start of that UTC day,
+// which is how the modal reads them back).
+export const MILESTONE_STATUS_VALUES = ['PENDING', 'IN_PROGRESS', 'COMPLETED'];
 export const milestoneSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(2_000).optional(),
   dueDate: z.string().datetime().optional(),
-  status: z.enum(['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED']).optional(),
+  status: z.enum(MILESTONE_STATUS_VALUES).optional(),
   color: z.string().max(20).optional(),
 });
 
@@ -1405,18 +1470,22 @@ export const semanticSearchCreateSchema = z.object({
 });
 
 // ── Team (user management) ───────────────────────────────────────────────
+// The staff roles this API may assign (User.role: ADMIN, TEAM, CLIENT, BOT).
+export const TEAM_MEMBER_ROLES = ['ADMIN', 'TEAM'];
 export const teamInviteSchema = z.object({
   email: z.string().email().max(255),
   password: password,
   name: z.string().min(1).max(100),
-  role: z.enum(['ADMIN', 'STAFF', 'CLIENT']).default('STAFF'),
+  // Staff roles only: client-portal users are created with their clientId by
+  // the client portal invite flow, never here (User.role default is TEAM).
+  role: z.enum(TEAM_MEMBER_ROLES).default('TEAM'),
   skills: z.array(z.string().max(50)).max(50).optional(),
   capacity: z.number().int().min(0).max(200).default(100),
 });
 
 export const teamUpdateSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  role: z.enum(['ADMIN', 'STAFF', 'CLIENT']).optional(),
+  role: z.enum(TEAM_MEMBER_ROLES).optional(),
   skills: z.array(z.string().max(50)).max(50).optional(),
   capacity: z.number().int().min(0).max(200).optional(),
   isActive: z.boolean().optional(),
@@ -1490,13 +1559,28 @@ export const attachmentCreateSchema = z.object({
 });
 
 // ── Brand settings ───────────────────────────────────────────────────────
+// The BrandSettings columns the PUT handler writes. The logo is set only by
+// POST /api/brand/logo, so logoUrl (and id/organizationId) are not accepted
+// here and are dropped if an older client still sends the whole record.
+// An emptied color field ('' or null) keeps the stored color; other text
+// fields may be cleared with '' or null.
+const brandHexColor = z.preprocess(
+  (value) => (value === '' || value === null ? undefined : value),
+  z.string().trim().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/, 'hex color like #1a2b3c').optional(),
+);
+const brandText = (max) => z.string().trim().max(max).nullable().optional();
 export const brandSettingsSchema = z.object({
-  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'hex color like #1a2b3c').optional(),
-  secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  logoUrl: z.string().url().max(2048).optional(),
-  companyName: z.string().min(1).max(200).optional(),
-  tagline: z.string().max(500).optional(),
-  fontFamily: z.string().max(100).optional(),
+  companyName: z.string().trim().min(1, 'Company name is required').max(200).optional(),
+  primaryColor: brandHexColor,
+  accentColor: brandHexColor,
+  address: brandText(1_000),
+  phone: brandText(50),
+  email: z.union([z.literal(''), z.string().trim().email().max(255)]).nullable().optional(),
+  website: brandText(2_048),
+  taxId: brandText(100),
+  invoiceFooter: brandText(5_000),
+  proposalFooter: brandText(5_000),
+  contractHeader: brandText(5_000),
 });
 
 // ── Calendar (event RSVP) ────────────────────────────────────────────────
@@ -1732,15 +1816,27 @@ export const messagePasteSchema = z.object({
   senderName: z.string().min(1).max(200),
 });
 
+const milestoneDueDate = invoiceDateInput({ endOfDay: false });
+const milestoneFields = {
+  name: z.string().trim().min(1, 'Name is required').max(200),
+  description: z.string().max(2_000).nullable().optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/, 'hex color like #3B82F6').optional(),
+};
+// A cleared date input ('') counts as "not sent".
+const milestoneDueDateInput = z.preprocess((value) => (value === '' ? undefined : value), milestoneDueDate.optional());
+
 export const milestoneCreateSchema = z.object({
-  name: z.string().min(1).max(200),
-  description: z.string().max(2_000).optional(),
-  dueDate: z.string().datetime().optional(),
-  color: z.string().max(20).optional(),
+  ...milestoneFields,
+  dueDate: milestoneDueDateInput.refine((value) => value !== undefined, { message: 'Due date is required' }),
 });
 
-export const milestoneUpdateSchema = milestoneCreateSchema.extend({
-  status: z.enum(['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED']).optional(),
+export const milestoneUpdateSchema = z.object({
+  name: milestoneFields.name.optional(),
+  description: milestoneFields.description,
+  color: milestoneFields.color,
+  // Omitted or '' leaves the stored due date unchanged.
+  dueDate: milestoneDueDateInput,
+  status: z.enum(MILESTONE_STATUS_VALUES).optional(),
 });
 
 export const noteProjectCreateSchema = z.object({
@@ -1913,21 +2009,46 @@ export const webhookEmailTestSchema = z.object({
 });
 
 // ── Final 8 endpoints (mixed shapes) ───────────────────────────────────────
-export const calendarEventCreateSchema = z.object({
-  title: z.string().min(1).max(200),
-  description: z.string().max(10_000).optional(),
-  startTime: z.string().datetime(),
-  endTime: z.string().datetime(),
-  type: z.enum(['MEETING', 'TASK', 'REMINDER', 'BLOCKED_TIME', 'OTHER']).default('MEETING'),
-  location: z.string().max(500).optional(),
-  isAllDay: z.boolean().default(false),
+// CalendarEvent.type: the Schedule page offers MEETING, CALL, DEADLINE and
+// REMINDER; milestones create MILESTONE events; TASK, BLOCKED_TIME and OTHER
+// were already accepted by this API. projectId '' (the page's "no project")
+// means none (null). attendeeIds are user ids; the route keeps only active
+// members of the caller's organization. `allDay` is accepted as an alias of
+// isAllDay.
+export const CALENDAR_EVENT_TYPES = ['MEETING', 'CALL', 'DEADLINE', 'REMINDER', 'MILESTONE', 'TASK', 'BLOCKED_TIME', 'OTHER'];
+const calendarOptionalId = z.preprocess((value) => (value === '' ? null : value), cuidId.nullable().optional());
+const calendarEventFields = {
+  title: z.string().trim().min(1).max(200),
+  description: z.string().max(10_000).nullable().optional(),
+  startTime: z.string().datetime({ offset: true }),
+  endTime: z.string().datetime({ offset: true }),
+  type: z.enum(CALENDAR_EVENT_TYPES),
+  location: z.string().max(500).nullable().optional(),
+  isAllDay: z.boolean(),
   color: z.string().max(20).optional(),
   // Optional linking
-  projectId: cuidId.optional(),
-  clientId: cuidId.optional(),
-});
+  projectId: calendarOptionalId,
+  clientId: calendarOptionalId,
+  attendeeIds: z.array(cuidId).max(100).optional(),
+};
+const normalizeAllDay = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !('allDay' in value)) return value;
+  const { allDay, ...rest } = value;
+  return rest.isAllDay === undefined ? { ...rest, isAllDay: allDay } : rest;
+};
+const endNotBeforeStart = (value) => !value.startTime || !value.endTime || new Date(value.endTime) >= new Date(value.startTime);
+const endNotBeforeStartMessage = { message: 'endTime must not be before startTime', path: ['endTime'] };
 
-export const calendarEventUpdateSchema = calendarEventCreateSchema.partial();
+export const calendarEventCreateSchema = z.preprocess(normalizeAllDay, z.object({
+  ...calendarEventFields,
+  type: calendarEventFields.type.default('MEETING'),
+  isAllDay: calendarEventFields.isAllDay.default(false),
+}).refine(endNotBeforeStart, endNotBeforeStartMessage));
+
+export const calendarEventUpdateSchema = z.preprocess(
+  normalizeAllDay,
+  z.object(calendarEventFields).partial().refine(endNotBeforeStart, endNotBeforeStartMessage),
+);
 
 export const credentialUpsertSchema = credentialCreateSchema;
 

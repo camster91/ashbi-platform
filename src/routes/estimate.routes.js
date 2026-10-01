@@ -39,6 +39,35 @@ export function publicEstimateView(estimate) {
   };
 }
 
+const roundMoney = (value) => parseFloat((Number(value) || 0).toFixed(2));
+
+/**
+ * Estimate money, computed the way the Estimates page shows it (and the way
+ * invoices apply taxRate): subtotal = sum(quantity * rate), tax =
+ * round2(subtotal * taxRate / 100), total = round2(subtotal + tax). A fixed
+ * `tax` amount is used only when no taxRate is given.
+ * @param {Array<{ quantity: number, rate: number }>} lineItems
+ * @param {{ taxRate?: number, tax?: number }} [options]
+ */
+export function computeEstimateTotals(lineItems, { taxRate, tax } = {}) {
+  const items = Array.isArray(lineItems) ? lineItems : [];
+  const rawSubtotal = items.reduce((sum, item) => sum + (Number(item?.quantity) || 0) * (Number(item?.rate) || 0), 0);
+  const taxAmount = taxRate !== undefined && taxRate !== null
+    ? roundMoney((rawSubtotal * Number(taxRate)) / 100)
+    : roundMoney(tax);
+  return { subtotal: roundMoney(rawSubtotal), tax: taxAmount, total: roundMoney(rawSubtotal + taxAmount) };
+}
+
+/** Line items as stored: the client's fields plus the computed amount. */
+function storedLineItems(lineItems) {
+  return (lineItems || []).map((item) => ({
+    description: item.description,
+    quantity: item.quantity,
+    rate: item.rate,
+    amount: roundMoney(item.quantity * item.rate),
+  }));
+}
+
 /** Why a public link cannot be used, or null. Unknown and draft look the same. */
 function publicEstimateFailure(estimate, now = new Date()) {
   if (!estimate || !PUBLIC_ESTIMATE_STATUSES.includes(estimate.status)) {
@@ -86,15 +115,13 @@ export default async function estimateRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: [validateBody(createEstimateSchema)]
   }, async (request, reply) => {
-    const { clientId, title, description, lineItems, tax, validUntil } = request.body;
+    const { clientId, title, description, lineItems, tax, taxRate, validUntil } = request.body;
     if (!clientId || !title) {
       return reply.status(400).send({ error: 'Client and title are required' });
     }
 
-    const items = lineItems || [];
-    const subtotal = items.reduce((sum, i) => sum + (i.quantity * i.rate), 0);
-    const taxAmount = tax || 0;
-    const total = subtotal + taxAmount;
+    const items = storedLineItems(lineItems);
+    const { subtotal, tax: taxAmount, total } = computeEstimateTotals(items, { taxRate, tax });
 
     const estimate = await request.prisma.estimate.create({
       data: {
@@ -123,11 +150,13 @@ export default async function estimateRoutes(fastify) {
     if (!existing) return reply.status(404).send({ error: 'Estimate not found' });
     if (existing.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft estimates can be edited' });
 
-    const { title, description, lineItems, tax, validUntil, status } = request.body;
-    const items = lineItems || existing.lineItems;
-    const subtotal = Array.isArray(items) ? items.reduce((sum, i) => sum + (i.quantity * i.rate), 0) : existing.subtotal;
-    const taxAmount = tax ?? existing.tax;
-    const total = subtotal + taxAmount;
+    const { title, description, lineItems, tax, taxRate, validUntil, status } = request.body;
+    const items = lineItems !== undefined ? storedLineItems(lineItems) : existing.lineItems;
+    // Without a new taxRate or tax the stored tax amount is kept.
+    const totals = Array.isArray(items)
+      ? computeEstimateTotals(items, taxRate !== undefined ? { taxRate } : { tax: tax ?? existing.tax })
+      : { subtotal: existing.subtotal, tax: tax ?? existing.tax, total: roundMoney(existing.subtotal + (tax ?? existing.tax)) };
+    const { subtotal, tax: taxAmount, total } = totals;
 
     const estimate = await request.prisma.estimate.update({
       where: { id },

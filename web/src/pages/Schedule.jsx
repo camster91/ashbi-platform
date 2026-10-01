@@ -47,6 +47,21 @@ const TYPE_ICONS = {
   REMINDER: Bell,
 };
 
+// The API stores isAllDay and returns attendee rows ({ userId, user }); the
+// page reads allDay and lists attendees by user.
+function normalizeEvent(event) {
+  return { ...event, allDay: Boolean(event?.allDay ?? event?.isAllDay) };
+}
+
+function normalizeEvents(events) {
+  return Array.isArray(events) ? events.map(normalizeEvent) : [];
+}
+
+function attendeeUserId(attendee) {
+  if (attendee && typeof attendee === 'object') return attendee.userId || attendee.user?.id || attendee.id;
+  return attendee;
+}
+
 function typeStyle(type) {
   return TYPE_MAP[type] ?? TYPE_MAP.MEETING;
 }
@@ -142,8 +157,8 @@ function EventModal({
     projectId: editEvent?.projectId || '',
     startTime: toLocalInput(defaultStart),
     endTime: toLocalInput(defaultEnd),
-    allDay: editEvent?.allDay || false,
-    attendeeIds: editEvent?.attendees?.map(a => a.id || a.userId || a) || [],
+    allDay: Boolean(editEvent?.allDay ?? editEvent?.isAllDay),
+    attendeeIds: editEvent?.attendees?.map(attendeeUserId).filter(Boolean) || [],
   });
 
   const createMutation = useMutation({
@@ -188,8 +203,16 @@ function EventModal({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    // Shape checked by calendarEventCreateSchema / calendarEventUpdateSchema
+    // (src/tests/unit/ui-payload-contract.test.js).
     const payload = {
-      ...form,
+      title: form.title,
+      description: form.description,
+      type: form.type,
+      location: form.location,
+      projectId: form.projectId || null,
+      isAllDay: form.allDay,
+      attendeeIds: form.attendeeIds,
       startTime: new Date(form.startTime).toISOString(),
       endTime: form.allDay
         ? new Date(new Date(form.startTime).setHours(23, 59, 59)).toISOString()
@@ -535,7 +558,7 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
               <div className="flex flex-wrap gap-2">
                 {event.attendees.map((a, i) => (
                   <span key={a.id || i} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">
-                    {a.name || a.email || a}
+                    {a.user?.name || a.user?.email || a.name || a.email || String(attendeeUserId(a))}
                   </span>
                 ))}
               </div>
@@ -631,7 +654,7 @@ function UpcomingSidebar({ onEventClick }) {
     isFetching: upcomingFetching,
   } = useQuery({
     queryKey: ['upcoming-events'],
-    queryFn: () => api.getUpcomingEvents(10),
+    queryFn: () => api.getUpcomingEvents(10).then(normalizeEvents),
     refetchInterval: 60000,
   });
 
@@ -717,7 +740,7 @@ export default function Schedule() {
     queryFn: () => api.getCalendarEvents({
       startDate: currentWeekStart.toISOString(),
       endDate: weekEnd.toISOString(),
-    }),
+    }).then(normalizeEvents),
   });
 
   const {

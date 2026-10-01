@@ -4,6 +4,29 @@ import { validateBody, calendarEventCreateSchema, calendarEventUpdateSchema, cal
 import { decrypt } from '../utils/crypto.js';
 import { createGoogleCalendarClient, propagateCalendarEventDeletion } from '../services/google-calendar-sync.service.js';
 
+/**
+ * The attendee ids that name active members of the caller's organization
+ * (request.prisma is tenant-scoped), de-duplicated, in request order. Unknown
+ * or foreign ids are dropped so an event never links or notifies them.
+ */
+async function resolveAttendeeIds(prisma, attendeeIds) {
+  const requested = [...new Set((attendeeIds || []).filter(Boolean))];
+  if (requested.length === 0) return [];
+  const users = await prisma.user.findMany({
+    where: { id: { in: requested }, isActive: true },
+    select: { id: true },
+  });
+  const known = new Set(users.map((user) => user.id));
+  return requested.filter((id) => known.has(id));
+}
+
+/** True when projectId is set but names no project in the caller's organization. */
+async function unknownProject(prisma, projectId) {
+  if (!projectId) return false;
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  return !project;
+}
+
 export default async function calendarRoutes(fastify, options = {}) {
   const propagateGoogleDeletion = options.propagateGoogleDeletion ?? ((input) => propagateCalendarEventDeletion({
     createCalendarClient: createGoogleCalendarClient, decryptSecret: decrypt, ...input,
@@ -133,9 +156,9 @@ export default async function calendarRoutes(fastify, options = {}) {
       location,
       isAllDay = false,
       color,
-      projectId,
-      attendeeIds = []
+      projectId: requestedProjectId,
     } = request.body;
+    const projectId = requestedProjectId || null;
 
     if (!title?.trim()) {
       return reply.status(400).send({ error: 'Title is required' });
@@ -144,6 +167,11 @@ export default async function calendarRoutes(fastify, options = {}) {
     if (!startTime) {
       return reply.status(400).send({ error: 'Start time is required' });
     }
+
+    if (await unknownProject(request.prisma, projectId)) {
+      return reply.status(400).send({ error: 'Project not found' });
+    }
+    const attendeeIds = await resolveAttendeeIds(request.prisma, request.body.attendeeIds);
 
     const event = await request.prisma.calendarEvent.create({
       data: {
@@ -217,7 +245,7 @@ export default async function calendarRoutes(fastify, options = {}) {
       location,
       isAllDay,
       color,
-      attendeeIds
+      projectId,
     } = request.body;
 
     const existing = await request.prisma.calendarEvent.findUnique({
@@ -243,6 +271,15 @@ export default async function calendarRoutes(fastify, options = {}) {
     if (location !== undefined) data.location = location;
     if (isAllDay !== undefined) data.isAllDay = isAllDay;
     if (color !== undefined) data.color = color;
+    if (projectId !== undefined) {
+      if (await unknownProject(request.prisma, projectId)) {
+        return reply.status(400).send({ error: 'Project not found' });
+      }
+      data.projectId = projectId || null;
+    }
+    const attendeeIds = request.body.attendeeIds === undefined
+      ? undefined
+      : await resolveAttendeeIds(request.prisma, request.body.attendeeIds);
 
     // Handle attendee updates
     if (attendeeIds !== undefined) {
