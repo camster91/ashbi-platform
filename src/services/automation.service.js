@@ -146,10 +146,6 @@ export async function onProposalApproved(proposalId) {
     }
 
     // Action 1: Auto-create contract from proposal
-    const scopeLines = proposal.lineItems.map(li =>
-      `- ${li.description} (${li.quantity} x $${li.unitPrice.toFixed(2)})`
-    ).join('\n');
-
     const contractContent = `
       <h1>${proposal.title}</h1>
       <h2>Scope of Work</h2>
@@ -625,7 +621,7 @@ async function executeAction(action, triggerData, workflow) {
 }
 
 async function executeSendEmail(config, triggerData) {
-  const { to, subject, body, from } = config;
+  const { to, subject, body } = config;
 
   // Resolve template variables
   const resolvedTo = resolveTemplate(to, triggerData);

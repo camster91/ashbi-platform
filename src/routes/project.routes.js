@@ -3,7 +3,6 @@
 import { refreshProjectPlan, getProjectBudgetMetrics, normalizeHealthHistory } from '../services/project.service.js';
 import { safeParse } from '../utils/safeParse.js';
 import { sortByTaskPriority } from '../shared/task-priority.js';
-import { queueEmbedding } from '../jobs/queue.js';
 import aiClient from '../ai/client.js';
 import {
   validateBody,

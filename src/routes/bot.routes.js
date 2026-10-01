@@ -1246,7 +1246,7 @@ export default async function botRoutes(fastify) {
         });
 
         // Create notification for Cameron
-        const notification = await prisma.notification.create({
+        await prisma.notification.create({
           data: {
             type: 'TASK_CREATED',
             title: task.title,

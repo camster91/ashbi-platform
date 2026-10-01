@@ -23,7 +23,6 @@ import {
 } from '../auth/impersonation.js';
 import {
   validateBody,
-  schemas,
   loginSchema,
   registerSchema,
   changePasswordSchema,

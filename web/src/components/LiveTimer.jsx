@@ -79,7 +79,7 @@ export default function LiveTimer({ socket }) {
         description: runningSession.description || '',
       });
     }
-  }, [runningSession]);
+  }, [runningSession, persistTimer]);
 
   // Mutations
   const startMutation = useMutation({
@@ -139,7 +139,7 @@ export default function LiveTimer({ socket }) {
       socket.off('timer:started', handleTimerStarted);
       socket.off('timer:stopped', handleTimerStopped);
     };
-  }, [socket, timerState.sessionId, timerState.isRunning]);
+  }, [socket, timerState.sessionId, timerState.isRunning, persistTimer, queryClient]);
 
   const handleStart = () => {
     startMutation.mutate({ description: timerState.description || undefined });

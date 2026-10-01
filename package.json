@@ -21,7 +21,7 @@
     "build:all": "npm run build",
     "build:web": "npm --prefix web run build",
     "preview": "npm --prefix web run preview",
-    "lint": "eslint src/ --max-warnings 49",
+    "lint": "eslint src/ --max-warnings 0",
     "lint:fix": "eslint src/ --fix",
     "test": "node scripts/run-node-tests.mjs src/tests/unit src/tests/ai-eval",
     "test:ai-eval": "node scripts/run-node-tests.mjs src/tests/ai-eval",
@@ -139,19 +139,19 @@
   "overrides": {
     "eslint": {
       "minimatch": "3.1.5",
-      "brace-expansion": "1.1.18"
+      "brace-expansion": "1.1.21"
     },
     "@eslint/config-array": {
       "minimatch": "3.1.5",
-      "brace-expansion": "1.1.18"
+      "brace-expansion": "1.1.21"
     },
     "@eslint/eslintrc": {
       "minimatch": "3.1.5",
-      "brace-expansion": "1.1.18"
+      "brace-expansion": "1.1.21"
     },
     "eslint-plugin-react": {
       "minimatch": "3.1.5",
-      "brace-expansion": "1.1.18"
+      "brace-expansion": "1.1.21"
     },
     "tmp": "^0.2.6",
     "uuid": "^11.1.1",

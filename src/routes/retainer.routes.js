@@ -1,4 +1,4 @@
-import { validateBody, createRetainerSchema, updateRetainerSchema, logRetainerHoursSchema, generateRetainerInvoiceSchema, retainerGenerateInvoiceSchema } from '../validators/schemas.js';
+import { validateBody, createRetainerSchema, updateRetainerSchema, logRetainerHoursSchema, retainerGenerateInvoiceSchema } from '../validators/schemas.js';
 // Retainer plan routes — track hours & revision rounds per client
 import { createNumberedInvoice } from '../utils/invoice.js';
 import { clampTake } from '../utils/query-limits.js';
@@ -18,7 +18,6 @@ export default async function retainerRoutes(fastify) {
 
     const now = new Date();
     return plans.map(plan => {
-      const revisionCount = 0; // lightweight list — detail page has revision count
       const percentUsed = plan.hoursPerMonth > 0
         ? Math.round((plan.hoursUsed / plan.hoursPerMonth) * 100)
         : 0;

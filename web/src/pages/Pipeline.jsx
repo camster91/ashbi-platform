@@ -50,8 +50,8 @@ function CreateDealModal({ isOpen, onClose, stages }) {
 
   // Set default stage when stages load
   useEffect(() => {
-    if (isOpen && stages.length && !formData.stageId) {
-      setFormData(prev => ({ ...prev, stageId: stages[0].id || '' }));
+    if (isOpen && stages.length) {
+      setFormData(prev => (prev.stageId ? prev : { ...prev, stageId: stages[0].id || '' }));
     }
   }, [isOpen, stages]);
 

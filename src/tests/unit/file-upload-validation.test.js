@@ -22,14 +22,9 @@ const routesDir = path.join(__dirname, '..', '..', 'routes');
 
 // Import schemas for allowlist testing
 const schemasModule = await import('../../validators/schemas.js');
-const schemas = schemasModule.schemas;
 const fileUpload = schemasModule.fileUpload;
 const ALLOWED_UPLOAD_EXTENSIONS = fileUpload.ALLOWED_EXTENSIONS;
 const ALLOWED_UPLOAD_MIMETYPES = fileUpload.ALLOWED_MIMETYPES;
-const { validateUploadedFile } = schemasModule;
-
-// Routes known to handle file uploads
-const UPLOAD_ROUTES = ['client-portal', 'brand', 'expense', 'attachment'];
 
 describe('File Upload Validation', () => {
   describe('Allowlist consistency', () => {

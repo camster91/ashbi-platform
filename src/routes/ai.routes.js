@@ -2,7 +2,6 @@
 
 import aiClient from '../ai/client.js';
 import { buildDraftResponsePrompt } from '../ai/prompts/draftResponse.js';
-import { buildAnalyzeMessagePrompt } from '../ai/prompts/analyzeMessage.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
 import {
   validateBody,
