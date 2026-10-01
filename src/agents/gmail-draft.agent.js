@@ -84,7 +84,7 @@ function buildRfc2822EmailWithAttachment(to, subject, body, options = {}) {
       'Content-Type: text/plain; charset="UTF-8"',
       'Content-Transfer-Encoding: quoted-printable',
       '',
-      body,
+      quotedPrintableEncode(body),
       '',
       `--${boundary}`,
       `Content-Type: application/pdf; name="${attachmentName}"`,
@@ -102,7 +102,7 @@ function buildRfc2822EmailWithAttachment(to, subject, body, options = {}) {
       'Content-Type: text/plain; charset="UTF-8"',
       'Content-Transfer-Encoding: quoted-printable',
       '',
-      body
+      quotedPrintableEncode(body)
     ].join('\r\n');
   }
 
@@ -378,6 +378,7 @@ async function searchInbox(query) {
 }
 
 export {
+  buildRfc2822EmailWithAttachment,
   createDraft,
   createDraftWithAttachment,
   sendEmail,
