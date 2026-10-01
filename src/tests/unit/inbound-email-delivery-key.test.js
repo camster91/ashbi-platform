@@ -84,10 +84,15 @@ test('a Mailgun delivery is keyed by its Message-Id, else by a hash of the deliv
   assert.notEqual(mailgunInboundDeliveryKey({ ...delivery, 'body-plain': 'Other' }), key);
   assert.notEqual(mailgunInboundDeliveryKey({ ...delivery, 'Message-Id': '' }), undefined);
   assert.match(mailgunInboundDeliveryKey(undefined), /^mailgun-sha256:/);
+  // A retried POST carries a new signature block but is the same delivery.
+  assert.equal(mailgunInboundDeliveryKey({ ...delivery, timestamp: '2', token: 'u', signature: 'abc' }), key);
 });
 
 test('the Mailgun inbound route hands its delivery key to the pipeline', () => {
   const source = fs.readFileSync(new URL('../../routes/mailgun.routes.js', import.meta.url), 'utf8');
-  const inbound = source.slice(source.indexOf("fastify.post('/',"));
+  const start = source.indexOf('export function processMailgunInboundEmail(');
+  assert.ok(start >= 0, 'inbound pipeline step found');
+  assert.match(source, /await processInboundEmail\(fastify, body\)/);
+  const inbound = source.slice(start);
   assert.match(inbound, /processEmailPipeline\(\{[\s\S]*inboundDeliveryKey: mailgunInboundDeliveryKey\(body\)/);
 });

@@ -43,5 +43,8 @@ export function mailgunInboundDeliveryKey(body) {
   const rawMessageId = fields['Message-Id'] ?? fields['message-id'];
   const messageId = typeof rawMessageId === 'string' ? rawMessageId.trim() : '';
   if (messageId) return normalizeInboundDeliveryKey(`mailgun:${messageId}`);
-  return `mailgun-sha256:${sha256(stableStringify(fields))}`;
+  // The signature block is per POST attempt; leave it out so a retried
+  // delivery hashes to the same key as the first attempt.
+  const { timestamp: _timestamp, token: _token, signature: _signature, ...message } = fields;
+  return `mailgun-sha256:${sha256(stableStringify(message))}`;
 }

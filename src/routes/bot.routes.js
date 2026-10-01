@@ -1312,7 +1312,7 @@ export default async function botRoutes(fastify) {
       }
     });
 
-    const { sendTaskHITLEmail, sendApprovalHITLEmail, sendMailgunEmail } = await import('../utils/hitl-email.service.js');
+    const { sendTaskHITLEmail, sendApprovalHITLEmail, sendToHitlApprover } = await import('../utils/hitl-email.service.js');
 
     let emailResult = { ok: false };
 
@@ -1341,8 +1341,7 @@ export default async function botRoutes(fastify) {
       // CUSTOM or PROJECT — send generic email
       const replyTo = `reply+${notification.id}@${env.mailgunDomain || 'ashbi.ca'}`;
       const urgencyPrefix = urgency === 'CRITICAL' ? '🔴 [CRITICAL] ' : urgency === 'HIGH' ? '🟠 [ACTION NEEDED] ' : '';
-      emailResult = await sendMailgunEmail({
-        to: 'cameron@ashbi.ca',
+      emailResult = await sendToHitlApprover({
         replyTo,
         subject: `${urgencyPrefix}${subject} — Ashbi Hub`,
         html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">

@@ -151,6 +151,10 @@ const env = {
   mailgunSigningKey: process.env.MAILGUN_SIGNING_KEY,
   // HTTP webhook signing key (Mailgun → Sending → Webhooks) for delivery events.
   mailgunWebhookSigningKey: process.env.MAILGUN_WEBHOOK_SIGNING_KEY,
+  // Where human-in-the-loop (HITL) task / approval emails are sent. Unset
+  // means no HITL email is sent. Replies are accepted only from the Hub user
+  // the notification was created for, or an active admin of that user's org.
+  hitlApproverEmail: process.env.HITL_APPROVER_EMAIL?.trim() || null,
 
   // Stripe
   stripeSecretKey: process.env.STRIPE_SECRET_KEY,

@@ -4,6 +4,7 @@ import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import Handlebars from 'handlebars';
+import env from '../config/env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = path.join(__dirname, 'email-templates');
@@ -24,6 +25,24 @@ const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'ashbi.ca';
 const MAILGUN_API_URL = `https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages`;
 
 const DISCORD_CAM_WEBHOOK = process.env.DISCORD_CAM_WEBHOOK_URL;
+
+/**
+ * The configured HITL approver address (HITL_APPROVER_EMAIL), or null. Read at
+ * call time so configuration changes and tests apply without a reload.
+ */
+export function hitlApproverEmail() {
+  return env.hitlApproverEmail || null;
+}
+
+/** Send a HITL email to the configured approver, or skip when none is set. */
+export function sendToHitlApprover(message) {
+  const to = hitlApproverEmail();
+  if (!to) {
+    console.warn('[hitl-email] HITL_APPROVER_EMAIL not set — skipping HITL email');
+    return Promise.resolve({ ok: false, error: 'HITL_APPROVER_EMAIL not set' });
+  }
+  return sendMailgunEmail({ ...message, to });
+}
 
 /**
  * Load and compile an HTML email template using Handlebars
@@ -94,8 +113,7 @@ export async function sendTaskHITLEmail({ notificationId, task, project, context
 
   const subject = `🔔 ${urgency === 'CRITICAL' || urgency === 'HIGH' ? '[ACTION NEEDED] ' : ''}${task.title} — Ashbi Hub`;
 
-  return sendMailgunEmail({
-    to: 'cameron@ashbi.ca',
+  return sendToHitlApprover({
     replyTo,
     subject,
     html,
@@ -123,8 +141,7 @@ export async function sendApprovalHITLEmail({ notificationId, approval }) {
 
   const subject = `✅ Approval Needed: ${approval.title} — Ashbi Hub`;
 
-  return sendMailgunEmail({
-    to: 'cameron@ashbi.ca',
+  return sendToHitlApprover({
     replyTo,
     subject,
     html,
@@ -146,8 +163,7 @@ export async function sendBlockedHITLEmail({ notificationId, task, project, bloc
 
   const subject = `🚫 Blocked: ${task.title} — Ashbi Hub`;
 
-  return sendMailgunEmail({
-    to: 'cameron@ashbi.ca',
+  return sendToHitlApprover({
     replyTo,
     subject,
     html,
