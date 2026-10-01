@@ -104,7 +104,6 @@ describe('Client Portal Token Security', () => {
 
       // Portal uses params.token or params.viewToken or params.signToken (often destructured)
       const paramTokenUsage = content.match(/request\.params\.(token|viewToken|signToken)|const\s+\{\s*(token|viewToken|signToken)\s*\}\s*=\s*request\.params/g) || [];
-      const queryTokenUsage = content.match(/request\.query/g) || [];
 
       console.log(`  âœ“ portal.routes.js: ${paramTokenUsage.length} param-based tokens (acceptable - not JWTs)`);
 

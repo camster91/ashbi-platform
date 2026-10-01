@@ -2,7 +2,6 @@
 
 import aiClient from '../ai/client.js';
 import { buildReplanProjectPrompt } from '../ai/prompts/replanProject.js';
-import { safeParse } from '../utils/safeParse.js';
 
 /**
  * Calculate project health score

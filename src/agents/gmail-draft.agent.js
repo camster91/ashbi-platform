@@ -42,23 +42,6 @@ function sanitizeEmailHeader(value) {
 }
 
 /**
- * Sanitize a string for use in RFC 2822 email headers.
- * Strips non-ASCII and control characters, collapses whitespace.
- * @param {string} value - Raw header value
- * @returns {string} Sanitized header value (printable ASCII only)
- */
-function sanitizeHeader(value) {
-  if (typeof value !== 'string') return String(value);
-  return value
-    // eslint-disable-next-line no-control-regex -- intentional, this IS the sanitization
-    .replace(/[\x00-\x1f\x7f-\x9f]/g, '')  // strip null bytes and control chars
-    .replace(/[\x80-\uffff]/g, '')          // strip non-ASCII
-    .replace(/\r?\n/g, ' ')                 // replace newlines with space
-    .replace(/\s+/g, ' ')                   // collapse multiple whitespace
-    .trim();
-}
-
-/**
  * Encode string to base64url format (URL-safe base64)
  */
 function toBase64Url(str) {
@@ -101,7 +84,7 @@ function buildRfc2822EmailWithAttachment(to, subject, body, options = {}) {
       'Content-Type: text/plain; charset="UTF-8"',
       'Content-Transfer-Encoding: quoted-printable',
       '',
-      body,
+      quotedPrintableEncode(body),
       '',
       `--${boundary}`,
       `Content-Type: application/pdf; name="${attachmentName}"`,
@@ -119,7 +102,7 @@ function buildRfc2822EmailWithAttachment(to, subject, body, options = {}) {
       'Content-Type: text/plain; charset="UTF-8"',
       'Content-Transfer-Encoding: quoted-printable',
       '',
-      body
+      quotedPrintableEncode(body)
     ].join('\r\n');
   }
 
@@ -253,33 +236,9 @@ async function createDraftWithAttachment(toEmail, subject, body, pdfBuffer, atta
     throw new Error('MATON_API_KEY environment variable is not set');
   }
 
-  const sanitizedSubject = sanitizeEmailHeader(subject);
-  const sanitizedTo = sanitizeEmailHeader(toEmail);
-  const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-
-  // Build multipart message
-  const base64Attachment = pdfBuffer.toString('base64');
-  const encodedBody = quotedPrintableEncode(body);
-
-  const multipartBody = [
-    `To: ${sanitizedTo}`,
-    `Subject: ${sanitizedSubject}`,
-    'Content-Type: multipart/mixed; boundary="' + boundary + '"',
-    '',
-    `--${boundary}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    'Content-Transfer-Encoding: quoted-printable',
-    '',
-    body,
-    '',
-    `--${boundary}`,
-    `Content-Type: application/pdf; name="${attachmentName}"`,
-    'Content-Transfer-Encoding: base64',
-    `Content-Disposition: attachment; filename="${attachmentName}"`,
-    '',
-    base64Attachment,
-    `--${boundary}--`
-  ].join('\r\n');
+  // One builder for every attachment draft, so the text part is always
+  // quoted-printable encoded as its header declares.
+  const multipartBody = buildRfc2822EmailWithAttachment(toEmail, subject, body, { attachment: pdfBuffer, attachmentName });
 
   const rawEncoded = toBase64Url(multipartBody);
 
@@ -396,6 +355,7 @@ async function searchInbox(query) {
 }
 
 export {
+  buildRfc2822EmailWithAttachment,
   createDraft,
   createDraftWithAttachment,
   sendEmail,

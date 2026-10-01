@@ -271,7 +271,7 @@ export function useProjectChat(projectId, token) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [projectId, token, resetAttachments]);
+  }, [projectId, token, resetAttachments, reloadMessages]);
 
   const sendMessage = useCallback(async (content) => {
     const attachmentIds = attachmentIdsRef.current;
@@ -306,7 +306,7 @@ export function useProjectChat(projectId, token) {
       sendInFlightRef.current = false;
       setSending(false);
     }
-  }, [projectId, reloadMessages, token, clearAttachments]);
+  }, [projectId, token, clearAttachments]);
 
   return { messages, connected, sendMessage, sendError, sending, messagesError, loadingMessages, reloadMessages, attachments };
 }

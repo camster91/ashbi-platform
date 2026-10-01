@@ -30,9 +30,11 @@ export default function BrandSettings() {
     queryFn: api.getBrandSettings,
   });
 
+  // Seed the editable form from the first loaded brand settings only; later
+  // refetches must not clobber in-progress edits.
   useEffect(() => {
-    if (brand && !form) {
-      setForm({ ...brand });
+    if (brand) {
+      setForm((current) => current ?? { ...brand });
     }
   }, [brand]);
 

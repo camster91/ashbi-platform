@@ -27,7 +27,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
     enabled: isOpen,
   });
 
-  const clientOptions = clients?.clients || [];
+  const clientOptions = useMemo(() => clients?.clients || [], [clients]);
   const clientsLoaded = Array.isArray(clients?.clients);
   const preselectedClientIsValid = useMemo(
     () => !preselectedClientId || clientOptions.some((client) => client.id === preselectedClientId),

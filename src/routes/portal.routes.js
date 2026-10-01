@@ -1,6 +1,5 @@
 // Client Portal routes (public - no auth required, token-based access)
 
-import { safeParse } from '../utils/safeParse.js';
 import { ensureCheckoutSession } from '../services/stripe.service.js';
 import { onProposalApproved, onContractSigned } from '../services/automation.service.js';
 import crypto from 'crypto';
