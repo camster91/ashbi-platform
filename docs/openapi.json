@@ -441,27 +441,23 @@
       },
       "AiDraftUpdate": {
         "properties": {
-          "notes": {
-            "maxLength": 8000,
-            "minLength": 1,
-            "type": "string"
+          "includeRevisionStatus": {
+            "type": "boolean"
           },
           "projectId": {
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
           },
-          "tone": {
-            "enum": [
-              "professional",
-              "friendly",
-              "concise"
-            ],
+          "rawNotes": {
+            "maxLength": 8000,
+            "minLength": 1,
             "type": "string"
           }
         },
         "required": [
-          "projectId"
+          "projectId",
+          "rawNotes"
         ],
         "type": "object"
       },
@@ -742,6 +738,27 @@
       },
       "AssetCreate": {
         "properties": {
+          "category": {
+            "enum": [
+              "logo",
+              "photo",
+              "illustration",
+              "icon",
+              "template",
+              "guide",
+              "other"
+            ],
+            "type": "string"
+          },
+          "clientId": {
+            "maxLength": 50,
+            "minLength": 1,
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "type": "string"
+          },
           "metadata": {
             "additionalProperties": {},
             "type": "object"
@@ -763,8 +780,10 @@
             "default": "IMAGE",
             "enum": [
               "IMAGE",
-              "VIDEO",
               "DOCUMENT",
+              "VIDEO",
+              "BRAND",
+              "WEBSITE",
               "FONT",
               "COLOR",
               "OTHER"
@@ -779,7 +798,8 @@
         },
         "required": [
           "name",
-          "url"
+          "url",
+          "clientId"
         ],
         "type": "object"
       },
@@ -808,6 +828,22 @@
       },
       "AssetUpdate": {
         "properties": {
+          "category": {
+            "enum": [
+              "logo",
+              "photo",
+              "illustration",
+              "icon",
+              "template",
+              "guide",
+              "other"
+            ],
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "type": "string"
+          },
           "metadata": {
             "additionalProperties": {},
             "type": "object"
@@ -829,8 +865,10 @@
             "default": "IMAGE",
             "enum": [
               "IMAGE",
-              "VIDEO",
               "DOCUMENT",
+              "VIDEO",
+              "BRAND",
+              "WEBSITE",
               "FONT",
               "COLOR",
               "OTHER"
@@ -1996,8 +2034,7 @@
             "enum": [
               "RETAINER",
               "PROJECT",
-              "HOURLY",
-              "FIXED"
+              "NDA"
             ],
             "type": "string"
           },
@@ -2390,7 +2427,7 @@
           },
           "hoursPerMonth": {
             "exclusiveMinimum": 0,
-            "type": "number"
+            "type": "integer"
           },
           "monthlyAmountCad": {
             "minimum": 0,
@@ -2401,7 +2438,12 @@
             "type": "number"
           },
           "tier": {
+            "default": "custom",
             "enum": [
+              "999",
+              "1999",
+              "3999",
+              "custom",
               "BASIC",
               "STANDARD",
               "PREMIUM",
@@ -2412,7 +2454,6 @@
         },
         "required": [
           "clientId",
-          "tier",
           "hoursPerMonth"
         ],
         "type": "object"
@@ -2554,14 +2595,28 @@
             "type": "string"
           },
           "url": {
-            "format": "uri",
-            "maxLength": 2048,
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "username": {
-            "maxLength": 200,
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object"
@@ -2959,9 +3014,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "invoiceId"
-        ],
         "type": "object"
       },
       "LineItemTemplateCreate": {
@@ -3116,34 +3168,29 @@
       },
       "MessagePaste": {
         "properties": {
-          "bodyHtml": {
-            "maxLength": 500000,
-            "type": "string"
-          },
-          "bodyText": {
+          "content": {
             "maxLength": 100000,
             "minLength": 1,
             "type": "string"
           },
-          "senderEmail": {
-            "format": "email",
-            "maxLength": 255,
-            "type": "string"
-          },
-          "senderName": {
-            "maxLength": 200,
+          "projectId": {
+            "maxLength": 50,
             "minLength": 1,
             "type": "string"
           },
-          "subject": {
-            "maxLength": 500,
+          "source": {
+            "default": "other",
+            "enum": [
+              "email",
+              "slack",
+              "upwork",
+              "other"
+            ],
             "type": "string"
           }
         },
         "required": [
-          "bodyText",
-          "senderEmail",
-          "senderName"
+          "content"
         ],
         "type": "object"
       },
@@ -4325,7 +4372,8 @@
           }
         },
         "required": [
-          "name"
+          "name",
+          "clientId"
         ],
         "type": "object"
       },
@@ -4437,11 +4485,6 @@
             "minLength": 1,
             "type": "string"
           },
-          "threadId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
-          },
           "tone": {
             "maxLength": 50,
             "minLength": 1,
@@ -4449,7 +4492,6 @@
           }
         },
         "required": [
-          "threadId",
           "subject",
           "body"
         ],
@@ -4895,13 +4937,9 @@
         "properties": {
           "notes": {
             "maxLength": 5000,
-            "minLength": 1,
             "type": "string"
           }
         },
-        "required": [
-          "notes"
-        ],
         "type": "object"
       },
       "RevisionUpdateStatus": {
@@ -6424,21 +6462,39 @@
         "properties": {
           "hoursPerMonth": {
             "exclusiveMinimum": 0,
-            "type": "number"
+            "type": "integer"
           },
           "monthlyAmountCad": {
-            "minimum": 0,
-            "type": "number"
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "monthlyAmountUsd": {
-            "minimum": 0,
-            "type": "number"
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "resetHours": {
             "type": "boolean"
           },
           "tier": {
             "enum": [
+              "999",
+              "1999",
+              "3999",
+              "custom",
               "BASIC",
               "STANDARD",
               "PREMIUM",
@@ -19327,7 +19383,7 @@
         "tags": [
           "invoice-chaser"
         ],
-        "x-access": "staff",
+        "x-access": "admin",
         "x-tenancy": "scoped"
       }
     },
@@ -19363,7 +19419,7 @@
         "tags": [
           "invoice-chaser"
         ],
-        "x-access": "staff",
+        "x-access": "admin",
         "x-tenancy": "scoped"
       }
     },
@@ -26692,6 +26748,8 @@
             "name": "threadId",
             "required": true,
             "schema": {
+              "maxLength": 50,
+              "minLength": 1,
               "type": "string"
             }
           }

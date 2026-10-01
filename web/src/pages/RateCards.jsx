@@ -278,10 +278,11 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || !clientId) return;
     onSubmit({
       name: name.trim(),
-      clientId: clientId || null,
+      // Required: a rate card belongs to a client (the API rejects null).
+      clientId,
       isDefault,
       rates: rates.map((r) => ({
         ...r,
@@ -307,7 +308,7 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
               />
             </div>
             <div>
-              <label htmlFor="rate-card-client" className="block text-sm font-medium mb-1.5">Client</label>
+              <label htmlFor="rate-card-client" className="block text-sm font-medium mb-1.5">Client *</label>
               {clientsLoading ? (
                 <LoadingState label="Loading clients…" compact size="sm" />
               ) : clientsError ? (
@@ -318,9 +319,10 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
                   disabled={isLoading}
+                  required
                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 >
-                  <option value="">Global (all clients)</option>
+                  <option value="" disabled>Select a client</option>
                   {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               )}

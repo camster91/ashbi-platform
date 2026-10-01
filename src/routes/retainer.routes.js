@@ -58,15 +58,15 @@ export default async function retainerRoutes(fastify) {
         clientId,
         tier: tier || 'custom',
         hoursPerMonth: parseInt(hoursPerMonth),
-        monthlyAmountUsd: monthlyAmountUsd ? parseFloat(monthlyAmountUsd) : null,
-        monthlyAmountCad: monthlyAmountCad ? parseFloat(monthlyAmountCad) : null,
+        monthlyAmountUsd: monthlyAmountUsd != null ? parseFloat(monthlyAmountUsd) : null,
+        monthlyAmountCad: monthlyAmountCad != null ? parseFloat(monthlyAmountCad) : null,
         billingCycleStart: new Date(),
       },
       update: {
         tier: tier || 'custom',
         hoursPerMonth: parseInt(hoursPerMonth),
-        monthlyAmountUsd: monthlyAmountUsd ? parseFloat(monthlyAmountUsd) : null,
-        monthlyAmountCad: monthlyAmountCad ? parseFloat(monthlyAmountCad) : null,
+        monthlyAmountUsd: monthlyAmountUsd != null ? parseFloat(monthlyAmountUsd) : null,
+        monthlyAmountCad: monthlyAmountCad != null ? parseFloat(monthlyAmountCad) : null,
       },
       include: { client: { select: { id: true, name: true } } }
     });
@@ -89,8 +89,8 @@ export default async function retainerRoutes(fastify) {
     const data = {};
     if (tier !== undefined) data.tier = tier;
     if (hoursPerMonth !== undefined) data.hoursPerMonth = parseInt(hoursPerMonth);
-    if (monthlyAmountUsd !== undefined) data.monthlyAmountUsd = parseFloat(monthlyAmountUsd);
-    if (monthlyAmountCad !== undefined) data.monthlyAmountCad = parseFloat(monthlyAmountCad);
+    if (monthlyAmountUsd !== undefined) data.monthlyAmountUsd = monthlyAmountUsd === null ? null : parseFloat(monthlyAmountUsd);
+    if (monthlyAmountCad !== undefined) data.monthlyAmountCad = monthlyAmountCad === null ? null : parseFloat(monthlyAmountCad);
     if (resetHours) {
       data.hoursUsed = 0;
       data.billingCycleStart = new Date();

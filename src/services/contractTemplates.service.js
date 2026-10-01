@@ -117,6 +117,10 @@ Date: _______________</p>`
   }
 };
 
+// The template types a contract can be created from (the create schema's
+// enum and the Contracts page options).
+export const CONTRACT_TEMPLATE_TYPES = Object.freeze(Object.keys(templates));
+
 export function getContractTemplate(templateType) {
   return templates[templateType] || null;
 }

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ScrollText, Plus, Send, ExternalLink, CheckCircle, Download, Sparkles, Wand2 } from 'lucide-react';
 import { api } from '../lib/api';
 import useClients from '../hooks/useClients';
+import { AI_CHAT_MESSAGE_MAX_LENGTH, buildContractRefineChatPayload } from '../lib/form-payloads';
 import { useToast } from '../hooks/useToast';
 import { Button, Card, EmptyState, LoadingState, StatusBadge } from '../components/ui';
 import Modal from '../components/Modal';
@@ -103,10 +104,14 @@ export default function Contracts() {
     setAiLoading(true);
     setAiResult('');
     try {
-      const contractContent = aiRefineContract.content || '';
-      const prompt = `Refine the following contract content with this instruction: "${aiInstruction}"\n\nContract content:\n${contractContent}\n\nReturn only the revised contract content.`;
-      const res = await api.aiChat({ messages: [{ role: 'user', content: prompt }] });
-      setAiResult(res?.content || res?.text || res?.message || JSON.stringify(res));
+      const payload = buildContractRefineChatPayload(aiInstruction, aiRefineContract.content || '');
+      if (!payload) {
+        toast.error('AI refine failed', `This contract is too long to refine with AI (limit ${AI_CHAT_MESSAGE_MAX_LENGTH.toLocaleString()} characters including the instruction).`);
+        return;
+      }
+      // POST /api/ai/chat answers { message }.
+      const res = await api.aiChat(payload);
+      setAiResult(res?.message || res?.content || res?.text || JSON.stringify(res));
     } catch (err) {
       toast.error('AI refine failed', err.message);
     } finally {

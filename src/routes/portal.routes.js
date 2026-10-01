@@ -626,6 +626,11 @@ export default async function portalRoutes(fastify) {
       if (slotStart <= now) continue;
 
       slots.push({
+        // The wall-clock "HH:MM" the booking form sends back as `time`. It is
+        // in the server's local timezone (slotStart above and POST /booking
+        // both parse `${date}T${time}` as server-local); there is no
+        // configured booking timezone to label it with.
+        time: `${String(hour).padStart(2, '0')}:00`,
         start: slotStart.toISOString(),
         end: slotEnd.toISOString(),
         available: !hasConflict

@@ -12,6 +12,7 @@ import {
 import { API_KEY_MAX_EXPIRY_DAYS, API_KEY_SCOPES } from '../auth/api-key-scopes.js';
 import { INVOICE_CURRENCIES } from '../utils/money.js';
 import { receiptRelativePath } from '../utils/stored-upload.js';
+import { CONTRACT_TEMPLATE_TYPES } from '../services/contractTemplates.service.js';
 
 // ── Reusable field validators ──────────────────────────────────────────────
 const email = z.string().email().max(255);
@@ -488,7 +489,9 @@ export function validate(schema, data) {
 export const createContractSchema = z.object({
   clientId: cuidId,
   title: z.string().min(1).max(200),
-  templateType: z.enum(['RETAINER', 'PROJECT', 'HOURLY', 'FIXED']).optional(),
+  // Only types with a template (contractTemplates.service.js): RETAINER,
+  // PROJECT and the Mutual NDA.
+  templateType: z.enum(CONTRACT_TEMPLATE_TYPES).optional(),
   content: z.string().max(50000).optional(),
   proposalId: cuidId.optional(),
 });
@@ -540,19 +543,34 @@ export const updateEstimateSchema = z.object({
   .refine(notBothTaxFields, notBothTaxFieldsMessage);
 
 // ── Retainer schemas ───────────────────────────────────────────────────────
+// RetainerPlan.tier is a free-form String column. Onboarding stores the
+// package price ('999' | '1999' | '3999', see onboarding.service.js
+// TIER_HOURS), the Retainers page and the create handler default to 'custom'
+// (a plan priced by its monthly amounts), and earlier API callers could store
+// the named tiers. All of them are accepted so stored plans round-trip.
+export const RETAINER_PACKAGE_TIERS = ['999', '1999', '3999'];
+export const RETAINER_TIER_VALUES = [
+  ...RETAINER_PACKAGE_TIERS,
+  'custom',
+  'BASIC', 'STANDARD', 'PREMIUM', 'ENTERPRISE',
+];
+const retainerTier = z.enum(RETAINER_TIER_VALUES);
+
 export const createRetainerSchema = z.object({
   clientId: cuidId,
-  tier: z.enum(['BASIC', 'STANDARD', 'PREMIUM', 'ENTERPRISE']),
-  hoursPerMonth: z.number().positive(),
+  tier: retainerTier.default('custom'),
+  // RetainerPlan.hoursPerMonth is an Int column.
+  hoursPerMonth: z.number().int().positive(),
   monthlyAmountUsd: z.number().nonnegative().optional(),
   monthlyAmountCad: z.number().nonnegative().optional(),
 });
 
 export const updateRetainerSchema = z.object({
-  tier: z.enum(['BASIC', 'STANDARD', 'PREMIUM', 'ENTERPRISE']).optional(),
-  hoursPerMonth: z.number().positive().optional(),
-  monthlyAmountUsd: z.number().nonnegative().optional(),
-  monthlyAmountCad: z.number().nonnegative().optional(),
+  tier: retainerTier.optional(),
+  hoursPerMonth: z.number().int().positive().optional(),
+  // null clears a monthly amount.
+  monthlyAmountUsd: z.number().nonnegative().nullable().optional(),
+  monthlyAmountCad: z.number().nonnegative().nullable().optional(),
   resetHours: z.boolean().optional(),
 }).refine(val => Object.keys(val).length > 0, { message: 'At least one field must be provided' });
 
@@ -700,11 +718,13 @@ export const aiAskSchema = z.object({
   { message: 'Provide threadId or projectId', path: ['question'] }
 );
 
+// Project page "Draft client update": the handler reads rawNotes and
+// includeRevisionStatus (src/routes/ai.routes.js /draft-update).
 export const aiDraftUpdateSchema = z.object({
   projectId: cuidId,
-  // Custom user-supplied bullet points; cap at 8k chars total
-  notes: aiFreeText.optional(),
-  tone: z.enum(['professional', 'friendly', 'concise']).optional(),
+  // User-supplied talking points; cap at 8k chars total
+  rawNotes: z.string().trim().min(1).max(8000),
+  includeRevisionStatus: z.boolean().optional(),
 });
 
 export const aiChatSchema = z.object({
@@ -1186,8 +1206,13 @@ export const pipelineDealUpdateSchema = z.object({
 });
 
 // ── Response (AI-drafted reply) ───────────────────────────────────────────
-export const responseCreateSchema = z.object({
+// POST /api/responses/:threadId/drafts — the thread comes from the URL
+// (responseThreadParamsSchema), never from the body.
+export const responseThreadParamsSchema = z.object({
   threadId: cuidId,
+});
+
+export const responseCreateSchema = z.object({
   subject: z.string().min(1).max(500),
   body: z.string().min(1).max(50_000),
   tone: z.string().min(1).max(50).optional(),
@@ -1333,7 +1358,12 @@ export const credentialCreateSchema = credentialFields.refine(
   (value) => Boolean(value.clientId || value.projectId),
   { message: 'A client or project owner is required' },
 );
-export const credentialUpdateSchema = credentialFields.partial().refine(
+// null clears a stored username or URL (the edit form sends null for an
+// emptied field).
+export const credentialUpdateSchema = credentialFields.partial().extend({
+  username: credentialFields.shape.username.unwrap().nullable().optional(),
+  url: credentialFields.shape.url.unwrap().nullable().optional(),
+}).refine(
   (value) => Object.keys(value).length > 0,
   { message: 'At least one credential field is required' },
 );
@@ -1701,8 +1731,10 @@ export const landingLeadSchema = z.object({
 });
 
 // ── Invoice Chaser ───────────────────────────────────────────────────────
+// "Generate all" sends {} and drafts reminders for every overdue invoice;
+// "Generate one" names the invoice.
 export const invoiceChaserSchema = z.object({
-  invoiceId: cuidId,
+  invoiceId: cuidId.optional(),
   message: z.string().max(5_000).optional(),
 });
 
@@ -1758,16 +1790,33 @@ export const assignmentRuleBulkSchema = z.object({
 });
 
 // ── Final batch (43 endpoints) ────────────────────────────────────────────
-export const assetCreateSchema = z.object({
-  name: z.string().min(1).max(200),
+// Asset Library (web/src/pages/AssetLibrary.jsx). Asset rows are scoped to the
+// organization through their client, so every asset needs one; the create
+// route checks the client is visible to the caller.
+export const ASSET_TYPES = ['IMAGE', 'DOCUMENT', 'VIDEO', 'BRAND', 'WEBSITE', 'FONT', 'COLOR', 'OTHER'];
+export const ASSET_CATEGORIES = ['logo', 'photo', 'illustration', 'icon', 'template', 'guide', 'other'];
+const assetFields = {
+  name: z.string().trim().min(1).max(200),
   url: z.string().url().max(2048),
-  type: z.enum(['IMAGE', 'VIDEO', 'DOCUMENT', 'FONT', 'COLOR', 'OTHER']).default('IMAGE'),
-  tags: z.array(z.string().max(50)).max(50).optional(),
+  type: z.enum(ASSET_TYPES).default('IMAGE'),
+  category: z.enum(ASSET_CATEGORIES).optional(),
+  description: z.string().trim().max(2_000).optional(),
+  // "category:" tags are reserved: the service stores the category as one
+  // (assetLibrary.service.js encodeAssetTags).
+  tags: z.array(
+    z.string().max(50).refine((tag) => !tag.toLowerCase().startsWith('category:'), { message: 'Tags starting with "category:" are reserved; use the category field' }),
+  ).max(50).optional(),
   // Loose metadata — client-specific fields like dimensions, color tokens
   metadata: z.record(z.string(), z.unknown()).optional(),
+};
+
+export const assetCreateSchema = z.object({
+  ...assetFields,
+  clientId: cuidId,
 });
 
-export const assetUpdateSchema = assetCreateSchema.partial();
+// An asset keeps its client; PATCH cannot move it to another one.
+export const assetUpdateSchema = z.object(assetFields).partial();
 
 export const assetGuidelineCreateSchema = z.object({
   title: z.string().min(1).max(200),
@@ -1834,12 +1883,14 @@ export const mailgunSendSchema = z.object({
   domain: z.string().max(255).optional(),
 });
 
+// Project page "Paste message": the handler reads content, source and
+// projectId (src/routes/message.routes.js). source is interpolated into the AI
+// prompt and the thread subject, so it stays an allowlist.
+export const MESSAGE_PASTE_SOURCES = ['email', 'slack', 'upwork', 'other'];
 export const messagePasteSchema = z.object({
-  bodyText: z.string().min(1).max(100_000),
-  bodyHtml: z.string().max(500_000).optional(),
-  subject: z.string().max(500).optional(),
-  senderEmail: z.string().email().max(255),
-  senderName: z.string().min(1).max(200),
+  content: z.string().trim().min(1).max(100_000),
+  source: z.enum(MESSAGE_PASTE_SOURCES).default('other'),
+  projectId: cuidId.optional(),
 });
 
 const milestoneDueDate = invoiceDateInput({ endOfDay: false });
@@ -1940,8 +1991,11 @@ export const rateCardSchema = z.object({
   // Categories this rate card applies to
   categories: z.array(z.string().max(100)).max(50).optional(),
   isActive: z.boolean().default(true),
-  // Actual RateCard model fields (clientId, rates, isDefault)
-  clientId: cuidId.optional(),
+  // Actual RateCard model fields (clientId, rates, isDefault). A rate card is
+  // scoped to the organization only through its client, so every card needs
+  // one: required on POST, and on PUT (rateCardSchema.partial()) omitted means
+  // unchanged. null is rejected, since a card without a client is unreachable.
+  clientId: cuidId,
   // rates is a JSON array of {serviceName, unit, rate, description}
   rates: z.array(z.object({
     serviceName: z.string().min(1).max(200),
@@ -1952,8 +2006,9 @@ export const rateCardSchema = z.object({
   isDefault: z.boolean().default(false),
 });
 
+// "New revision round" sends {}; notes are optional.
 export const revisionCreateNewSchema = z.object({
-  notes: z.string().min(1).max(5_000),
+  notes: z.string().trim().max(5_000).optional(),
 });
 
 export const revisionUpdateStatusSchema = z.object({

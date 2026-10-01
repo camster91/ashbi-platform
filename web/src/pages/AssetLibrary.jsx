@@ -3,14 +3,23 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { FolderOpen, Search, Plus, Trash2, Image, FileText, Video, Palette, Globe } from 'lucide-react';
 import { api } from '../lib/api';
+import { buildAssetCreatePayload } from '../lib/form-payloads';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Button, Card, LoadingState } from '../components/ui';
 import Modal, { ModalFooter } from '../components/Modal';
 import QueryErrorState from '../components/QueryErrorState';
 import { useAuth } from '../hooks/useAuth';
 
-const TYPE_ICONS = { image: Image, document: FileText, video: Video, brand: Palette, website: Globe };
-const ASSET_TYPES = ['image', 'document', 'video', 'brand', 'website', 'other'];
+// Values match the API enum (assetCreateSchema in src/validators/schemas.js).
+const TYPE_ICONS = { IMAGE: Image, DOCUMENT: FileText, VIDEO: Video, BRAND: Palette, WEBSITE: Globe };
+const ASSET_TYPES = [
+  { value: 'IMAGE', label: 'Image' },
+  { value: 'DOCUMENT', label: 'Document' },
+  { value: 'VIDEO', label: 'Video' },
+  { value: 'BRAND', label: 'Brand' },
+  { value: 'WEBSITE', label: 'Website' },
+  { value: 'OTHER', label: 'Other' },
+];
 const CATEGORIES = ['logo', 'photo', 'illustration', 'icon', 'template', 'guide', 'other'];
 
 export default function AssetLibrary() {
@@ -22,7 +31,7 @@ export default function AssetLibrary() {
   const [typeFilter, setTypeFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showUpload, setShowUpload] = useState(false);
-  const [newAsset, setNewAsset] = useState({ name: '', type: 'image', category: 'logo', url: '', description: '' });
+  const [newAsset, setNewAsset] = useState({ name: '', type: 'IMAGE', category: 'logo', url: '', description: '' });
   const [assetToDelete, setAssetToDelete] = useState(null);
 
   const { data: assets = [], isLoading, isFetching, error: assetsError, refetch } = useQuery({
@@ -36,7 +45,7 @@ export default function AssetLibrary() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['assets', clientId] });
       setShowUpload(false);
-      setNewAsset({ name: '', type: 'image', category: 'logo', url: '', description: '' });
+      setNewAsset({ name: '', type: 'IMAGE', category: 'logo', url: '', description: '' });
     },
   });
 
@@ -57,7 +66,7 @@ export default function AssetLibrary() {
 
   const handleCreate = (e) => {
     e.preventDefault();
-    createMutation.mutate({ ...newAsset, clientId });
+    createMutation.mutate(buildAssetCreatePayload(newAsset, clientId));
   };
 
   const getTypeIcon = (type) => {
@@ -107,7 +116,7 @@ export default function AssetLibrary() {
           <select aria-label="Filter by type" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
             className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
             <option value="">All Types</option>
-            {ASSET_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+            {ASSET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
           <select aria-label="Filter by category" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
             className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
@@ -141,13 +150,16 @@ export default function AssetLibrary() {
           {filteredAssets.map(asset => (
             <Card key={asset.id} className="p-3 group hover:border-primary/30 transition-colors">
               <div className="aspect-square rounded-lg bg-muted flex items-center justify-center mb-2 overflow-hidden">
-                {asset.type === 'image' && asset.url ? (
+                {asset.type === 'IMAGE' && asset.url ? (
                   <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="text-muted-foreground">{getTypeIcon(asset.type)}</div>
                 )}
               </div>
               <p className="text-sm font-medium text-foreground truncate">{asset.name}</p>
+              {asset.description && (
+                <p className="text-xs text-muted-foreground truncate" title={asset.description}>{asset.description}</p>
+              )}
               <div className="flex items-center justify-between mt-1">
                 <span className="text-xs text-muted-foreground">{asset.category}</span>
                 <button onClick={() => { deleteMutation.reset(); setAssetToDelete(asset); }}
@@ -193,7 +205,7 @@ export default function AssetLibrary() {
               <label htmlFor="asset-type" className="block text-sm font-medium mb-1">Type</label>
               <select id="asset-type" value={newAsset.type} onChange={e => setNewAsset({ ...newAsset, type: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" disabled={createMutation.isPending}>
-                    {ASSET_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                    {ASSET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>
                 <div>
@@ -208,7 +220,7 @@ export default function AssetLibrary() {
             <label htmlFor="asset-url" className="block text-sm font-medium mb-1">URL</label>
             <input id="asset-url" type="url" value={newAsset.url} onChange={e => setNewAsset({ ...newAsset, url: e.target.value })}
                   placeholder="https://..."
-              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" disabled={createMutation.isPending} />
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" required disabled={createMutation.isPending} />
               </div>
               <div>
             <label htmlFor="asset-description" className="block text-sm font-medium mb-1">Description</label>
