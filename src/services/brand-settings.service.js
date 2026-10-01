@@ -1,5 +1,5 @@
 // Brand settings are per organization: BrandSettings.organizationId is unique
-// (migration 20261001140000_estimate_tax_rate_brand_unique). Every read and
+// (migration 20261001160000_estimate_tax_rate_brand_unique). Every read and
 // write names the organization explicitly, so a lookup can never return or
 // change another organization's branding, whichever Prisma client
 // (request-scoped or raw) the caller holds.

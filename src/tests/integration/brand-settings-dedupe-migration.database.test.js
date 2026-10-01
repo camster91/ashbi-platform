@@ -1,4 +1,4 @@
-// Migration 20261001140000_estimate_tax_rate_brand_unique merges duplicate
+// Migration 20261001160000_estimate_tax_rate_brand_unique merges duplicate
 // brand_settings rows per organization before making organizationId unique.
 // Runs the migration's merge and delete statements against fixture rows in a
 // transaction that is rolled back (the unique index is dropped inside it so
@@ -17,7 +17,7 @@ test('duplicate brand rows merge into the oldest, keeping the newest set values'
   skip: !databaseUrl && 'TENANT_INTEGRATION_DATABASE_URL is not configured',
   timeout: 60_000,
 }, async () => {
-  const migration = readFileSync(new URL('../../../prisma/migrations/20261001140000_estimate_tax_rate_brand_unique/migration.sql', import.meta.url), 'utf8');
+  const migration = readFileSync(new URL('../../../prisma/migrations/20261001160000_estimate_tax_rate_brand_unique/migration.sql', import.meta.url), 'utf8');
   assert.doesNotMatch(migration, /^\s*(BEGIN|COMMIT)\s*;/m, 'no explicit transaction control');
   const start = migration.indexOf('WITH merged AS');
   const end = migration.indexOf('DROP INDEX');
