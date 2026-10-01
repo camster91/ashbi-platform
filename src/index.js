@@ -22,7 +22,7 @@ import { realtimeRedisSource } from './realtime/redis.js';
 import { apiRateLimitKey, createApiRateLimitMax, createRateLimitRedis, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { clearStaleSessionCookie, resolveRequestSession } from './auth/request-session.js';
-import { canonicalRequestUrl, requestTimeoutMs } from './config/http.js';
+import { canonicalRequestUrl, requestPath, requestTimeoutMs } from './config/http.js';
 import { spaStaticOptions } from './config/static-cache.js';
 import { isCurrentUserSession } from './auth/session.js';
 import { createNotifier } from './services/notification.service.js';
@@ -211,15 +211,17 @@ fastify.setErrorHandler((error, request, reply) => {
 
 // JWT verification hook — runs for ALL /api/* requests BEFORE tenancyMiddleware
 fastify.addHook('onRequest', async (request, reply) => {
-  if (!request.url.startsWith('/api/')) return;
+  // The matched route, not the raw URL, so no spelling can skip the hook.
+  const path = requestPath(request);
+  if (!path.startsWith('/api/')) return;
   // Skip auth-exempt routes
   if (
-    request.url.startsWith('/api/auth') ||
-    request.url.startsWith('/api/portal') ||
-    request.url.startsWith('/api/client-acquisition/config') ||
-    request.url.startsWith('/api/client-acquisition/intake') ||
-    request.url === '/api/health' ||
-    request.url === '/api/live'
+    path.startsWith('/api/auth') ||
+    path.startsWith('/api/portal') ||
+    path.startsWith('/api/client-acquisition/config') ||
+    path.startsWith('/api/client-acquisition/intake') ||
+    path === '/api/health' ||
+    path === '/api/live'
   ) return;
   // A token that is not a current session (stale, revoked, untyped, or not a
   // session at all) makes the request anonymous and its cookie is cleared:

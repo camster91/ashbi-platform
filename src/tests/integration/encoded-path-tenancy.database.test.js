@@ -7,6 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import net from 'node:net';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
@@ -22,6 +23,33 @@ const SPELLINGS = [
   '/./api/clients',
   '/API/clients',
 ];
+
+// app.inject normalises the target (dot segments, absolute-form) before the
+// app sees it, so the spellings that bypassed the first fix only reproduce on
+// a real socket with the request line exactly as sent.
+function rawRequest(port, method, target, { cookie = '', body = null } = {}) {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect(port, '127.0.0.1');
+    let data = '';
+    socket.setEncoding('utf8');
+    socket.on('data', (chunk) => { data += chunk; });
+    socket.on('error', reject);
+    socket.on('end', () => {
+      const status = Number((data.match(/^HTTP\/1\.1 (\d{3})/) || [])[1]);
+      resolve({ status, body: data.slice(data.indexOf('\r\n\r\n') + 4) });
+    });
+    const payload = body ? JSON.stringify(body) : '';
+    socket.write([
+      `${method} ${target} HTTP/1.1`,
+      'Host: 127.0.0.1',
+      'Connection: close',
+      ...(cookie ? [`Cookie: ${cookie}`] : []),
+      ...(payload ? ['Content-Type: application/json', `Content-Length: ${Buffer.byteLength(payload)}`] : []),
+      '',
+      payload,
+    ].join('\r\n'));
+  });
+}
 
 function cookieOf(response) {
   const header = response.headers['set-cookie'];
@@ -78,6 +106,32 @@ test('encoded and non-canonical API paths are tenant-scoped like /api', {
 
       const asClient = await app.inject({ method: 'GET', url, headers: { cookie: portal } });
       assert.ok([403, 404].includes(asClient.statusCode), `${url} as a client-portal session: ${asClient.statusCode} ${asClient.body}`);
+    }
+
+    await app.listen({ port: 0, host: '127.0.0.1' });
+    const { port } = app.server.address();
+    for (const target of [
+      '/%61pi/clients',
+      '/%6%31pi/clients',
+      '/%%36%31pi/clients',
+      'http://x/api/clients',
+      'https://x/api/clients',
+      'http://user@x/api/clients',
+      'http://x/%61pi/clients',
+    ]) {
+      for (const [label, cookie] of [['staff', staff], ['client-portal', portal]]) {
+        const response = await rawRequest(port, 'GET', target, { cookie });
+        assert.ok(!response.body.includes(clientA.name), `${label} ${target} leaked another organisation's client (${response.status})`);
+        if (label === 'client-portal') {
+          assert.ok([400, 403, 404].includes(response.status), `client-portal ${target}: ${response.status} ${response.body}`);
+        }
+      }
+    }
+    for (const target of [`http://x/api/clients/${clientA.id}`, `/%6%31pi/clients/${clientA.id}`]) {
+      for (const cookie of [staff, portal]) {
+        const response = await rawRequest(port, 'PUT', target, { cookie, body: { name: 'Hijacked' } });
+        assert.ok([400, 403, 404].includes(response.status), `PUT ${target}: ${response.status} ${response.body}`);
+      }
     }
 
     const rename = await app.inject({

@@ -20,28 +20,53 @@ export function requestTimeoutMs(value = process.env.REQUEST_TIMEOUT_MS) {
 }
 
 const UNRESERVED_ESCAPE = /%([0-9A-Fa-f]{2})/g;
+const MALFORMED_ESCAPE = /%(?![0-9A-Fa-f]{2})/;
 const UNRESERVED = /^[A-Za-z0-9\-._~]$/;
+// find-my-way routes an absolute-form target (`GET http://host/api/x`) by
+// dropping everything up to the first slash after the scheme; mirror it.
+const ABSOLUTE_FORM = /^https?:\/\/.*?\//;
 
 /**
  * Canonical form of a request URL, applied before routing (Fastify
- * `rewriteUrl`). The router decodes percent-escapes, but every prefix check
- * that runs on `request.url` (tenancy, session hook, rate limiting, auth
- * exemptions) reads the raw string; `/%61pi/clients` would route to
- * `/api/clients` while those checks saw a non-API path and skipped tenant
- * scoping. RFC 3986 (section 6.2.2.2) makes escaped unreserved characters
- * equivalent to the characters themselves, so decoding them here gives the
- * checks and the router the same path. Reserved escapes (%2F and friends) and
- * the query string are left untouched.
+ * `rewriteUrl`), so logs and the few places that still read request.url see
+ * the path the router dispatches. RFC 3986 (section 6.2.2.2) makes escaped
+ * unreserved characters equivalent to the characters themselves, so they are
+ * decoded; reserved escapes (%2F and friends) and the query string are left
+ * untouched. A path with a malformed escape is returned as sent so the router
+ * rejects it (400) instead of a decode assembling a new escape from it
+ * (`%6%31` -> `%61`). Security decisions do not rely on this: they use
+ * `requestPath`, the route the router actually matched.
  * @param {string} url
  */
 export function canonicalRequestUrl(url) {
-  if (typeof url !== 'string' || !url.includes('%')) return url;
-  const queryAt = url.indexOf('?');
-  const path = queryAt === -1 ? url : url.slice(0, queryAt);
-  const rest = queryAt === -1 ? '' : url.slice(queryAt);
+  if (typeof url !== 'string') return url;
+  const target = url.startsWith('/') ? url : url.replace(ABSOLUTE_FORM, '/');
+  if (!target.includes('%')) return target;
+  const queryAt = target.indexOf('?');
+  const path = queryAt === -1 ? target : target.slice(0, queryAt);
+  const rest = queryAt === -1 ? '' : target.slice(queryAt);
+  if (MALFORMED_ESCAPE.test(path)) return target;
   const canonical = path.replace(UNRESERVED_ESCAPE, (escape, hex) => {
     const char = String.fromCharCode(Number.parseInt(hex, 16));
     return UNRESERVED.test(char) ? char : escape.toUpperCase();
   });
   return canonical + rest;
+}
+
+/**
+ * The path a security decision should look at: the route pattern the router
+ * matched (`/api/clients/:id`), so no spelling of the URL can make a check
+ * disagree with what is dispatched. Unmatched requests (404s) fall back to the
+ * parsed origin-form pathname.
+ * @param {{ routeOptions?: { url?: string }, url?: string, raw?: { url?: string } }} request
+ */
+export function requestPath(request) {
+  const route = request?.routeOptions?.url;
+  if (typeof route === 'string' && route.startsWith('/')) return route;
+  const url = request?.url ?? request?.raw?.url ?? '/';
+  try {
+    return new URL(url, 'http://localhost').pathname;
+  } catch {
+    return '/';
+  }
 }

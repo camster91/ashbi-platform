@@ -26,6 +26,7 @@ import defaultLogger from '../utils/logger.js';
 import { safeEqual } from '../utils/crypto.js';
 import { insensitiveEquals } from '../utils/insensitive-equals.js';
 import { sessionBinding } from './reauth.js';
+import { requestPath } from '../config/http.js';
 import { sessionTokenTypeFor } from './session.js';
 import { recordAuditEvent } from '../services/audit-event.service.js';
 
@@ -626,7 +627,7 @@ export function revokeImpersonationsForUser(prisma, request, userId, reason) {
 export function createImpersonationHook({ prisma, isCurrentUserSession, logger = defaultLogger }) {
   return async function impersonationHook(request, reply) {
     // Normalised, so `//api/...` or an encoded prefix cannot skip the hook.
-    if (!normalizedPath(request.url).startsWith('/api/')) return undefined;
+    if (!normalizedPath(requestPath(request)).startsWith('/api/')) return undefined;
     if (!request.cookies?.[IMPERSONATION_COOKIE]) return undefined;
 
     let adminOk = false;

@@ -1,6 +1,7 @@
 import logger from '../utils/logger.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../utils/request-context.js';
+import { requestPath } from '../config/http.js';
 // CRITICAL: Import the NAMED `prisma` (the raw soft-delete-extended client
 // at src/config/db.js line ~110), NOT the default export (the outer
 // request-context-aware Proxy at line ~133). The default Proxy calls
@@ -89,13 +90,15 @@ function impersonationOf(request) {
  */
 export async function tenancyMiddleware(request, reply) {
   // Only enforce tenancy on API routes
-  if (!request.url.startsWith('/api/')) {
+  // Decide on the route the router matched, never the raw URL string.
+  const path = requestPath(request);
+  if (!path.startsWith('/api/')) {
     request.prisma = prisma;
     enterRequestContext({ prisma, organizationId: null });
     return;
   }
 
-  if (isTenancyExemptUrl(request.url)) {
+  if (isTenancyExemptUrl(path)) {
     request.prisma = prisma; // Use global for auth/portal/health/public routes
     enterRequestContext({ prisma, organizationId: null, impersonation: impersonationOf(request) });
     return;
