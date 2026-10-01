@@ -237,6 +237,7 @@
   "GET /api/reviews",
   "GET /api/reviews/",
   "GET /api/reviews/:id",
+  "GET /api/reviews/:id/export",
   "GET /api/reviews/:id/share-links",
   "GET /api/reviews/capabilities",
   "GET /api/search",

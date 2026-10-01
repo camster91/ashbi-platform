@@ -1,6 +1,7 @@
 // Client routes
 
 import { safeParse } from '../utils/safeParse.js';
+import { clientStateRevokesPortal, revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
 import { validateBody, createClientSchema, updateClientSchema, clientContactSchema, clientNoteCreateSchema } from '../validators/schemas.js';
 
 export default async function clientRoutes(fastify) {
@@ -182,6 +183,12 @@ export default async function clientRoutes(fastify) {
       where: { id },
       data
     });
+
+    // Pausing, archiving or churning a client ends its portal access: its
+    // open portal sockets are dropped now (HTTP requests already re-check).
+    if ((data.status !== undefined || data.relationshipStatus !== undefined) && clientStateRevokesPortal(client)) {
+      revokeClientSocketsFrom(fastify, { clientId: client.id }, request.log);
+    }
 
     return client;
   });

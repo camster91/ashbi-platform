@@ -679,6 +679,9 @@ export const api = {
     request(`/reviews/${encodeURIComponent(id)}/decisions`, { method: 'POST', body: data }),
   getReviewCapabilities: () =>
     request('/reviews/capabilities'),
+  // Evidence export (docs/media-review.md "Evidence export"): a JSON download
+  // served with Content-Disposition, opened as a plain link.
+  reviewEvidenceExportUrl: (id) => `${API_BASE}/reviews/${encodeURIComponent(id)}/export`,
   captureReviewPage: (data) =>
     request('/reviews/capture', { method: 'POST', body: data }),
   recaptureReviewPage: (id, data = {}) =>

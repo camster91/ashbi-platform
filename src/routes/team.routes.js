@@ -1,6 +1,7 @@
 // Team management routes
 
 import bcrypt from 'bcrypt';
+import { revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
 import { validateBody, teamInviteSchema, teamResetPasswordSchema, teamUpdateSchema } from '../validators/schemas.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { requireRecentAuth } from '../auth/reauth.js';
@@ -223,6 +224,12 @@ export default async function teamRoutes(fastify) {
         metadata: { fromRole: before.role, toRole: member.role },
       });
     }
+    // A client-portal user who is deactivated, or whose role changed (which
+    // ended their sessions), loses their open portal sockets now. Staff
+    // sockets never join those rooms, so this is a no-op for staff.
+    if (member.isActive === false || (before && role && before.role !== member.role)) {
+      revokeClientSocketsFrom(fastify, { userId: member.id }, request.log);
+    }
     if (before && isActive !== undefined && before.isActive !== member.isActive) {
       await recordRequestAuditEvent(request.prisma, request, {
         action: member.isActive ? 'user.reactivated' : 'user.deactivated',
@@ -321,6 +328,8 @@ export default async function teamRoutes(fastify) {
     });
     // And any support view by or of them (#416).
     await revokeImpersonationsForUser(request.prisma, request, id, 'revoked_password_reset');
+    // Their sessions ended: so do any client-portal sockets they hold.
+    revokeClientSocketsFrom(fastify, { userId: id }, request.log);
 
     return { success: true };
   });

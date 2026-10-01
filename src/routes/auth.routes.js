@@ -1,6 +1,7 @@
 // Authentication routes
 
 import crypto from 'crypto';
+import { revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
@@ -211,6 +212,7 @@ export default async function authRoutes(fastify) {
           where: { userId: request.user.id }
         });
         await revokeUserSessions(request.prisma, request.user.id);
+        revokeClientSocketsFrom(fastify, { userId: request.user.id }, request.log);
         // Signing out also ends any support view the admin had open (#416).
         await endImpersonationSessions(request.prisma, {
           organizationId: request.user.organizationId,
@@ -438,6 +440,9 @@ export default async function authRoutes(fastify) {
       metadata: { method: 'self_service', sessionsRevoked: true },
     });
     await revokeImpersonationsForUser(request.prisma, request, request.user.id, 'revoked_password_change');
+    // Every session just ended: so do this user's client-portal sockets
+    // (none for staff, who never join those rooms).
+    revokeClientSocketsFrom(fastify, { userId: request.user.id }, request.log);
 
     return { success: true };
   });
@@ -740,6 +745,7 @@ export default async function authRoutes(fastify) {
         requestId: request.id,
         ip: request.ip,
       });
+      revokeClientSocketsFrom(fastify, { userId: user.id }, request.log);
 
       return { success: true };
     } catch (err) {

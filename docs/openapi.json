@@ -8966,6 +8966,8 @@
                 "api_key",
                 "settings",
                 "attachment",
+                "revision_round",
+                "project",
                 "ai_provider_connection",
                 "ai_action",
                 "ai_session",
@@ -9019,6 +9021,9 @@
                 "api_key.revoked",
                 "settings.ai_provider_changed",
                 "client_portal.document_deleted",
+                "client_portal.revision_responded",
+                "client_portal.feedback_submitted",
+                "upload.rejected",
                 "ai.connection_connected",
                 "ai.connection_validated",
                 "ai.connection_rotated",
@@ -9043,6 +9048,7 @@
                 "review.share_link_created",
                 "review.share_link_revoked",
                 "review.client_access_changed",
+                "review.evidence_exported",
                 "estimate.approved",
                 "estimate.declined",
                 "estimate.link_revoked",
@@ -26951,6 +26957,58 @@
           }
         ],
         "summary": "POST /api/reviews/:id/decisions",
+        "tags": [
+          "reviews"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/reviews/{id}/export": {
+      "get": {
+        "operationId": "get_api_reviews_id_export",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/reviews/:id/export",
         "tags": [
           "reviews"
         ],

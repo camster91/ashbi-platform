@@ -32,7 +32,8 @@ import {
 } from './auth/impersonation.js';
 import { createJoinProjectHandler, createLeaveProjectHandler } from './auth/project-room-access.js';
 import { createMfaEnforcementHook, disconnectUserSockets, isMfaEnrollmentRequired } from './auth/mfa-enforcement.js';
-import { createSocketAuthMiddleware } from './auth/socket-auth.js';
+import { createSocketAuthMiddleware, withClientReauthorization } from './auth/socket-auth.js';
+import { clientSocketRooms, disconnectClientSockets, startClientSocketSweep } from './auth/client-socket-revocation.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 
@@ -368,8 +369,14 @@ fastify.decorate('revokeSupportViewSockets', (userId) => viewSocketRevoker.revok
 // publish is logged, never surfaced (the view sweep does not cover this case).
 fastify.decorate('disconnectUserSockets', (userIds) => disconnectUserSockets(viewSocketRevoker, userIds, fastify.log));
 const stopViewSocketSweep = startViewSocketSweep(io, prisma, fastify.log);
+// Client-portal sockets whose access was revoked (#286): dropped at once by
+// the revoking write paths, and within one sweep otherwise
+// (src/auth/client-socket-revocation.js).
+fastify.decorate('revokeClientSockets', (target) => disconnectClientSockets(io, target));
+const stopClientSocketSweep = startClientSocketSweep(io, prisma, fastify.log);
 fastify.addHook('onClose', async () => {
   stopViewSocketSweep();
+  stopClientSocketSweep();
   await viewSocketRevoker.close();
   await new Promise((resolve) => io.close(resolve));
   // After io.close(): closing the server closes the adapter's subscriptions.
@@ -405,6 +412,8 @@ io.on('connection', (socket) => {
   // so notify() reaches it.
   const pendingRoom = `pending-user:${socket.userId}`;
   if (socket.userId) socket.join(pendingRoom);
+  // Client-portal sockets only: the rooms revocation disconnects.
+  for (const room of clientSocketRooms(socket)) socket.join(room);
   // The MFA requirement is re-checked here too: it may have been turned on
   // between the handshake check and this point, after the disconnect for
   // that change had already been sent.
@@ -435,7 +444,10 @@ io.on('connection', (socket) => {
   // project-room-access.js), which never carries internal chat or fields.
   // Acknowledges the result so a reconnecting call can wait for the room
   // before re-signalling.
-  socket.on('join-project', createJoinProjectHandler(socket, {
+  // A client-portal socket is re-authorized on every join: a client paused
+  // or archived (or a contact removed) since the handshake is refused and
+  // disconnected (src/auth/socket-auth.js).
+  socket.on('join-project', withClientReauthorization(prisma, socket, createJoinProjectHandler(socket, {
     findProject: (projectId) => prisma.project.findUnique({
       where: { id: projectId },
       select: { clientId: true, client: { select: { organizationId: true } } },
@@ -444,7 +456,7 @@ io.on('connection', (socket) => {
     // enroll is refused and disconnected (docs/privileged-actions.md).
     mustEnrollMfa: () => isMfaEnrollmentRequired(prisma, socket.userId),
     logger,
-  }));
+  })));
 
   socket.on('leave-project', createLeaveProjectHandler(socket));
 
