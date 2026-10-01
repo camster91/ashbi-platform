@@ -33,3 +33,20 @@ test('accepts inert text and rejects empty files', () => {
   assert.equal(validateUploadedFile('notes.txt', 'text/plain', Buffer.from('Project notes')).valid, true);
   assert.equal(validateUploadedFile('notes.txt', 'text/plain', Buffer.alloc(0)).valid, false);
 });
+
+test('every refusal carries a stable code for the upload.rejected audit event', () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+  for (const [args, code] of [
+    [['payload.html.png', 'image/png', png], 'DOUBLE_EXTENSION'],
+    [['payload.svg', 'image/svg+xml', Buffer.from('<svg/>')], 'EXTENSION_NOT_ALLOWED'],
+    [['proof.png', 'text/html', png], 'MIME_MISMATCH'],
+    [['notes.txt', 'text/plain', Buffer.alloc(0)], 'EMPTY_FILE'],
+    [['proof.png', 'image/png', Buffer.alloc(50 * 1024 * 1024 + 1)], 'TOO_LARGE'],
+    [['proof.png', 'image/png', Buffer.from('<script>alert(1)</script>')], 'CONTENT_MISMATCH'],
+  ]) {
+    const result = validateUploadedFile(...args);
+    assert.equal(result.valid, false);
+    assert.equal(result.code, code, args[0]);
+    assert.equal(typeof result.error, 'string');
+  }
+});

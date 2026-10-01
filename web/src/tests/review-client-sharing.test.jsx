@@ -10,6 +10,7 @@ vi.mock('../lib/api', () => ({
     getReviewCapabilities: vi.fn(async () => ({ webCapture: { enabled: false } })),
     getTeam: vi.fn(async () => []),
     attachmentFileUrl: (filename) => `/api/attachments/uploads/${filename}`,
+    reviewEvidenceExportUrl: (id) => `/api/reviews/${id}/export`,
     setReviewClientAccess: vi.fn(async () => ({})),
     addReviewAnnotation: vi.fn(),
     resolveReviewAnnotation: vi.fn(),

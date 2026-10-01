@@ -22,6 +22,7 @@ import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { validateUploadedFile } from '../security/file-upload-policy.js';
 import { isQuarantined } from './media-review.service.js';
+import { sha256Hex } from './upload-integrity.service.js';
 
 export const CHAT_ATTACHMENT_ENTITY = 'CHAT';
 export const CHAT_PENDING_ENTITY = 'CHAT_PENDING';
@@ -73,8 +74,10 @@ export function sendChatAttachmentError(reply, err) {
 
 /**
  * Validate a multipart file (extension + MIME + magic bytes, 50 MB) and write
- * it under a random name. Returns the stored-file fields of an Attachment row,
- * or `{ error }` when the file is refused.
+ * it under a random name. Returns the stored-file fields of an Attachment row
+ * (with the SHA-256 of the bytes written, hashed from the same buffer), or
+ * `{ error, rejected }` when the file is refused: `rejected` is what the
+ * caller passes to recordRejectedUpload (upload-integrity.service.js).
  *
  * @param {{ filename: string, mimetype: string, toBuffer: () => Promise<Buffer> }} file
  * @param {{ uploadDir?: string }} [options]
@@ -82,7 +85,12 @@ export function sendChatAttachmentError(reply, err) {
 export async function storeValidatedUpload(file, { uploadDir = UPLOAD_DIR } = {}) {
   const buffer = await file.toBuffer();
   const validation = validateUploadedFile(file.filename, file.mimetype, buffer);
-  if (!validation.valid) return { error: validation.error };
+  if (!validation.valid) {
+    return {
+      error: validation.error,
+      rejected: { validation, filename: file.filename, mimeType: file.mimetype, size: buffer.length },
+    };
+  }
   await fs.mkdir(uploadDir, { recursive: true });
   const filename = `${randomUUID()}${validation.ext}`;
   await fs.writeFile(path.join(uploadDir, filename), buffer);
@@ -93,6 +101,7 @@ export async function storeValidatedUpload(file, { uploadDir = UPLOAD_DIR } = {}
       mimeType: validation.mimetype,
       size: buffer.length,
       path: `/uploads/${filename}`,
+      checksumSha256: sha256Hex(buffer),
     },
   };
 }

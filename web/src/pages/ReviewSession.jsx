@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Copy, Globe, Link2, RefreshCw, ShieldAlert, Users } from 'lucide-react';
+import { ArrowLeft, Copy, Download, Globe, Link2, RefreshCw, ShieldAlert, Users } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn, formatDate, formatDateTime } from '../lib/utils';
 import MediaReview, { StatusBadge, VersionSwitcher } from '../components/review/MediaReview';
@@ -273,6 +273,15 @@ export default function ReviewSession() {
           <StatusBadge status={session.status} />
           <ClientVisibilityBadge shared={Boolean(session.sharedWithClient)} />
           <span className="text-sm text-muted-foreground">Version {session.version}</span>
+          <a
+            href={api.reviewEvidenceExportUrl(session.id)}
+            download
+            className="ml-auto inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-describedby={`${session.id}-export-help`}
+          >
+            <Download className="h-4 w-4" aria-hidden="true" />Export evidence
+          </a>
+          <span id={`${session.id}-export-help`} className="sr-only">Downloads a JSON file with every version, checksum, comment, decision and share link of this review</span>
         </div>
         <VersionSwitcher versions={data.versions} currentId={session.id} onSelect={(versionId) => navigate(`/review/${versionId}`)} />
         <nav aria-label="Versions" className="flex flex-wrap gap-3 text-sm">
