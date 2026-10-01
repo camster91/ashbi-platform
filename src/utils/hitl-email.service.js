@@ -4,6 +4,8 @@ import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import Handlebars from 'handlebars';
+import env from '../config/env.js';
+import { hitlReplyAddress } from '../services/hitl-reply-address.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = path.join(__dirname, 'email-templates');
@@ -24,6 +26,100 @@ const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'ashbi.ca';
 const MAILGUN_API_URL = `https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages`;
 
 const DISCORD_CAM_WEBHOOK = process.env.DISCORD_CAM_WEBHOOK_URL;
+
+/**
+ * The configured HITL approver address (HITL_APPROVER_EMAIL), or null. Read at
+ * call time so configuration changes and tests apply without a reload.
+ */
+export function hitlApproverEmail() {
+  return env.hitlApproverEmail || null;
+}
+
+/**
+ * The Hub user who receives HITL notifications: the active ADMIN or TEAM user
+ * whose email is HITL_APPROVER_EMAIL (case-insensitive). Returns null, with a
+ * warning, when the address is unset or matches no such user; callers then
+ * skip the HITL notification and email instead of picking someone else.
+ */
+export async function resolveHitlApprover(prisma, log = console) {
+  const email = hitlApproverEmail();
+  if (!email) {
+    log.warn('[hitl-email] HITL_APPROVER_EMAIL not set — skipping HITL notification');
+    return null;
+  }
+  const user = await prisma.user.findFirst({
+    where: {
+      email: { equals: email, mode: 'insensitive' },
+      isActive: true,
+      role: { in: ['ADMIN', 'TEAM'] },
+    },
+    select: { id: true, email: true, organizationId: true },
+  });
+  if (!user) {
+    log.warn('[hitl-email] HITL_APPROVER_EMAIL does not match an active ADMIN/TEAM user — skipping HITL notification');
+    return null;
+  }
+  return user;
+}
+
+/** A notification's JSON data (stored as a JSON string or an object). */
+export function parseNotificationData(raw) {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  if (typeof raw !== 'string' || !raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/** "<id@host>" for any Mailgun message id, or null. */
+export function normalizeHitlMessageId(messageId) {
+  if (typeof messageId !== 'string') return null;
+  const bare = messageId.trim().replace(/^<|>$/g, '').trim();
+  return bare && !/[\s<>]/.test(bare) ? `<${bare}>` : null;
+}
+
+/**
+ * Store the outbound Message-Id on the HITL notification's data, so a reply
+ * is accepted only when its In-Reply-To / References names that email.
+ */
+export async function recordHitlMessageId(prisma, notificationId, messageId) {
+  const id = normalizeHitlMessageId(messageId);
+  if (!id) return false;
+  const notification = await prisma.notification.findUnique({ where: { id: notificationId } });
+  if (!notification) return false;
+  const data = { ...parseNotificationData(notification.data), hitlMessageId: id };
+  await prisma.notification.update({ where: { id: notificationId }, data: { data: JSON.stringify(data) } });
+  return true;
+}
+
+/**
+ * Send a HITL email to the configured approver, or skip when none is set.
+ * The Reply-To is the notification's signed reply address; with `prisma`,
+ * the sent Message-Id is recorded on the notification (without it, replies
+ * to this email are refused).
+ * @param {{ notificationId: string, prisma?: any, subject: string, html: string, text?: string }} message
+ */
+export async function sendToHitlApprover({ notificationId, prisma, ...message }, { send = sendMailgunEmail } = {}) {
+  const to = hitlApproverEmail();
+  if (!to) {
+    console.warn('[hitl-email] HITL_APPROVER_EMAIL not set — skipping HITL email');
+    return { ok: false, error: 'HITL_APPROVER_EMAIL not set' };
+  }
+  const replyTo = hitlReplyAddress(notificationId, env.mailgunDomain || MAILGUN_DOMAIN);
+  const result = await send({ ...message, to, replyTo });
+  if (result?.ok && prisma) {
+    try {
+      result.recorded = await recordHitlMessageId(prisma, notificationId, result.id);
+    } catch (err) {
+      console.error('[hitl-email] Could not record the HITL Message-Id:', err.message);
+      result.recorded = false;
+    }
+  }
+  return result;
+}
 
 /**
  * Load and compile an HTML email template using Handlebars
@@ -78,8 +174,7 @@ export async function sendMailgunEmail({ to, from = 'hub@ashbi.ca', replyTo, sub
 /**
  * Send a HITL task notification email
  */
-export async function sendTaskHITLEmail({ notificationId, task, project, context, urgency = 'NORMAL', replyInstructions, assigneeAgent }) {
-  const replyTo = `reply+${notificationId}@${MAILGUN_DOMAIN}`;
+export async function sendTaskHITLEmail({ notificationId, prisma, task, project, context, urgency = 'NORMAL', replyInstructions, assigneeAgent }) {
   const urgencyLabel = urgency === 'CRITICAL' ? '🔴 CRITICAL' : urgency === 'HIGH' ? '🟠 HIGH' : urgency;
 
   const html = await loadTemplate('hitl-task.html', {
@@ -94,9 +189,9 @@ export async function sendTaskHITLEmail({ notificationId, task, project, context
 
   const subject = `🔔 ${urgency === 'CRITICAL' || urgency === 'HIGH' ? '[ACTION NEEDED] ' : ''}${task.title} — Ashbi Hub`;
 
-  return sendMailgunEmail({
-    to: 'cameron@ashbi.ca',
-    replyTo,
+  return sendToHitlApprover({
+    notificationId,
+    prisma,
     subject,
     html,
   });
@@ -105,8 +200,7 @@ export async function sendTaskHITLEmail({ notificationId, task, project, context
 /**
  * Send a HITL approval notification email
  */
-export async function sendApprovalHITLEmail({ notificationId, approval }) {
-  const replyTo = `reply+${notificationId}@${MAILGUN_DOMAIN}`;
+export async function sendApprovalHITLEmail({ notificationId, prisma, approval }) {
   let content = '';
   try {
     content = typeof approval.content === 'string' ? approval.content : JSON.stringify(approval.content, null, 2);
@@ -123,9 +217,9 @@ export async function sendApprovalHITLEmail({ notificationId, approval }) {
 
   const subject = `✅ Approval Needed: ${approval.title} — Ashbi Hub`;
 
-  return sendMailgunEmail({
-    to: 'cameron@ashbi.ca',
-    replyTo,
+  return sendToHitlApprover({
+    notificationId,
+    prisma,
     subject,
     html,
   });
@@ -134,8 +228,7 @@ export async function sendApprovalHITLEmail({ notificationId, approval }) {
 /**
  * Send a HITL blocked task notification email
  */
-export async function sendBlockedHITLEmail({ notificationId, task, project, blockedReason }) {
-  const replyTo = `reply+${notificationId}@${MAILGUN_DOMAIN}`;
+export async function sendBlockedHITLEmail({ notificationId, prisma, task, project, blockedReason }) {
 
   const html = await loadTemplate('hitl-blocked.html', {
     title: task.title,
@@ -146,9 +239,9 @@ export async function sendBlockedHITLEmail({ notificationId, task, project, bloc
 
   const subject = `🚫 Blocked: ${task.title} — Ashbi Hub`;
 
-  return sendMailgunEmail({
-    to: 'cameron@ashbi.ca',
-    replyTo,
+  return sendToHitlApprover({
+    notificationId,
+    prisma,
     subject,
     html,
   });

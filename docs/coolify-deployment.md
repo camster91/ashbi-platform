@@ -73,6 +73,8 @@ stack for staging or a new environment, and to rehearse that move.
    | `TRUST_PROXY` | no (default `1`) | `1` behind Coolify's single proxy |
    | `POSTGRES_DB`, `POSTGRES_USER` | no (default `ashbi`) | database name and role |
    | `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `MAILGUN_SIGNING_KEY`, `MAILGUN_WEBHOOK_SIGNING_KEY` | for email | Mailgun sending and webhooks |
+   | `HITL_APPROVER_EMAIL` | for HITL email | email of the active ADMIN/TEAM user who receives human-in-the-loop notifications and emails; unset or unmatched creates none. Replies are applied only from that user or an admin of their org, with an SPF/DKIM pass aligned with the From domain |
+   | `MAILGUN_ALLOW_UNSIGNED_INBOUND` | never on a deployed host | local-development opt-in to unsigned inbound email when `MAILGUN_SIGNING_KEY` is unset; ignored unless `NODE_ENV=development` |
    | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | for payments | use test-mode keys until the revenue flow is verified (#378) |
    | `AI_PROVIDER` plus that provider's key (`ANTHROPIC_API_KEY`, `OLLAMA_API_KEY`, …) | for AI features | `AI_DISABLED=true` turns AI off |
    | `SENTRY_DSN`, `OBSERVABILITY_OWNER`, `CREDENTIALS_KEY_OWNER` | recommended | error reporting and named owners; missing values are logged as warnings |
@@ -101,6 +103,59 @@ stack for staging or a new environment, and to rehearse that move.
 
    Sign in at `https://<domain>`, then turn on two-factor authentication for
    the admin account.
+
+## Email approvals (HITL replies)
+
+Human-in-the-loop emails go to `HITL_APPROVER_EMAIL` with a Reply-To of
+`reply+<notificationId>.<token>@<MAILGUN_DOMAIN>`. The token is 32
+lowercase hex characters of an HMAC of the notification id (key derived from
+`HITL_REPLY_SECRET`, which must be at least 32 bytes when set, or from
+`JWT_SECRET` when unset); the whole address is case-insensitive. The sent
+Message-Id is stored on the notification. A reply posted to
+`/api/mailgun-hitl/hitl-reply` is applied only when all of these hold, and
+is otherwise answered 406 (Mailgun does not retry):
+
+- the Mailgun signature, timestamp window and single-use token are valid;
+- the reply address token matches the notification;
+- `message-headers` is present, `In-Reply-To` or `References` names the
+  stored Message-Id, and the `Date` header (and the time the reply reaches
+  Hub) is within 30 days of the notification, and not before it;
+- the reply has exactly one `Message-Id`, and that reply has not already
+  been applied to the notification (a re-injected copy is refused);
+- the From header is one mailbox: the notified user or an active admin of
+  that user's organization;
+- Mailgun's verdicts, read only from the `X-Mailgun-*` headers that come
+  before the first other header (such as `Received`), show a DKIM pass where
+  every `DKIM-Signature` has one `d=` equal to the From domain or a subdomain
+  of it, or an SPF pass for an envelope sender in that domain or a subdomain;
+- an approval is still `PENDING`.
+
+Mailgun setup: create a route with the expression
+`match_recipient("reply\+.*@<MAILGUN_DOMAIN>")` and the action
+`forward("https://<domain>/api/mailgun-hitl/hitl-reply")`, and use the
+domain's HTTP webhook signing key as `MAILGUN_SIGNING_KEY`. Rotating
+`HITL_REPLY_SECRET` (or `JWT_SECRET` without it) invalidates replies to
+emails already sent.
+
+**Before relying on email approvals, capture one real reply.** The exact
+layout of Mailgun's forwarded fields (the order of `message-headers`, and
+whether the SPF and DKIM verdict headers are present for your domain) could
+not be confirmed when this was built. To check:
+
+1. Add a second action to the route, `store(notify="https://<a request bin you control>")`,
+   or temporarily forward to that bin instead. Do not use a public bin for
+   real approval mail.
+2. Trigger a test HITL notification and reply to its email from the
+   approver's normal mail client with a harmless text (not `APPROVED`).
+3. In the captured POST, confirm: `recipient` carries the `.token` part;
+   `message-headers` is a JSON list whose first entries are Mailgun's
+   `X-Mailgun-*` headers, including `X-Mailgun-Spf` and/or
+   `X-Mailgun-Dkim-Check-Result` with `Pass`, before the first `Received`;
+   the `DKIM-Signature` `d=` (or the `sender` domain) is the approver's From
+   domain or a subdomain of it; and `In-Reply-To` names the HITL email.
+4. Remove the extra action. If any check fails (for example, Mailgun adds no
+   DKIM verdict and the approver's domain fails SPF alignment), replies will
+   be refused with 406 and the approver must use the Hub approvals page.
 
 ## Automatic deploys
 

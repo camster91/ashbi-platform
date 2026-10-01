@@ -1,11 +1,9 @@
 // Mailgun webhook + send routes
 
-import crypto from 'crypto';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import { processEmailPipeline } from '../services/pipeline.service.js';
 import { mailgunInboundDeliveryKey } from '../services/inbound-delivery-key.js';
-import { safeEqual } from '../utils/crypto.js';
 import env from '../config/env.js';
 import {validateBody, mailgunSendSchema} from '../validators/schemas.js';
 import { runTenantJob } from '../jobs/tenant-iteration.js';
@@ -16,6 +14,22 @@ import {
   releaseWebhookToken,
   verifyMailgunSignature,
 } from '../services/mailgun-delivery.service.js';
+import {
+  addMailgunFormParser,
+  authenticateMailgunWebhook,
+  MAILGUN_WEBHOOK_BODY_LIMIT,
+  readMailgunWebhookRequest,
+} from '../services/mailgun-webhook-request.js';
+
+/**
+ * Unsigned inbound posts (no MAILGUN_SIGNING_KEY) are accepted only under
+ * NODE_ENV=test, or NODE_ENV=development with the explicit opt-in
+ * MAILGUN_ALLOW_UNSIGNED_INBOUND=1. Deployed environments always fail closed.
+ */
+export function allowUnsignedInbound() {
+  if (env.isTest) return true;
+  return Boolean(env.isDevelopment && env.mailgunAllowUnsignedInbound);
+}
 
 /**
  * Map a Mailgun inbound route POST (multipart fields) to the pipeline's email
@@ -45,7 +59,29 @@ export function mailgunInboundEmailData(body = {}) {
   };
 }
 
-export default async function mailgunRoutes(fastify) {
+/**
+ * Run one verified inbound delivery through the email pipeline, in the
+ * webhook tenant (BOT_ORGANIZATION_ID).
+ * @param {any} fastify
+ * @param {Record<string, any>} body
+ */
+export function processMailgunInboundEmail(fastify, body) {
+  return runTenantJob(fastify.prisma, env.botOrganizationId, () => processEmailPipeline({
+    ...mailgunInboundEmailData(body),
+    // Stable per delivery (Message-Id, or a hash of the delivery), so a
+    // redelivery resumes the first attempt's thread instead of adding one.
+    inboundDeliveryKey: mailgunInboundDeliveryKey(body),
+  }), backgroundPrisma);
+}
+
+/**
+ * @param {any} fastify
+ * @param {{ processInboundEmail?: typeof processMailgunInboundEmail }} [opts]
+ *   Tests substitute the pipeline step; production uses the default.
+ */
+export default async function mailgunRoutes(fastify, opts = {}) {
+  const processInboundEmail = opts.processInboundEmail || processMailgunInboundEmail;
+
   // POST /mailgun/send — manually send an email (admin only)
   fastify.post('/send', {
     onRequest: [fastify.authenticate],
@@ -117,50 +153,57 @@ export default async function mailgunRoutes(fastify) {
     }
   });
 
-  fastify.post('/', { config: { public: true } }, async (request, reply) => {
-    if (!env.botOrganizationId) {
-      return reply.status(503).send({ error: 'Webhook tenant is not configured' });
-    }
-    try {
-      const body = request.body;
+  // POST /mailgun — Mailgun inbound route forward (a client email). Mailgun
+  // posts form fields (urlencoded, or multipart with attachments), so this
+  // route lives in its own scope with the form parser; the cookie-authenticated
+  // routes above keep accepting JSON only.
+  //
+  // Responses follow Mailgun's retry rules: 406 is never retried (stale,
+  // replayed or unusable deliveries); 401 and 5xx are retried. A processing
+  // failure releases the token and answers 500 so the retry is accepted; the
+  // pipeline's inbound delivery key makes that retry resume the first
+  // attempt's thread instead of creating a second one.
+  await fastify.register(async function mailgunInboundRoute(inbound) {
+    addMailgunFormParser(inbound);
 
-      // Validate Mailgun webhook signature (fail closed)
-      const signingKey = env.mailgunSigningKey;
-      if (!signingKey) {
-        if (!env.isDev) {
-          return reply.status(500).send({ error: 'Mailgun signing key not configured' });
-        }
-        // Dev mode: skip validation
-      } else {
-        const timestamp = body.timestamp;
-        const token = body.token;
-        const signature = body.signature;
-
-        if (!timestamp || !token || !signature) {
-          return reply.status(401).send({ error: 'Missing Mailgun signature fields' });
-        }
-
-        const expectedSignature = crypto
-          .createHmac('sha256', signingKey)
-          .update(timestamp + token)
-          .digest('hex');
-
-        if (!safeEqual(expectedSignature, signature)) {
-          fastify.log.warn('Invalid Mailgun webhook signature');
-          return reply.status(401).send({ error: 'Invalid Mailgun webhook signature' });
-        }
+    inbound.post('/', { config: { public: true }, bodyLimit: MAILGUN_WEBHOOK_BODY_LIMIT }, async (request, reply) => {
+      if (!env.botOrganizationId) {
+        return reply.status(503).send({ error: 'Webhook tenant is not configured' });
       }
 
-      await runTenantJob(fastify.prisma, env.botOrganizationId, () => processEmailPipeline({
-        ...mailgunInboundEmailData(body),
-        // Stable per delivery (Message-Id, or a hash of the delivery), so a
-        // redelivery resumes the first attempt's thread instead of adding one.
-        inboundDeliveryKey: mailgunInboundDeliveryKey(body),
-      }), backgroundPrisma);
-    } catch (err) {
-      fastify.log.error(err, 'Mailgun webhook processing error');
-    }
+      const read = await readMailgunWebhookRequest(request);
+      if (!read.ok) return reply.status(read.status).send({ error: read.error });
+      const body = read.fields;
 
-    return reply.status(200).send({ status: 'ok' });
+      // Signature, timestamp window and single-use token. Fails closed when
+      // the key is missing unless unsigned posts were explicitly allowed.
+      const prisma = request.prisma || fastify.prisma;
+      const signingKey = env.mailgunSigningKey;
+      let token = null;
+      if (!signingKey) {
+        if (!allowUnsignedInbound()) {
+          return reply.status(503).send({ error: 'Mailgun signing key not configured' });
+        }
+        request.log.warn('Accepting an unsigned Mailgun inbound post (MAILGUN_SIGNING_KEY unset)');
+      } else {
+        const auth = await authenticateMailgunWebhook({ fields: body, signingKey, prisma });
+        if (!auth.ok) {
+          request.log.warn({ reason: auth.reason }, 'Rejected Mailgun inbound webhook');
+          return reply.status(auth.status).send({ error: auth.error });
+        }
+        token = auth.token;
+      }
+
+      try {
+        await processInboundEmail(fastify, body);
+      } catch (err) {
+        // Let Mailgun's retry of this delivery through.
+        if (token) await releaseWebhookToken(prisma, token);
+        request.log.error({ err }, 'Mailgun webhook processing error');
+        return reply.status(500).send({ error: 'Failed to process inbound email' });
+      }
+
+      return reply.status(200).send({ status: 'ok' });
+    });
   });
 }

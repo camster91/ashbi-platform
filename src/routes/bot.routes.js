@@ -581,19 +581,24 @@ export default async function botRoutes(fastify) {
         }
         // Fire webhook (non-blocking)
         sendWebhookNotification(notification).catch(() => {});
-        // Fire HITL email for approval (non-blocking)
-        // Return the inner chain so the .catch below covers the create and the
-        // email, not only the dynamic import.
-        import('../utils/hitl-email.service.js').then(({ sendApprovalHITLEmail }) => {
-          return fastify.prisma.notification.create({
+        // Fire HITL email for approval (non-blocking). The HITL notification
+        // belongs to the configured approver (HITL_APPROVER_EMAIL), the only
+        // person whose email reply can decide it; none is configured, none is
+        // sent. The async callback's promise is chained, so the .catch below
+        // covers the lookup, the create and the email.
+        import('../utils/hitl-email.service.js').then(async ({ sendApprovalHITLEmail, resolveHitlApprover }) => {
+          const approver = await resolveHitlApprover(fastify.prisma, fastify.log);
+          if (!approver) return;
+          const hitlNotif = await fastify.prisma.notification.create({
             data: {
               type: 'HITL_REQUIRED',
               title: approval.title,
               message: `Approval needed: ${approval.title}`,
-              userId: admin.id,
+              userId: approver.id,
               data: JSON.stringify({ type: 'APPROVAL', refId: approval.id }),
             }
-          }).then(hitlNotif => sendApprovalHITLEmail({ notificationId: hitlNotif.id, approval }))
+          });
+          await sendApprovalHITLEmail({ notificationId: hitlNotif.id, prisma: fastify.prisma, approval });
         }).catch(err => fastify.log.error({ err }, 'Approval HITL email error'));
       }
     } catch (notifErr) {
@@ -1194,9 +1199,11 @@ export default async function botRoutes(fastify) {
 
     const { prisma } = fastify;
 
-    // Get Cameron's user ID
-    const cameron = await prisma.user.findFirst({ where: { email: 'cameron@ashbi.ca' } });
-    if (!cameron) return reply.status(500).send({ error: 'Cameron user not found' });
+    // The HITL approver (HITL_APPROVER_EMAIL) receives the task notifications.
+    // Without one the tasks are still created, but no notification or HITL
+    // email is sent.
+    const { sendTaskHITLEmail, resolveHitlApprover } = await import('../utils/hitl-email.service.js');
+    const approver = await resolveHitlApprover(prisma, fastify.log);
 
     // Get or create Internal Ops project
     let internalOpsProject = await prisma.project.findFirst({ where: { name: 'Internal Ops' } });
@@ -1216,7 +1223,6 @@ export default async function botRoutes(fastify) {
       });
     }
 
-    const { sendTaskHITLEmail } = await import('../utils/hitl-email.service.js');
     const created = [];
 
     for (const taskDef of tasks) {
@@ -1245,31 +1251,34 @@ export default async function botRoutes(fastify) {
           }
         });
 
-        // Create notification for Cameron
-        await prisma.notification.create({
-          data: {
-            type: 'TASK_CREATED',
-            title: task.title,
-            message: `Task created: ${task.title}`,
-            userId: cameron.id,
-            data: JSON.stringify({ type: 'TASK', refId: task.id, requiresHITL: taskDef.requiresHITL }),
-          }
-        });
+        // Notify the HITL approver, when one is configured
+        if (approver) {
+          await prisma.notification.create({
+            data: {
+              type: 'TASK_CREATED',
+              title: task.title,
+              message: `Task created: ${task.title}`,
+              userId: approver.id,
+              data: JSON.stringify({ type: 'TASK', refId: task.id, requiresHITL: taskDef.requiresHITL }),
+            }
+          });
+        }
 
         // Fire HITL email if required
-        if (taskDef.requiresHITL) {
+        if (taskDef.requiresHITL && approver) {
           const project = await prisma.project.findUnique({ where: { id: projectId } });
           const hitlNotif = await prisma.notification.create({
             data: {
               type: 'HITL_REQUIRED',
               title: `HITL: ${task.title}`,
               message: `Human input required for task: ${task.title}`,
-              userId: cameron.id,
+              userId: approver.id,
               data: JSON.stringify({ type: 'TASK', refId: task.id, assigneeAgent: taskDef.assigneeAgent }),
             }
           });
           sendTaskHITLEmail({
             notificationId: hitlNotif.id,
+            prisma,
             task,
             project,
             context: taskDef.description || `Agent ${taskDef.assigneeAgent || 'system'} needs your input on this task.`,
@@ -1298,8 +1307,10 @@ export default async function botRoutes(fastify) {
     }
 
     const { prisma } = fastify;
-    const cameron = await prisma.user.findFirst({ where: { email: 'cameron@ashbi.ca' } });
-    if (!cameron) return reply.status(500).send({ error: 'Cameron user not found' });
+    const { sendTaskHITLEmail, sendApprovalHITLEmail, sendToHitlApprover, resolveHitlApprover } = await import('../utils/hitl-email.service.js');
+    // No configured approver means no HITL notification or email (no fallback person).
+    const approver = await resolveHitlApprover(prisma, fastify.log);
+    if (!approver) return reply.status(503).send({ error: 'HITL approver is not configured' });
 
     // Create HITL notification
     const notification = await prisma.notification.create({
@@ -1307,12 +1318,10 @@ export default async function botRoutes(fastify) {
         type: 'HITL_REQUIRED',
         title: subject,
         message: context.substring(0, 500),
-        userId: cameron.id,
+        userId: approver.id,
         data: JSON.stringify({ type, refId: refId || null, urgency }),
       }
     });
-
-    const { sendTaskHITLEmail, sendApprovalHITLEmail, sendMailgunEmail } = await import('../utils/hitl-email.service.js');
 
     let emailResult = { ok: false };
 
@@ -1322,6 +1331,7 @@ export default async function botRoutes(fastify) {
         const project = await prisma.project.findUnique({ where: { id: task.projectId } });
         emailResult = await sendTaskHITLEmail({
           notificationId: notification.id,
+          prisma,
           task,
           project,
           context,
@@ -1334,16 +1344,16 @@ export default async function botRoutes(fastify) {
       if (approval) {
         emailResult = await sendApprovalHITLEmail({
           notificationId: notification.id,
+          prisma,
           approval,
         });
       }
     } else {
       // CUSTOM or PROJECT — send generic email
-      const replyTo = `reply+${notification.id}@${env.mailgunDomain || 'ashbi.ca'}`;
       const urgencyPrefix = urgency === 'CRITICAL' ? '🔴 [CRITICAL] ' : urgency === 'HIGH' ? '🟠 [ACTION NEEDED] ' : '';
-      emailResult = await sendMailgunEmail({
-        to: 'cameron@ashbi.ca',
-        replyTo,
+      emailResult = await sendToHitlApprover({
+        notificationId: notification.id,
+        prisma,
         subject: `${urgencyPrefix}${subject} — Ashbi Hub`,
         html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
           <h2>🔔 ${subject}</h2>

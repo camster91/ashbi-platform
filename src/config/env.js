@@ -151,6 +151,18 @@ const env = {
   mailgunSigningKey: process.env.MAILGUN_SIGNING_KEY,
   // HTTP webhook signing key (Mailgun → Sending → Webhooks) for delivery events.
   mailgunWebhookSigningKey: process.env.MAILGUN_WEBHOOK_SIGNING_KEY,
+  // Where human-in-the-loop (HITL) task / approval emails are sent. Unset
+  // means no HITL email is sent. Replies are accepted only from the Hub user
+  // the notification was created for, or an active admin of that user's org.
+  hitlApproverEmail: process.env.HITL_APPROVER_EMAIL?.trim() || null,
+  // Key material for HITL reply addresses (reply+<id>.<token>@...). Falls
+  // back to JWT_SECRET (a derived key is used either way); set it to rotate
+  // reply addresses independently of sessions. Rotating invalidates replies
+  // to emails already sent.
+  hitlReplySecret: process.env.HITL_REPLY_SECRET || null,
+  // Local development only: accept unsigned POST /api/mailgun when
+  // MAILGUN_SIGNING_KEY is unset. Honoured only with NODE_ENV=development.
+  mailgunAllowUnsignedInbound: process.env.MAILGUN_ALLOW_UNSIGNED_INBOUND === '1',
 
   // Stripe
   stripeSecretKey: process.env.STRIPE_SECRET_KEY,
@@ -249,6 +261,12 @@ if (env.requiresDeploymentSecrets) {
     HUNTER_API_KEY: 'your-hunter-api-key',
     NOTION_TOKEN: 'your-notion-integration-token',
   };
+  // HITL reply addresses are HMAC tokens; a short dedicated key would make
+  // them guessable. Unset is fine (a key derived from JWT_SECRET is used).
+  if (process.env.HITL_REPLY_SECRET && Buffer.byteLength(process.env.HITL_REPLY_SECRET) < 32) {
+    throw new Error('HITL_REPLY_SECRET must be at least 32 bytes when set (or leave it unset to derive the key from JWT_SECRET)');
+  }
+
   const placeholderHits = Object.entries(placeholders)
     .filter(([key, placeholder]) => process.env[key] === placeholder)
     .map(([key]) => key);

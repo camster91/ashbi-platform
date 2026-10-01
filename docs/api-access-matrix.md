@@ -580,7 +580,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| POST | `/api/mailgun` | public | exempt | signed webhook: Mailgun HMAC signature verified in the handler (fails closed outside dev). |
+| POST | `/api/mailgun` | public | exempt | signed webhook: Mailgun HMAC signature, 15-minute timestamp window and single-use token verified in the handler (fails closed outside dev). Accepts Mailgun form posts (urlencoded or multipart) in its own scope only. |
 | POST | `/api/mailgun/events` | public | exempt | signed webhook: Mailgun HMAC signature and single-use token verified in the handler. |
 | POST | `/api/mailgun/send` | staff | exempt | Admin only; sends one email and reads no tenant data. |
 
@@ -588,7 +588,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| POST | `/api/mailgun-hitl/hitl-reply` | public | exempt | signed webhook: Mailgun HMAC signature verified in the handler; always answers 200. |
+| POST | `/api/mailgun-hitl/hitl-reply` | public | exempt | signed webhook: Mailgun HMAC signature, 15-minute timestamp window and single-use token verified in the handler; the reply address must carry the notification's HMAC token and the reply must reference the sent Message-Id, and it is applied only when its single From address is the notified staff user or an active admin of that org, Mailgun reports an SPF/DKIM pass aligned with the From domain, and an approval is still pending. |
 
 ### /api/messages
 

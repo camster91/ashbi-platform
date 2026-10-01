@@ -160,6 +160,11 @@ test('the API entry point closes queue infrastructure and flushes Sentry on shut
 
 test('the approval HITL chain returns its inner promise so its .catch covers it', () => {
   const bot = fs.readFileSync(new URL('../../routes/bot.routes.js', import.meta.url), 'utf8');
-  const chain = bot.slice(bot.indexOf("import('../utils/hitl-email.service.js').then(({ sendApprovalHITLEmail })"));
-  assert.match(chain.slice(0, 400), /=> \{[\s\S]*?return fastify\.prisma\.notification\.create\(/);
+  const start = bot.indexOf("import('../utils/hitl-email.service.js').then(async ({ sendApprovalHITLEmail, resolveHitlApprover })");
+  assert.ok(start >= 0, 'approval HITL chain found');
+  const chain = bot.slice(start, start + 900);
+  // An async callback: every await inside rejects the chained promise.
+  assert.match(chain, /=> \{[\s\S]*?await fastify\.prisma\.notification\.create\(/);
+  assert.match(chain, /await sendApprovalHITLEmail\(/);
+  assert.match(chain, /\}\)\.catch\(err =>/);
 });
