@@ -905,9 +905,9 @@ async function runImport(prisma) {
     }
 
     const clientId = clientName ? resolveClientId(clientName) : null;
-    // Expense has no organizationId column: its only tenant link is its
-    // client. An expense without a resolvable client would belong to no
-    // organization, so it is not created; it is reported instead.
+    // An expense without a resolvable client is not created; it is reported
+    // instead (EXPENSE_NO_CLIENT). Expenses now carry organizationId, so
+    // importing them client-less is possible but not yet decided.
     if (!clientId) {
       stats.expenses.skipped++;
       stats.warnings.push({ code: 'EXPENSE_NO_CLIENT', description, date: date.toISOString(), amount, currency, client: clientName || null });
@@ -927,7 +927,7 @@ async function runImport(prisma) {
           date,
           amount,
           clientId,
-          client: { organizationId: ORGANIZATION_ID },
+          organizationId: ORGANIZATION_ID,
         },
       });
 
@@ -945,6 +945,7 @@ async function runImport(prisma) {
             category,
             date,
             billable,
+            organizationId: ORGANIZATION_ID,
             clientId,
             projectId: projectId || undefined,
           },

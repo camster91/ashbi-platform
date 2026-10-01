@@ -362,7 +362,7 @@ four classes:
 | | `MEDIA_BLOCKED` | MarkUp.io | unsupported (live run) |
 | | `unsupported.*` (no code) | Slack | unsupported (files, DMs, canvases) |
 | | `input.unsupportedFiles` (no code) | Notion | blocking (non-Markdown files block a live run) |
-| | `EXPENSE_NO_CLIENT` | Bonsai | unsupported (not imported: an expense can belong to an organization only through its client) |
+| | `EXPENSE_NO_CLIENT` | Bonsai | unsupported (not imported: the importer requires a client for each expense) |
 | Value mapped to a default | `STATUS_FALLBACK`, `PRIORITY_FALLBACK` | ClickUp | warning (planned as `PENDING` / `NORMAL`) |
 | No code (free text) | `stats.errors[]` | Bonsai | blocking |
 | | missing CSV file (`inputInventory`) | Bonsai | blocking (live run) |

@@ -254,6 +254,26 @@ test('exportWorkspace copies safe files and records unsafe ones as exceptions wi
   });
 });
 
+test('exportWorkspace verifies expense receipts against receiptChecksumSha256', async () => {
+  const other = 'receipt-1b0e6a4e-7f3a-4c52-9d5e-1a2b3c4d5e6f.pdf';
+  const sha = (text) => createHash('sha256').update(text).digest('hex');
+  await withExport(({ uploads }) => {
+    fs.writeFileSync(path.join(uploads, RECEIPT), 'receipt');
+    fs.writeFileSync(path.join(uploads, other), 'changed on disk');
+  }, {
+    Expense: [
+      { id: 'e1', receiptUrl: `/uploads/${RECEIPT}`, receiptChecksumSha256: sha('receipt') },
+      { id: 'e2', receiptUrl: `/uploads/${other}`, receiptChecksumSha256: sha('original') },
+    ],
+  }, async ({ result }) => {
+    const byRecord = Object.fromEntries(result.manifest.files.map((file) => [file.recordId, file]));
+    assert.equal(byRecord.e1.recordedSha256, sha('receipt'));
+    assert.equal(byRecord.e1.sha256, sha('receipt'));
+    assert.equal(byRecord.e2.recordedSha256, sha('original'));
+    assert.deepEqual(codes(result), ['e2:FILE_CHECKSUM_MISMATCH']);
+  });
+});
+
 test('exportWorkspace records an unreadable upload as FILE_UNREADABLE and finishes', {
   skip: typeof process.getuid === 'function' && process.getuid() === 0 && 'root can read a mode-000 file',
 }, async () => {

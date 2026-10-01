@@ -884,6 +884,8 @@ export const api = {
     request(`/expenses/${id}`, { method: 'PUT', body: data }),
   deleteExpense: (id) =>
     request(`/expenses/${id}`, { method: 'DELETE' }),
+  // Receipts are served by the tenant-scoped API route, never /uploads/*.
+  expenseReceiptUrl: (expenseId) => `${API_BASE}/expenses/${encodeURIComponent(expenseId)}/receipt`,
   uploadReceipt: async (file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -1083,6 +1085,15 @@ export const api = {
     request('/brand'),
   updateBrandSettings: (data) =>
     request('/brand', { method: 'PUT', body: data }),
+  // A logo stored by uploadBrandLogo is served by GET /brand/logo (the file
+  // name busts the cache when it changes); an external URL is used as is.
+  brandLogoSrc: (logoUrl) => {
+    if (typeof logoUrl !== 'string' || !logoUrl) return null;
+    if (logoUrl.startsWith('/uploads/brand/')) {
+      return `${API_BASE}/brand/logo?v=${encodeURIComponent(logoUrl.slice('/uploads/brand/'.length))}`;
+    }
+    return /^https?:\/\//i.test(logoUrl) ? logoUrl : null;
+  },
   uploadBrandLogo: async (file) => {
     const formData = new FormData();
     formData.append('file', file);

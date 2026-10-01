@@ -90,8 +90,8 @@ test('real database enforces one soft-delete policy across every classified mode
       { clientId: activeClient.id, createdById: user.id, invoiceNumber: `ACTIVE-${suffix}` },
       { clientId: activeClient.id, createdById: user.id, invoiceNumber: `DELETED-${suffix}` });
     await seedPair('expense',
-      { clientId: activeClient.id, projectId: activeProject.id, description: `Active expense ${suffix}`, amount: 10 },
-      { clientId: activeClient.id, projectId: activeProject.id, description: `Deleted expense ${suffix}`, amount: 20 });
+      { organizationId: organization.id, clientId: activeClient.id, projectId: activeProject.id, description: `Active expense ${suffix}`, amount: 10 },
+      { organizationId: organization.id, clientId: activeClient.id, projectId: activeProject.id, description: `Deleted expense ${suffix}`, amount: 20 });
     await seedPair('estimate',
       { clientId: activeClient.id, title: `Active estimate ${suffix}` },
       { clientId: activeClient.id, title: `Deleted estimate ${suffix}` });

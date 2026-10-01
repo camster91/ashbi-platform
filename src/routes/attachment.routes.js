@@ -5,6 +5,7 @@ import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { fileUpload } from '../validators/schemas.js';
 import { sendStoredFile } from '../utils/send-file.js';
+import { writeUploadThenPersist } from '../utils/stored-upload.js';
 import { recordRejectedUpload, sha256Hex } from '../services/upload-integrity.service.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
 
@@ -84,9 +85,9 @@ export default async function attachmentRoutes(fastify) {
     }
     const filename = `${randomUUID()}${validation.ext}`;
     const filepath = path.join(UPLOAD_DIR, filename);
-    await fs.writeFile(filepath, buffer);
 
-    const attachment = await request.prisma.attachment.create({
+    // A failed row write removes the file just written (no orphan file).
+    const attachment = await writeUploadThenPersist(filepath, buffer, () => request.prisma.attachment.create({
       data: {
         filename,
         originalName: data.filename,
@@ -103,7 +104,7 @@ export default async function attachmentRoutes(fastify) {
       include: {
         uploadedBy: { select: { id: true, name: true } }
       }
-    });
+    }));
 
     // Log activity if project-related
     if (entityType.value === 'PROJECT' || entityType.value === 'TASK') {

@@ -262,6 +262,7 @@ export const createExpenseSchema = z.object({
   clientId: cuidId.optional(),
   projectId: cuidId.optional(),
   notes: z.string().max(2000).optional(),
+  receiptUrl: z.string().max(500).nullable().optional(),
 });
 
 // ── Invoice update schema ─────────────────────────────────────────────────
@@ -1299,6 +1300,7 @@ export const expenseUpdateSchema = z.object({
   date: z.string().datetime().optional(),
   billable: z.boolean().optional(),
   notes: z.string().max(5_000).optional(),
+  receiptUrl: z.string().max(500).nullable().optional(),
 });
 
 // ── Gmail drafts / replies ────────────────────────────────────────────────

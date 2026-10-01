@@ -34,6 +34,7 @@ import {
   withAttachments,
 } from '../services/chat-attachment.service.js';
 import { sendStoredFile } from '../utils/send-file.js';
+import { writeUploadThenPersist } from '../utils/stored-upload.js';
 import { validateBody, validateQuery, chatMessageListQuerySchema, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
 import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
@@ -842,14 +843,8 @@ export default async function clientPortalRoutes(fastify) {
     // Ensure upload directory
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
 
-    // Use validated extension (always from allowlist)
-    const filename = `${randomUUID()}${validation.ext}`;
-    const filepath = path.join(UPLOAD_DIR, filename);
-
-    // Write file
-    await fs.writeFile(filepath, buffer);
-
-    // Find or create user for the contact
+    // Find or create user for the contact (before the file is written, so a
+    // failure here leaves nothing on disk)
     const contact = await request.prisma.contact.findUnique({ where: { id: contactId } });
     let authorUser = await request.prisma.user.findFirst({ where: { email: contact.email } });
     if (!authorUser) {
@@ -866,8 +861,13 @@ export default async function clientPortalRoutes(fastify) {
       });
     }
 
-    // Save attachment record
-    const attachment = await request.prisma.attachment.create({
+    // Use validated extension (always from allowlist)
+    const filename = `${randomUUID()}${validation.ext}`;
+    const filepath = path.join(UPLOAD_DIR, filename);
+
+    // Write the file, then save the attachment record; a failed record write
+    // removes the file just written (no orphan file).
+    const attachment = await writeUploadThenPersist(filepath, buffer, () => request.prisma.attachment.create({
       data: {
         filename,
         originalName: data.filename,
@@ -881,7 +881,7 @@ export default async function clientPortalRoutes(fastify) {
         organizationId: project.organizationId,
       },
       select: PORTAL_DOCUMENT_SELECT,
-    });
+    }));
 
     return reply.status(201).send(attachment);
   });

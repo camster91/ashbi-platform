@@ -2,13 +2,18 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import { validateBody, brandSettingsSchema, fileUpload } from '../validators/schemas.js';
+import {
+  DEFAULT_UPLOADS_DIR, brandLogoRelativePath, removeStoredBrandLogo, sendStoredUpload, writeUploadThenPersist,
+} from '../utils/stored-upload.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-export default async function brandRoutes(fastify) {
+/**
+ * @param {import('fastify').FastifyInstance} fastify
+ * @param {{ uploadsDir?: string }} [options]
+ */
+export default async function brandRoutes(fastify, options = {}) {
+  const uploadsDir = options.uploadsDir ?? DEFAULT_UPLOADS_DIR;
 
   // ─── GET / — get brand settings (create default if none) ────────────────────
   fastify.get('/', { onRequest: [fastify.authenticate] }, async () => {
@@ -69,35 +74,45 @@ export default async function brandRoutes(fastify) {
       return reply.status(400).send({ error: validation.error || 'Brand logos must be PNG, JPEG, or WebP' });
     }
 
-    // Save to uploads/brand/
-    const uploadsDir = path.join(__dirname, '../../uploads/brand');
-    await fs.mkdir(uploadsDir, { recursive: true });
+    const brandDir = path.join(uploadsDir, 'brand');
+    await fs.mkdir(brandDir, { recursive: true });
 
     const filename = `logo-${randomUUID()}${validation.ext}`;
-    const filePath = path.join(uploadsDir, filename);
-
-    // Write file
-    await fs.writeFile(filePath, buffer);
-
     const logoUrl = `/uploads/brand/${filename}`;
 
-    // Update brand settings
-    let settings = await fastify.prisma.brandSettings.findFirst();
-    if (!settings) {
-      settings = await fastify.prisma.brandSettings.create({ data: {} });
-    }
-
-    // Delete old logo file if it exists
-    if (settings.logoUrl) {
-      const oldPath = path.join(__dirname, '../..', settings.logoUrl);
-      try { await fs.unlink(oldPath); } catch { /* ignore */ }
-    }
-
-    const updated = await fastify.prisma.brandSettings.update({
-      where: { id: settings.id },
-      data: { logoUrl },
+    // Write the file, then the row; if the row write fails the new file is
+    // removed. The previous logo is removed only after the row points at the
+    // new one, so a failure never leaves the settings naming a deleted file.
+    let previousLogoUrl = null;
+    const updated = await writeUploadThenPersist(path.join(brandDir, filename), buffer, async () => {
+      let settings = await fastify.prisma.brandSettings.findFirst();
+      if (!settings) {
+        settings = await fastify.prisma.brandSettings.create({ data: {} });
+      }
+      previousLogoUrl = settings.logoUrl;
+      return fastify.prisma.brandSettings.update({
+        where: { id: settings.id },
+        data: { logoUrl },
+      });
     });
 
+    if (previousLogoUrl && previousLogoUrl !== logoUrl) {
+      await removeStoredBrandLogo(previousLogoUrl, uploadsDir);
+    }
+
     return updated;
+  });
+
+  // ─── GET /logo — the organization's stored logo image ───────────────────────
+  // Staff-only and tenant-scoped (the settings row is this organization's).
+  // Only a logo stored by POST /logo is served; an external logoUrl is linked
+  // directly by the client instead.
+  fastify.get('/logo', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const settings = await fastify.prisma.brandSettings.findFirst({ select: { logoUrl: true } });
+    const relativePath = brandLogoRelativePath(settings?.logoUrl);
+    if (!relativePath) return reply.status(404).send({ error: 'Logo not found' });
+    const sent = await sendStoredUpload(reply, { relativePath, uploadsDir, fileName: path.basename(relativePath) });
+    if (sent === null) return reply.status(404).send({ error: 'Logo not found' });
+    return sent;
   });
 }

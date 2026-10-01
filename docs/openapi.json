@@ -1929,6 +1929,17 @@
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
+          },
+          "receiptUrl": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -2473,6 +2484,17 @@
           "notes": {
             "maxLength": 5000,
             "type": "string"
+          },
+          "receiptUrl": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object"
@@ -11702,6 +11724,40 @@
       }
     },
     "/api/brand/logo": {
+      "get": {
+        "operationId": "get_api_brand_logo",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/brand/logo",
+        "tags": [
+          "brand"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
       "post": {
         "operationId": "post_api_brand_logo",
         "responses": {
@@ -17718,6 +17774,58 @@
           }
         ],
         "summary": "PUT /api/expenses/:id",
+        "tags": [
+          "expenses"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/expenses/{id}/receipt": {
+      "get": {
+        "operationId": "get_api_expenses_id_receipt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/expenses/:id/receipt",
         "tags": [
           "expenses"
         ],

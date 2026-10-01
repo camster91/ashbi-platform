@@ -29,6 +29,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { once } from 'node:events';
 import { pipeline } from 'node:stream/promises';
+import { RECEIPT_FILE_NAME } from '../utils/stored-upload.js';
 
 export const EXPORT_FORMAT = 'ashbi-workspace-export-directory';
 export const EXPORT_FORMAT_VERSION = 1;
@@ -38,10 +39,10 @@ const DIR_MODE = 0o700;
 const FILE_MODE = 0o600;
 const SAFE_UPLOAD_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/;
 const ALLOWED_UPLOAD_SUBDIRS = new Set(['brand']);
-// `/upload-receipt` names receipts `receipt-<uuid>.<ext>`. Only those are
-// copied: `Expense.receiptUrl` is free text, so another value could name a
-// file that belongs to a different organization.
-const RECEIPT_FILE_NAME = /^receipt-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[A-Za-z0-9]{1,10}$/i;
+// `/upload-receipt` names receipts `receipt-<uuid>.<ext>` (RECEIPT_FILE_NAME).
+// Only those are copied: rows written before the server validated
+// `Expense.receiptUrl` may hold another value, which could name a file that
+// belongs to a different organization.
 
 // ---------------------------------------------------------------------------
 // Scoping helpers. `org` is the organization id being exported.
@@ -121,7 +122,9 @@ export const EXPORT_ENTITIES = Object.freeze([
   { name: 'proposal_versions', model: 'ProposalVersion', category: 'finance', where: (org) => ({ proposal: proposalScope(org) }), description: 'Saved proposal versions' },
   { name: 'contracts', model: 'Contract', category: 'finance', where: (org) => ({ deletedAt: null, client: activeClient(org) }), omit: ['signToken', 'draftData'], description: 'Contracts and signature evidence' },
   { name: 'estimates', model: 'Estimate', category: 'finance', where: (org) => ({ deletedAt: null, client: activeClient(org) }), omit: ['viewToken', 'draftData'], description: 'Estimates' },
-  { name: 'expenses', model: 'Expense', category: 'finance', where: (org) => ({ deletedAt: null, OR: [{ client: activeClient(org) }, { clientId: null, project: activeProject(org) }] }), description: 'Expenses' },
+  // Expenses carry organizationId; one linked to a trashed client is left out
+  // like the client's other children.
+  { name: 'expenses', model: 'Expense', category: 'finance', where: (org) => ({ organizationId: org, deletedAt: null, OR: [{ clientId: null }, { client: activeClient(org) }] }), description: 'Expenses' },
   { name: 'retainer_plans', model: 'RetainerPlan', category: 'finance', where: (org) => ({ deletedAt: null, client: activeClient(org) }), omit: ['draftData'], description: 'Retainer plans' },
   { name: 'rate_cards', model: 'RateCard', category: 'finance', where: (org) => ({ client: activeClient(org) }), description: 'Client rate cards' },
   { name: 'time_entries', model: 'TimeEntry', category: 'finance', where: (org) => ({ deletedAt: null, project: activeProject(org) }), description: 'Time entries' },
@@ -533,8 +536,9 @@ async function copyStoredFile({ outputDir, uploadsDir, source, recordId, storedP
     await fsp.rm(destination, { force: true });
     return { exception: { ...base, code: 'FILE_COPY_MISMATCH', detail: 'The copied file did not match the source SHA-256; it was removed from the export' } };
   }
-  // recordedSha256: the checksum stored at upload (attachments.checksumSha256,
-  // null for files stored before checksums existed).
+  // recordedSha256: the checksum stored with the record
+  // (attachments.checksumSha256 or expenses.receiptChecksumSha256), null for
+  // files stored before checksums existed.
   const entry = { source, recordId, exportPath, originalName: name ?? null, mimeType: mimeType ?? null, size: sourceBytes, sha256, recordedSha256: expectedSha256 ?? null };
   if (Number.isInteger(expectedSize) && expectedSize !== sourceBytes) {
     return { entry, exception: { ...base, code: 'FILE_SIZE_MISMATCH', detail: `The recorded size is ${expectedSize} bytes but the stored file has ${sourceBytes} bytes; the stored file was copied as is` } };
@@ -657,7 +661,7 @@ export async function exportWorkspace({ prisma, organizationId, outputDir, inclu
             record(await copyStoredFile({ outputDir: target, uploadsDir: uploadRoot, source: 'attachment', recordId: row.id, storedPath: row.path, name: row.originalName || row.filename, expectedSize: row.size, expectedSha256: row.checksumSha256 ?? null, mimeType: row.mimeType }));
           } else if (entity.name === 'expenses' && typeof row.receiptUrl === 'string' && row.receiptUrl.startsWith('/uploads/')) {
             if (RECEIPT_FILE_NAME.test(row.receiptUrl.slice('/uploads/'.length))) {
-              record(await copyStoredFile({ outputDir: target, uploadsDir: uploadRoot, source: 'expense_receipt', recordId: row.id, storedPath: row.receiptUrl, name: path.posix.basename(row.receiptUrl) }));
+              record(await copyStoredFile({ outputDir: target, uploadsDir: uploadRoot, source: 'expense_receipt', recordId: row.id, storedPath: row.receiptUrl, name: path.posix.basename(row.receiptUrl), expectedSha256: row.receiptChecksumSha256 ?? null }));
             } else {
               record({ exception: { source: 'expense_receipt', recordId: row.id, storedPath: row.receiptUrl, code: 'FILE_NOT_RECEIPT', detail: 'The receipt path is not a receipt name the application writes; it was not copied' } });
             }

@@ -97,7 +97,7 @@ test('workspace export: complete, tenant-isolated, secret-free, with verified fi
     await raw.proposalLineItem.create({ data: { id: i('proposal-line'), proposalId: proposal, description: 'Scope', unitPrice: 50, total: 50 } });
     await raw.contract.create({ data: { id: i('contract'), title: 'MSA', content: 'Terms', clientId: client, createdById: staff, proposalId: proposal, signToken: secret(`sign-${org}`) } });
     await raw.estimate.create({ data: { id: i('estimate'), clientId: client, title: 'Estimate', viewToken: secret(`estimate-view-${org}`) } });
-    await raw.expense.create({ data: { id: i('expense'), description: 'Hosting', amount: 20, clientId: client, projectId: project } });
+    await raw.expense.create({ data: { id: i('expense'), organizationId: orgId, description: 'Hosting', amount: 20, clientId: client, projectId: project } });
     await raw.retainerPlan.create({ data: { id: i('retainer'), clientId: client, tier: '999', hoursPerMonth: 20 } });
     await raw.timeEntry.create({ data: { id: i('time-entry'), projectId: project, userId: staff, taskId: task, duration: 60 } });
 
