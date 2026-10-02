@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import useClients from '../hooks/useClients';
 import { AI_CHAT_MESSAGE_MAX_LENGTH, buildContractRefineChatPayload } from '../lib/form-payloads';
 import { useToast } from '../hooks/useToast';
+import { isAiErrorCode } from '../lib/apiErrorToast';
 import { Button, Card, EmptyState, Field, Input, LoadingState, Select, StatusBadge } from '../components/ui';
 import Modal from '../components/Modal';
 import useAutosave from '../hooks/useAutosave';
@@ -113,7 +114,9 @@ export default function Contracts() {
       const res = await api.aiChat(payload);
       setAiResult(res?.message || res?.content || res?.text || JSON.stringify(res));
     } catch (err) {
-      toast.error('AI refine failed', err.message);
+      // AI_* errors already raise the global AI toast (lib/apiErrorToast.js);
+      // a second toast here would repeat it.
+      if (!isAiErrorCode(err?.data?.code)) toast.error('AI refine failed', err?.message);
     } finally {
       setAiLoading(false);
     }

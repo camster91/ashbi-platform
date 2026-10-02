@@ -4,10 +4,12 @@
  */
 
 import { createDraftWithAttachment } from './gmail-draft.agent.js';
+import { replySignature } from '../routes/gmail.routes.js';
 import prisma from '../config/db.js';
 import logger from '../utils/logger.js';
 import PDFDocument from 'pdfkit';
 import { computeProposalLineItems, proposalTotals } from '../utils/proposal-totals.js';
+import { senderDescription } from '../utils/organization-name.js';
 
 // Pricing tiers (hardcoded for now, can be updated via UI)
 const PRICING_TIERS = {
@@ -249,15 +251,17 @@ function buildProposalHtml(proposalData, leadData) {
 
 /**
  * Generate a full proposal from lead data using AI
+ * @param {object} leadData
+ * @param {{ sender?: { name?: string } | null, organizationName?: string }} [writer] who the proposal is from
  */
-async function generateProposal(leadData) {
+async function generateProposal(leadData, { sender = null, organizationName = '' } = {}) {
   const { name, company, email, projectType, budget, timeline, notes } = leadData;
   const budgetNum = parseFloat(budget) || 0;
   const recommendedTiers = getRecommendedTiers(projectType, budgetNum);
 
-  const systemPrompt = `You are a proposal writer for Ashbi Design, a Toronto-based CPG/DTC creative agency. 
-You create professional, direct proposals with no fluff. Ashbi specializes in branding, packaging design, and Shopify/WooCommerce web development.
-Brand voice: confident, professional, no salesy language. Focus on value and outcomes.`;
+  const systemPrompt = `You are a proposal writer for a creative agency, writing on behalf of ${senderDescription(sender, organizationName)}.
+You create professional, direct proposals with no fluff for branding, packaging design, and web development work.
+Brand voice: confident, professional, no salesy language. Focus on value and outcomes. Do not invent facts about the agency that you were not given.`;
 
   const userPrompt = `Generate a proposal for a potential client.
 
@@ -402,12 +406,14 @@ async function generatePdf(proposalHtml) {
 /**
  * Create a Gmail draft with the proposal PDF attached
  */
-async function createProposalDraft(proposal, leadEmail) {
+async function createProposalDraft(proposal, leadEmail, { sender = null, organizationName = '' } = {}) {
   try {
     const pdfBuffer = await generatePdf(proposal.html);
 
     const subject = proposal.title || `Proposal for ${proposal.leadData?.name}`;
     const firstName = (proposal.leadData?.name || 'there').split(' ')[0];
+    // Signed by the person sending it and their workspace, never one agency.
+    const signature = replySignature(sender, organizationName);
 
     const emailBody = `Hi ${firstName},
 
@@ -417,9 +423,7 @@ I've outlined our approach, timeline, and investment details in the attached doc
 
 Looking forward to potentially working together.
 
-Best,
-Cameron
-Ashbi Design`;
+Best,${signature ? `\n${signature}` : ''}`;
 
     // Create draft with PDF attachment via gmail-draft agent
     const attachmentName = `Ashbi_Proposal_${proposal.id || Date.now()}.pdf`;

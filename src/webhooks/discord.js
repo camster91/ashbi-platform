@@ -217,7 +217,7 @@ export function formatApprovalNeeded(response, thread, client) {
         }
       ],
       footer: {
-        text: "Agency Hub - Awaiting Cameron's approval",
+        text: "Agency Hub - Awaiting approval",
         icon_url: "https://ashbi.ca/favicon.ico"
       },
       timestamp: new Date().toISOString()

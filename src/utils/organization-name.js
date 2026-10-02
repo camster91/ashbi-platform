@@ -30,3 +30,19 @@ export function senderDescription(user, organizationName) {
   if (name && org) return `${name} at ${org}`;
   return name || org || 'the agency team';
 }
+
+/**
+ * "Pat Lee, Northwind Studio" for a sign-off line; '' when neither is known,
+ * so a prompt can leave the signature to the sender.
+ * @param {{ name?: string } | null | undefined} user
+ * @param {string} organizationName
+ */
+export function signOffName(user, organizationName) {
+  return [user?.name, organizationName].map((part) => String(part || '').trim()).filter(Boolean).join(', ');
+}
+
+/** The prompt line asking for that sign-off, or for none when nobody is known. */
+export function signOffInstruction(user, organizationName, verb = 'Sign off as') {
+  const signOff = signOffName(user, organizationName);
+  return signOff ? `${verb} ${signOff}.` : 'Leave the signature for the sender to add.';
+}

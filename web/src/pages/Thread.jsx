@@ -52,6 +52,18 @@ export function responseStatusLabel(status) {
   return RESPONSE_STATUS_LABELS[status] || String(status || '').replace(/_/g, ' ');
 }
 
+// AI analysis suggests a role, never a person: show it as a role.
+const ASSIGNMENT_SUGGESTION_LABELS = {
+  dev: 'Development',
+  design: 'Design',
+  account_lead: 'Account lead',
+  anyone: 'Anyone',
+};
+
+export function assignmentSuggestionLabel(value) {
+  return ASSIGNMENT_SUGGESTION_LABELS[value] || String(value || '').replace(/_/g, ' ');
+}
+
 /**
  * The /gmail/send body. Gmail ids are sent only when the conversation came
  * from Gmail: a hub-only conversation starts a new Gmail thread.
@@ -694,7 +706,7 @@ export default function Thread() {
                   <li key={i} className="p-4">
                     <p className="text-sm font-medium">{item.task}</p>
                     <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-xs bg-secondary text-muted-foreground px-1.5 py-0.5 rounded">{item.assignmentSuggestion}</span>
+                      <span className="text-xs bg-secondary text-muted-foreground px-1.5 py-0.5 rounded">{assignmentSuggestionLabel(item.assignmentSuggestion)}</span>
                       <span className="text-xs text-muted-foreground">{item.estimatedEffort}</span>
                     </div>
                   </li>

@@ -1,7 +1,14 @@
 // AI Prompt: Draft Response (Step 4)
 
-export function buildDraftResponsePrompt({ message, thread, project, analysis, client }) {
-  const system = `You are an AI assistant for Agency Hub, helping draft client response emails.
+import { senderDescription, signOffInstruction } from '../../utils/organization-name.js';
+
+/**
+ * @param {object} input
+ * @param {{ name?: string } | null} [input.sender] the person the drafts are for, when known
+ * @param {string} [input.organizationName] their organization's name, when known
+ */
+export function buildDraftResponsePrompt({ message, thread, project, analysis, client, sender = null, organizationName = '' }) {
+  const system = `You are an AI assistant for Agency Hub, helping draft client response emails on behalf of ${senderDescription(sender, organizationName)}.
 
 Your task is to generate 2-3 response options with different approaches.
 
@@ -13,6 +20,7 @@ Guidelines:
 5. Don't over-promise or make commitments without context
 6. Keep responses concise but complete
 7. Use appropriate tone based on sentiment
+8. ${signOffInstruction(sender, organizationName, 'Sign each option as')}
 
 Response lengths:
 - short: 2-4 sentences, quick acknowledgment
@@ -65,7 +73,7 @@ Generate 2-3 response options. Respond with JSON:
   ],
   "warnings": ["any concerns about responding", "things to verify before sending"],
   "needsPersonalTouch": true/false,
-  "personalTouchReason": "why Cameron should customize this",
+  "personalTouchReason": "why the sender should personalize this before sending",
   "suggestedFollowUp": {
     "needed": true/false,
     "when": "suggested timing",

@@ -24,6 +24,7 @@ import {
   proposalBuilderEmailSchema,
   proposalBuilderUpdateSchema,
 } from '../validators/schemas.js';
+import { organizationNameFor } from '../utils/organization-name.js';
 
 
 // ProposalBuilderError codes and the fixed message each answers with.
@@ -61,7 +62,7 @@ export default async function proposalBuilderRoutes(fastify) {
         budget,
         timeline,
         notes
-      });
+      }, { sender: request.user, organizationName: await organizationNameFor(request) });
 
       // Save as draft if clientId provided
       let savedProposal = null;
@@ -164,7 +165,10 @@ export default async function proposalBuilderRoutes(fastify) {
       // Create Gmail draft with PDF
       let draftResult = null;
       try {
-        draftResult = await createProposalDraft(proposalData, recipientEmail);
+        draftResult = await createProposalDraft(proposalData, recipientEmail, {
+          sender: request.user,
+          organizationName: await organizationNameFor(request),
+        });
       } catch (draftErr) {
         console.warn('Gmail draft creation failed:', draftErr.message);
       }
