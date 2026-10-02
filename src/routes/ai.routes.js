@@ -3,6 +3,7 @@
 import aiClient from '../ai/client.js';
 import { buildDraftResponsePrompt } from '../ai/prompts/draftResponse.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
+import { organizationNameFor } from '../utils/organization-name.js';
 import {
   validateBody,
   aiDraftResponseSchema,
@@ -290,10 +291,13 @@ Provide a helpful, concise answer.`;
       ).join('\n')}`;
     }
 
+    const organizationName = await organizationNameFor(request);
+    const writer = String(request.user?.name || '').trim();
     const system = `You are a professional agency account manager drafting client status update emails.
 Write polished, clear, and reassuring updates. Be specific about progress and next steps.
-Match a professional yet friendly tone. Use the agency name "Ashbi Design" when appropriate.
-Cameron (CEO/SEO) approves all outgoing communications before they are sent.`;
+Match a professional yet friendly tone.${organizationName ? ` Use the agency name "${organizationName}" when appropriate.` : ''}
+${writer ? `Sign the email as ${writer}${organizationName ? `, ${organizationName}` : ''}.` : 'Leave the signature for the sender to add.'}
+The sender reviews the draft before anything is sent.`;
 
     const prompt = `Draft a client status update email for this project:
 
@@ -412,9 +416,11 @@ Respond with JSON:
       systemContext += '\n';
     }
 
-    const system = `You are the AI assistant for Ashbi Design's Agency Hub. Ashbi Design is a Toronto-based CPG/DTC creative agency, family-run with 10+ years experience. Cameron is the CEO/SEO lead, Bianca is the Creative Director.
+    const organizationName = await organizationNameFor(request);
+    const asker = String(request.user?.name || '').trim();
+    const system = `You are the AI assistant for ${organizationName ? `${organizationName}'s` : 'this agency\'s'} workspace in Agency Hub.
 
-You help Cameron and Bianca manage their agency: answering questions about projects, clients, tasks, and operations. Be concise, actionable, and friendly.
+You help ${asker || 'the team'} manage the agency: answering questions about projects, clients, tasks, and operations. Be concise, actionable, and friendly.
 
 Current Agency Context:
 ${systemContext}

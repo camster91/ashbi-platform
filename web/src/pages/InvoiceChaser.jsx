@@ -21,6 +21,48 @@ import { Button, Card, LoadingState } from '../components/ui';
 import { formatRelativeTime } from '../lib/utils';
 import QueryErrorState from '../components/QueryErrorState';
 
+const REMINDER_FAILED = "This reminder couldn't be written. Try again; if it keeps failing, write it yourself from the invoice.";
+
+/**
+ * Sort a POST /invoice-chaser/chase answer into written reminders and
+ * per-invoice failures (the server reports a failed invoice as
+ * `{ invoiceId, error }` and keeps going).
+ */
+export function splitReminders(reminders = []) {
+  const written = {};
+  const failed = {};
+  for (const reminder of reminders) {
+    if (!reminder?.invoiceId) continue;
+    if (reminder.error) failed[reminder.invoiceId] = REMINDER_FAILED;
+    else written[reminder.invoiceId] = reminder;
+  }
+  return { written, failed };
+}
+
+/** The banner for a run where nothing could be written, or null. */
+export function chaseFailureBanner(error, { requested = 0, failed = 0, written = 0 } = {}) {
+  if (error) {
+    const code = error.data?.code;
+    if (typeof code === 'string' && code.startsWith('AI_')) {
+      return {
+        title: 'AI is unavailable, so no reminders were written',
+        message: error.message || "AI isn't set up for this workspace yet. Ask an admin to add an AI provider in Settings.",
+      };
+    }
+    return {
+      title: 'Reminders could not be written',
+      message: error.message ? `${error.message} Nothing was sent.` : 'Nothing was written or sent. Try again in a minute.',
+    };
+  }
+  if (requested > 1 && written === 0 && failed > 0) {
+    return {
+      title: 'None of the reminders could be written',
+      message: 'AI did not answer for any invoice. Try again in a minute; if it keeps failing, ask an admin to check the AI provider in Settings.',
+    };
+  }
+  return null;
+}
+
 function urgencyColor(days) {
   if (days > 30) return 'text-destructive bg-destructive/5';
   if (days > 14) return 'text-warning bg-warning/5';
@@ -41,6 +83,8 @@ export default function InvoiceChaser() {
   const [copied, setCopied] = useState({});
   const [sendingEmail, setSendingEmail] = useState({});
   const [sendSuccess, setSendSuccess] = useState({});
+  const [failures, setFailures] = useState({});
+  const [banner, setBanner] = useState(null);
 
   const {
     data: overdueInvoices = [],
@@ -56,22 +100,38 @@ export default function InvoiceChaser() {
 
   const chaseMutation = useMutation({
     mutationFn: (data) => api.chaseInvoices(data),
-    onSuccess: (data) => {
-      const emailMap = {};
-      for (const reminder of data.reminders || []) {
-        if (!reminder.error) {
-          emailMap[reminder.invoiceId] = reminder;
-        }
-      }
-      setGeneratedEmails(prev => ({ ...prev, ...emailMap }));
+    onMutate: () => setBanner(null),
+    onSuccess: (data, variables) => {
+      const { written, failed } = splitReminders(data.reminders);
+      setGeneratedEmails(prev => ({ ...prev, ...written }));
+      setFailures(prev => {
+        const next = { ...prev, ...failed };
+        for (const invoiceId of Object.keys(written)) delete next[invoiceId];
+        return next;
+      });
       // Auto-expand all with generated emails
       const expandMap = {};
-      for (const reminder of data.reminders || []) {
-        if (!reminder.error) expandMap[reminder.invoiceId] = true;
-      }
+      for (const invoiceId of Object.keys(written)) expandMap[invoiceId] = true;
       setExpanded(prev => ({ ...prev, ...expandMap }));
+      setBanner(chaseFailureBanner(null, {
+        requested: variables?.invoiceId ? 1 : (data.reminders || []).length,
+        failed: Object.keys(failed).length,
+        written: Object.keys(written).length,
+      }));
     },
-    onError: (error) => toast.error(error.message || 'Failed to generate invoice reminders'),
+    // The whole run failed (AI unavailable, for example): mark every invoice
+    // it covered and say why once, above the list.
+    onError: (error, variables) => {
+      const failure = chaseFailureBanner(error);
+      // "Try again" repeats what failed: one invoice, or the whole run.
+      setBanner({ ...failure, retryInvoiceId: variables?.invoiceId || null });
+      const ids = variables?.invoiceId ? [variables.invoiceId] : overdueInvoices.map(inv => inv.id).filter(invId => !generatedEmails[invId]);
+      setFailures(prev => {
+        const next = { ...prev };
+        for (const invoiceId of ids) next[invoiceId] = failure.message;
+        return next;
+      });
+    },
   });
 
   const handleGenerateAll = () => {
@@ -113,12 +173,13 @@ export default function InvoiceChaser() {
     }
   };
 
+  const pendingInvoiceId = chaseMutation.isPending ? (chaseMutation.variables?.invoiceId || 'all') : null;
   const totalOutstanding = overdueInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-testid="chaser-header">
+        <div className="min-w-0">
           <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
             <Zap className="w-6 h-6 text-warning" />
             Invoice Chaser
@@ -127,14 +188,16 @@ export default function InvoiceChaser() {
             AI-powered payment reminders for overdue invoices
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => refetchInvoices()} leftIcon={<RefreshCw className="w-4 h-4" />}>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="min-h-11" onClick={() => refetchInvoices()} leftIcon={<RefreshCw className="w-4 h-4" />}>
             Refresh
           </Button>
           {overdueInvoices.length > 0 && (
             <Button
+              className="min-h-11"
               onClick={handleGenerateAll}
-              loading={chaseMutation.isPending}
+              loading={pendingInvoiceId === 'all'}
+              disabled={chaseMutation.isPending}
               leftIcon={<Sparkles className="w-4 h-4" />}
             >
               Generate All Reminders
@@ -154,6 +217,26 @@ export default function InvoiceChaser() {
             </p>
           </div>
           <DollarSign className="w-5 h-5 text-warning" />
+        </div>
+      )}
+
+      {banner && (
+        <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-destructive">{banner.title}</p>
+            <p className="text-sm text-muted-foreground mt-0.5">{banner.message}</p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="min-h-11"
+            onClick={() => (banner.retryInvoiceId ? handleGenerateOne(banner.retryInvoiceId) : handleGenerateAll())}
+            loading={pendingInvoiceId === (banner.retryInvoiceId || 'all')}
+            disabled={chaseMutation.isPending}
+          >
+            Try again
+          </Button>
         </div>
       )}
 
@@ -180,7 +263,8 @@ export default function InvoiceChaser() {
           {overdueInvoices.map((invoice) => {
             const email = generatedEmails[invoice.id];
             const isExpanded = expanded[invoice.id];
-            const isGenerating = chaseMutation.isPending;
+            const isGenerating = pendingInvoiceId === 'all' || pendingInvoiceId === invoice.id;
+            const failure = !email && failures[invoice.id];
 
             return (
               <Card key={invoice.id} className="overflow-hidden">
@@ -220,14 +304,22 @@ export default function InvoiceChaser() {
                           size="sm"
                           variant="outline"
                           loading={isGenerating}
+                          disabled={chaseMutation.isPending && !isGenerating}
                           onClick={() => handleGenerateOne(invoice.id)}
-                          leftIcon={<Sparkles className="w-3 h-3" />}
+                          leftIcon={failure ? <RefreshCw className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
+                          aria-describedby={failure ? `chase-failure-${invoice.id}` : undefined}
                         >
-                          Generate
+                          {failure ? 'Retry' : 'Generate'}
                         </Button>
                       )}
                     </div>
                   </div>
+                  {failure && !isGenerating && (
+                    <p id={`chase-failure-${invoice.id}`} role="status" className="mt-2 flex items-start gap-1.5 text-sm text-destructive">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                      {failure}
+                    </p>
+                  )}
                 </div>
 
                 {email && isExpanded && (

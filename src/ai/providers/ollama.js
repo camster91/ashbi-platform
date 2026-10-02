@@ -21,6 +21,19 @@ class OllamaProvider {
     this.apiKey = env.ollamaApiKey;
   }
 
+  /**
+   * Ollama's hosted service needs an API key; a self-hosted server does not,
+   * so it counts as configured until a call shows nothing is listening.
+   */
+  isConfigured() {
+    if (this.apiKey) return true;
+    try {
+      return new URL(this.baseUrl).hostname !== 'ollama.com';
+    } catch {
+      return false;
+    }
+  }
+
   _headers() {
     const headers = { 'Content-Type': 'application/json' };
     if (this.apiKey) headers['Authorization'] = `Bearer ${this.apiKey}`;

@@ -56,3 +56,19 @@ export default function useClients({ limit = CLIENT_OPTIONS_LIMIT, enabled = tru
     refetch: query.refetch,
   };
 }
+
+/**
+ * Server-side client search, for pickers whose first page (`useClients`) is
+ * not the whole list. Runs once the term has at least 2 characters; `data` is
+ * always an array.
+ */
+export function useClientSearch(term, { enabled = true, limit = 50 } = {}) {
+  const search = String(term || '').trim();
+  const query = useQuery({
+    queryKey: ['clients', 'search', search, limit],
+    queryFn: () => api.getClients({ search, limit }),
+    select: normalizeClients,
+    enabled: enabled && search.length >= 2,
+  });
+  return { ...query, data: query.data ?? [] };
+}

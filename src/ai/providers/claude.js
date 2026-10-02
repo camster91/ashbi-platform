@@ -12,6 +12,11 @@ class ClaudeProvider {
     });
   }
 
+  /** Whether the deployment gave this provider an API key. */
+  isConfigured() {
+    return Boolean(env.anthropicApiKey);
+  }
+
   async chat({ system, prompt, temperature = 0.3, maxTokens = aiConfig.maxTokens }) {
     const response = await this.client.messages.create({
       model: aiConfig.model,

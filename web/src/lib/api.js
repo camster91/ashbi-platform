@@ -653,6 +653,9 @@ export const api = {
     if (!response.ok) throw new ApiError(data.error || 'Upload failed', response.status, data);
     return data;
   },
+  // Same upload with progress: options.onProgress(fraction), options.signal.
+  uploadAttachmentWithProgress: (file, entityType, entityId, options = {}) =>
+    uploadFileWithProgress(`${API_BASE}/attachments`, file, { ...options, method: 'POST', fields: { entityType, entityId } }),
   deleteAttachment: (id) =>
     request(`/attachments/${id}`, { method: 'DELETE' }),
   // Share a project file with the client portal's Documents (or stop sharing).

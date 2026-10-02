@@ -5,6 +5,7 @@ import { validateBody, invoiceChaserSchema } from '../validators/schemas.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
 import { withInvoiceBalance } from '../utils/invoice-balance.js';
 import { invoicePublicAccessFailure } from '../utils/public-document-access.js';
+import { organizationNameFor, senderDescription } from '../utils/organization-name.js';
 
 function hubUrl() {
   return process.env.APP_URL || process.env.HUB_URL || 'https://hub.ashbi.ca';
@@ -62,6 +63,9 @@ export default async function invoiceChaserRoutes(fastify) {
     }
 
     const reminders = [];
+    // Signed by the person generating the reminders and their workspace.
+    const organizationName = await organizationNameFor(request);
+    const signOff = [request.user?.name, organizationName].map((part) => String(part || '').trim()).filter(Boolean).join(', ');
 
     for (const loaded of invoices) {
       const invoice = await withInvoiceBalance(prisma, loaded);
@@ -74,7 +78,7 @@ export default async function invoiceChaserRoutes(fastify) {
       const contactName = invoice.client?.contacts?.[0]?.name || 'there';
       const contactEmail = invoice.client?.contacts?.[0]?.email || null;
 
-      const system = `You are a professional but friendly payment reminder writer for Ashbi Design. You write firm but polite payment reminders that maintain the client relationship while being clear about the outstanding amount. Never be aggressive or threatening.`;
+      const system = `You are a professional but friendly payment reminder writer for ${senderDescription(request.user, organizationName)}. You write firm but polite payment reminders that maintain the client relationship while being clear about the outstanding amount. Never be aggressive or threatening.`;
 
       const urgency = daysOverdue > 30 ? 'final notice' : daysOverdue > 14 ? 'second reminder' : 'friendly reminder';
 
@@ -98,7 +102,7 @@ Return JSON:
   "urgency": "${urgency}"
 }
 
-Sign off as Cameron Ashley, Ashbi Design.`;
+${signOff ? `Sign off as ${signOff}.` : 'Sign off without a name; the sender will add one.'}`;
 
       try {
         const result = await aiClient.chatJSON({ system, prompt, temperature: 0.4 });

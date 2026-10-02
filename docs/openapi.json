@@ -2891,26 +2891,52 @@
             "type": "string"
           },
           "in_reply_to": {
-            "maxLength": 500,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "pattern": "^[^\\r\\n]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "references": {
-            "maxLength": 500,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "pattern": "^[^\\r\\n]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "subject": {
             "maxLength": 500,
             "minLength": 1,
+            "pattern": "^[^\\r\\n]*$",
             "type": "string"
           },
           "threadId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "to": {
             "format": "email",
             "maxLength": 255,
+            "pattern": "^[^\\r\\n]*$",
             "type": "string"
           }
         },
