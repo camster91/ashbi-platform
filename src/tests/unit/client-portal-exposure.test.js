@@ -45,9 +45,13 @@ test('the public project link selects no notes, health or AI summary', async (t)
   let query;
   const project = {
     name: 'Website', description: 'A new site', status: 'DESIGN_DEV', updatedAt: new Date(),
-    client: { name: 'Acme' }, revisionRounds: [], milestones: [], tasks: [{ title: 'Copy', status: 'WAITING_CLIENT', priority: 'NORMAL', category: 'UPCOMING', dueDate: null }],
+    id: 'project-1', client: { name: 'Acme' }, revisionRounds: [], milestones: [], tasks: [],
   };
-  const prisma = { project: { findFirst: async (args) => { query = args; return project; } } };
+  const waiting = [{ id: 't1', title: 'Copy', status: 'WAITING_CLIENT', priority: 'NORMAL', category: 'UPCOMING', dueDate: null }];
+  const prisma = {
+    project: { findFirst: async (args) => { query = args; return project; } },
+    task: { findMany: async () => waiting },
+  };
   const app = Fastify({ logger: false });
   app.addHook('onRequest', async (request) => { request.prisma = prisma; });
   await app.register(portalRoutes);
@@ -61,11 +65,45 @@ test('the public project link selects no notes, health or AI summary', async (t)
     assert.equal(field in response.json(), false, `${field} is not returned`);
   }
   assert.equal(response.json().activeTasks[0].status, 'WAITING_CLIENT');
+  assert.equal('id' in response.json(), false, 'the project id is not returned');
+  assert.equal('id' in response.json().activeTasks[0], false, 'task ids are not returned');
   // Trashed or cancelled projects are not served; revision rounds carry
   // client-facing fields only.
   assert.deepEqual(query.where, { viewToken: 'view-token-1', deletedAt: null, status: { not: 'CANCELLED' } });
   assert.equal('projectId' in query.select.revisionRounds.select, false);
   assert.equal(query.select.revisionRounds.select.notes, true);
+});
+
+test('the public project link always includes tasks waiting on the client, beyond the open-task cap', async (t) => {
+  let projectQuery;
+  let waitingQuery;
+  const open = Array.from({ length: 20 }, (_, i) => ({ id: `o${i}`, title: `Open ${i}`, status: 'IN_PROGRESS', priority: 'HIGH', category: 'UPCOMING', dueDate: null }));
+  const waiting = [{ id: 'w1', title: 'Approve the logo', status: 'WAITING_CLIENT', priority: 'LOW', category: 'WAITING_CLIENT', dueDate: null }];
+  const prisma = {
+    project: {
+      findFirst: async (args) => {
+        projectQuery = args;
+        return { id: 'project-1', name: 'Website', description: null, status: 'DESIGN_DEV', updatedAt: new Date(), client: { name: 'Acme' }, revisionRounds: [], milestones: [], tasks: open };
+      },
+    },
+    task: { findMany: async (args) => { waitingQuery = args; return waiting; } },
+  };
+  const app = Fastify({ logger: false });
+  app.addHook('onRequest', async (request) => { request.prisma = prisma; });
+  await app.register(portalRoutes);
+  t.after(() => app.close());
+
+  const response = await app.inject({ method: 'GET', url: '/view-token-1' });
+  assert.equal(response.statusCode, 200, response.body);
+  // The capped list leaves waiting tasks out; they come from their own query.
+  assert.deepEqual(projectQuery.select.tasks.where, { status: { notIn: ['COMPLETED', 'WAITING_CLIENT'] } });
+  assert.equal(projectQuery.select.tasks.take, 20);
+  assert.deepEqual(waitingQuery.where, { projectId: 'project-1', status: 'WAITING_CLIENT' });
+  assert.deepEqual(waitingQuery.select, projectQuery.select.tasks.select, 'the same client-safe fields');
+  const tasks = response.json().activeTasks;
+  assert.equal(tasks.length, 21);
+  assert.equal(tasks.filter((task) => task.status === 'WAITING_CLIENT').length, 1);
+  assert.equal(tasks[0].title, 'Approve the logo');
 });
 
 test('the public project link answers 404 for a trashed or cancelled project', async (t) => {

@@ -7,15 +7,36 @@ import LoadingState from '../components/ui/LoadingState';
 import usePortalLightTheme from '../hooks/usePortalLightTheme';
 import StatusBadge from '../components/ui/StatusBadge';
 import { statusLabel } from '../lib/status';
+import { CLIENT_TASK_COLUMN_STATUSES } from '@shared/client-task-columns.js';
 
 const phases = ['STARTING_UP', 'DESIGN_DEV', 'ADDING_CONTENT', 'FINALIZING', 'LAUNCHED'];
 
-const taskStatusIcons = {
-  PENDING: <Clock className="w-4 h-4 text-muted-foreground" />,
-  IN_PROGRESS: <AlertTriangle className="w-4 h-4 text-info" />,
-  BLOCKED: <AlertTriangle className="w-4 h-4 text-destructive" />,
-  COMPLETED: <CheckCircle className="w-4 h-4 text-success" />,
-};
+// Client-facing task groups: the signed-in portal board's columns
+// (CLIENT_TASK_COLUMN_STATUSES, shared with the API), with the same labels as
+// pages/client-portal/ProjectDetail.jsx. Internal statuses such as WAITING_US
+// are never shown to the client; they read "In Progress". Completed tasks are
+// not sent to this page, so there is no Done group.
+const PORTAL_TASK_GROUP_DISPLAY = [
+  { key: 'WAITING_CLIENT', label: 'Waiting on you', dot: 'bg-warning' },
+  { key: 'TODO', label: 'To Do', dot: 'bg-muted-foreground' },
+  { key: 'IN_PROGRESS', label: 'In Progress', dot: 'bg-accent' },
+  { key: 'REVIEW', label: 'In Review', dot: 'bg-info' },
+  { key: 'BLOCKED', label: 'Blocked', dot: 'bg-destructive' },
+];
+export const PORTAL_TASK_GROUPS = Object.freeze(PORTAL_TASK_GROUP_DISPLAY.map((group) => ({
+  ...group,
+  statuses: CLIENT_TASK_COLUMN_STATUSES[group.key],
+})));
+
+/** Group the portal's tasks; an unknown legacy status lands in To Do, as on the board. */
+export function groupPortalTasks(tasks) {
+  const groups = Object.fromEntries(PORTAL_TASK_GROUPS.map(({ key }) => [key, []]));
+  for (const task of Array.isArray(tasks) ? tasks : []) {
+    const group = PORTAL_TASK_GROUPS.find(({ statuses }) => statuses.includes(task?.status));
+    groups[group ? group.key : 'TODO'].push(task);
+  }
+  return groups;
+}
 
 export default function Portal() {
   usePortalLightTheme();
@@ -71,6 +92,7 @@ export default function Portal() {
   }
 
   const currentPhaseIndex = phases.indexOf(project.status);
+  const groupedTasks = groupPortalTasks(project.activeTasks);
 
   return (
     <div className="min-h-screen bg-background">
@@ -166,20 +188,47 @@ export default function Portal() {
           </div>
         )}
 
-        {/* Active Tasks */}
+        {/* Active Tasks, grouped like the portal task board */}
         {project.activeTasks?.length > 0 && (
-          <div className="bg-card rounded-xl border border-border/40 p-6">
+          <div className="bg-card rounded-xl border border-border/40 p-4 sm:p-6">
             <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-4">
               Active Tasks ({project.activeTasks.length})
             </h2>
-            <div className="space-y-2">
-              {project.activeTasks.map((task, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                  {taskStatusIcons[task.status] || taskStatusIcons.PENDING}
-                  <span className="flex-1 text-sm text-foreground">{task.title}</span>
-                  <span className="text-xs text-muted-foreground capitalize">{task.status.toLowerCase().replace('_', ' ')}</span>
-                </div>
-              ))}
+            <div className="space-y-5">
+              {PORTAL_TASK_GROUPS.map(({ key, label, dot }) => {
+                const tasks = groupedTasks[key];
+                // "Waiting on you" always shows, so the client can see at a
+                // glance whether anything needs them.
+                if (!tasks.length && key !== 'WAITING_CLIENT') return null;
+                return (
+                  <section key={key} aria-labelledby={`portal-tasks-${key}`}>
+                    <h3 id={`portal-tasks-${key}`} className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <span className={cn('h-2 w-2 rounded-full', dot)} aria-hidden="true" />
+                      {label}
+                      <span className="font-normal text-muted-foreground">({tasks.length})</span>
+                    </h3>
+                    {tasks.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Nothing needs your input right now.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {tasks.map((task, i) => (
+                          <li key={`${key}-${i}`} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                            {key === 'WAITING_CLIENT'
+                              ? <AlertTriangle className="mt-0.5 w-4 h-4 shrink-0 text-warning" aria-hidden="true" />
+                              : key === 'BLOCKED'
+                                ? <AlertTriangle className="mt-0.5 w-4 h-4 shrink-0 text-destructive" aria-hidden="true" />
+                                : <Clock className="mt-0.5 w-4 h-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+                            <span className="min-w-0 flex-1 break-words text-sm text-foreground">{task.title}</span>
+                            {task.dueDate && (
+                              <span className="shrink-0 text-xs text-muted-foreground">Due {formatDate(task.dueDate)}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                );
+              })}
             </div>
           </div>
         )}

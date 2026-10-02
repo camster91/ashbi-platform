@@ -365,7 +365,7 @@ export default function Login() {
               </div>
 
               <div className="flex items-center justify-end text-sm">
-                <Link to="/forgot-password" className="text-primary hover:text-primary/80 font-medium transition-colors">
+                <Link to="/forgot-password" className="inline-flex min-h-11 items-center rounded-lg text-primary hover:text-primary/80 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   {t('auth.forgotPassword')}
                 </Link>
               </div>
@@ -421,7 +421,7 @@ export default function Login() {
               value={currentLang}
               onChange={(e) => setLang(e.target.value)}
               aria-label="Language"
-              className="text-sm bg-transparent border-none text-muted-foreground focus:ring-0 cursor-pointer"
+              className="min-h-11 rounded-lg px-2 text-sm bg-transparent border-none text-muted-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {languages.map((lang) => (
                 <option key={lang.code} value={lang.code}>

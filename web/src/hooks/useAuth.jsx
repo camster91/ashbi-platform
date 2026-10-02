@@ -46,6 +46,20 @@ function isSignInScreen(pathname) {
   return pathname === '/login';
 }
 
+// Public pages that never use the staff session: client links (/portal/...
+// invoices, proposals, estimates, contracts, booking, forms, reviews) and
+// password recovery. Checking /api/auth/me there only produced a 401 in the
+// console for every visitor. The session is checked as soon as the visitor
+// moves on to any other page. The client portal (/client/...) is not listed:
+// a staff member viewing it as a client still needs the support-view banner,
+// which comes from /api/auth/me.
+const PUBLIC_PAGE_PREFIXES = ['/portal/', '/forgot-password', '/reset-password'];
+
+export function isPublicPagePath(pathname) {
+  return typeof pathname === 'string'
+    && PUBLIC_PAGE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
 const FIRST_PAINT_FALLBACK_MS = 1000;
 
 // Runs `callback` once the page's first contentful paint has been presented
@@ -160,18 +174,36 @@ export function AuthProvider({ children }) {
   }, []);
   checkAuthRef.current = checkAuth;
 
+  // The first session check runs once, on the first page that is not a
+  // public one (isLoading stays true until then, so a private route reached
+  // from a public page waits for it instead of redirecting to sign-in).
+  const publicPage = isPublicPagePath(location.pathname);
+  const sessionCheckStartedRef = useRef(false);
   useEffect(() => {
-    if (!isSignInScreen(window.location.pathname)) {
+    if (publicPage || sessionCheckStartedRef.current) return undefined;
+    let started = false;
+    const startCheck = () => {
+      started = true;
+      sessionCheckStartedRef.current = true;
       checkAuth();
-      return undefined;
-    }
+    };
     // Nothing on the sign-in screen waits for the session check, so let the
     // form reach the screen first. When /api/auth/me completed before that
     // paint, Lighthouse's simulation charged its whole round trip (plus the
     // script work that starts it) to the login page's largest contentful
     // paint.
-    return afterFirstContentfulPaint(checkAuth);
-  }, [checkAuth]);
+    const cancelDeferred = isSignInScreen(window.location.pathname)
+      ? afterFirstContentfulPaint(startCheck)
+      : (startCheck(), null);
+    return () => {
+      cancelDeferred?.();
+      // An unmount (including StrictMode's simulated one) invalidates the
+      // check in flight (the mount effect above has already cleared
+      // mountedRef), so let the next mount start it again. Moving to a
+      // public page does not, and needs no second check.
+      if (started && !mountedRef.current) sessionCheckStartedRef.current = false;
+    };
+  }, [checkAuth, publicPage]);
 
   // Invalidate any in-flight session check and cancel a scheduled 429 retry.
   // A pending rate-limited check keeps isLoading true until its retry runs;

@@ -12,6 +12,15 @@ import { cn } from '../lib/utils';
 
 const EMPTY_RATE_ROW = { serviceName: '', unit: 'hour', rate: '', description: '' };
 
+// Older cards stored the unit as "hr", "hrs", "hours" or "h", newer ones as
+// "hour", so the list showed both "/hr" and "/hour". Show and edit one word.
+const UNIT_ALIASES = { h: 'hour', hr: 'hour', hrs: 'hour', hour: 'hour', hours: 'hour', project: 'project', projects: 'project', item: 'item', items: 'item' };
+
+export function normalizeRateUnit(unit) {
+  const key = String(unit ?? '').trim().toLowerCase();
+  return UNIT_ALIASES[key] || key || 'hour';
+}
+
 export default function RateCards() {
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -225,7 +234,7 @@ function RateCardRow({ card, onEdit, onDelete }) {
                   >
                     <span className="font-medium">{r.serviceName}</span>
                     <span className="text-muted-foreground">
-                      ${typeof r.rate === 'number' ? r.rate.toFixed(2) : r.rate}/{r.unit}
+                      ${typeof r.rate === 'number' ? r.rate.toFixed(2) : r.rate}/{normalizeRateUnit(r.unit)}
                     </span>
                   </span>
                 ))}
@@ -258,7 +267,7 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
   const [isDefault, setIsDefault] = useState(card?.isDefault ?? false);
   const [rates, setRates] = useState(
     card?.rates?.length
-      ? card.rates.map((r) => ({ ...r }))
+      ? card.rates.map((r) => ({ ...r, unit: normalizeRateUnit(r.unit) }))
       : [{ ...EMPTY_RATE_ROW }]
   );
 

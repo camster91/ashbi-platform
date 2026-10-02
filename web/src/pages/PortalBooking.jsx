@@ -16,6 +16,29 @@ import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import usePortalLightTheme from '../hooks/usePortalLightTheme';
 
+/**
+ * The booking slots are in the server's local time: GET
+ * /portal/booking/availability returns each slot's wall-clock `time` ("HH:MM",
+ * server-local) and its absolute `start` (ISO, UTC). There is no configured
+ * booking timezone to name, but the two together give the server's UTC
+ * offset for that day, so the page can say which time the slots are in.
+ * Returns e.g. "UTC-4", "UTC+5:30" or "UTC", or null when it cannot tell.
+ */
+export function slotUtcOffsetLabel(date, slot) {
+  if (!slot || typeof slot !== 'object' || !slot.start || !slot.time || !date) return null;
+  const [y, m, d] = String(date).split('-').map(Number);
+  const [hh, mm] = String(slot.time).split(':').map(Number);
+  const start = Date.parse(slot.start);
+  if ([y, m, d, hh, mm, start].some((n) => !Number.isFinite(n))) return null;
+  const offsetMinutes = Math.round((Date.UTC(y, m - 1, d, hh, mm) - start) / 60000);
+  if (offsetMinutes === 0) return 'UTC';
+  const sign = offsetMinutes > 0 ? '+' : '-';
+  const abs = Math.abs(offsetMinutes);
+  const hours = Math.floor(abs / 60);
+  const minutes = abs % 60;
+  return `UTC${sign}${hours}${minutes ? `:${String(minutes).padStart(2, '0')}` : ''}`;
+}
+
 function getDateString(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -61,7 +84,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
   const prevMonth = () => setViewMonth(new Date(year, month - 1, 1));
   const nextMonth = () => setViewMonth(new Date(year, month + 1, 1));
 
-  const monthLabel = viewMonth.toLocaleDateString({ month: 'long', year: 'numeric' });
+  const monthLabel = viewMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
   // Keyboard navigation across the day grid. Arrow keys move focus by ±1 day
   // (left/right) or ±7 days (up/down). Home/End jump to start/end of week.
@@ -146,7 +169,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
         <button
           type="button"
           onClick={prevMonth}
-          aria-label={`Previous month, ${new Date(year, month - 1, 1).toLocaleDateString({ month: 'long', year: 'numeric' })}`}
+          aria-label={`Previous month, ${new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`}
           className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <ChevronLeft className="w-4 h-4" />
@@ -155,7 +178,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
         <button
           type="button"
           onClick={nextMonth}
-          aria-label={`Next month, ${new Date(year, month + 1, 1).toLocaleDateString({ month: 'long', year: 'numeric' })}`}
+          aria-label={`Next month, ${new Date(year, month + 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`}
           className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <ChevronRight className="w-4 h-4" />
@@ -209,11 +232,16 @@ export default function PortalBooking() {
     retry: false,
   });
 
+  const slots = slotsData?.slots || slotsData || [];
+  const slotZone = slotUtcOffsetLabel(selectedDate, Array.isArray(slots) ? slots.find((slot) => slot?.start) : null);
+  const zoneText = slotZone ? `our local time (${slotZone})` : 'our local time';
+
   const bookMutation = useMutation({
     mutationFn: (data) => api.createPortalBooking(data),
     onSuccess: (data) => {
       setBooked(true);
-      setBookingDetails(data);
+      // Keep the zone the slots were shown in for the confirmation screen.
+      setBookingDetails({ ...data, zone: zoneText });
     },
   });
 
@@ -230,7 +258,7 @@ export default function PortalBooking() {
     });
   };
 
-  const slots = slotsData?.slots || slotsData || [];
+  const bookedZone = bookingDetails?.zone || zoneText;
 
   if (booked) {
     return (
@@ -251,13 +279,13 @@ export default function PortalBooking() {
             <CheckCircle className="w-14 h-14 text-success mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-success mb-2">Booking Confirmed</h2>
             <p className="text-success mb-4">
-              Your call has been scheduled. We will send a confirmation to your email.
+              Your call is booked. This page is your confirmation: no confirmation email is sent, so please note the date and time below.
             </p>
             <div className="inline-flex flex-col items-center gap-2 bg-card rounded-lg border border-success/30 px-6 py-4 mt-2">
               <div className="flex items-center gap-2 text-foreground">
                 <Calendar className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm font-medium">
-                  {new Date(selectedDate + 'T00:00:00').toLocaleDateString({
+                  {new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, {
                     weekday: 'long',
                     month: 'long',
                     day: 'numeric',
@@ -267,7 +295,7 @@ export default function PortalBooking() {
               </div>
               <div className="flex items-center gap-2 text-foreground">
                 <Clock className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm font-medium">{selectedSlot}</span>
+                <span className="text-sm font-medium">{selectedSlot}, {bookedZone}</span>
               </div>
             </div>
           </div>
@@ -312,6 +340,9 @@ export default function PortalBooking() {
               <Clock className="w-4 h-4" />
               Available Times
             </h3>
+            <p className="-mt-2 mb-4 text-xs text-muted-foreground">
+              Times are in {zoneText}, not converted to your time zone.
+            </p>
 
             {!selectedDate ? (
               <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
@@ -410,10 +441,10 @@ export default function PortalBooking() {
             </div>
 
             {/* Selected summary */}
-            <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-muted/50 border border-border/25 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 rounded-lg bg-muted/50 border border-border/25 text-sm text-muted-foreground">
               <div className="flex items-center gap-1.5">
                 <Calendar className="w-4 h-4 text-muted-foreground" />
-                {new Date(selectedDate + 'T00:00:00').toLocaleDateString({
+                {new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, {
                   weekday: 'short',
                   month: 'short',
                   day: 'numeric',
@@ -421,7 +452,7 @@ export default function PortalBooking() {
               </div>
               <div className="flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-muted-foreground" />
-                {selectedSlot}
+                {selectedSlot}{slotZone ? ` ${slotZone}` : ''}
               </div>
             </div>
 

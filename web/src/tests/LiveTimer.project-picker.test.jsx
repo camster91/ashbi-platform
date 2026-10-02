@@ -18,7 +18,7 @@ vi.mock('../lib/api', () => ({
   },
 }));
 
-const { default: LiveTimer } = await import('../components/LiveTimer');
+const { default: LiveTimer, TIMER_PICKER_CLASS, describeElapsed } = await import('../components/LiveTimer');
 const PROJECT_KEY = 'ashbi-live-timer-project';
 
 function renderTimer() {
@@ -55,5 +55,40 @@ describe('LiveTimer project picker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start timer' }));
     await waitFor(() => expect(startTimeSession).toHaveBeenCalledWith({ projectId: 'p-active', description: undefined }));
     expect(localStorage.getItem(PROJECT_KEY)).toBe('p-active');
+  });
+
+  it('pins the picker to the viewport on phones and keeps a 44px header tap target', async () => {
+    renderTimer();
+    const toggle = screen.getByRole('button', { name: 'Timer' });
+    expect(toggle.className).toMatch(/\bmin-h-11\b/);
+    expect(toggle.className).toMatch(/\bmin-w-11\b/);
+    fireEvent.click(toggle);
+    const picker = await screen.findByTestId('live-timer-picker');
+    expect(picker.className).toBe(TIMER_PICKER_CLASS);
+    const classes = TIMER_PICKER_CLASS.split(/\s+/);
+    // Base (phone) layout: fixed to the viewport with a 16px gutter on both
+    // sides, so it can never start at a negative x on a 375px screen.
+    expect(classes).toEqual(expect.arrayContaining(['fixed', 'inset-x-4']));
+    expect(classes).not.toContain('right-0');
+    expect(classes).not.toContain('w-64');
+    // From sm up it is 256px wide, placed under the button from its rect.
+    expect(classes).toEqual(expect.arrayContaining(['sm:w-64', 'sm:left-auto']));
+    // Portalled to <body>, so `fixed` really is relative to the viewport (the
+    // header's backdrop-filter would otherwise contain it).
+    expect(picker.parentElement).toBe(document.body);
+    // Focus moves into the picker, and Escape returns it to the toggle.
+    await waitFor(() => expect(screen.getByLabelText('Project')).toHaveFocus());
+    fireEvent.keyDown(screen.getByLabelText('Project'), { key: 'Escape' });
+    expect(screen.queryByTestId('live-timer-picker')).toBeNull();
+    expect(toggle).toHaveFocus();
+  });
+
+  it('names the running time on the Stop button in plain words', async () => {
+    localStorage.setItem('ashbi-live-timer', JSON.stringify({ isRunning: true, sessionId: 's1', startTime: Date.now() - (65 * 60 + 5) * 1000, elapsed: 0, description: '' }));
+    renderTimer();
+    expect(screen.getByRole('button', { name: 'Stop timer, 1 hour 5 minutes running' })).toBeInTheDocument();
+    expect(describeElapsed(30)).toBe('less than a minute');
+    expect(describeElapsed(120)).toBe('2 minutes');
+    expect(describeElapsed(7200)).toBe('2 hours');
   });
 });

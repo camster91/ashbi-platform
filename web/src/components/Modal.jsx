@@ -136,7 +136,7 @@ export default function Modal({
         >
           {/* Header */}
           {(title || showCloseButton) && (
-            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5 sm:px-6">
               {title && (
                 <h2 id={titleId} className="text-lg font-semibold">
                   {title}
@@ -144,9 +144,10 @@ export default function Modal({
               )}
               {showCloseButton && (
                 <button
+                  type="button"
                   onClick={onClose}
                   aria-label="Close modal"
-                  className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="-mr-2 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="w-5 h-5" />
                 </button>
