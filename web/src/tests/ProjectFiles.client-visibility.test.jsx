@@ -7,6 +7,7 @@ vi.mock('../lib/api', () => ({
   api: {
     getAttachments: vi.fn(),
     setAttachmentClientVisibility: vi.fn(),
+    setProjectAttachmentsClientVisibility: vi.fn(),
   },
 }));
 
@@ -14,11 +15,12 @@ const auth = { user: { id: 'u-sam', role: 'TEAM' } };
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => auth }));
 
 const { api } = await import('../lib/api');
+const { ToastProvider } = await import('../hooks/useToast');
 const { default: ProjectFiles } = await import('../components/project/ProjectFiles');
 
 function renderPanel() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}><ProjectFiles projectId="p1" /></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><ToastProvider><ProjectFiles projectId="p1" /></ToastProvider></QueryClientProvider>);
 }
 
 const recording = { id: 'a-1', originalName: 'screen-recording.webm', mimeType: 'video/webm', size: 2048, createdAt: '2026-09-30T12:00:00.000Z', uploadedBy: { id: 'u-sam', name: 'Sam' }, clientVisible: false };

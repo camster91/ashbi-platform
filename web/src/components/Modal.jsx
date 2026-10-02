@@ -17,6 +17,7 @@ export default function Modal({
   size = 'md',
   showCloseButton = true,
   ariaLabel,
+  ariaDescribedBy,
 }) {
   const modalRef = useRef(null);
   const previousActiveElement = useRef(null);
@@ -125,6 +126,7 @@ export default function Modal({
           aria-modal="true"
           aria-labelledby={title ? titleId : undefined}
           aria-label={title ? undefined : (ariaLabel || 'Dialog')}
+          aria-describedby={ariaDescribedBy}
           tabIndex={-1}
           className={cn(
             'relative w-full rounded-lg border border-border bg-card text-card-foreground shadow-xl',

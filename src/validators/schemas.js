@@ -378,6 +378,15 @@ export const attachmentClientVisibilitySchema = z.object({
   clientVisible: z.boolean(),
 }).strict();
 
+// PATCH /api/projects/:id/attachments/client-visibility: share (or stop
+// sharing) many of a project's files in one action. Without attachmentIds it
+// acts on every PROJECT file of the project; the cap bounds one request.
+export const PROJECT_ATTACHMENT_VISIBILITY_MAX = 500;
+export const projectAttachmentsClientVisibilitySchema = z.object({
+  clientVisible: z.boolean(),
+  attachmentIds: z.array(cuidId).min(1).max(PROJECT_ATTACHMENT_VISIBILITY_MAX).optional(),
+}).strict();
+
 // Both public signing routes (POST /api/portal/contract/:signToken/sign and
 // POST /api/contracts/sign/:signToken). A typed signature is the default.
 export const contractSignSchema = z.object({

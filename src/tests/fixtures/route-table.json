@@ -557,6 +557,7 @@
   "PATCH /api/leads/leads/:id/convert",
   "PATCH /api/notifications/:id/read",
   "PATCH /api/notifications/read-all",
+  "PATCH /api/projects/:id|:projectId/attachments/client-visibility",
   "PATCH /api/timesheets/:id/approve",
   "PATCH /api/timesheets/:id/reject",
   "POST /api/ai-bridge/v1/actions/:actionId/confirm",
