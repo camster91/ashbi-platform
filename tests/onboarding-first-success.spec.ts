@@ -83,7 +83,9 @@ test('TEAM onboarding excludes admin outcomes and keeps server save failures rec
 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/dashboard');
-  await expect(page.getByRole('dialog', { name: 'Your getting-started checklist' })).toBeVisible({ timeout: 15_000 });
+  // An in-progress checklist waits to be resumed rather than opening by itself.
+  await page.getByRole('button', { name: 'Resume getting started, 0 of 3 tasks resolved' }).click({ timeout: 15_000 });
+  await expect(page.getByRole('dialog', { name: 'Your getting-started checklist' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Complete an assigned task' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Add your first client' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Skip this task' }).first().click();

@@ -33,7 +33,7 @@ describe('project files upload', () => {
     const input = await screen.findByLabelText('Upload file');
     expect(input).toHaveAttribute('type', 'file');
     expect(input.getAttribute('accept')).toContain('.pdf');
-    expect(screen.getByText('Upload file').closest('label').className).toMatch(/min-h-11/);
+    expect(screen.getByRole('button', { name: 'Upload file' }).className).toMatch(/min-h-11/);
     expect(screen.getByText("Clients can't see new files until you share them.")).toBeInTheDocument();
     expect(screen.getByText(/Up to 50 MB/)).toBeInTheDocument();
   });

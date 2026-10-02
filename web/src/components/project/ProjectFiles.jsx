@@ -277,24 +277,27 @@ export default function ProjectFiles({ projectId }) {
         <div className="flex shrink-0 flex-col gap-2 sm:items-end">
           <input
             ref={fileInputRef}
-            id={`${id}-upload`}
             type="file"
             multiple
             accept={UPLOAD_ACCEPT}
-            className="sr-only"
+            className="hidden"
+            tabIndex={-1}
+            aria-label="Upload file"
             disabled={Boolean(upload)}
-            aria-describedby={`${id}-upload-note ${id}-upload-limits`}
             onChange={(event) => uploadFiles(event.target.files)}
           />
-          <label
-            htmlFor={`${id}-upload`}
-            className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 focus-within:ring-2 focus-within:ring-ring sm:w-auto ${upload ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={Boolean(upload)}
+            aria-describedby={`${id}-upload-note ${id}-upload-limits`}
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             {upload
               ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
               : <Upload className="h-4 w-4" aria-hidden="true" />}
             {upload ? 'Uploading…' : 'Upload file'}
-          </label>
+          </button>
           <p id={`${id}-upload-limits`} className="text-xs text-muted-foreground">Up to 50 MB: images, PDF, Office files, text, CSV, ZIP, audio or video.</p>
         {showBulk && (
           <div className="flex shrink-0 flex-col sm:items-end">
