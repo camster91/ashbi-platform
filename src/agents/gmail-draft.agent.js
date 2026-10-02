@@ -2,44 +2,17 @@
  * Gmail Draft Agent for ashbi-platform
  * Connects to Maton API to create Gmail drafts with attachments and search inbox
  *
- * Email headers are sanitized to prevent RFC 2822 violations
- * and header injection attacks (Issue #26/#30).
+ * Messages are built like the Gmail reply route's (`buildMimeMessage`): every
+ * header value is one line (CR/LF and control characters removed), non-ASCII
+ * subjects are RFC 2047 encoded, the text is base64, and there is exactly one
+ * From, the connected mailbox when known (Gmail fills it in otherwise).
  */
 
 import { outboundSignal } from '../utils/outbound-timeouts.js';
+import { buildMimeMessage, encodeSubject, headerValue } from '../routes/gmail.routes.js';
 
 const MATON_API_KEY = process.env.MATON_API_KEY;
 const BASE_URL = 'https://api.maton.ai/google-mail/gmail/v1/users/me';
-
-/**
- * Sanitize an email header value to prevent header injection and RFC violations.
- * Removes control characters, newlines, and trims whitespace.
- * Encodes non-ASCII characters using RFC 2047 encoded-word syntax.
- *
- * @param {string} value - The raw header value
- * @returns {string} Sanitized header value safe for RFC 2822
- */
-function sanitizeEmailHeader(value) {
-  if (typeof value !== 'string') return '';
-
-  // Remove any control characters except tabs
-  // eslint-disable-next-line no-control-regex -- intentional, this IS the sanitization
-  let sanitized = value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-
-  // Remove any newlines (prevents header injection)
-  sanitized = sanitized.replace(/\r?\n|\r/g, ' ');
-
-  // Collapse multiple spaces
-  sanitized = sanitized.replace(/[ \t]+/g, ' ').trim();
-
-  // If there are non-ASCII characters, encode the whole value as RFC 2047
-  if (/[^\x20-\x7E]/.test(sanitized)) {
-    const buf = Buffer.from(sanitized, 'utf-8');
-    sanitized = '=?UTF-8?B?' + buf.toString('base64') + '?=';
-  }
-
-  return sanitized;
-}
 
 /**
  * Encode string to base64url format (URL-safe base64)
@@ -52,129 +25,72 @@ function toBase64Url(str) {
     .replace(/=+$/, '');
 }
 
+/** Base64 in 76-character lines, as MIME bodies are written. */
+function base64Lines(value) {
+  return Buffer.from(value).toString('base64').replace(/.{76}/g, '$&\r\n');
+}
+
+/** A filename safe inside a quoted header parameter. */
+function attachmentFilename(name) {
+  return headerValue(name).replace(/["\\]/g, '') || 'proposal.pdf';
+}
+
 /**
  * Build RFC 2822 email message with optional attachment
  * @param {string} to - Recipient email
  * @param {string} subject - Email subject
  * @param {string} body - Email body (plain text)
  * @param {object} options - Additional options
- * @param {Buffer} options.attachment - PDF buffer to attach
- * @param {string} options.attachmentName - Filename for attachment
+ * @param {Buffer} [options.attachment] - PDF buffer to attach
+ * @param {string} [options.attachmentName] - Filename for attachment
+ * @param {string | null} [options.from] - The connected mailbox, the only From
  * @returns {string} RFC 2822 formatted message
  */
 function buildRfc2822EmailWithAttachment(to, subject, body, options = {}) {
-  const { attachment, attachmentName = 'proposal.pdf' } = options;
+  const { attachment, attachmentName = 'proposal.pdf', from = null } = options;
+  if (!attachment) return buildMimeMessage({ from, to, subject, body });
+
   const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-
-  const sanitizedSubject = sanitizeEmailHeader(subject);
-  const sanitizedTo = sanitizeEmailHeader(to);
-
-  let message = '';
-
-  if (attachment) {
-    // Multipart message with attachment
-    const base64Attachment = attachment.toString('base64');
-    message = [
-      `To: ${sanitizedTo}`,
-      `Subject: ${sanitizedSubject}`,
-      'Content-Type: multipart/mixed; boundary="' + boundary + '"',
-      'Content-Transfer-Encoding: 7bit',
-      '',
-      `--${boundary}`,
-      'Content-Type: text/plain; charset="UTF-8"',
-      'Content-Transfer-Encoding: quoted-printable',
-      '',
-      quotedPrintableEncode(body),
-      '',
-      `--${boundary}`,
-      `Content-Type: application/pdf; name="${attachmentName}"`,
-      'Content-Transfer-Encoding: base64',
-      `Content-Disposition: attachment; filename="${attachmentName}"`,
-      '',
-      base64Attachment,
-      `--${boundary}--`
-    ].join('\r\n');
-  } else {
-    // Simple text message
-    message = [
-      `To: ${sanitizedTo}`,
-      `Subject: ${sanitizedSubject}`,
-      'Content-Type: text/plain; charset="UTF-8"',
-      'Content-Transfer-Encoding: quoted-printable',
-      '',
-      quotedPrintableEncode(body)
-    ].join('\r\n');
-  }
-
-  return message;
+  const filename = attachmentFilename(attachmentName);
+  const lines = [];
+  const sender = headerValue(from);
+  if (sender) lines.push(`From: ${sender}`);
+  lines.push(
+    `To: ${headerValue(to)}`,
+    `Subject: ${encodeSubject(subject)}`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    base64Lines(String(body ?? '')),
+    `--${boundary}`,
+    `Content-Type: application/pdf; name="${filename}"`,
+    'Content-Transfer-Encoding: base64',
+    `Content-Disposition: attachment; filename="${filename}"`,
+    '',
+    base64Lines(attachment),
+    `--${boundary}--`,
+  );
+  return lines.join('\r\n');
 }
 
-/**
- * Minimal quoted-printable encoder for UTF-8 text.
- * Ensures lines > 76 chars are soft-wrapped and non-ASCII chars are encoded.
- * @param {string} text - Plain text to encode
- * @returns {string} Quoted-printable encoded text
- */
-function quotedPrintableEncode(text) {
-  // First decode any HTML entities that might be in the text
-  const decoded = text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-
-  // Encode non-ASCII and special chars
-  let result = '';
-  for (let i = 0; i < decoded.length; i++) {
-    const code = decoded.charCodeAt(i);
-    if (code === 0x0a) {
-      result += '\r\n';
-    } else if (code === 0x0d) {
-      result += '\r';
-    } else if (code >= 0x21 && code <= 0x7e && code !== 0x3d) {
-      result += decoded[i];
-    } else if (code <= 0x1f || code === 0x7f) {
-      result += '=' + code.toString(16).toUpperCase().padStart(2, '0');
-    } else if (code >= 0x80) {
-      const bytes = [];
-      if (code < 0x800) {
-        bytes.push(0xC0 | (code >> 6));
-        bytes.push(0x80 | (code & 0x3F));
-      } else if (code < 0x10000) {
-        bytes.push(0xE0 | (code >> 12));
-        bytes.push(0x80 | ((code >> 6) & 0x3F));
-        bytes.push(0x80 | (code & 0x3F));
-      } else {
-        bytes.push(0xF0 | (code >> 18));
-        bytes.push(0x80 | ((code >> 12) & 0x3F));
-        bytes.push(0x80 | ((code >> 6) & 0x3F));
-        bytes.push(0x80 | (code & 0x3F));
-      }
-      for (const b of bytes) {
-        result += '=' + b.toString(16).toUpperCase().padStart(2, '0');
-      }
-    } else {
-      result += '=' + code.toString(16).toUpperCase().padStart(2, '0');
-    }
+/** The connected mailbox's address, or null when Gmail does not say. */
+async function mailboxAddress() {
+  try {
+    const response = await fetch(`${BASE_URL}/profile`, {
+      signal: outboundSignal('api'),
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${MATON_API_KEY}` },
+    });
+    if (!response.ok) return null;
+    const profile = await response.json();
+    return typeof profile?.emailAddress === 'string' && profile.emailAddress.includes('@') ? profile.emailAddress : null;
+  } catch {
+    return null;
   }
-
-  // Soft-wrap lines longer than 76 chars
-  const maxLineLen = 76;
-  const wrapped = [];
-  for (const line of result.split('\r\n')) {
-    let pos = 0;
-    while (pos < line.length) {
-      const chunk = line.slice(pos, pos + maxLineLen);
-      if (pos + maxLineLen < line.length) {
-        wrapped.push(chunk + '=');
-      } else {
-        wrapped.push(chunk);
-      }
-      pos += maxLineLen;
-    }
-  }
-  return wrapped.join('\r\n');
 }
 
 /**
@@ -185,20 +101,8 @@ async function createDraft(toEmail, subject, body) {
     throw new Error('MATON_API_KEY environment variable is not set');
   }
 
-  const sanitizedSubject = sanitizeEmailHeader(subject);
-  const sanitizedTo = sanitizeEmailHeader(toEmail);
-
-  // Build RFC 2822 message
-  const lines = [
-    `To: ${sanitizedTo}`,
-    `Subject: ${sanitizedSubject}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    'Content-Transfer-Encoding: quoted-printable',
-    '',
-    quotedPrintableEncode(body)
-  ];
-  const rfc2822Message = lines.join('\r\n');
-  const rawEncoded = toBase64Url(rfc2822Message);
+  const from = await mailboxAddress();
+  const rawEncoded = toBase64Url(buildMimeMessage({ from, to: toEmail, subject, body }));
 
   const response = await fetch(`${BASE_URL}/drafts`, {
     signal: outboundSignal('api'),
@@ -236,9 +140,10 @@ async function createDraftWithAttachment(toEmail, subject, body, pdfBuffer, atta
     throw new Error('MATON_API_KEY environment variable is not set');
   }
 
-  // One builder for every attachment draft, so the text part is always
-  // quoted-printable encoded as its header declares.
-  const multipartBody = buildRfc2822EmailWithAttachment(toEmail, subject, body, { attachment: pdfBuffer, attachmentName });
+  // One builder for every attachment draft, so headers are always one line
+  // and the text part is always base64 as its header declares.
+  const from = await mailboxAddress();
+  const multipartBody = buildRfc2822EmailWithAttachment(toEmail, subject, body, { attachment: pdfBuffer, attachmentName, from });
 
   const rawEncoded = toBase64Url(multipartBody);
 
@@ -278,26 +183,12 @@ async function sendEmail(toEmail, subject, body, pdfBuffer = null, attachmentNam
     throw new Error('MATON_API_KEY environment variable is not set');
   }
 
-  const sanitizedSubject = sanitizeEmailHeader(subject);
-  const sanitizedTo = sanitizeEmailHeader(toEmail);
-
-  let message;
-  if (pdfBuffer) {
-    message = buildRfc2822EmailWithAttachment(toEmail, sanitizedSubject, body, {
-      attachment: pdfBuffer,
-      attachmentName
-    });
-  } else {
-    const lines = [
-      `To: ${sanitizedTo}`,
-      `Subject: ${sanitizedSubject}`,
-      'Content-Type: text/plain; charset="UTF-8"',
-      'Content-Transfer-Encoding: quoted-printable',
-      '',
-      quotedPrintableEncode(body)
-    ];
-    message = lines.join('\r\n');
-  }
+  const from = await mailboxAddress();
+  const message = buildRfc2822EmailWithAttachment(toEmail, subject, body, {
+    attachment: pdfBuffer,
+    attachmentName,
+    from,
+  });
 
   const rawEncoded = toBase64Url(message);
 
@@ -359,6 +250,5 @@ export {
   createDraft,
   createDraftWithAttachment,
   sendEmail,
-  searchInbox,
-  sanitizeEmailHeader
+  searchInbox
 };

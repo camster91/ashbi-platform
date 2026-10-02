@@ -3,7 +3,7 @@
 import aiClient from '../ai/client.js';
 import { buildDraftResponsePrompt } from '../ai/prompts/draftResponse.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
-import { organizationNameFor } from '../utils/organization-name.js';
+import { organizationNameFor, senderDescription, signOffInstruction } from '../utils/organization-name.js';
 import {
   validateBody,
   aiDraftResponseSchema,
@@ -56,7 +56,9 @@ export default async function aiRoutes(fastify) {
       thread,
       project: thread.project,
       analysis,
-      client: thread.client
+      client: thread.client,
+      sender: request.user,
+      organizationName: await organizationNameFor(request),
     });
 
     try {
@@ -469,9 +471,11 @@ ${context ? `Additional context from user: ${context}` : ''}`;
       }
     }
 
-    const system = `You are a proposal writer for Ashbi Design, a Toronto-based CPG/DTC creative agency. Family-run with 10+ years of experience in branding, web design, packaging, and SEO for consumer brands.
+    const organizationName = await organizationNameFor(request);
+    const agency = organizationName || 'the agency';
+    const system = `You are a proposal writer for a creative agency, writing on behalf of ${senderDescription(request.user, organizationName)}.
 
-Write compelling, professional proposals that reflect Ashbi's expertise in the CPG/DTC space. Tone should be confident yet warm, emphasizing partnership and results. Include specific deliverables, timelines, and value propositions.`;
+Write compelling, professional proposals that reflect the agency's expertise. Tone should be confident yet warm, emphasizing partnership and results. Include specific deliverables, timelines, and value propositions. Do not invent facts about the agency (location, history, team size or past clients) that you were not given.`;
 
     const prompt = `Generate a full client proposal for the following:
 
@@ -482,14 +486,16 @@ Deadline: ${deadline ? deadline.slice(0, 10) : 'Not specified'}
 Brief: ${brief || 'None'}
 
 Write a complete proposal that includes:
-1. Introduction / About Ashbi Design
+1. Introduction / About ${agency}
 2. Understanding of the client's needs
 3. Proposed approach and methodology
 4. Deliverables with descriptions
 5. Timeline
 6. Investment / pricing (use the budget as a guide)
-7. Why Ashbi Design (differentiators)
+7. Why ${agency} (differentiators)
 8. Next steps
+
+${signOffInstruction(request.user, organizationName, 'Sign the proposal as')}
 
 Format the proposal as clean, professional text ready to be sent to a client. Do not use markdown headers - use clean formatting with clear sections.`;
 

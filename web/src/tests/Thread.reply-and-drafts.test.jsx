@@ -45,7 +45,7 @@ vi.mock('../lib/api', () => ({
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', name: 'Pat Lee', role: 'TEAM' } }) }));
 vi.mock('../hooks/useToast', () => ({ useToast: () => toast }));
 
-const { default: Thread, buildGmailSendPayload, gmailConnectionLine, responseStatusLabel } = await import('../pages/Thread');
+const { default: Thread, assignmentSuggestionLabel, buildGmailSendPayload, gmailConnectionLine, responseStatusLabel } = await import('../pages/Thread');
 
 function renderThread() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -176,6 +176,12 @@ describe('Compose response', () => {
   it('labels response states in plain words', () => {
     expect(responseStatusLabel('DRAFT')).toBe('Draft');
     expect(responseStatusLabel('PENDING_APPROVAL')).toBe('Waiting for approval');
+  });
+
+  it('shows AI assignment suggestions as roles, not people', () => {
+    expect(assignmentSuggestionLabel('account_lead')).toBe('Account lead');
+    expect(assignmentSuggestionLabel('dev')).toBe('Development');
+    expect(assignmentSuggestionLabel('anyone')).toBe('Anyone');
   });
 });
 

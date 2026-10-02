@@ -2,15 +2,16 @@
 
 import { getProvider } from '../ai/providers/index.js';
 import {validateBody, aiTeamMessageSchema} from '../validators/schemas.js';
+import { organizationNameFor, signOffInstruction } from '../utils/organization-name.js';
 
-const AGENTS = [
+export const AGENTS = [
   {
     role: 'WEB_DESIGNER',
     name: 'Web Designer',
     description: 'Figma briefs, mockup feedback, style guides',
     color: 'blue',
     icon: 'Palette',
-    systemPrompt: 'You are Ashbi Design web designer. Expert in Figma, Elementor, UI/UX for CPG/DTC brands. Give specific visual recommendations.',
+    systemPrompt: 'You are {agency} web designer. Expert in Figma, Elementor, UI/UX for CPG/DTC brands. Give specific visual recommendations.',
     quickActions: [
       'Create a Figma brief',
       'Review this mockup',
@@ -24,7 +25,7 @@ const AGENTS = [
     description: 'WordPress/Shopify debugging, code snippets',
     color: 'purple',
     icon: 'Code2',
-    systemPrompt: 'You are Ashbi Design web developer. Expert in WordPress, WooCommerce, Shopify, Elementor. Give working code examples.',
+    systemPrompt: 'You are {agency} web developer. Expert in WordPress, WooCommerce, Shopify, Elementor. Give working code examples.',
     quickActions: [
       'Debug this WordPress issue',
       'Write a WooCommerce snippet',
@@ -38,7 +39,7 @@ const AGENTS = [
     description: 'Client updates, status reports, milestone tracking',
     color: 'green',
     icon: 'ClipboardList',
-    systemPrompt: 'You are Ashbi Design PM. Draft client updates, flag risks, track milestones. Be professional and warm.',
+    systemPrompt: 'You are {agency} PM. Draft client updates, flag risks, track milestones. Be professional and warm.',
     quickActions: [
       'Draft a client update',
       'Write a status report',
@@ -52,7 +53,7 @@ const AGENTS = [
     description: 'Social posts, blog content, campaigns',
     color: 'orange',
     icon: 'Megaphone',
-    systemPrompt: 'You are Ashbi Design marketing manager. Create content for CPG/DTC brands. Brand voice: expert, human, not corporate.',
+    systemPrompt: 'You are {agency} marketing manager. Create content for CPG/DTC brands. Brand voice: expert, human, not corporate.',
     quickActions: [
       'Write a social post',
       'Draft blog outline',
@@ -66,7 +67,7 @@ const AGENTS = [
     description: 'Outreach emails, proposals, follow-ups',
     color: 'yellow',
     icon: 'HandshakeIcon',
-    systemPrompt: 'You are Ashbi Design sales agent. Write outreach emails under 100 words, proposals, follow-ups. CTA: 15-min call. Sign off as Cameron Ashley.',
+    systemPrompt: 'You are {agency} sales agent. Write outreach emails under 100 words, proposals, follow-ups. CTA: 15-min call. {signOff}',
     quickActions: [
       'Write cold outreach email',
       'Draft a proposal',
@@ -80,7 +81,7 @@ const AGENTS = [
     description: 'Contracts, NDAs, SOW templates',
     color: 'slate',
     icon: 'Scale',
-    systemPrompt: 'You are Ashbi Design legal assistant. Draft contracts, NDAs, SOW for Toronto creative agency. Always recommend professional review.',
+    systemPrompt: 'You are {agency} legal assistant. Draft contracts, NDAs, SOW for a creative agency. Always recommend professional review.',
     quickActions: [
       'Draft an NDA',
       'Create SOW template',
@@ -94,7 +95,7 @@ const AGENTS = [
     description: 'Brand identity, creative direction, packaging',
     color: 'pink',
     icon: 'Sparkles',
-    systemPrompt: 'You are Ashbi Design branding expert. Brand identity, packaging direction, creative briefs for CPG/DTC supplement/skincare/food brands.',
+    systemPrompt: 'You are {agency} branding expert. Brand identity, packaging direction, creative briefs for CPG/DTC supplement/skincare/food brands.',
     quickActions: [
       'Create brand brief',
       'Suggest packaging direction',
@@ -106,6 +107,19 @@ const AGENTS = [
 
 // Build a lookup map
 const AGENT_MAP = Object.fromEntries(AGENTS.map(a => [a.role, a]));
+
+/**
+ * An agent's system prompt for the signed-in person's workspace: {agency}
+ * names their organization and {signOff} signs as them, never one agency.
+ */
+export function agentSystemPrompt(agent, user, organizationName) {
+  const agency = organizationName ? `${organizationName}'s` : "the agency's";
+  const signOff = signOffInstruction(user, organizationName);
+  // Replacer functions, so a "$" in a name is never read as a pattern.
+  return agent.systemPrompt
+    .replaceAll('{agency}', () => agency)
+    .replaceAll('{signOff}', () => signOff);
+}
 
 export default async function aiTeamRoutes(fastify) {
   // GET /ai-team/agents — return all 7 agent configs
@@ -148,9 +162,10 @@ export default async function aiTeamRoutes(fastify) {
     }
 
     // Build conversation for the AI
+    const baseSystemPrompt = agentSystemPrompt(agent, request.user, await organizationNameFor(request));
     const systemPrompt = contextParts.length > 0
-      ? `${agent.systemPrompt}\n\nContext:\n${contextParts.join('\n')}`
-      : agent.systemPrompt;
+      ? `${baseSystemPrompt}\n\nContext:\n${contextParts.join('\n')}`
+      : baseSystemPrompt;
 
     // Format history + new message as a prompt
     const conversationLines = history.map(h =>

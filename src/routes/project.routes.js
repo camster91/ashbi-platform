@@ -19,6 +19,7 @@ import {
 import { setProjectAttachmentsClientVisibility } from '../services/attachment-visibility.service.js';
 import bus, { EVENTS } from '../utils/events.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
+import { organizationNameFor } from '../utils/organization-name.js';
 
 /**
  * Check that a project's client and default owner belong to the caller's
@@ -508,8 +509,10 @@ export default async function projectRoutes(fastify) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
+    const organizationName = await organizationNameFor(request);
+
     try {
-      const systemPrompt = `You are a project manager for a design agency called Ashbi Design. Given a project brief, generate a structured project plan.
+      const systemPrompt = `You are a project manager for ${organizationName ? `a design agency called ${organizationName}` : 'a design agency'}. Given a project brief, generate a structured project plan.
 
 Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 {

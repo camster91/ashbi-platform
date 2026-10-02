@@ -9,9 +9,9 @@ import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.j
 /**
  * Build and store one organization's weekly digest.
  * @param {any} tenantPrisma organization-scoped Prisma client
- * @param {{ chat?: (options: any) => Promise<string>, now?: Date }} [options]
+ * @param {{ chat?: (options: any) => Promise<string>, now?: Date, organizationName?: string }} [options]
  */
-export async function buildWeeklyDigest(tenantPrisma, { chat = (options) => aiClient.chat(options), now: at = new Date() } = {}) {
+export async function buildWeeklyDigest(tenantPrisma, { chat = (options) => aiClient.chat(options), now: at = new Date(), organizationName = '' } = {}) {
   const now = at;
   const weekStart = new Date(now);
   weekStart.setDate(weekStart.getDate() - 7);
@@ -76,7 +76,7 @@ export async function buildWeeklyDigest(tenantPrisma, { chat = (options) => aiCl
     return sum + (Number.isFinite(price) ? price : 0);
   }, 0);
 
-  const system = `You are the AI assistant for Ashbi Design agency. Generate a concise weekly digest email for Cameron (CEO).`;
+  const system = `You are the AI assistant for ${organizationName ? `${organizationName}, an agency` : 'an agency'}. Generate a concise weekly digest email for the agency's leadership.`;
   const prompt = `Generate a weekly digest for the week of ${weekStart.toLocaleDateString('en-CA')} to ${now.toLocaleDateString('en-CA')}:
 
 - New leads: ${newLeads}
@@ -114,6 +114,16 @@ Write a brief, actionable digest highlighting what needs attention this week. In
   return { newLeads, proposalsSent, proposalsViewed, proposalsHired, tasksOverdue, retainerTotal };
 }
 
+/** The organization's display name for its digest prompt, or '' when unknown. */
+async function organizationNameOf(prisma, organizationId) {
+  try {
+    const organization = await prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true } });
+    return typeof organization?.name === 'string' ? organization.name.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
 /**
  * Run the weekly digest for one organization (when requested) or all of them.
  * @param {{ prisma: any, backgroundPrisma: any, organizationId?: string | null, chat?: (options: any) => Promise<string> }} options
@@ -122,10 +132,11 @@ export async function runWeeklyDigest({ prisma, backgroundPrisma, organizationId
   const organizationIds = await resolveTenantOrganizationIds(prisma, requested);
   const organizations = [];
   for (const organizationId of organizationIds) {
+    const organizationName = await organizationNameOf(prisma, organizationId);
     const summary = await runTenantJob(
       prisma,
       organizationId,
-      (tenantPrisma) => buildWeeklyDigest(tenantPrisma, { chat }),
+      (tenantPrisma) => buildWeeklyDigest(tenantPrisma, { chat, organizationName }),
       backgroundPrisma,
     );
     organizations.push({ organizationId, ...summary });

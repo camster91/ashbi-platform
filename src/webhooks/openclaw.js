@@ -146,7 +146,7 @@ Subject: ${thread.subject || 'No subject'}
 
 Preview: "${preview}"
 
-Cameron: Review and approve at https://hub.ashbi.ca/inbox/${thread.id}`;
+Review and approve at https://hub.ashbi.ca/inbox/${thread.id}`;
 
     const result = await sendOpenClawMessage('agency-hub', message, {
       eventType: 'approval_needed',

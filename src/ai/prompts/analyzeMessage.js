@@ -19,6 +19,8 @@ Urgency levels:
 
 Sentiment: frustrated, happy, neutral, anxious, confused
 
+Assignment roles (never a person's name): dev, design, account_lead (whoever owns the client relationship), anyone
+
 Be thorough in extracting action items - even implied ones.`;
 
   const prompt = `Analyze this client message:
@@ -47,7 +49,7 @@ Respond with JSON:
   "actionItems": [
     {
       "task": "specific task to complete",
-      "assignmentSuggestion": "dev|design|cameron|anyone",
+      "assignmentSuggestion": "dev|design|account_lead|anyone",
       "estimatedEffort": "quick|medium|significant",
       "reason": "why this task is needed"
     }

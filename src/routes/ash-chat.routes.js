@@ -4,10 +4,15 @@ import env from '../config/env.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { aiGovernance } from '../ai/governance.js';
 import { aiErrorBody, isAiControlError, sendAiError } from '../ai/errors.js';
+import { organizationNameFor } from '../utils/organization-name.js';
 
-const ASH_SYSTEM_PROMPT = `You are Ash, Chief of Staff at Ashbi Design. You have access to the agency's Hub data. You are direct, smart, and get things done. Keep responses concise unless detail is needed.`;
+/** Ash's system prompt for the signed-in person's organization (never one agency's name). */
+export function ashSystemPrompt(organizationName) {
+  const workplace = organizationName ? `at ${organizationName}` : 'for this agency';
+  return `You are Ash, Chief of Staff ${workplace}. You have access to the agency's Hub data. You are direct, smart, and get things done. Keep responses concise unless detail is needed.`;
+}
 
-async function callAI(messages) {
+async function callAI(messages, systemPrompt) {
   // Use Kilo (OpenAI-compatible) if available
   const kiloKey = process.env.KILO_API_KEY;
   const kiloBase = process.env.KILO_API_BASE || 'https://api.kilo.ai/api/gateway/';
@@ -24,7 +29,7 @@ async function callAI(messages) {
         model: kiloModel,
         max_tokens: 2048,
         messages: [
-          { role: 'system', content: ASH_SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt },
           ...messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))
         ]
       })
@@ -41,7 +46,7 @@ async function callAI(messages) {
     const genAI = new GoogleGenerativeAI(env.geminiApiKey);
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.0-flash',
-      systemInstruction: ASH_SYSTEM_PROMPT,
+      systemInstruction: systemPrompt,
       generationConfig: { temperature: 0.4, maxOutputTokens: 2048 }
     });
 
@@ -68,7 +73,7 @@ async function callAI(messages) {
       body: JSON.stringify({
         model: 'claude-3-haiku-20240307',
         max_tokens: 2048,
-        system: ASH_SYSTEM_PROMPT,
+        system: systemPrompt,
         messages: messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))
       })
     });
@@ -129,12 +134,13 @@ export default async function ashChatRoutes(fastify) {
     let aiResponse;
     try {
       const turns = history.map(m => ({ role: m.role, content: m.content }));
+      const system = ashSystemPrompt(await organizationNameFor(request));
       // Governed like every other AI call (#413): kill switches, the
       // organization's BYOK connection and budget when it has one, and the
       // beforeCall/afterCall hooks around this route's own platform chain.
       aiResponse = await aiGovernance.chatVia(
-        { system: ASH_SYSTEM_PROMPT, messages: turns, temperature: 0.4, maxTokens: 2048, feature: '/api/ash-chat/message' },
-        () => callAI(turns),
+        { system, messages: turns, temperature: 0.4, maxTokens: 2048, feature: '/api/ash-chat/message' },
+        () => callAI(turns, system),
       );
     } catch (err) {
       if (isAiControlError(err)) {

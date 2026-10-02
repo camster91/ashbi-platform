@@ -3,6 +3,7 @@
 import aiClient from '../ai/client.js';
 import { validateBody, emailTriageDraftUpdateSchema, emailTriageScanSchema } from '../validators/schemas.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
+import { organizationNameFor, senderDescription, signOffInstruction } from '../utils/organization-name.js';
 
 const SCAN_STOPPING_CODES = new Set(['AI_DISABLED', 'AI_BUDGET_EXCEEDED', 'AI_CONNECTION_DISABLED', 'AI_CONNECTION_UNAVAILABLE']);
 
@@ -35,6 +36,9 @@ export default async function emailTriageRoutes(fastify) {
 
     const items = [];
     let failed = 0;
+    // Triage is for the person scanning and their workspace, not one agency.
+    const organizationName = await organizationNameFor(request);
+    const triager = String(request.user?.name || '').trim() || 'the inbox owner';
 
     for (const thread of threads) {
       const msg = thread.messages[0];
@@ -42,7 +46,7 @@ export default async function emailTriageRoutes(fastify) {
 
       if (triagedIds.has(thread.id)) continue;
 
-      const system = `You are an email triage assistant for Ashbi Design, a Toronto-based CPG/DTC creative agency run by Cameron Ashley. Classify emails accurately and concisely.`;
+      const system = `You are an email triage assistant for ${senderDescription(request.user, organizationName)}. Classify emails accurately and concisely.`;
 
       const prompt = `Analyze this email and return JSON:
 
@@ -56,7 +60,7 @@ Return JSON:
   "summary": "1-2 sentence summary of what this email is about and what action is needed"
 }
 
-Choose ALL applicable tags. "needs-reply" means Cameron should respond. "lead" means potential new business. "urgent" means time-sensitive.`;
+Choose ALL applicable tags. "needs-reply" means ${triager} should respond. "lead" means potential new business. "urgent" means time-sensitive.`;
 
       try {
         const result = await aiClient.chatJSON({ system, prompt, temperature: 0.2 });
@@ -101,7 +105,8 @@ Choose ALL applicable tags. "needs-reply" means Cameron should respond. "lead" m
 
     if (!item) return reply.status(404).send({ error: 'Triage item not found' });
 
-    const system = `You are a professional email assistant for Cameron Ashley, founder of Ashbi Design, a Toronto-based CPG/DTC creative agency specializing in branding, packaging design, and ecommerce web development. Draft polite, professional, on-brand replies.`;
+    const organizationName = await organizationNameFor(request);
+    const system = `You are a professional email assistant for ${senderDescription(request.user, organizationName)}. Draft polite, professional, on-brand replies.`;
 
     const prompt = `Draft 2 different reply options for this email:
 
@@ -117,7 +122,7 @@ Return JSON:
   ]
 }
 
-Option 1: Standard professional reply. Option 2: Shorter/friendlier alternative. Sign as Cameron.`;
+Option 1: Standard professional reply. Option 2: Shorter/friendlier alternative. ${signOffInstruction(request.user, organizationName, 'Sign as')}`;
 
     try {
       const result = await aiClient.chatJSON({ system, prompt, temperature: 0.6 });

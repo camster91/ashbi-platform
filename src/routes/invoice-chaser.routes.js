@@ -5,7 +5,7 @@ import { validateBody, invoiceChaserSchema } from '../validators/schemas.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
 import { withInvoiceBalance } from '../utils/invoice-balance.js';
 import { invoicePublicAccessFailure } from '../utils/public-document-access.js';
-import { organizationNameFor, senderDescription } from '../utils/organization-name.js';
+import { organizationNameFor, senderDescription, signOffName } from '../utils/organization-name.js';
 
 function hubUrl() {
   return process.env.APP_URL || process.env.HUB_URL || 'https://hub.ashbi.ca';
@@ -65,7 +65,7 @@ export default async function invoiceChaserRoutes(fastify) {
     const reminders = [];
     // Signed by the person generating the reminders and their workspace.
     const organizationName = await organizationNameFor(request);
-    const signOff = [request.user?.name, organizationName].map((part) => String(part || '').trim()).filter(Boolean).join(', ');
+    const signOff = signOffName(request.user, organizationName);
 
     for (const loaded of invoices) {
       const invoice = await withInvoiceBalance(prisma, loaded);
