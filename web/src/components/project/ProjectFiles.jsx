@@ -1,7 +1,8 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, EyeOff, FolderOpen } from 'lucide-react';
+import { Eye, EyeOff, FolderOpen, Loader2, Upload } from 'lucide-react';
 import { api } from '../../lib/api';
+import { prepareUploadFile, UPLOAD_ACCEPT } from '../../lib/upload';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { formatDate } from '../../lib/utils';
@@ -71,6 +72,8 @@ function skippedMessage(skipped, shared) {
   return parts.join(' ');
 }
 
+export const NEW_FILES_HIDDEN_NOTE = "Clients can't see new files until you share them.";
+
 export default function ProjectFiles({ projectId }) {
   const id = useId();
   const { user } = useAuth();
@@ -83,6 +86,10 @@ export default function ProjectFiles({ projectId }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [bulkPending, setBulkPending] = useState(false);
   const [bulkError, setBulkError] = useState('');
+  const fileInputRef = useRef(null);
+  // { name, index, count, fraction } while files upload, else null.
+  const [upload, setUpload] = useState(null);
+  const [uploadError, setUploadError] = useState('');
   const filesQuery = useQuery({
     queryKey: ['project-files', projectId],
     queryFn: () => api.getAttachments('PROJECT', projectId),
@@ -116,6 +123,43 @@ export default function ProjectFiles({ projectId }) {
       setError(err?.message || 'The file could not be updated.');
     } finally {
       setPendingId('');
+    }
+  };
+
+  // Staff uploads go through POST /api/attachments (PROJECT) one at a time.
+  // The server re-checks size and type; the same limits are checked here
+  // first so a file that is bound to be refused is never sent.
+  const uploadFiles = async (picked) => {
+    const chosen = Array.from(picked || []);
+    if (chosen.length === 0) return;
+    setUploadError('');
+    const failures = [];
+    const uploaded = [];
+    for (let index = 0; index < chosen.length; index += 1) {
+      const prepared = prepareUploadFile(chosen[index], { fallbackBase: 'project-file' });
+      if (prepared.error) {
+        failures.push(prepared.error);
+        continue;
+      }
+      setUpload({ name: prepared.file.name, index, count: chosen.length, fraction: 0 });
+      try {
+        await api.uploadAttachmentWithProgress(prepared.file, 'PROJECT', projectId, {
+          onProgress: (fraction) => setUpload((current) => (current ? { ...current, fraction } : current)),
+        });
+        uploaded.push(prepared.file.name);
+      } catch (err) {
+        failures.push(`${prepared.file.name} was not uploaded: ${err?.message || 'the upload failed.'}`);
+      }
+    }
+    setUpload(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (failures.length > 0) setUploadError(failures.join(' '));
+    if (uploaded.length > 0) {
+      toast.success({
+        title: uploaded.length === 1 ? `Uploaded ${uploaded[0]}` : `Uploaded ${filesLabel(uploaded.length)}`,
+        message: NEW_FILES_HIDDEN_NOTE,
+      });
+      await refresh();
     }
   };
 
@@ -223,12 +267,38 @@ export default function ProjectFiles({ projectId }) {
         <div className="min-w-0">
           <h2 id={`${id}-heading`} className="flex items-center gap-2 font-semibold text-foreground"><FolderOpen className="h-5 w-5 text-primary" aria-hidden="true" />Project files</h2>
           <p className="mt-1 text-sm text-muted-foreground">Files stay internal, including screen recordings, until you share them. Shared files appear in the client portal&apos;s Documents.</p>
+          <p id={`${id}-upload-note`} className="mt-1 text-sm text-muted-foreground">{NEW_FILES_HIDDEN_NOTE}</p>
           {showBulk && (
             <p id={`${id}-summary`} className="mt-1 text-sm text-muted-foreground">
               {sharedCount} of {filesLabel(files.length)} shared with the client.
             </p>
           )}
         </div>
+        <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={UPLOAD_ACCEPT}
+            className="hidden"
+            tabIndex={-1}
+            aria-label="Upload file"
+            disabled={Boolean(upload)}
+            onChange={(event) => uploadFiles(event.target.files)}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={Boolean(upload)}
+            aria-describedby={`${id}-upload-note ${id}-upload-limits`}
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+          >
+            {upload
+              ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              : <Upload className="h-4 w-4" aria-hidden="true" />}
+            {upload ? 'Uploading…' : 'Upload file'}
+          </button>
+          <p id={`${id}-upload-limits`} className="text-xs text-muted-foreground">Up to 50 MB: images, PDF, Office files, text, CSV, ZIP, audio or video.</p>
         {showBulk && (
           <div className="flex shrink-0 flex-col sm:items-end">
             <Button
@@ -248,8 +318,27 @@ export default function ProjectFiles({ projectId }) {
             )}
           </div>
         )}
+        </div>
       </div>
       <div className="p-5">
+        {upload && (
+          <div className="mb-4" role="status">
+            <p className="text-sm text-foreground">
+              Uploading {upload.name}{upload.count > 1 ? ` (${upload.index + 1} of ${upload.count})` : ''}: {Math.round(upload.fraction * 100)}%
+            </p>
+            <div
+              role="progressbar"
+              aria-label={`Uploading ${upload.name}`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(upload.fraction * 100)}
+              className="mt-1 h-2 overflow-hidden rounded-full bg-muted"
+            >
+              <div className="h-full bg-primary motion-reduce:transition-none" style={{ width: `${Math.round(upload.fraction * 100)}%` }} />
+            </div>
+          </div>
+        )}
+        {uploadError && <p role="alert" className="mb-4 text-sm text-destructive">{uploadError} Check the file and try again.</p>}
         {filesQuery.isLoading ? (
           <p role="status" className="text-sm text-muted-foreground">Loading files…</p>
         ) : filesQuery.error ? (

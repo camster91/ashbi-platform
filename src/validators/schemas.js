@@ -1437,13 +1437,21 @@ export const expenseUpdateSchema = z.object({
 });
 
 // ── Gmail drafts / replies ────────────────────────────────────────────────
+// Email header values are one line: a CR or LF would let a value start a
+// header of its own (Bcc:, From:, Content-Type:). The route strips them too.
+const SINGLE_LINE = /^[^\r\n]*$/;
+const singleLineMessage = 'must be a single line (no line breaks)';
+
 export const gmailSendSchema = z.object({
-  to: z.string().email().max(255),
-  subject: z.string().min(1).max(500),
+  to: z.string().email().max(255).regex(SINGLE_LINE, singleLineMessage),
+  subject: z.string().min(1).max(500).regex(SINGLE_LINE, singleLineMessage),
   body: z.string().min(1).max(50_000),
-  threadId: cuidId.optional(),
-  in_reply_to: z.string().max(500).optional(),
-  references: z.string().max(500).optional(),
+  // A hub thread that never came from Gmail has no Gmail thread or message
+  // id: the web client may send null for them, which means "start a new
+  // Gmail thread". Gmail ids are hex strings.
+  threadId: z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/, 'must be a Gmail thread id').nullable().optional(),
+  in_reply_to: z.string().max(500).regex(SINGLE_LINE, singleLineMessage).nullable().optional(),
+  references: z.string().max(500).regex(SINGLE_LINE, singleLineMessage).nullable().optional(),
   hubThreadId: cuidId.optional(),
 });
 

@@ -12,6 +12,11 @@ class GeminiProvider {
     this.client = new GoogleGenerativeAI(env.geminiApiKey);
   }
 
+  /** Whether the deployment gave this provider an API key. */
+  isConfigured() {
+    return Boolean(env.geminiApiKey);
+  }
+
   async chat({ system, prompt, temperature = 0.3, maxTokens = 4096 }) {
     const model = this.client.getGenerativeModel({
       model: this.modelName,

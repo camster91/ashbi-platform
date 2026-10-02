@@ -18,6 +18,8 @@ import {
   ExternalLink,
   Loader2,
   Mail,
+  Copy,
+  Save,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import LoadingState from '../components/ui/LoadingState';
@@ -34,6 +36,42 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import Modal, { ModalFooter } from '../components/Modal';
 
+// What saving a response does today: it is stored on the conversation for
+// the team and is not sent or routed to anyone (sending is Reply via Gmail).
+export const DRAFT_HINT = 'Saved drafts stay on this conversation. Nothing is sent to the client; use Reply via Gmail to send.';
+
+const RESPONSE_STATUS_LABELS = {
+  DRAFT: 'Draft',
+  PENDING_APPROVAL: 'Waiting for approval',
+  APPROVED: 'Approved',
+  REJECTED: 'Returned',
+  SENT: 'Sent',
+};
+
+export function responseStatusLabel(status) {
+  return RESPONSE_STATUS_LABELS[status] || String(status || '').replace(/_/g, ' ');
+}
+
+/**
+ * The /gmail/send body. Gmail ids are sent only when the conversation came
+ * from Gmail: a hub-only conversation starts a new Gmail thread.
+ */
+export function buildGmailSendPayload({ to, subject, body, meta, hubThreadId }) {
+  const payload = { to, subject, body, hubThreadId };
+  if (meta?.gmailThreadId) payload.threadId = meta.gmailThreadId;
+  if (meta?.lastMessageId) payload.in_reply_to = meta.lastMessageId;
+  return payload;
+}
+
+/** The one line under the Gmail reply that says where it sends from. */
+export function gmailConnectionLine({ checking, failed, status }) {
+  if (checking) return 'Checking the Gmail connection…';
+  if (status && !status.connected) return 'Copy the reply and send it from your own email.';
+  if (status?.email) return `Sends from ${status.email}.`;
+  if (failed) return "The Gmail connection couldn't be checked, so sending may fail.";
+  return 'Sends through the connected Gmail mailbox.';
+}
+
 export default function Thread() {
   const { id } = useParams();
   const queryClient = useQueryClient();
@@ -47,6 +85,8 @@ export default function Thread() {
   const [gmailReplySubject, setGmailReplySubject] = useState('');
   const [gmailReplyTo, setGmailReplyTo] = useState('');
   const [gmailDraftMeta, setGmailDraftMeta] = useState(null); // { gmailThreadId, lastMessageId }
+  const [gmailDraftNotice, setGmailDraftNotice] = useState('');
+  const [gmailCopied, setGmailCopied] = useState(false);
 
   const {
     data: thread,
@@ -60,21 +100,35 @@ export default function Thread() {
     queryFn: () => api.getThread(id),
   });
 
+  // Only checked while the Gmail reply is open: whether this workspace has a
+  // connected mailbox, so the modal never promises a send it cannot make.
+  const gmailStatusQuery = useQuery({
+    queryKey: ['gmail-status'],
+    queryFn: () => api.getGmailStatus(),
+    enabled: showGmailReply,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const gmailStatus = gmailStatusQuery.data;
+  const gmailNotConnected = gmailStatus ? !gmailStatus.connected : false;
+
   const draftMutation = useMutation({
     mutationFn: () => api.draftResponse(id),
     onSuccess: (data) => {
-      setResponseText(data.options[0]?.body || '');
+      setResponseText(data.options?.[0]?.body || '');
+      // The AI draft is also saved on the conversation as a draft.
+      queryClient.invalidateQueries({ queryKey: ['thread', id] });
     },
   });
 
-  const submitMutation = useMutation({
+  // Saves the text as a draft on this conversation. Nothing is sent.
+  const saveDraftMutation = useMutation({
     mutationFn: (body) => api.createResponse(id, { subject: `Re: ${thread.subject}`, body, tone: 'professional' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['thread', id] });
       setResponseText('');
-      toast.success('Response submitted for approval');
+      toast.success('Draft saved', 'It is listed under Saved drafts. Nothing was sent to the client.');
     },
-    onError: () => toast.error('Failed to submit response'),
   });
 
   const noteMutation = useMutation({
@@ -105,20 +159,20 @@ export default function Thread() {
       setGmailReplySubject(data.subject || `Re: ${thread?.subject}`);
       setGmailReplyTo(data.to || '');
       setGmailDraftMeta({ gmailThreadId: data.gmailThreadId, lastMessageId: data.lastMessageId });
+      setGmailDraftNotice(data.notice?.message || '');
+      setGmailCopied(false);
       setShowGmailReply(true);
     },
-    onError: (error) => toast.error('Could not prepare Gmail reply', error.message),
   });
 
   const gmailSendMutation = useMutation({
-    mutationFn: () => api.gmailSend({
+    mutationFn: () => api.gmailSend(buildGmailSendPayload({
       to: gmailReplyTo,
       subject: gmailReplySubject,
       body: gmailReplyText,
-      threadId: gmailDraftMeta?.gmailThreadId,
-      in_reply_to: gmailDraftMeta?.lastMessageId,
+      meta: gmailDraftMeta,
       hubThreadId: id,
-    }),
+    })),
     onSuccess: () => {
       setShowGmailReply(false);
       setGmailReplyText('');
@@ -128,8 +182,16 @@ export default function Thread() {
       queryClient.invalidateQueries({ queryKey: ['thread', id] });
       toast.success('Reply sent via Gmail');
     },
-    onError: () => toast.error('Failed to send Gmail reply'),
   });
+
+  const copyGmailReply = async () => {
+    try {
+      await navigator.clipboard.writeText(`Subject: ${gmailReplySubject}\n\n${gmailReplyText}`);
+      setGmailCopied(true);
+    } catch {
+      toast.error('Could not copy', 'Select the message text and copy it yourself.');
+    }
+  };
 
   const closeGmailReply = () => {
     if (gmailSendMutation.isPending) return;
@@ -168,12 +230,14 @@ export default function Thread() {
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-start gap-4">
-        <Link to="/inbox" aria-label="Back to inbox" className="p-2 hover:bg-secondary rounded-lg transition-colors mt-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      {/* Stacks on phones: title first, then badges and actions on their own row. */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4" data-testid="thread-header">
+        <div className="flex min-w-0 flex-1 items-start gap-2 md:gap-4">
+        <Link to="/inbox" aria-label="Back to inbox" className="inline-flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-lg hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-heading font-bold text-foreground">{thread.subject}</h1>
+        <div className="flex-1 min-w-0 pt-2">
+          <h1 className="text-xl font-heading font-bold text-foreground break-words">{thread.subject}</h1>
           <div className="flex items-center gap-3 mt-1.5 text-sm text-muted-foreground flex-wrap">
             {thread.client && (
               <Link to={`/client/${thread.client.id}`} className="flex items-center gap-1 hover:text-foreground transition-colors">
@@ -195,7 +259,8 @@ export default function Thread() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        </div>
+        <div className="flex flex-wrap items-center gap-2 md:flex-shrink-0 md:justify-end">
           <span className={cn('px-2.5 py-1 text-sm font-medium rounded-lg', getPriorityColor(thread.priority))}>
             {thread.priority}
           </span>
@@ -205,9 +270,10 @@ export default function Thread() {
           {thread.status !== 'RESOLVED' && (
             <>
               <button
+                type="button"
                 onClick={() => gmailDraftMutation.mutate()}
                 disabled={gmailDraftMutation.isPending}
-                className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 flex items-center gap-1.5 transition-all hover-lift disabled:opacity-60"
+                className="min-h-11 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 flex items-center gap-1.5 transition-all hover-lift disabled:opacity-60"
               >
                 {gmailDraftMutation.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -217,8 +283,10 @@ export default function Thread() {
                 {gmailDraftMutation.isPending ? 'Drafting...' : 'Reply via Gmail'}
               </button>
               <button
+                type="button"
                 onClick={() => resolveMutation.mutate()}
-                className="px-3 py-1.5 text-sm bg-success text-success-foreground rounded-lg hover:opacity-90 flex items-center gap-1.5 transition-all hover-lift"
+                disabled={resolveMutation.isPending}
+                className="min-h-11 px-3 py-1.5 text-sm bg-success text-success-foreground rounded-lg hover:opacity-90 flex items-center gap-1.5 transition-all hover-lift"
               >
                 <CheckCircle className="w-4 h-4" />
                 Resolve
@@ -237,6 +305,19 @@ export default function Thread() {
       {/* Gmail Reply Modal */}
       <Modal isOpen={showGmailReply} onClose={closeGmailReply} title="Reply via Gmail" size="lg" showCloseButton={!gmailSendMutation.isPending}>
         <form onSubmit={(event) => { event.preventDefault(); gmailSendMutation.mutate(); }} className="space-y-4">
+              {gmailNotConnected && (
+                <div role="alert" className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+                  <p className="font-medium">Gmail isn&apos;t connected</p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    {gmailStatus?.error || "This workspace has no connected Gmail mailbox, so this reply can't be sent from here."}
+                  </p>
+                </div>
+              )}
+              {gmailDraftNotice && (
+                <p role="status" className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+                  {gmailDraftNotice}
+                </p>
+              )}
               <div>
                 <label htmlFor="gmail-reply-to" className="block text-sm font-medium mb-1.5">To</label>
                 <input
@@ -280,12 +361,22 @@ export default function Thread() {
                 </p>
               )}
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
-            <Shield className="w-4 h-4" aria-hidden="true" />
-            Sends through the connected Gmail account.
+            <Shield className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            {gmailConnectionLine({
+              checking: gmailStatusQuery.isLoading,
+              failed: gmailStatusQuery.isError,
+              status: gmailStatus,
+            })}
           </div>
           <ModalFooter>
             <button type="button" onClick={closeGmailReply} disabled={gmailSendMutation.isPending} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50">Cancel</button>
-            <button type="submit" disabled={!gmailReplyText.trim() || !gmailReplyTo.trim() || !gmailReplySubject.trim() || gmailSendMutation.isPending} className="flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+            {gmailNotConnected && (
+              <button type="button" onClick={copyGmailReply} disabled={!gmailReplyText.trim()} className="flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50">
+                <Copy className="w-4 h-4" aria-hidden="true" />
+                {gmailCopied ? 'Copied' : 'Copy reply'}
+              </button>
+            )}
+            <button type="submit" disabled={gmailNotConnected || gmailStatusQuery.isLoading || !gmailReplyText.trim() || !gmailReplyTo.trim() || !gmailReplySubject.trim() || gmailSendMutation.isPending} className="flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
               {gmailSendMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Send className="w-4 h-4" aria-hidden="true" />}
               {gmailSendMutation.isPending ? 'Sending…' : 'Send email'}
             </button>
@@ -464,6 +555,11 @@ export default function Thread() {
                 </button>
               </div>
               <div className="p-5">
+                {draftMutation.error && (
+                  <p role="alert" className="mb-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                    {draftMutation.error.message || 'The AI draft could not be written.'} You can still write the response yourself.
+                  </p>
+                )}
                 <textarea
                   value={responseText}
                   onChange={(e) => setResponseText(e.target.value)}
@@ -472,18 +568,24 @@ export default function Thread() {
                   className="w-full p-3 border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm leading-relaxed"
                   placeholder="Write your response..."
                 />
-                <div className="flex items-center justify-between mt-3">
+                {saveDraftMutation.error && (
+                  <p role="alert" className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                    {saveDraftMutation.error.message || 'The draft could not be saved.'} Your text is still here; try again.
+                  </p>
+                )}
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Shield className="w-3 h-3" />
-                    Cameron must approve before sending
+                    <Shield className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
+                    {DRAFT_HINT}
                   </p>
                   <button
-                    onClick={() => submitMutation.mutate(responseText)}
-                    disabled={!responseText || submitMutation.isPending}
-                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center gap-2 text-sm font-medium transition-all hover-lift"
+                    type="button"
+                    onClick={() => saveDraftMutation.mutate(responseText)}
+                    disabled={!responseText.trim() || saveDraftMutation.isPending}
+                    className="min-h-11 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center gap-2 text-sm font-medium transition-all hover-lift"
                   >
-                    <Send className="w-4 h-4" />
-                    {submitMutation.isPending ? 'Saving...' : 'Save Draft'}
+                    <Save className="w-4 h-4" aria-hidden="true" />
+                    {saveDraftMutation.isPending ? 'Saving…' : 'Save draft'}
                   </button>
                 </div>
               </div>
@@ -554,7 +656,7 @@ export default function Thread() {
           {thread.responses?.length > 0 && (
             <div className="bg-card rounded-xl border border-border overflow-hidden">
               <div className="px-5 py-3 border-b border-border">
-                <h3 className="font-heading font-semibold">Response Drafts</h3>
+                <h3 className="font-heading font-semibold">Saved drafts</h3>
               </div>
               <ul className="divide-y divide-border">
                 {thread.responses.map((response) => (
@@ -567,7 +669,7 @@ export default function Thread() {
                         response.status === 'REJECTED' ? 'bg-destructive/10 text-destructive' :
                         'bg-secondary text-muted-foreground'
                       )}>
-                        {response.status?.replace(/_/g, ' ')}
+                        {responseStatusLabel(response.status)}
                       </span>
                       <span className="text-xs text-muted-foreground">{response.draftedBy?.name}</span>
                     </div>

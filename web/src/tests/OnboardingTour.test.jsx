@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import OnboardingTour from '../components/OnboardingTour';
+import OnboardingTour, { tourDismissedKey } from '../components/OnboardingTour';
 import { api } from '../lib/api';
 
 vi.mock('../lib/api', () => ({
@@ -16,6 +16,7 @@ vi.mock('../lib/api', () => ({
 
 const eligible = {
   supported: true,
+  userId: 'u-admin',
   role: 'ADMIN',
   state: 'eligible',
   startedAt: null,
@@ -47,6 +48,7 @@ function renderTour() {
 describe('role-aware onboarding', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     api.getOnboardingProgress.mockResolvedValue(eligible);
   });
 
@@ -85,7 +87,9 @@ describe('role-aware onboarding', () => {
       });
     renderTour();
 
-    await screen.findByRole('dialog', { name: 'Your getting-started checklist' }, { timeout: 2000 });
+    // A checklist in progress never opens itself; the resume button does.
+    fireEvent.click(await screen.findByRole('button', { name: /Resume getting started/ }));
+    await screen.findByRole('dialog', { name: 'Your getting-started checklist' });
     fireEvent.click(screen.getAllByRole('button', { name: 'Skip this task' })[0]);
     expect(await screen.findByRole('alert')).toHaveTextContent('Network unavailable');
     expect(screen.getByRole('heading', { name: 'Add your first client' })).toBeInTheDocument();
@@ -106,5 +110,45 @@ describe('role-aware onboarding', () => {
     await waitFor(() => expect(api.getOnboardingProgress).toHaveBeenCalled());
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /getting started/i })).not.toBeInTheDocument();
+  });
+
+  it('remembers "Not now" for this person, so the tour does not reopen on the next page load', async () => {
+    const first = renderTour();
+    expect(await screen.findByRole('dialog', { name: 'Welcome to Ashbi Hub' }, { timeout: 2000 })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(window.localStorage.getItem(tourDismissedKey('u-admin'))).toBe('1');
+    first.unmount();
+
+    // A full page load: fresh component, same person.
+    renderTour();
+    expect(await screen.findByRole('button', { name: /Resume getting started/ })).toBeInTheDocument();
+    await new Promise(resolve => setTimeout(resolve, 900));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(api.skipOnboarding).not.toHaveBeenCalled();
+  });
+
+  it('keeps one person\'s "Not now" from hiding the welcome for another', async () => {
+    window.localStorage.setItem(tourDismissedKey('someone-else'), '1');
+    renderTour();
+    expect(await screen.findByRole('dialog', { name: 'Welcome to Ashbi Hub' }, { timeout: 2000 })).toBeInTheDocument();
+  });
+
+  it('still opens when browser storage is blocked', async () => {
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    try {
+      renderTour();
+      expect(await screen.findByRole('dialog', { name: 'Welcome to Ashbi Hub' }, { timeout: 2000 })).toBeInTheDocument();
+    } finally {
+      getItem.mockRestore();
+    }
+  });
+
+  it('never opens itself for a checklist already in progress', async () => {
+    api.getOnboardingProgress.mockResolvedValue({ ...eligible, state: 'in_progress', startedAt: '2026-08-09T12:00:00.000Z' });
+    renderTour();
+    expect(await screen.findByRole('button', { name: /Resume getting started/ })).toBeInTheDocument();
+    await new Promise(resolve => setTimeout(resolve, 900));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

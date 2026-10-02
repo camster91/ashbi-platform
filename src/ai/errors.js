@@ -43,6 +43,40 @@ export class AiBudgetExceededError extends AiControlError {
   }
 }
 
+/**
+ * The deployment's own AI provider cannot serve this workspace: it has no API
+ * key, or nothing answers at its address, or it refused the deployment's
+ * credentials. Organizations without their own provider connection see this
+ * instead of a generic server error.
+ */
+export class AiUnavailableError extends AiControlError {
+  constructor() {
+    super(
+      "AI isn't set up for this workspace yet. Ask an admin to add an AI provider in Settings.",
+      { code: 'AI_UNAVAILABLE', statusCode: 503 },
+    );
+  }
+}
+
+const UNREACHABLE_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH']);
+
+/**
+ * Whether a failure from the platform provider means it is not set up: no
+ * service at its address (connection refused, unknown host) or its
+ * credentials were refused (HTTP 401/403). Timeouts, rate limits and bad
+ * answers are not, so callers keep their own handling for those.
+ * @param {any} error
+ */
+export function isPlatformSetupFailure(error) {
+  if (!error || error instanceof AiControlError) return false;
+  const codes = [error.code, error.cause?.code, error.cause?.cause?.code].filter(Boolean);
+  if (codes.some((code) => UNREACHABLE_CODES.has(code))) return true;
+  const status = Number(error.status ?? error.statusCode);
+  if (status === 401 || status === 403) return true;
+  // Providers that only report the HTTP status in the message (Ollama).
+  return /\bAPI error (401|403)\b/.test(String(error.message || ''));
+}
+
 export const AI_PROVIDER_ERROR_TYPES = Object.freeze([
   'auth', 'quota', 'rate_limit', 'timeout', 'invalid_request', 'upstream', 'invalid_response',
 ]);
