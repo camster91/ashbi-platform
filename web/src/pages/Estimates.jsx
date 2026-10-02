@@ -1,37 +1,82 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Send, ArrowRightLeft, Trash2, Search, Pencil, CalendarDays, Clock } from 'lucide-react';
+import { Plus, Send, ArrowRightLeft, Trash2, Search, Pencil, CalendarDays, Clock, Link2 } from 'lucide-react';
 import { api } from '../lib/api';
 import useClients from '../hooks/useClients';
 import { useToast } from '../hooks/useToast';
 import { Button, Card, EmptyState, LoadingState, StatusBadge } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
+import useIsSmUp from '../hooks/useIsSmUp';
+import { invoiceTotals, lineTotal, roundMoney } from '../lib/money-totals';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
-import { formatDate } from '../lib/format';
+import { formatDate, formatMoney } from '../lib/format';
+import { statusLabel } from '../lib/status';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const FILTERS = ['', 'DRAFT', 'SENT', 'APPROVED', 'DECLINED', 'CONVERTED'];
 
+// Estimates are in the workspace currency (CAD).
 function fmt(n) {
-  return `$${(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return formatMoney(n);
+}
+
+// Statuses staff can convert to a proposal (the API's
+// ESTIMATE_CONVERTIBLE_STATUSES): approved, or sent and not yet answered.
+export const CONVERTIBLE_STATUSES = ['SENT', 'APPROVED'];
+
+/**
+ * The public estimate page for this estimate, or null before it is sent.
+ * The server's clientLink (built from the hub URL) wins; the browser origin
+ * is only a fallback for a response without one.
+ */
+export function estimateClientLink(estimate, origin = window.location.origin) {
+  if (!estimate || estimate.status === 'DRAFT') return null;
+  if (estimate.clientLink) return estimate.clientLink;
+  return estimate.viewToken ? `${origin}/portal/estimate/${estimate.viewToken}` : null;
+}
+
+/** Whether the stored link still opens (not revoked, not expired). */
+export function estimateLinkUsable(estimate, now = new Date()) {
+  if (!estimate?.viewToken || estimate.status === 'DRAFT' || estimate.publicAccessRevokedAt) return false;
+  return !estimate.publicAccessExpiresAt || new Date(estimate.publicAccessExpiresAt) > now;
+}
+
+/**
+ * The toast after sending: what really happened to the email (the API's
+ * emailStatus). The estimate is sent and its link works either way.
+ * @returns {{ type: 'success' | 'warning', title: string, message: string, offerLink: boolean }}
+ */
+export function estimateSendOutcome(result) {
+  switch (result?.emailStatus) {
+    case 'SENT':
+      return { type: 'success', title: 'Estimate sent', message: 'The client was emailed a link to review and approve it.', offerLink: false };
+    case 'NO_CLIENT_EMAIL':
+      return { type: 'warning', title: 'Estimate marked as sent, but not emailed', message: 'This client has no email address. Copy the client link and share it yourself.', offerLink: true };
+    case 'EMAIL_NOT_CONFIGURED':
+      return { type: 'warning', title: 'Estimate marked as sent, but not emailed', message: 'Email is not set up for this workspace. Copy the client link and share it yourself.', offerLink: true };
+    case 'FAILED':
+      return { type: 'warning', title: 'Estimate marked as sent, but the email failed', message: 'Copy the client link and share it yourself.', offerLink: true };
+    default:
+      return { type: 'success', title: 'Estimate sent', message: 'Copy the client link to share it.', offerLink: true };
+  }
 }
 
 const DEFAULT_TAX_RATE = 13;
-const roundMoney = (value) => parseFloat((Number(value) || 0).toFixed(2));
 
-// Same arithmetic as the API (computeEstimateTotals in estimate.routes.js):
-// each line is round2(quantity * rate) and the subtotal is the sum of those.
+// Same arithmetic as the API (computeEstimateTotals in estimate.routes.js,
+// via the shared money-totals helper): each line is round2(quantity * rate),
+// the subtotal is the sum of those, and tax and total round half-up to cents.
 function lineAmount(li) {
-  return roundMoney((parseFloat(li.quantity) || 0) * (parseFloat(li.rate) || 0));
+  return lineTotal(parseFloat(li.quantity) || 0, parseFloat(li.rate) || 0);
 }
 
 function estimateTotals(lineItems, taxRate) {
-  const subtotal = roundMoney(lineItems.reduce((sum, li) => sum + lineAmount(li), 0));
-  const tax = roundMoney((subtotal * (parseFloat(taxRate) || 0)) / 100);
-  return { subtotal, tax, total: roundMoney(subtotal + tax) };
+  const { subtotal, tax, total } = invoiceTotals(lineItems.map((li) => ({ total: lineAmount(li) })), parseFloat(taxRate) || 0);
+  return { subtotal, tax, total };
 }
 
 // The API stores the rate staff entered. Estimates from before it was stored
@@ -57,12 +102,14 @@ function defaultLineItem() {
 export default function Estimates() {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const navigate = useNavigate();
 
   const [filterStatus, setFilterStatus] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [editingEstimate, setEditingEstimate] = useState(null);
   const [estimateToDelete, setEstimateToDelete] = useState(null);
+  const [estimateToConvert, setEstimateToConvert] = useState(null);
 
   const [form, setForm] = useState({
     clientId: '',
@@ -155,25 +202,76 @@ export default function Estimates() {
     onError: (err) => toast.error('Failed to delete estimate', err.message),
   });
 
+  // Copies the client's estimate link. A sent estimate whose link was
+  // revoked or has expired gets a fresh one first (the old one stops working).
+  const copyClientLink = async (estimate) => {
+    let link = estimateClientLink(estimate);
+    try {
+      if (!estimateLinkUsable(estimate)) {
+        if (estimate.status !== 'SENT') {
+          toast.error('This estimate link has expired', 'Only an estimate still awaiting an answer can get a new link.');
+          return;
+        }
+        const fresh = await api.reissueEstimateLink(estimate.id);
+        link = estimateClientLink({ ...estimate, viewToken: fresh.viewToken, clientLink: fresh.clientLink });
+        queryClient.invalidateQueries({ queryKey: ['estimates'] });
+      }
+      if (!link) throw new Error('This estimate has no client link yet.');
+      if (!navigator.clipboard?.writeText) throw new Error(`Copy it by hand: ${link}`);
+      await navigator.clipboard.writeText(link);
+      toast.success('Client link copied', 'Paste it into an email or message to the client.');
+    } catch (err) {
+      toast.error({
+        title: 'Could not copy the client link',
+        message: link && !String(err?.message || '').includes(link) ? `${err?.message || 'Try again.'} Link: ${link}` : (err?.message || 'Try again.'),
+        duration: 0,
+      });
+    }
+  };
+
   const sendMutation = useMutation({
     mutationFn: (id) => api.sendEstimate(id),
-    onSuccess: () => {
+    onSuccess: (result, id) => {
       queryClient.invalidateQueries({ queryKey: ['estimates'] });
-      toast.success('Estimate sent', 'Client will receive an email');
+      const outcome = estimateSendOutcome(result);
+      const sent = { ...(estimatesData.estimates.find((estimate) => estimate.id === id) || {}), ...result, id };
+      toast[outcome.type]({
+        title: outcome.title,
+        message: outcome.message,
+        duration: outcome.offerLink ? 10000 : undefined,
+        ...(outcome.offerLink ? { action: { label: 'Copy client link', onClick: () => copyClientLink(sent) } } : {}),
+      });
     },
     onError: (err) => toast.error('Failed to send estimate', err.message),
   });
 
   const convertMutation = useMutation({
     mutationFn: (id) => api.convertEstimate(id),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      setEstimateToConvert(null);
       queryClient.invalidateQueries({ queryKey: ['estimates'] });
       // Converting creates a proposal.
       queryClient.invalidateQueries({ queryKey: ['proposals'] });
-      toast.success('Estimate converted to proposal');
+      const proposalId = result?.proposal?.id;
+      toast.success({
+        title: 'Estimate converted to a draft proposal',
+        message: 'Review it, then send it to the client.',
+        ...(proposalId ? { action: { label: 'Open proposal', onClick: () => navigate(`/proposal/${proposalId}`) } } : {}),
+      });
     },
     onError: (err) => toast.error('Failed to convert estimate', err.message),
   });
+
+  // An approved estimate converts straight away; a sent one the client has
+  // not answered asks first, because converting closes it to the client.
+  const requestConvert = (estimate) => {
+    if (estimate.status === 'SENT') {
+      convertMutation.reset();
+      setEstimateToConvert(estimate);
+      return;
+    }
+    convertMutation.mutate(estimate.id);
+  };
 
   // Form helpers
   const resetForm = () => setForm({
@@ -275,16 +373,19 @@ export default function Estimates() {
       {/* Status Filters */}
       <div className="flex gap-2 flex-wrap items-center">
         <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <label htmlFor="estimate-search" className="sr-only">Search estimates</label>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
           <input
-            type="text"
+            id="estimate-search"
+            type="search"
             placeholder="Search estimates..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-background"
           />
         </div>
-        <div className="flex gap-1">
+        {/* Chips wrap on narrow screens instead of panning the page. */}
+        <div className="flex flex-wrap gap-1 max-w-full" role="group" aria-label="Filter by status">
           {FILTERS.map((s) => (
             <button
               key={s}
@@ -297,7 +398,7 @@ export default function Estimates() {
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
-              {s || 'All'}
+              {s ? statusLabel('estimate', s) : 'All'}
             </button>
           ))}
         </div>
@@ -356,7 +457,8 @@ export default function Estimates() {
               estimate={estimate}
               onEdit={() => openEdit(estimate)}
               onSend={() => sendMutation.mutate(estimate.id)}
-              onConvert={() => convertMutation.mutate(estimate.id)}
+              onConvert={() => requestConvert(estimate)}
+              onCopyLink={() => copyClientLink(estimate)}
               onDelete={() => { deleteMutation.reset(); setEstimateToDelete(estimate); }}
               sendLoading={sendMutation.isPending && sendMutation.variables === estimate.id}
               convertLoading={convertMutation.isPending && convertMutation.variables === estimate.id}
@@ -374,17 +476,32 @@ export default function Estimates() {
         pending={deleteMutation.isPending}
         error={deleteMutation.error?.message}
       />
+      <ConfirmDialog
+        isOpen={Boolean(estimateToConvert)}
+        title="Convert to proposal"
+        description={estimateToConvert
+          ? `The client has not answered “${estimateToConvert.title || 'this estimate'}” yet. Converting makes a draft proposal and closes the estimate, so the client can no longer approve it from their link. You then send them the proposal.`
+          : ''}
+        confirmLabel="Convert to proposal"
+        onConfirm={() => estimateToConvert && convertMutation.mutate(estimateToConvert.id)}
+        onCancel={() => { convertMutation.reset(); setEstimateToConvert(null); }}
+        pending={convertMutation.isPending}
+        error={convertMutation.error?.message}
+      />
     </div>
   );
 }
 
 // ─── Estimate Card ────────────────────────────────────────────────────────────
 
-function EstimateCard({ estimate, onEdit, onSend, onConvert, onDelete, sendLoading, convertLoading }) {
+function EstimateCard({ estimate, onEdit, onSend, onConvert, onCopyLink, onDelete, sendLoading, convertLoading }) {
   const isDraft = estimate.status === 'DRAFT';
-  const isApproved = estimate.status === 'APPROVED';
   const isSent = estimate.status === 'SENT';
   const isConverted = estimate.status === 'CONVERTED';
+  const canConvert = CONVERTIBLE_STATUSES.includes(estimate.status);
+  // A sent estimate can always share its link (a fresh one if it lapsed);
+  // an answered one while its link still opens.
+  const canCopyLink = isSent || (!isDraft && estimateLinkUsable(estimate));
 
   return (
     <Card className="p-4 hover:shadow-sm transition-shadow">
@@ -392,7 +509,7 @@ function EstimateCard({ estimate, onEdit, onSend, onConvert, onDelete, sendLoadi
       <div className="sm:hidden space-y-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-foreground truncate">{estimate.title || 'Untitled'}</span>
               <StatusBadge domain="estimate" status={estimate.status} />
             </div>
@@ -418,8 +535,11 @@ function EstimateCard({ estimate, onEdit, onSend, onConvert, onDelete, sendLoadi
           {isDraft && (
             <Button size="sm" variant="outline" leftIcon={<Send className="w-3 h-3" />} onClick={onSend} loading={sendLoading}>Send</Button>
           )}
-          {isApproved && (
-            <Button size="sm" variant="outline" leftIcon={<ArrowRightLeft className="w-3 h-3" />} onClick={onConvert} loading={convertLoading}>Convert</Button>
+          {canCopyLink && (
+            <Button size="sm" variant="outline" leftIcon={<Link2 className="w-3 h-3" />} onClick={onCopyLink}>Copy client link</Button>
+          )}
+          {canConvert && (
+            <Button size="sm" variant="outline" leftIcon={<ArrowRightLeft className="w-3 h-3" />} onClick={onConvert} loading={convertLoading}>Convert to proposal</Button>
           )}
           {isDraft && (
             <Button size="sm" variant="ghost" onClick={onDelete} className="text-destructive hover:text-destructive/80" leftIcon={<Trash2 className="w-3 h-3" />}>Delete</Button>
@@ -451,7 +571,7 @@ function EstimateCard({ estimate, onEdit, onSend, onConvert, onDelete, sendLoadi
 
         <StatusBadge domain="estimate" status={estimate.status} className="px-2.5 py-1" />
 
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center justify-end gap-1">
           {isDraft && (
             <Button size="sm" variant="outline" leftIcon={<Pencil className="w-3 h-3" />}
               onClick={(e) => { e.stopPropagation(); onEdit(); }}>
@@ -464,10 +584,16 @@ function EstimateCard({ estimate, onEdit, onSend, onConvert, onDelete, sendLoadi
               Send
             </Button>
           )}
-          {isApproved && (
+          {canCopyLink && (
+            <Button size="sm" variant="outline" leftIcon={<Link2 className="w-3 h-3" />}
+              onClick={(e) => { e.stopPropagation(); onCopyLink(); }}>
+              Copy client link
+            </Button>
+          )}
+          {canConvert && (
             <Button size="sm" variant="outline" leftIcon={<ArrowRightLeft className="w-3 h-3" />}
               onClick={(e) => { e.stopPropagation(); onConvert(); }} loading={convertLoading}>
-              Convert to Proposal
+              Convert to proposal
             </Button>
           )}
           {isDraft && (
@@ -499,6 +625,9 @@ function EstimateForm({
   onFormChange, onLineItemUpdate, onLineItemAdd, onLineItemRemove,
   onSubmit, onCancel, loading, error, draftState,
 }) {
+  // One set of line-item inputs for the layout in use, so a required field is
+  // never a hidden duplicate the browser cannot focus.
+  const isSmUp = useIsSmUp();
   return (
     <Card className="p-4 sm:p-6">
       <h2 className="text-lg font-semibold mb-5">{isEditing ? 'Edit Estimate' : 'New Estimate'}</h2>
@@ -515,8 +644,9 @@ function EstimateForm({
         {/* Client + Title */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Client *</label>
+            <label htmlFor="estimate-client" className="block text-sm font-medium mb-1">Client *</label>
             <select
+              id="estimate-client"
               value={form.clientId}
               onChange={(e) => onFormChange(f => ({ ...f, clientId: e.target.value }))}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -527,8 +657,9 @@ function EstimateForm({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Title *</label>
+            <label htmlFor="estimate-title" className="block text-sm font-medium mb-1">Title *</label>
             <input
+              id="estimate-title"
               type="text"
               value={form.title}
               onChange={(e) => onFormChange(f => ({ ...f, title: e.target.value }))}
@@ -541,8 +672,9 @@ function EstimateForm({
 
         {/* Description */}
         <div>
-          <label className="block text-sm font-medium mb-1">Description</label>
+          <label htmlFor="estimate-description" className="block text-sm font-medium mb-1">Description</label>
           <textarea
+            id="estimate-description"
             value={form.description}
             onChange={(e) => onFormChange(f => ({ ...f, description: e.target.value }))}
             placeholder="Scope of work, notes, terms..."
@@ -554,8 +686,9 @@ function EstimateForm({
         {/* Valid Until + Tax */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Valid Until</label>
+            <label htmlFor="estimate-valid-until" className="block text-sm font-medium mb-1">Valid Until</label>
             <input
+              id="estimate-valid-until"
               type="date"
               value={form.validUntil}
               onChange={(e) => onFormChange(f => ({ ...f, validUntil: e.target.value }))}
@@ -563,8 +696,9 @@ function EstimateForm({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Tax Rate (%)</label>
+            <label htmlFor="estimate-tax-rate" className="block text-sm font-medium mb-1">Tax Rate (%)</label>
             <input
+              id="estimate-tax-rate"
               type="number"
               value={form.taxRate}
               min="0"
@@ -579,7 +713,7 @@ function EstimateForm({
 
         {/* Line Items */}
         <div>
-          <label className="text-sm font-medium mb-3 block">Line Items</label>
+          <h3 id="estimate-line-items-heading" className="text-sm font-medium mb-3">Line Items</h3>
 
           {/* Desktop Column Headers */}
           <div className="hidden sm:grid grid-cols-12 gap-2 mb-1 text-xs text-muted-foreground font-medium px-1">
@@ -594,12 +728,14 @@ function EstimateForm({
             {form.lineItems.map((li, idx) => (
               <div key={idx}>
                 {/* Desktop Row */}
-                <div className="hidden sm:grid grid-cols-12 gap-2 items-center">
+                {isSmUp ? (
+                <div className="grid grid-cols-12 gap-2 items-center">
                   <input
                     type="text"
                     value={li.description}
                     onChange={(e) => onLineItemUpdate(idx, 'description', e.target.value)}
                     placeholder="Item description"
+                    aria-label={`Line item ${idx + 1} description`}
                     className="col-span-5 px-2 py-1.5 rounded border border-border bg-background text-sm"
                     required
                   />
@@ -609,6 +745,7 @@ function EstimateForm({
                     min="0"
                     step="0.5"
                     onChange={(e) => onLineItemUpdate(idx, 'quantity', e.target.value)}
+                    aria-label={`Line item ${idx + 1} quantity`}
                     className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-center"
                   />
                   <input
@@ -617,6 +754,7 @@ function EstimateForm({
                     min="0"
                     step="0.01"
                     onChange={(e) => onLineItemUpdate(idx, 'rate', e.target.value)}
+                    aria-label={`Line item ${idx + 1} rate`}
                     className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-right"
                   />
                   <span className="col-span-2 text-sm text-right font-medium">
@@ -632,15 +770,16 @@ function EstimateForm({
                     &times;
                   </button>
                 </div>
-
-                {/* Mobile Stacked Card */}
-                <div className="sm:hidden p-3 border border-border rounded-lg bg-muted/30 space-y-2">
+                ) : (
+                /* Mobile Stacked Card */
+                <div className="p-3 border border-border rounded-lg bg-muted/30 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <input
                       type="text"
                       value={li.description}
                       onChange={(e) => onLineItemUpdate(idx, 'description', e.target.value)}
                       placeholder="Item description"
+                      aria-label={`Line item ${idx + 1} description`}
                       className="flex-1 px-2 py-1.5 rounded border border-border bg-background text-sm"
                       required
                     />
@@ -653,8 +792,9 @@ function EstimateForm({
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-xs text-muted-foreground mb-0.5">Qty</label>
+                      <label htmlFor={`estimate-line-${idx}-qty`} className="block text-xs text-muted-foreground mb-0.5">Qty</label>
                       <input
+                        id={`estimate-line-${idx}-qty`}
                         type="number"
                         value={li.quantity}
                         min="0"
@@ -664,8 +804,9 @@ function EstimateForm({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-muted-foreground mb-0.5">Rate</label>
+                      <label htmlFor={`estimate-line-${idx}-rate`} className="block text-xs text-muted-foreground mb-0.5">Rate</label>
                       <input
+                        id={`estimate-line-${idx}-rate`}
                         type="number"
                         value={li.rate}
                         min="0"
@@ -675,13 +816,14 @@ function EstimateForm({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-muted-foreground mb-0.5">Amount</label>
+                      <span className="block text-xs text-muted-foreground mb-0.5">Amount</span>
                       <div className="px-2 py-1.5 text-sm font-medium">
                         {fmt(lineAmount(li))}
                       </div>
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             ))}
           </div>
@@ -705,7 +847,7 @@ function EstimateForm({
           </div>
           <div className="flex justify-between font-semibold text-base border-t border-border pt-2 mt-2">
             <span>Total</span>
-            <span>{fmt(formTotal)} CAD</span>
+            <span>{fmt(formTotal)}</span>
           </div>
         </div>
 

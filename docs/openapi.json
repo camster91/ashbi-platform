@@ -2331,6 +2331,7 @@
               "HST",
               "GST",
               "PST",
+              "TAX",
               "NONE"
             ],
             "type": "string"
@@ -6395,6 +6396,7 @@
               "HST",
               "GST",
               "PST",
+              "TAX",
               "NONE"
             ],
             "type": "string"

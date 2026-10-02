@@ -1096,7 +1096,7 @@ model Invoice {
   subtotal                Float     @default(0)
   discountAmount          Float     @default(0)
   taxRate                 Float     @default(13) // HST 13% default for Ontario
-  taxType                 String    @default("HST") // HST | GST | PST | NONE
+  taxType                 String    @default("HST") // HST | GST | PST | TAX (neutral "Tax" for a rate that is not a named tax) | NONE
   tax                     Float     @default(0)
   total                   Float     @default(0)
   notes                   String?

@@ -8,6 +8,7 @@ import { deliveryFieldsFromSend, mailgunTrackingFields, withDeliveryState } from
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { recordAuditEvent, recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { computeProposalLineItems, proposalTotals } from '../utils/proposal-totals.js';
+import { invoiceTotals, lineTotal, roundMoney } from '../utils/money-totals.js';
 
 // Estimates a client may see through the public link. A DRAFT is never public,
 // whatever token it holds.
@@ -32,6 +33,9 @@ export function publicEstimateView(estimate) {
     })),
     subtotal: estimate.subtotal,
     tax: estimate.tax,
+    // The rate staff entered, for the "Tax (5%)" label; null on estimates
+    // from before it was stored.
+    taxRate: estimate.taxRate ?? null,
     total: estimate.total,
     validUntil: estimate.validUntil ?? null,
     sentAt: estimate.sentAt ?? null,
@@ -40,7 +44,6 @@ export function publicEstimateView(estimate) {
   };
 }
 
-const roundMoney = (value) => parseFloat((Number(value) || 0).toFixed(2));
 
 // A date-only "valid until" (the Estimates page's date input) is stored as
 // 23:59:59.999Z of that calendar day. The client may be anywhere, so the
@@ -61,7 +64,7 @@ export function estimateValidThrough(validUntil) {
 
 /** A line's amount as stored and shown: round2(quantity * rate). */
 export function estimateLineAmount(item) {
-  return roundMoney((Number(item?.quantity) || 0) * (Number(item?.rate) || 0));
+  return lineTotal(item?.quantity, item?.rate);
 }
 
 /**
@@ -75,10 +78,15 @@ export function estimateLineAmount(item) {
  */
 export function computeEstimateTotals(lineItems, { taxRate, tax } = {}) {
   const items = Array.isArray(lineItems) ? lineItems : [];
-  const subtotal = roundMoney(items.reduce((sum, item) => sum + estimateLineAmount(item), 0));
-  const taxAmount = taxRate !== undefined && taxRate !== null
-    ? roundMoney((subtotal * Number(taxRate)) / 100)
-    : roundMoney(tax);
+  const lines = items.map((item) => ({ total: estimateLineAmount(item) }));
+  if (taxRate !== undefined && taxRate !== null) {
+    // The invoice's own arithmetic (src/utils/money-totals.js), so the
+    // estimate, its proposal and the invoice agree to the cent.
+    const { subtotal, tax: taxAmount, total } = invoiceTotals(lines, taxRate, 0);
+    return { subtotal, tax: taxAmount, total };
+  }
+  const { subtotal } = invoiceTotals(lines, 0, 0);
+  const taxAmount = roundMoney(tax);
   return { subtotal, tax: taxAmount, total: roundMoney(subtotal + taxAmount) };
 }
 
@@ -165,6 +173,23 @@ export function proposalDataFromEstimate(estimate, { createdById, now = new Date
   };
 }
 
+/**
+ * Why POST /:id/send will not email the client, or null when it will try:
+ * NO_CLIENT_EMAIL (the client has no email address) or EMAIL_NOT_CONFIGURED
+ * (no mail provider). The send itself still succeeds and issues the link.
+ */
+export function estimateEmailSkipReason({ mailConfigured, clientEmail }) {
+  if (!clientEmail || !String(clientEmail).trim()) return 'NO_CLIENT_EMAIL';
+  if (!mailConfigured) return 'EMAIL_NOT_CONFIGURED';
+  return null;
+}
+
+/** The client's estimate page (env.hubUrl), or null for a draft or no token. */
+export function estimateClientLink(estimate) {
+  if (!estimate?.viewToken || estimate.status === 'DRAFT') return null;
+  return `${env.hubUrl}/portal/estimate/${estimate.viewToken}`;
+}
+
 /** Why a public link cannot be used, or null. Unknown and draft look the same. */
 function publicEstimateFailure(estimate, now = new Date()) {
   if (!estimate || !PUBLIC_ESTIMATE_STATUSES.includes(estimate.status)) {
@@ -192,7 +217,9 @@ export default async function estimateRoutes(fastify) {
       take: clampTake(request.query.limit),
     });
 
-    return { estimates };
+    // clientLink: the hub URL staff copy for the client (never for drafts,
+    // whose placeholder token is not public).
+    return { estimates: estimates.map((estimate) => ({ ...estimate, clientLink: estimateClientLink(estimate) })) };
   });
 
   // Get single estimate
@@ -345,8 +372,14 @@ export default async function estimateRoutes(fastify) {
     // Send estimate email with magic link to client
     const portalUrl = `${env.hubUrl}/portal/estimate/${access.token}`;
     let deliveryFields = null;
+    // What happened to the email, so the page can say it plainly (the
+    // estimate is SENT either way and its link works).
+    let emailStatus = estimateEmailSkipReason({
+      mailConfigured: Boolean(env.mailgunApiKey && env.mailgunDomain),
+      clientEmail: estimate.client?.email,
+    });
 
-    if (env.mailgunApiKey && env.mailgunDomain && estimate.client?.email) {
+    if (!emailStatus) {
       try {
         const mg = new Mailgun(FormData);
         const mgClient = mg.client({
@@ -374,9 +407,11 @@ export default async function estimateRoutes(fastify) {
         });
         console.log(`[estimate] Estimate email sent to ${estimate.client.email}`);
         deliveryFields = deliveryFieldsFromSend({ ok: true, id: sent?.id });
+        emailStatus = 'SENT';
       } catch (mailErr) {
         console.error('[estimate] Failed to send estimate email:', mailErr.message || mailErr);
         deliveryFields = deliveryFieldsFromSend({ ok: false, error: 'Estimate email send error' });
+        emailStatus = 'FAILED';
       }
       try {
         await request.prisma.estimate.update({ where: { id }, data: deliveryFields });
@@ -391,7 +426,12 @@ export default async function estimateRoutes(fastify) {
       // it to logs; staff can recover it from the authenticated response below.
     }
 
-    return withDeliveryState({ ...updated, ...deliveryFields });
+    return {
+      ...withDeliveryState({ ...updated, ...deliveryFields }),
+      emailSent: emailStatus === 'SENT',
+      emailStatus,
+      clientLink: portalUrl,
+    };
   });
 
   // Public view by token (capability link: expiring, revocable, never a draft)
@@ -463,14 +503,15 @@ export default async function estimateRoutes(fastify) {
     const updated = await request.prisma.estimate.update({
       where: { id },
       data: { viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null },
-      select: { id: true, viewToken: true, publicAccessExpiresAt: true },
+      select: { id: true, status: true, viewToken: true, publicAccessExpiresAt: true },
     });
     await recordRequestAuditEvent(request.prisma, request, {
       action: 'estimate.link_reissued',
       entityId: id,
       metadata: { expiresAt: access.expiresAt },
     });
-    return updated;
+    const { status: _status, ...link } = updated;
+    return { ...link, clientLink: estimateClientLink(updated) };
   });
 
   // Revoke the public link (staff). Reissue or re-send issues a new one.

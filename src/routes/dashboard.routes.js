@@ -1,5 +1,8 @@
 // Dashboard stats — single endpoint for the command center
 
+import { mrrSummary, retainerMonthlyCharge } from '../utils/retainer-money.js';
+import { UNPAID_INVOICE_STATUSES } from '../utils/invoice-balance.js';
+
 export default async function dashboardRoutes(fastify) {
   // GET /api/dashboard/stats — all numbers in one call
   fastify.get('/stats', {
@@ -12,11 +15,13 @@ export default async function dashboardRoutes(fastify) {
     const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
     const [
-      // MRR — sum of monthlyAmountUsd for active retainers. Sums and counts
-      // are computed in the database: a list read of a soft-deletable model
-      // stops at 100 rows, which would understate an agency's totals.
+      // MRR per currency (src/utils/retainer-money.js): a plan with a USD
+      // rate counts in USD, a plan with only a CAD rate in CAD. Sums and
+      // counts are computed in the database: a list read of a soft-deletable
+      // model stops at 100 rows, which would understate an agency's totals.
       activeRetainers,
-      // Outstanding invoices (SENT + OVERDUE)
+      cadOnlyRetainers,
+      // Outstanding invoices (SENT, VIEWED or OVERDUE: UNPAID_INVOICE_STATUSES)
       outstandingInvoices,
       // Active projects
       activeProjectCount,
@@ -59,8 +64,12 @@ export default async function dashboardRoutes(fastify) {
         _sum: { monthlyAmountUsd: true },
         _count: { _all: true }
       }),
+      request.prisma.retainerPlan.aggregate({
+        where: { retainerStatus: 'ACTIVE', OR: [{ monthlyAmountUsd: null }, { monthlyAmountUsd: { lte: 0 } }] },
+        _sum: { monthlyAmountCad: true },
+      }),
       request.prisma.invoice.aggregate({
-        where: { status: { in: ['SENT', 'OVERDUE'] } },
+        where: { status: { in: [...UNPAID_INVOICE_STATUSES] } },
         _sum: { total: true },
         _count: { _all: true }
       }),
@@ -107,6 +116,7 @@ export default async function dashboardRoutes(fastify) {
             select: {
               retainerStatus: true,
               monthlyAmountUsd: true,
+              monthlyAmountCad: true,
               tier: true
             }
           },
@@ -276,24 +286,27 @@ export default async function dashboardRoutes(fastify) {
       }),
       request.prisma.invoice.aggregate({
         where: {
-          status: { in: ['SENT', 'OVERDUE'] },
+          status: { in: [...UNPAID_INVOICE_STATUSES] },
           OR: [{ status: 'OVERDUE' }, { dueDate: { lt: now } }]
         },
         _sum: { total: true },
         _count: { _all: true }
       }),
       request.prisma.invoicePayment.aggregate({
-        where: { invoice: { status: { in: ['SENT', 'OVERDUE'] } } },
+        where: { invoice: { status: { in: [...UNPAID_INVOICE_STATUSES] } } },
         _sum: { amount: true },
       }),
       request.prisma.invoicePayment.aggregate({
-        where: { invoice: { status: { in: ['SENT', 'OVERDUE'] }, OR: [{ status: 'OVERDUE' }, { dueDate: { lt: now } }] } },
+        where: { invoice: { status: { in: [...UNPAID_INVOICE_STATUSES] }, OR: [{ status: 'OVERDUE' }, { dueDate: { lt: now } }] } },
         _sum: { amount: true },
       })
     ]);
 
-    // Calculate MRR
-    const mrr = activeRetainers?._sum?.monthlyAmountUsd || 0;
+    // MRR per currency, never added across currencies.
+    const mrrFields = mrrSummary({
+      USD: activeRetainers?._sum?.monthlyAmountUsd || 0,
+      CAD: cadOnlyRetainers?._sum?.monthlyAmountCad || 0,
+    });
 
     // Outstanding totals
     const balance = (aggregate, paid) => Math.max(0, Math.round(((aggregate?._sum?.total || 0) - (paid?._sum?.amount || 0)) * 100) / 100);
@@ -325,17 +338,19 @@ export default async function dashboardRoutes(fastify) {
         healthStatus: worstHealth,
         retainerStatus: client.retainerPlan?.retainerStatus || null,
         retainerTier: client.retainerPlan?.tier || null,
-        monthlyAmount: client.retainerPlan?.monthlyAmountUsd || 0,
+        monthlyAmount: retainerMonthlyCharge(client.retainerPlan)?.amount || 0,
+        monthlyCurrency: retainerMonthlyCharge(client.retainerPlan)?.currency || null,
         activeProjects: client.projects.length,
         lastActivity
       };
     });
 
     return {
-      // MRR counts ACTIVE retainer plans only (monthlyAmountUsd).
-      mrr,
+      // MRR counts ACTIVE retainer plans only: `mrr` in `mrrCurrency` when
+      // one currency is in use, otherwise null with `mrrByCurrency`.
+      ...mrrFields,
       activeRetainerCount: activeRetainers?._count?._all || 0,
-      // Outstanding = SENT + OVERDUE invoices; drafts are reported separately.
+      // Outstanding = unpaid (SENT, VIEWED, OVERDUE) invoices; drafts are reported separately.
       totalOutstanding,
       outstandingCount: outstandingInvoices?._count?._all || 0,
       overdueAmount,

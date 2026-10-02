@@ -481,6 +481,121 @@ test('money paths hold their invariants against the real database', {
       const totals = byTotal.json().invoices.map((invoice) => invoice.total);
       assert.deepEqual(totals, [...totals].sort((a, b) => a - b));
     });
+
+    await t.test('10. a sent estimate converts to a proposal that shows the tax its invoice bills', async () => {
+      const created = await api('team', 'POST', '/api/estimates', {
+        clientId: clientA, title: 'Tax estimate', taxRate: 5,
+        lineItems: [{ description: 'Website', quantity: 1, rate: 1500 }],
+      });
+      assert.equal(created.statusCode, 201, created.body);
+      assert.deepEqual([created.json().subtotal, created.json().tax, created.json().total], [1500, 75, 1575]);
+
+      // Client A has no email address: the estimate is sent (and its link
+      // works) but the response says no email went out.
+      const sent = await api('team', 'POST', `/api/estimates/${created.json().id}/send`);
+      assert.equal(sent.statusCode, 200, sent.body);
+      assert.equal(sent.json().status, 'SENT');
+      assert.equal(sent.json().emailSent, false);
+      assert.equal(sent.json().emailStatus, 'NO_CLIENT_EMAIL');
+      assert.ok(sent.json().clientLink.endsWith(`/portal/estimate/${sent.json().viewToken}`));
+
+      // Staff can convert a sent estimate the client has not answered.
+      const converted = await api('team', 'POST', `/api/estimates/${created.json().id}/convert`);
+      assert.equal(converted.statusCode, 200, converted.body);
+      const proposalId = converted.json().proposal.id;
+      assert.equal((await raw.estimate.findUnique({ where: { id: created.json().id } })).status, 'CONVERTED');
+
+      const staffView = (await api('team', 'GET', `/api/proposals/${proposalId}`)).json();
+      assert.deepEqual(
+        [staffView.total, staffView.taxRate, staffView.taxType, staffView.tax, staffView.totalWithTax],
+        [1500, 5, 'TAX', 75, 1575],
+      );
+
+      // The client's proposal page shows the tax and the total they will be billed.
+      const access = createPublicAccessWindow();
+      await raw.proposal.update({ where: { id: proposalId }, data: {
+        status: 'SENT', viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null,
+      } });
+      const portalView = await api(null, 'GET', `/api/portal/proposal/${access.token}`);
+      assert.equal(portalView.statusCode, 200, portalView.body);
+      assert.deepEqual([portalView.json().tax, portalView.json().totalWithTax], [75, 1575]);
+      assert.equal('metadata' in portalView.json(), false, 'proposal metadata stays private');
+      const legacyView = await api(null, 'GET', `/api/proposals/client/${access.token}`);
+      assert.equal(legacyView.statusCode, 200, legacyView.body);
+      assert.deepEqual([legacyView.json().tax, legacyView.json().totalWithTax], [75, 1575]);
+      assert.equal('metadata' in legacyView.json(), false);
+      // The public link shows the client's name and email, never the Client row.
+      assert.deepEqual(Object.keys(legacyView.json().client).sort(), ['email', 'id', 'name']);
+      assert.equal('internalNotes' in legacyView.json(), false);
+
+      // The invoice bills exactly what the client approved, labelled "Tax".
+      await raw.proposal.update({ where: { id: proposalId }, data: { status: 'APPROVED' } });
+      const invoice = await api('admin', 'POST', `/api/invoices/from-proposal/${proposalId}`);
+      assert.equal(invoice.statusCode, 200, invoice.body);
+      assert.deepEqual(
+        [invoice.json().taxRate, invoice.json().taxType, invoice.json().tax, invoice.json().total],
+        [5, 'TAX', 75, portalView.json().totalWithTax],
+      );
+
+      // Half-cent tax: estimate, proposal and invoice agree to the cent.
+      for (const [rate, expected] of [[1000.5, 1130.57], [4.5, 5.09]]) {
+        const halfCent = await api('team', 'POST', '/api/estimates', {
+          clientId: clientA, title: `Half cent ${rate}`, taxRate: 13, lineItems: [{ description: 'Work', quantity: 1, rate }],
+        });
+        assert.equal(halfCent.json().total, expected, halfCent.body);
+        await api('team', 'POST', `/api/estimates/${halfCent.json().id}/send`);
+        const halfProposal = (await api('team', 'POST', `/api/estimates/${halfCent.json().id}/convert`)).json().proposal;
+        assert.equal((await api('team', 'GET', `/api/proposals/${halfProposal.id}`)).json().totalWithTax, expected);
+        await raw.proposal.update({ where: { id: halfProposal.id }, data: { status: 'APPROVED' } });
+        const halfInvoice = await api('admin', 'POST', `/api/invoices/from-proposal/${halfProposal.id}`);
+        assert.equal(halfInvoice.json().total, expected, halfInvoice.body);
+      }
+    });
+
+    await t.test('11. the client page counts what is still owed, after payments, on every open invoice', async () => {
+      const clientC = `money-client-c-${suffix}`;
+      await raw.client.create({ data: { id: clientC, name: 'Client C', organizationId: orgA } });
+      const owed = (data) => newInvoice({ clientId: clientC, currency: 'CAD', ...data });
+      const partlyPaid = await owed({ status: 'SENT', subtotal: 1000, tax: 130, total: 1130 });
+      await raw.invoicePayment.create({ data: { invoiceId: partlyPaid.id, amount: 300, method: 'BANK' } });
+      await owed({ status: 'OVERDUE', total: 200 });
+      await owed({ status: 'VIEWED', total: 50, dueDate: new Date(Date.now() + 86_400_000) });
+      await owed({ status: 'PAID', total: 500 });
+      await owed({ status: 'DRAFT', total: 999 });
+      await owed({ status: 'VOID', total: 777 });
+
+      const response = await api('admin', 'GET', `/api/clients/${clientC}`);
+      assert.equal(response.statusCode, 200, response.body);
+      const client = response.json();
+      assert.equal(client.outstandingBalance, 830 + 200 + 50, 'balances of SENT, OVERDUE and VIEWED invoices');
+      assert.equal(client.outstandingCurrency, 'CAD');
+      assert.deepEqual(client.outstandingByCurrency, { CAD: 1080 });
+      assert.equal(client.totalRevenue, 500);
+      const row = client.invoices.find((invoice) => invoice.id === partlyPaid.id);
+      assert.deepEqual([row.amountPaid, row.balanceDue], [300, 830]);
+      assert.equal('payments' in row, false, 'the page gets the balance, not the payment rows');
+
+      // A second currency is never added to the first.
+      await owed({ status: 'SENT', total: 100, currency: 'USD' });
+      const mixed = (await api('admin', 'GET', `/api/clients/${clientC}`)).json();
+      assert.equal(mixed.outstandingBalance, null);
+      assert.deepEqual(mixed.outstandingByCurrency, { CAD: 1080, USD: 100 });
+    });
+
+    await t.test('12. MRR is reported in each retainer\'s own currency', async () => {
+      // Subtest 6 gave client A a CAD-only retainer of 2,000.
+      const cadOnly = (await api('admin', 'GET', '/api/dashboard/stats')).json();
+      assert.deepEqual([cadOnly.mrr, cadOnly.mrrCurrency], [2000, 'CAD']);
+      assert.deepEqual(cadOnly.mrrByCurrency, { CAD: 2000 });
+
+      const clientD = `money-client-d-${suffix}`;
+      await raw.client.create({ data: { id: clientD, name: 'Client D', organizationId: orgA } });
+      await raw.retainerPlan.create({ data: { clientId: clientD, tier: 'STANDARD', hoursPerMonth: 10, monthlyAmountUsd: 999 } });
+      const mixed = (await api('admin', 'GET', '/api/dashboard/stats')).json();
+      assert.deepEqual([mixed.mrr, mixed.mrrCurrency], [null, null]);
+      assert.deepEqual(mixed.mrrByCurrency, { CAD: 2000, USD: 999 });
+      assert.equal(mixed.activeRetainerCount, 2);
+    });
   } finally {
     await app?.close();
     if (await purgeFixtureAuditEvents(raw, { ids: [orgA, orgB] })) {

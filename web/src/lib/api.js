@@ -1250,6 +1250,7 @@ export const api = {
   getEstimateByToken: (viewToken) => request(`/estimates/view/${viewToken}`),
   approveEstimateByToken: (viewToken, action) => request(`/estimates/view/${viewToken}/approve`, { method: 'POST', body: { action } }),
   convertEstimate: (id) => request(`/estimates/${id}/convert`, { method: 'POST' }),
+  reissueEstimateLink: (id) => request(`/estimates/${id}/reissue-link`, { method: 'POST' }),
 
   // ===== RATE CARDS =====
   getRateCards: (params = {}) => {

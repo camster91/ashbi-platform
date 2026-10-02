@@ -2,6 +2,7 @@
 
 import { CheckoutNotPayableError, ensureCheckoutSession } from '../services/stripe.service.js';
 import { invoiceBalance } from '../utils/invoice-balance.js';
+import { proposalTaxSummary } from '../utils/proposal-totals.js';
 import { onProposalApproved, onContractSigned } from '../services/automation.service.js';
 import crypto from 'crypto';
 import { validateBody, bookingSchema, contractSignSchema, formSubmitSchema, proposalDeclineSchema } from '../validators/schemas.js';
@@ -158,6 +159,9 @@ export default async function portalRoutes(fastify) {
       subtotal: proposal.subtotal,
       discount: proposal.discount,
       total: proposal.total,
+      // The tax its invoice will add and the total it will bill, so the
+      // client approves the amount they will be invoiced.
+      ...proposalTaxSummary(proposal),
       notes: proposal.notes,
       sentAt: proposal.sentAt,
       approvedAt: proposal.approvedAt,

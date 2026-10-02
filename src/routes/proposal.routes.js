@@ -17,7 +17,7 @@ import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { recordProposalApproved } from '../services/domain-event-producers.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { deliveryFieldsFromSend, mailgunTrackingFields, withDeliveryState } from '../services/mailgun-delivery.service.js';
-import { computeProposalLineItems, proposalTotals } from '../utils/proposal-totals.js';
+import { computeProposalLineItems, proposalTaxSummary, proposalTotals } from '../utils/proposal-totals.js';
 
 // Returns the provider result ({ ok, id?, error? }), or null when no send was
 // attempted (test mode).
@@ -73,6 +73,42 @@ async function recordProposalDelivery(prisma, proposalId, delivery) {
 
 export const PROPOSAL_BULK_SEND_MAX = 25;
 
+// The client fields a public proposal link may show (as /api/portal/proposal).
+export const PUBLIC_PROPOSAL_CLIENT_SELECT = Object.freeze({ id: true, name: true, email: true });
+
+/**
+ * The explicit public shape of a proposal: what the client reads, plus the
+ * tax and total its invoice will bill (from metadata, which stays private).
+ */
+export function publicProposalView(proposal) {
+  return {
+    id: proposal.id,
+    title: proposal.title,
+    status: proposal.status,
+    validUntil: proposal.validUntil ?? null,
+    subtotal: proposal.subtotal,
+    discount: proposal.discount,
+    total: proposal.total,
+    ...proposalTaxSummary(proposal),
+    notes: proposal.notes ?? null,
+    sentAt: proposal.sentAt ?? null,
+    approvedAt: proposal.approvedAt ?? null,
+    declinedAt: proposal.declinedAt ?? null,
+    createdAt: proposal.createdAt,
+    client: proposal.client
+      ? { id: proposal.client.id, name: proposal.client.name, email: proposal.client.email ?? null }
+      : null,
+    createdBy: { name: proposal.createdBy?.name ?? null },
+    lineItems: (proposal.lineItems || []).map((li) => ({
+      id: li.id,
+      description: li.description,
+      quantity: li.quantity,
+      unitPrice: li.unitPrice,
+      total: li.total,
+    })),
+  };
+}
+
 export default async function proposalRoutes(fastify) {
   // List all proposals
   fastify.get('/', {
@@ -122,7 +158,8 @@ export default async function proposalRoutes(fastify) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
 
-    return withDeliveryState(proposal);
+    // taxRate / taxType / tax / totalWithTax: what its invoice will bill.
+    return withDeliveryState({ ...proposal, ...proposalTaxSummary(proposal) });
   });
 
   // Create proposal
@@ -502,11 +539,30 @@ export default async function proposalRoutes(fastify) {
   fastify.get('/client/:viewToken', { config: { public: true } }, async (request, reply) => {
     const { viewToken } = request.params;
 
+    // An explicit select: the public link must never load internal client
+    // data (notes, knowledge base, revenue, organization id) or delivery,
+    // AI and draft fields.
     const proposal = await request.prisma.proposal.findUnique({
       where: { viewToken },
-      include: {
-        client: true,
-        lineItems: true,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        validUntil: true,
+        subtotal: true,
+        discount: true,
+        total: true,
+        notes: true,
+        sentAt: true,
+        approvedAt: true,
+        declinedAt: true,
+        createdAt: true,
+        // Read for the access check and the tax; never returned as such.
+        publicAccessExpiresAt: true,
+        publicAccessRevokedAt: true,
+        metadata: true,
+        client: { select: PUBLIC_PROPOSAL_CLIENT_SELECT },
+        lineItems: { select: { id: true, description: true, quantity: true, unitPrice: true, total: true } },
         createdBy: { select: { name: true } }
       }
     });
@@ -526,21 +582,7 @@ export default async function proposalRoutes(fastify) {
       proposal.status = 'VIEWED';
     }
 
-    const {
-      internalNotes,
-      createdById,
-      clientId,
-      projectId,
-      viewToken: storedToken,
-      aiPrompt,
-      metadata,
-      draftData,
-      deletedAt,
-      deliveryMessageId,
-      deliveryError,
-      ...publicProposal
-    } = proposal;
-    return publicProposal;
+    return publicProposalView(proposal);
   });
 
   // PUBLIC: Client approves proposal

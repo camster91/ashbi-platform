@@ -7,13 +7,33 @@ import {
   XCircle,
   FileText,
   User,
-  DollarSign,
   Loader2,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn, formatDate } from '../lib/utils';
 import LoadingState from '../components/ui/LoadingState';
 import usePortalLightTheme from '../hooks/usePortalLightTheme';
+import PortalLineItems from '../components/PortalLineItems';
+import { formatMoney } from '../lib/format';
+import { taxTypeLabel } from '../lib/invoice-status';
+import { statusLabel } from '../lib/status';
+
+// The money a client sees on a proposal: the pre-tax amount, then the tax its
+// invoice will add and the total that invoice will bill (the API's taxRate /
+// tax / totalWithTax), so what they approve is what they are invoiced.
+export function proposalAmounts(proposal) {
+  const amount = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+  const preTax = amount(proposal.total ?? proposal.amount);
+  const hasTax = proposal.totalWithTax !== undefined && proposal.totalWithTax !== null;
+  return {
+    subtotal: amount(proposal.subtotal ?? preTax),
+    discount: amount(proposal.discount),
+    taxRate: hasTax ? amount(proposal.taxRate) : 0,
+    taxType: proposal.taxType,
+    tax: hasTax ? amount(proposal.tax) : 0,
+    total: hasTax ? amount(proposal.totalWithTax) : preTax,
+  };
+}
 
 export default function PortalProposal() {
   usePortalLightTheme();
@@ -74,12 +94,14 @@ export default function PortalProposal() {
   }
 
   const alreadyResponded = proposal.status === 'APPROVED' || proposal.status === 'DECLINED';
+  const amounts = proposalAmounts(proposal);
+  const money = (value) => formatMoney(value);
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="bg-card border-b border-border/40 shadow-sm">
-        <div className="max-w-3xl mx-auto px-6 py-6">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
           <div className="flex items-center gap-3 mb-1">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-warning" />
@@ -90,7 +112,7 @@ export default function PortalProposal() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         {/* Completion confirmation */}
         {(completed || alreadyResponded) && (
           <div role="status" aria-live="polite" className={cn(
@@ -138,7 +160,7 @@ export default function PortalProposal() {
                 proposal.status === 'SENT' ? 'bg-info/10 text-info' :
                 'bg-muted text-muted-foreground'
               )}>
-                {proposal.status}
+                {statusLabel('proposal', proposal.status, { audience: 'client' })}
               </span>
             )}
           </div>
@@ -150,40 +172,42 @@ export default function PortalProposal() {
 
         {/* Line Items */}
         <div className="bg-card rounded-xl border border-border/40 overflow-hidden">
-          <div className="px-6 py-4 border-b border-border/25">
+          <div className="px-4 sm:px-6 py-4 border-b border-border/25">
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Line Items</h3>
           </div>
-          <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" tabIndex={0} role="region" aria-label="Proposal line items">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/50 text-left">
-                  <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Qty</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Rate</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/25">
-                {proposal.lineItems?.map((item, i) => (
-                  <tr key={i} className="hover:bg-muted/50">
-                    <td className="px-6 py-4 text-sm text-foreground">{item.description}</td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground text-right">{item.quantity}</td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground text-right">${Number(item.rate || item.unitPrice || 0).toFixed(2)}</td>
-                    <td className="px-6 py-4 text-sm font-medium text-foreground text-right">${Number(item.amount || item.total || (item.quantity * (item.rate || item.unitPrice || 0))).toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PortalLineItems
+            label="Proposal line items"
+            formatAmount={money}
+            items={(proposal.lineItems || []).map((item) => {
+              const quantity = Number(item.quantity || 0);
+              const rate = Number(item.rate || item.unitPrice || 0);
+              return { description: item.description, quantity, rate, amount: Number(item.amount || item.total || (quantity * rate)) };
+            })}
+          />
 
-          {/* Total */}
-          <div className="border-t border-border/40 px-6 py-4 bg-muted/50">
-            <div className="flex items-center justify-between">
+          {/* Totals: the total is what the invoice will bill, tax included. */}
+          <div className="border-t border-border/40 px-4 sm:px-6 py-4 bg-muted/50 space-y-2">
+            {(amounts.discount > 0 || amounts.tax > 0) && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="text-foreground">{money(amounts.subtotal)}</span>
+              </div>
+            )}
+            {amounts.discount > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Discount</span>
+                <span className="text-success">-{money(amounts.discount)}</span>
+              </div>
+            )}
+            {amounts.tax > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">{taxTypeLabel(amounts.taxType)} ({amounts.taxRate}%)</span>
+                <span className="text-foreground">{money(amounts.tax)}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between pt-2 border-t border-border/40">
               <span className="text-sm font-medium text-muted-foreground">Total</span>
-              <span className="text-xl font-bold text-foreground flex items-center gap-1">
-                <DollarSign className="w-5 h-5" />
-                {Number(proposal.total || proposal.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </span>
+              <span className="text-xl font-bold text-foreground">{money(amounts.total)}</span>
             </div>
           </div>
         </div>

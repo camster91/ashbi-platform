@@ -38,6 +38,7 @@ import { sendStoredFile } from '../utils/send-file.js';
 import { writeUploadThenPersist } from '../utils/stored-upload.js';
 import { validateBody, validateQuery, chatMessageListQuerySchema, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
 import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
+import { invoiceBalance } from '../utils/invoice-balance.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
 import { insensitiveEquals } from '../utils/insensitive-equals.js';
 import { CLIENT_TASK_COLUMN_STATUSES } from '../shared/client-task-columns.js';
@@ -1058,16 +1059,20 @@ export default async function clientPortalRoutes(fastify) {
         viewToken: true,
         publicAccessExpiresAt: true,
         publicAccessRevokedAt: true,
+        // Partial payments: the client owes the balance, not the total.
+        payments: { select: { amount: true } },
       },
       orderBy: { issueDate: 'desc' }
     });
 
-    return invoices.map(({ viewToken, publicAccessExpiresAt, publicAccessRevokedAt, ...invoice }) => {
+    return invoices.map(({ viewToken, publicAccessExpiresAt, publicAccessRevokedAt, payments, ...invoice }) => {
+      const paid = Array.isArray(payments) ? payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) : 0;
       const linkUsable = Boolean(viewToken)
         && !invoicePublicAccessFailure({ ...invoice, viewToken, publicAccessExpiresAt, publicAccessRevokedAt });
       const viewUrl = linkUsable ? `/portal/invoice/${viewToken}` : null;
       return {
         ...invoice,
+        ...invoiceBalance(invoice.total, paid),
         viewUrl,
         payUrl: linkUsable && INVOICE_OPEN_STATUSES.includes(invoice.status) ? viewUrl : null,
       };

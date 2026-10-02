@@ -15,7 +15,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const issued = { publicAccessExpiresAt: new Date(Date.now() + 30 * DAY), publicAccessRevokedAt: null };
 const INVOICES = [
   { id: 'draft', invoiceNumber: 'INV-1', status: 'DRAFT', viewToken: 'tok-draft', stripePaymentLink: null, publicAccessExpiresAt: null, publicAccessRevokedAt: null },
-  { id: 'sent', invoiceNumber: 'INV-2', status: 'SENT', viewToken: 'tok-sent', stripePaymentLink: 'https://checkout.stripe.test/expired', ...issued },
+  { id: 'sent', invoiceNumber: 'INV-2', status: 'SENT', viewToken: 'tok-sent', stripePaymentLink: 'https://checkout.stripe.test/expired', ...issued, total: 1130, payments: [{ amount: 200 }, { amount: 100 }] },
   { id: 'overdue', invoiceNumber: 'INV-3', status: 'OVERDUE', viewToken: 'tok-overdue', stripePaymentLink: null, ...issued },
   { id: 'paid', invoiceNumber: 'INV-4', status: 'PAID', viewToken: 'tok-paid', stripePaymentLink: null, paidAt: new Date(), ...issued },
   { id: 'void', invoiceNumber: 'INV-5', status: 'VOID', viewToken: 'tok-void', stripePaymentLink: null, ...issued },
@@ -72,6 +72,16 @@ describe('client portal invoices', () => {
     assert.equal(byId.paid.payUrl, null, 'paid invoices are never payable');
     assert.equal(byId.revoked.payUrl, null, 'a revoked link is never handed out');
     assert.equal(byId.paid.viewUrl, '/portal/invoice/tok-paid', 'the receipt stays viewable');
+  });
+
+  it('returns what is still owed on each invoice after partial payments', async () => {
+    const bearer = app.jwt.sign({ ...user, contactId: 'contact-a', typ: 'client_session' }, { expiresIn: '1h' });
+    const response = await app.inject({ method: 'GET', url: '/api/client-portal/invoices', headers: { authorization: `Bearer ${bearer}` } });
+    assert.equal(response.statusCode, 200, response.body);
+    const byId = Object.fromEntries(response.json().map((invoice) => [invoice.id, invoice]));
+    assert.deepEqual([byId.sent.total, byId.sent.amountPaid, byId.sent.balanceDue], [1130, 300, 830]);
+    assert.deepEqual([byId.overdue.amountPaid, byId.overdue.balanceDue], [0, 100], 'no payments: the whole total is due');
+    assert.equal('payments' in byId.sent, false, 'payment rows are not exposed');
   });
 });
 

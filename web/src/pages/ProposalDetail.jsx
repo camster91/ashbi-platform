@@ -18,6 +18,9 @@ import { Button, Card, LoadingState } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import QueryErrorState from '../components/QueryErrorState';
+import { formatMoney } from '../lib/format';
+import { taxTypeLabel } from '../lib/invoice-status';
+import { invoiceTotals } from '../lib/money-totals';
 
 export default function ProposalDetail() {
   const { id } = useParams();
@@ -98,10 +101,12 @@ export default function ProposalDetail() {
 
   const createInvoiceMutation = useMutation({
     mutationFn: () => api.createInvoiceFromProposal(id),
-    onSuccess: () => {
+    onSuccess: (invoice) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       toast.success('Invoice created');
-      navigate('/invoices');
+      // Land on the new invoice (the API returns it, or the one already made
+      // from this proposal); the list only if no id came back.
+      navigate(invoice?.id ? `/invoices/${invoice.id}` : '/invoices');
     },
     onError: (error) => toast.error('Failed to create invoice', error.message),
   });
@@ -157,6 +162,15 @@ export default function ProposalDetail() {
     : proposal.subtotal;
   // Mirrors the server: a discount never takes the total below zero.
   const total = Math.max(0, subtotal - (editing ? parseFloat(discount) || 0 : proposal.discount));
+  // The invoice made from this proposal adds tax at the proposal's rate (the
+  // API's taxRate); show it so staff see what the client approves and is
+  // billed. Saved figures come from the server (tax / totalWithTax); only an
+  // unsaved edit is previewed here, with the same arithmetic.
+  const taxRate = Number(proposal.taxRate) || 0;
+  const preview = invoiceTotals([{ total }], taxRate);
+  const useServer = !editing && proposal.totalWithTax !== undefined && proposal.totalWithTax !== null;
+  const tax = useServer ? Number(proposal.tax) || 0 : preview.tax;
+  const totalWithTax = useServer ? Number(proposal.totalWithTax) || 0 : preview.total;
   const isDraft = proposal.status === 'DRAFT';
 
   return (
@@ -363,7 +377,7 @@ export default function ProposalDetail() {
         <div className="mt-6 border-t border-border pt-4 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Subtotal</span>
-            <span>${subtotal.toFixed(2)}</span>
+            <span>{formatMoney(subtotal)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Discount</span>
@@ -377,12 +391,18 @@ export default function ProposalDetail() {
                 step="0.01"
               />
             ) : (
-              <span>-${(proposal.discount || 0).toFixed(2)}</span>
+              <span>-{formatMoney(proposal.discount || 0)}</span>
             )}
           </div>
+          {taxRate > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">{taxTypeLabel(proposal.taxType)} ({taxRate}%)</span>
+              <span>{formatMoney(tax)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-base font-semibold border-t border-border pt-2">
             <span>Total</span>
-            <span>${total.toFixed(2)}</span>
+            <span>{formatMoney(totalWithTax)}</span>
           </div>
         </div>
       </Card>

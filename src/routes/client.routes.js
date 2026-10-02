@@ -5,8 +5,58 @@ import { clampTake } from '../utils/query-limits.js';
 import { clientStateRevokesPortal, revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
 import { validateBody, createClientSchema, updateClientSchema, clientContactSchema, clientNoteCreateSchema } from '../validators/schemas.js';
 import { normalizeClientDomain, normalizeContactEmail } from '../utils/client-identity.js';
+import { invoiceBalance, roundMoney, UNPAID_INVOICE_STATUSES } from '../utils/invoice-balance.js';
 
 const DUPLICATE_DOMAIN_ERROR = 'Client with this domain already exists';
+
+// Invoices the client still owes money on (the shared unpaid list).
+export const CLIENT_OUTSTANDING_STATUSES = UNPAID_INVOICE_STATUSES;
+
+/**
+ * A client's invoice money for the client page. Outstanding is what is still
+ * owed (each open invoice's balance after its recorded payments, not its
+ * total); revenue is what PAID invoices billed. Both are grouped by currency,
+ * and the single-number fields are only filled when every invoice counted
+ * shares one currency (adding CAD to USD means nothing): otherwise they are
+ * null and `outstandingByCurrency` / `revenueByCurrency` carry the amounts.
+ * @param {Array<{ status: string, total: number, currency?: string, dueDate?: Date|string|null, payments?: Array<{ amount: number }> }>} invoices
+ */
+export function clientInvoiceSummary(invoices, now = new Date()) {
+  const outstandingByCurrency = {};
+  const revenueByCurrency = {};
+  const processed = (invoices || []).map((inv) => {
+    const { payments, ...rest } = inv;
+    const paid = Array.isArray(payments) ? payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) : 0;
+    const balance = invoiceBalance(inv.total, paid);
+    const currency = inv.currency || 'CAD';
+    if (CLIENT_OUTSTANDING_STATUSES.includes(inv.status) && balance.balanceDue > 0) {
+      outstandingByCurrency[currency] = roundMoney((outstandingByCurrency[currency] ?? 0) + balance.balanceDue);
+    }
+    if (inv.status === 'PAID') {
+      revenueByCurrency[currency] = roundMoney((revenueByCurrency[currency] ?? 0) + (Number(inv.total) || 0));
+    }
+    const isOverdue = inv.status === 'OVERDUE'
+      || Boolean(['SENT', 'VIEWED'].includes(inv.status) && inv.dueDate && new Date(inv.dueDate) < now);
+    return { ...rest, ...balance, isOverdue };
+  });
+  const single = (byCurrency) => {
+    const codes = Object.keys(byCurrency);
+    if (codes.length === 0) return { amount: 0, currency: null };
+    if (codes.length === 1) return { amount: byCurrency[codes[0]], currency: codes[0] };
+    return { amount: null, currency: null };
+  };
+  const outstanding = single(outstandingByCurrency);
+  const revenue = single(revenueByCurrency);
+  return {
+    invoices: processed,
+    outstandingBalance: outstanding.amount,
+    outstandingCurrency: outstanding.currency,
+    outstandingByCurrency,
+    totalRevenue: revenue.amount,
+    revenueCurrency: revenue.currency,
+    revenueByCurrency,
+  };
+}
 
 export default async function clientRoutes(fastify) {
   // List all clients
@@ -126,7 +176,9 @@ export default async function clientRoutes(fastify) {
         invoices: {
           orderBy: { createdAt: 'desc' },
           include: {
-            createdBy: { select: { id: true, name: true } }
+            createdBy: { select: { id: true, name: true } },
+            // Partial payments: outstanding money is each invoice's balance.
+            payments: { select: { amount: true } }
           }
         }
       }
@@ -136,28 +188,13 @@ export default async function clientRoutes(fastify) {
       return reply.status(404).send({ error: 'Client not found' });
     }
 
-    // Calculate invoice totals
-    const invoices = client.invoices || [];
-    const now = new Date();
-    const totalRevenue = invoices
-      .filter(i => i.status === 'PAID')
-      .reduce((sum, i) => sum + i.total, 0);
-    const outstandingBalance = invoices
-      .filter(i => i.status === 'SENT' || (i.status === 'SENT' && i.dueDate && new Date(i.dueDate) < now))
-      .reduce((sum, i) => sum + i.total, 0);
-
-    // Flag overdue
-    const processedInvoices = invoices.map(inv => ({
-      ...inv,
-      isOverdue: inv.status === 'SENT' && inv.dueDate && new Date(inv.dueDate) < now
-    }));
+    // Invoice money: balances after payments, grouped by currency.
+    const summary = clientInvoiceSummary(client.invoices);
 
     // Parse JSON fields
     return {
       ...client,
-      invoices: processedInvoices,
-      totalRevenue,
-      outstandingBalance,
+      ...summary,
       communicationPrefs: safeParse(client.communicationPrefs, {}),
       satisfactionSignals: safeParse(client.satisfactionSignals, {}),
       knowledgeBase: safeParse(client.knowledgeBase, {})
