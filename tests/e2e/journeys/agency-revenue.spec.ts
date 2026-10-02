@@ -179,10 +179,11 @@ test('agency sells, contracts, invoices and collects payment end to end', async 
     const listed = page.getByText(invoice.invoiceNumber, { exact: true }).filter({ visible: true });
     await page.goto('/invoices');
     await expect(listed).toHaveCount(1);
-    await page.getByRole('button', { name: 'SENT', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'SENT', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    const statusFilters = page.getByRole('group', { name: 'Filter by status' });
+    await statusFilters.getByRole('button', { name: 'Sent', exact: true }).click();
+    await expect(statusFilters.getByRole('button', { name: 'Sent', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(listed).toHaveCount(0);
-    await page.getByRole('button', { name: 'PAID', exact: true }).click();
+    await statusFilters.getByRole('button', { name: 'Paid', exact: true }).click();
     await expect(listed).toHaveCount(1);
   });
 
