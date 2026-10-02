@@ -445,7 +445,7 @@ export default function Dashboard() {
               <AlertTriangle className="w-4 h-4 text-destructive" />
               <h2 className="font-semibold text-foreground">Blocked &amp; At-Risk</h2>
             </div>
-            <Link to="/projects" className="text-xs text-primary hover:underline flex items-center gap-1">
+            <Link to="/projects" className="-my-3 -mr-2 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               View all <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
@@ -626,7 +626,7 @@ export default function Dashboard() {
               <CheckSquare className="w-4 h-4 text-warning" />
               <h2 className="font-semibold text-foreground">My Tasks</h2>
             </div>
-            <Link to="/inbox" className="text-xs text-primary hover:underline flex items-center gap-1">
+            <Link to="/inbox" className="-my-3 -mr-2 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               View all <ArrowRight className="w-3 h-3" />
             </Link>
           </div>

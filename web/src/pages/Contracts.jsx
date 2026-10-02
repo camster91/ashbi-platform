@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 import useClients from '../hooks/useClients';
 import { AI_CHAT_MESSAGE_MAX_LENGTH, buildContractRefineChatPayload } from '../lib/form-payloads';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, EmptyState, LoadingState, StatusBadge } from '../components/ui';
+import { Button, Card, EmptyState, Field, Input, LoadingState, Select, StatusBadge } from '../components/ui';
 import Modal from '../components/Modal';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -128,12 +128,12 @@ export default function Contracts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground">Contracts</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage client contracts and agreements</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             leftIcon={<Sparkles className="w-4 h-4" />}
@@ -216,19 +216,15 @@ export default function Contracts() {
         size="lg"
       >
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Refinement instructions
-            </label>
-            <input
-              type="text"
+          <Field label="What should change?" id="contract-ai-instruction">
+            <Input
               value={aiInstruction}
               onChange={(e) => setAiInstruction(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+              className="min-h-11"
               placeholder="e.g. Add a late payment clause"
               onKeyDown={(e) => { if (e.key === 'Enter') handleAiRefine(); }}
             />
-          </div>
+          </Field>
           <Button
             onClick={handleAiRefine}
             loading={aiLoading}
@@ -239,8 +235,9 @@ export default function Contracts() {
           </Button>
           {aiResult && (
             <div>
-              <label className="block text-sm font-medium mb-1">AI Result</label>
+              <label htmlFor="contract-ai-result" className="block text-sm font-medium mb-1">AI result</label>
               <textarea
+                id="contract-ai-result"
                 value={aiResult}
                 readOnly
                 rows={10}
@@ -262,7 +259,7 @@ export default function Contracts() {
 
       {/* Create Form */}
       {showCreate && (
-        <Card className="p-6">
+        <Card className="p-4 sm:p-6">
           <h2 className="text-lg font-semibold mb-4">New Contract</h2>
           <DraftRecoveryNotice
             draft={formDraft.draft}
@@ -274,44 +271,33 @@ export default function Contracts() {
             onRetry={formDraft.saveNow}
           />
           <form onSubmit={handleCreate} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Client</label>
-              <select
+            <Field label="Client" id="contract-client" required>
+              <Select
                 value={form.clientId}
                 onChange={(e) => setForm({ ...form, clientId: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
-                required
               >
                 <option value="">Select client...</option>
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Title</label>
-              <input
-                type="text"
+              </Select>
+            </Field>
+            <Field label="Title" id="contract-title" required>
+              <Input
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                className="min-h-11"
                 placeholder="Contract title"
-                required
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Template</label>
-              <select
+            </Field>
+            <Field label="Template" id="contract-template">
+              <Select
                 value={form.templateType}
                 onChange={(e) => setForm({ ...form, templateType: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
-              >
-                {templateTypes.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex gap-2">
+                options={templateTypes}
+              />
+            </Field>
+            <div className="flex flex-wrap gap-2">
               <Button type="submit" loading={createMutation.isPending}>Create</Button>
               <Button type="button" variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
             </div>
@@ -349,28 +335,32 @@ export default function Contracts() {
             const isExpanded = expandedId === contract.id;
             return (
               <Card key={contract.id} className="p-4">
-                <div className="flex items-center gap-4">
-                  <ScrollText className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedId(isExpanded ? null : contract.id)}
-                      aria-expanded={isExpanded}
-                      aria-label={`${isExpanded ? 'Collapse' : 'Expand'} contract ${contract.title}`}
-                      className="min-h-11 text-sm font-medium text-foreground hover:text-primary truncate block text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {contract.title}
-                    </button>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                      <span>{contract.client?.name}</span>
-                      <span>{contract.templateType}</span>
-                      {contract.proposal && (
-                        <span>From: {contract.proposal.title}</span>
-                      )}
+                {/* Phones: details on top, actions on their own row below, so
+                    Send never sits over the title. From sm up: one row. */}
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                  <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
+                    <ScrollText className="mt-3 w-5 h-5 text-muted-foreground flex-shrink-0 sm:mt-0" aria-hidden="true" />
+                    <div className="flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(isExpanded ? null : contract.id)}
+                        aria-expanded={isExpanded}
+                        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} contract ${contract.title}`}
+                        className="min-h-11 max-w-full text-sm font-medium text-foreground hover:text-primary truncate block text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {contract.title}
+                      </button>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                        <span className="break-words">{contract.client?.name}</span>
+                        <span>{contract.templateType}</span>
+                        {contract.proposal && (
+                          <span className="min-w-0 break-words">From: {contract.proposal.title}</span>
+                        )}
+                      </div>
                     </div>
+                    <StatusBadge domain="contract" status={contract.status} className="mt-2.5 shrink-0 px-2.5 py-1 sm:mt-0" />
                   </div>
-                  <StatusBadge domain="contract" status={contract.status} className="px-2.5 py-1" />
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1 sm:shrink-0">
                     {contract.status === 'DRAFT' && (
                       <Button
                         size="sm"
@@ -405,10 +395,11 @@ export default function Contracts() {
                     )}
                     <a
                       href={`/api/contracts/${contract.id}/pdf`}
-                      className="p-1.5 text-muted-foreground hover:text-foreground rounded"
-                      title="Download"
+                      aria-label={`Download contract ${contract.title} as PDF`}
+                      className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      title="Download PDF"
                     >
-                      <Download className="w-4 h-4" />
+                      <Download className="w-4 h-4" aria-hidden="true" />
                     </a>
                   </div>
                 </div>

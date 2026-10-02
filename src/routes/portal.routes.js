@@ -17,6 +17,22 @@ import env from '../config/env.js';
 // a public intake form, never acting with a staff member's authority
 // (`config.public`, see src/auth/mfa-enforcement.js).
 const PUBLIC = { config: { public: true } };
+
+// The client-safe task fields the public project link returns.
+const PUBLIC_PORTAL_TASK_SELECT = Object.freeze({
+  id: true,
+  title: true,
+  status: true,
+  priority: true,
+  category: true,
+  dueDate: true,
+});
+const PUBLIC_PORTAL_TASK_ORDER = Object.freeze([{ priority: 'asc' }, { createdAt: 'desc' }]);
+// Other open tasks are capped; tasks waiting on the client are loaded on
+// their own (with a far higher cap) so "Waiting on you" is never emptied by
+// the cap on the rest.
+const PUBLIC_PORTAL_OPEN_TASK_LIMIT = 20;
+const PUBLIC_PORTAL_WAITING_TASK_LIMIT = 100;
 const LEGACY_LINK_VIEW_RATE_LIMIT = { config: { public: true, rateLimit: { max: 30, timeWindow: '1 minute' } } };
 const LEGACY_LINK_SUBMIT_RATE_LIMIT = { config: { public: true, rateLimit: { max: 10, timeWindow: '15 minutes' } } };
 
@@ -34,6 +50,8 @@ export default async function portalRoutes(fastify) {
       // An explicit select: the internal health rating, AI summary and notes
       // are never loaded for this public view.
       select: {
+        // Used to load the client's waiting tasks below; never returned.
+        id: true,
         name: true,
         description: true,
         status: true,
@@ -56,17 +74,10 @@ export default async function portalRoutes(fastify) {
           }
         },
         tasks: {
-          where: { status: { not: 'COMPLETED' } },
-          orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
-          take: 20,
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            priority: true,
-            category: true,
-            dueDate: true
-          }
+          where: { status: { notIn: ['COMPLETED', 'WAITING_CLIENT'] } },
+          orderBy: PUBLIC_PORTAL_TASK_ORDER,
+          take: PUBLIC_PORTAL_OPEN_TASK_LIMIT,
+          select: PUBLIC_PORTAL_TASK_SELECT,
         }
       }
     });
@@ -74,6 +85,13 @@ export default async function portalRoutes(fastify) {
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
+
+    const waitingOnClient = await request.prisma.task.findMany({
+      where: { projectId: project.id, status: 'WAITING_CLIENT' },
+      orderBy: PUBLIC_PORTAL_TASK_ORDER,
+      take: PUBLIC_PORTAL_WAITING_TASK_LIMIT,
+      select: PUBLIC_PORTAL_TASK_SELECT,
+    });
 
     // Client-facing: never the internal health rating, the AI summary, or
     // project notes (pinning a note is a staff feature, not a publish action;
@@ -85,7 +103,7 @@ export default async function portalRoutes(fastify) {
       clientName: project.client?.name,
       milestones: project.milestones,
       revisionRounds: project.revisionRounds,
-      activeTasks: project.tasks.map(t => ({
+      activeTasks: [...waitingOnClient, ...project.tasks].map(t => ({
         title: t.title,
         status: t.status,
         priority: t.priority,

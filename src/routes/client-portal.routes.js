@@ -40,6 +40,7 @@ import { validateBody, validateQuery, chatMessageListQuerySchema, clientPortalMe
 import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
 import { insensitiveEquals } from '../utils/insensitive-equals.js';
+import { CLIENT_TASK_COLUMN_STATUSES } from '../shared/client-task-columns.js';
 
 // The project document fields the client portal returns (docs list, upload).
 const PORTAL_DOCUMENT_SELECT = Object.freeze({
@@ -53,17 +54,10 @@ const PORTAL_DOCUMENT_SELECT = Object.freeze({
   uploadedBy: { select: { name: true } },
 });
 
-// The client portal's task board (GET /projects/:id/tasks). Every value of
-// TASK_STATUS_VALUES maps to exactly one column, so no task disappears from
-// the board; WAITING_CLIENT gets its own "Waiting on you" column.
-export const CLIENT_TASK_COLUMN_STATUSES = Object.freeze({
-  TODO: Object.freeze(['PENDING', 'UPCOMING', 'IMMEDIATE', 'TODO']),
-  IN_PROGRESS: Object.freeze(['IN_PROGRESS', 'WAITING_US']),
-  WAITING_CLIENT: Object.freeze(['WAITING_CLIENT']),
-  REVIEW: Object.freeze(['REVIEW']),
-  BLOCKED: Object.freeze(['BLOCKED']),
-  DONE: Object.freeze(['COMPLETED']),
-});
+// The client portal's task board (GET /projects/:id/tasks). The columns live
+// in src/shared so the web app's public project link groups tasks the same
+// way; see client-task-columns.js.
+export { CLIENT_TASK_COLUMN_STATUSES };
 
 const CLIENT_TASK_COLUMN_BY_STATUS = new Map(
   Object.entries(CLIENT_TASK_COLUMN_STATUSES).flatMap(([column, statuses]) => statuses.map((status) => [status, column])),

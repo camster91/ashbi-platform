@@ -505,33 +505,35 @@ export default function Layout({ children }) {
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className="p-2 -ml-2 text-muted-foreground hover:text-foreground lg:hidden"
+            className="-ml-2 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
             aria-label="Open navigation menu"
           >
             <Menu className="w-6 h-6" />
           </button>
 
           {/* Search */}
-          <form onSubmit={handleSearch} className="mx-2 min-w-0 max-w-xl flex-1 sm:mx-4">
+          <form onSubmit={handleSearch} role="search" className="mx-2 min-w-0 max-w-xl flex-1 sm:mx-4">
+            <label htmlFor="header-search" className="sr-only">Search threads, clients and projects</label>
             <div
               className={cn(
                 'relative group transition-all duration-200',
                 isSearchFocused && 'scale-[1.02]'
               )}
             >
-              <Search className={cn(
+              <Search aria-hidden="true" className={cn(
                 'absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200',
                 isSearchFocused ? 'text-foreground' : 'text-muted-foreground'
               )} />
               <input
-                type="text"
+                id="header-search"
+                type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setIsSearchFocused(false)}
                 placeholder="Search threads, clients, projects..."
                 className={cn(
-                  'w-full pl-10 pr-4 py-2 text-sm bg-muted border-0 rounded-xl',
+                  'w-full min-h-11 pl-10 pr-4 py-2 text-sm bg-muted border-0 rounded-xl',
                   'placeholder:text-muted-foreground',
                   'focus:outline-none focus:ring-2 focus:ring-ring/40 focus:bg-card',
                   'transition-all duration-200'
@@ -541,14 +543,16 @@ export default function Layout({ children }) {
           </form>
 
           {/* Right side actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             <LiveTimer socket={socket} />
             <QuickCreateMenu navigate={navigate} isAdmin={isAdmin} />
             <button
               type="button"
               onClick={toggleTheme}
               aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-              className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              // Below sm the theme switch lives in the bottom nav's More menu,
+              // which leaves the header search room for its text.
+              className="hidden sm:inline-flex min-h-11 min-w-11 items-center justify-center p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -612,7 +616,15 @@ export default function Layout({ children }) {
         )}
 
         {/* Page content */}
-        <div id="main-content" className="flex-1 p-4 lg:p-6 pb-20 lg:pb-6 animate-fade-in overflow-auto" tabIndex={-1}>
+        {/* Below lg the bottom nav and the floating AI chat button sit over the
+            page. The extra bottom padding lets the last row of any page (Balance
+            due, Send, deal actions) scroll clear of both. Keep in step with
+            the chat button offset in GlobalAIChat.jsx. */}
+        {/* The fade-in must not keep running (`animate-fade-in` holds its
+            final opacity with fill-mode forwards): an element with an opacity
+            animation is a stacking context, which trapped every page's modals
+            under the sticky header and the mobile bottom nav. */}
+        <div id="main-content" className="flex-1 p-4 lg:p-6 pb-[calc(8.5rem+env(safe-area-inset-bottom))] lg:pb-6 animate-in fade-in duration-300 motion-reduce:animate-none overflow-auto" tabIndex={-1}>
           {children}
         </div>
       </main>
@@ -637,7 +649,7 @@ export default function Layout({ children }) {
                   type="button"
                   onClick={() => setMoreMenuOpen(!moreMenuOpen)}
                   className={cn(
-                    'w-full min-h-11 flex flex-col items-center justify-center py-2.5 text-xs transition-all active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    'w-full min-h-11 flex flex-col items-center justify-center py-2.5 text-xs transition-all active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
                     moreMenuOpen ? 'text-primary' : 'text-muted-foreground'
                   )}
                   aria-expanded={moreMenuOpen}
@@ -808,7 +820,8 @@ export default function Layout({ children }) {
               to={item.href}
               onClick={() => setMoreMenuOpen(false)}
               className={cn(
-                'flex-1 flex flex-col items-center justify-center py-2.5 text-xs transition-all active:scale-90 relative',
+                'flex-1 min-h-11 flex flex-col items-center justify-center py-2.5 text-xs transition-all active:scale-90 relative',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
                 isActive ? 'text-primary' : 'text-muted-foreground'
               )}
               aria-current={isActive ? 'page' : undefined}
@@ -827,8 +840,9 @@ export default function Layout({ children }) {
         })}
       </nav>
 
-      {/* Global AI Chat Widget */}
-      <GlobalAIChat />
+      {/* Global AI Chat Widget — its button steps aside while the mobile
+          More menu or navigation drawer is open. */}
+      <GlobalAIChat hideButton={moreMenuOpen || sidebarOpen} />
 
       {/* Quick Add — Cmd+K command palette */}
       <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />

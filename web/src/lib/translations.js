@@ -44,7 +44,10 @@ export const translations = {
       resetInstructions: 'Enter your email address and we\'ll send you a link to reset your password.',
       sendResetLink: 'Send reset link',
       checkYourEmail: 'Check your email',
-      resetSent: 'We\'ve sent a password reset link to',
+      // The API answers the same way whether or not the address has an
+      // account, so the confirmation must not claim an email was sent.
+      resetSentBefore: 'If an account exists for',
+      resetSentAfter: ', we\'ve sent a reset link.',
       linkExpiresIn: 'The link will expire in 24 hours.',
       tryAgain: 'try again',
       returnToLogin: 'Return to login',
@@ -132,7 +135,8 @@ export const translations = {
       resetInstructions: 'Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.',
       sendResetLink: 'Enviar enlace de restablecimiento',
       checkYourEmail: 'Revisa tu correo',
-      resetSent: 'Hemos enviado un enlace de restablecimiento a',
+      resetSentBefore: 'Si existe una cuenta para',
+      resetSentAfter: ', te hemos enviado un enlace para restablecer la contraseña.',
       linkExpiresIn: 'El enlace expira en 24 horas.',
       tryAgain: 'intentar de nuevo',
       returnToLogin: 'Volver al inicio de sesión',

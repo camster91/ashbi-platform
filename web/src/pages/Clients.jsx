@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -442,8 +442,8 @@ export default function Clients() {
                 const isAtRisk = client.health === 'AT_RISK';
 
                 return (
-                  <>
-                    <tr key={client.id} className={cn(
+                  <Fragment key={client.id}>
+                    <tr className={cn(
                       'hover:bg-muted/30 transition-colors',
                       isAtRisk && 'bg-destructive/[0.02]'
                     )}>
@@ -574,7 +574,7 @@ export default function Clients() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>

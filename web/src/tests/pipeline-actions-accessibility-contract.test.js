@@ -17,9 +17,9 @@ describe('pipeline actions accessibility contract', () => {
     expect(source).toContain('aria-label={`Delete ${deal.title}`}');
   });
 
-  it('exposes expanded state for desktop and mobile stage controls', () => {
-    expect(source).toContain('aria-label={`${isExpanded ? \'Collapse\' : \'Expand\'} ${stage.name} stage`}');
-    expect(source).toContain('aria-expanded={isExpanded}');
+  it('exposes expanded state on the stage toggles (one toggle per stage, all breakpoints)', () => {
+    expect(source).toContain('aria-expanded={isOpen}');
+    expect(source).toContain('aria-controls={isOpen ? panelId : undefined}');
     expect(source).toContain('focus-visible:ring-2');
   });
 });
