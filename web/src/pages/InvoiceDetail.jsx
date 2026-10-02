@@ -20,11 +20,18 @@ import { formatInvoiceMoney, formatInvoiceDate, toDateInputValue } from '../lib/
 const HST_RATE = 13;
 const INITIAL_PAYMENT_FORM = { paymentMethod: 'BANK', paymentNotes: '', transactionId: '', amount: '' };
 
+// Whether the invoice has nothing left to pay (a $0 total, or fully covered).
+export function nothingOwed(balanceDue) {
+  return Number.isFinite(Number(balanceDue)) && Math.round(Number(balanceDue) * 100) <= 0;
+}
+
 // Why the entered payment amount cannot be submitted, or null. It must be a
-// positive amount no larger than the balance due.
+// positive amount no larger than the balance due; with nothing owed, 0
+// closes the invoice as paid.
 export function paymentAmountError(amount, balanceDue) {
   const value = Number(amount);
   if (amount === '' || amount === null || amount === undefined || !Number.isFinite(value)) return 'Enter the amount received';
+  if (nothingOwed(balanceDue)) return Math.round(value * 100) === 0 ? null : 'Nothing is owed on this invoice. Enter 0 to mark it paid.';
   if (value <= 0) return 'The amount must be greater than zero';
   if (Number.isFinite(Number(balanceDue)) && Math.round(value * 100) > Math.round(Number(balanceDue) * 100)) return 'The amount is more than the balance due';
   return null;
@@ -897,7 +904,7 @@ export default function InvoiceDetail() {
               id="invoice-payment-amount"
               type="number"
               inputMode="decimal"
-              min="0.01"
+              min={nothingOwed(invoice.balanceDue) ? '0' : '0.01'}
               step="0.01"
               max={invoice.balanceDue ?? invoice.total}
               value={payForm.amount}
@@ -908,7 +915,9 @@ export default function InvoiceDetail() {
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-base"
             />
             <p id="invoice-payment-amount-hint" className={`mt-1 text-xs ${amountError ? 'text-destructive' : 'text-muted-foreground'}`}>
-              {amountError || 'Less than the balance records a partial payment; the invoice stays open.'}
+              {amountError || (nothingOwed(invoice.balanceDue)
+                ? 'Nothing is owed. Recording this marks the invoice paid.'
+                : 'Less than the balance records a partial payment; the invoice stays open.')}
             </p>
           </div>
           <div>

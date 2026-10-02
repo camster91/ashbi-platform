@@ -347,7 +347,8 @@ const invoicePaymentMethodSchema = z.preprocess(
 );
 
 export const markInvoicePaidSchema = z.object({
-  amount: z.number().positive().optional(),
+  // 0 is accepted only to close an invoice with nothing owed (a $0 total).
+  amount: z.number().nonnegative().max(10_000_000).optional(),
   method: invoicePaymentMethodSchema.optional(),
   paymentMethod: invoicePaymentMethodSchema.optional(),
   paymentNotes: z.string().max(2000).optional(),

@@ -983,8 +983,9 @@ export default async function invoiceRoutes(fastify, options = {}) {
     const method = paymentMethod || 'OTHER';
     let updated = 0;
     // Additive to the original `{ updated }` response: why each other id was
-    // left alone (not_found, already_paid, void, draft, or changed when another
-    // payment settled it between the read and the compare-and-set).
+    // left alone (not_found, already_paid, void, draft, invalid_amount, or
+    // changed when another payment settled it between the read and the
+    // compare-and-set).
     const skipped = [];
 
     for (const id of ids) {
@@ -994,10 +995,20 @@ export default async function invoiceRoutes(fastify, options = {}) {
       if (invoice.status === 'VOID') { skipped.push({ id, reason: 'void' }); continue; }
       if (invoice.status === 'DRAFT') { skipped.push({ id, reason: 'draft' }); continue; }
 
-      // Settles the remaining balance (after any partial payments).
-      const settled = await settleInvoiceManually(fastify.prisma, {
-        invoice, method, paidAt: paidDate, correlationId: request.id,
-      });
+      // Settles the remaining balance (after any partial payments). One
+      // invoice that cannot take the payment never stops the rest.
+      let settled;
+      try {
+        settled = await settleInvoiceManually(fastify.prisma, {
+          invoice, method, paidAt: paidDate, correlationId: request.id,
+        });
+      } catch (error) {
+        if (error instanceof InvoiceOverpaymentError || error instanceof InvalidPaymentAmountError) {
+          skipped.push({ id, reason: 'invalid_amount' });
+          continue;
+        }
+        throw error;
+      }
       if (!settled) { skipped.push({ id, reason: 'changed' }); continue; }
       await retireCheckoutSession({ id: invoice.id, stripeCheckoutSessionId: settled.clearedCheckoutSessionId }, 'Payment recorded');
       await recordPaymentAudit(request, { invoice, paymentId: settled.payment?.id, amount: settled.amount, method, bulk: true, fullyPaid: settled.fullyPaid });
