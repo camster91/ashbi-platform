@@ -224,6 +224,25 @@ test('a zero or negative payment is refused with its own error, and a draft take
   assert.equal(draft.state.payments.length, 0);
 });
 
+test('an invoice with nothing owed closes with a $0 record, and refuses any other amount', async () => {
+  const invoice = { id: 'inv-0', clientId: 'client-1', status: 'SENT', total: 0, currency: 'CAD' };
+  const refused = paymentDb(invoice);
+  await assert.rejects(
+    recordManualPayment(refused.db, { invoice, method: 'BANK', amount: 5, paidAt: new Date() }),
+    (error) => error instanceof InvoiceOverpaymentError && error.balanceDue === 0,
+  );
+  assert.equal(refused.state.payments.length, 0);
+
+  // Bulk mark-paid passes no amount; the single dialog sends 0.
+  for (const amount of [undefined, 0]) {
+    const { state, outbox, db } = paymentDb(invoice);
+    const closed = await recordManualPayment(db, { invoice, method: 'BANK', amount, paidAt: new Date() });
+    assert.deepEqual([closed.amount, closed.fullyPaid, closed.invoice.status], [0, true, 'PAID'], String(amount));
+    assert.deepEqual(state.payments.map((payment) => payment.amount), [0]);
+    assert.deepEqual(outbox.events.map((event) => event.type), ['invoice.paid']);
+  }
+});
+
 test('balances and Checkout amounts follow the recorded payments', () => {
   assert.deepEqual(invoiceBalance(113, 40.004), { amountPaid: 40, balanceDue: 73 });
   assert.deepEqual(invoiceBalance(100, 120), { amountPaid: 120, balanceDue: 0 });

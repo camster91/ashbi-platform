@@ -20,6 +20,10 @@ describe('recording a (partial) invoice payment', () => {
     expect(paymentAmountError('63.01', 63)).toMatch(/more than the balance/);
     expect(paymentAmountError('63', 63)).toBeNull();
     expect(paymentAmountError('0.01', 63)).toBeNull();
+    // Nothing owed (a $0 invoice): 0 closes it as paid, anything else is refused.
+    expect(paymentAmountError('0', 0)).toBeNull();
+    expect(paymentAmountError('5', 0)).toMatch(/Nothing is owed/);
+    expect(paymentAmountError('', 0)).toMatch(/Enter the amount/);
   });
 
   it('labels the amount field, disables submit on an invalid amount and shows what is still owed', () => {

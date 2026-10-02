@@ -6,7 +6,8 @@
 //      concurrent payments run one after the other and each reads the
 //      balance only after the previous one committed.
 //   2. applyInvoicePayment: reads the balance (total minus the payment
-//      rows), refuses a non-positive amount or one above the balance, writes
+//      rows), refuses a non-positive amount (unless nothing is owed, when a
+//      $0 record closes the invoice) or one above the balance, writes
 //      the payment, and moves the invoice to PAID (with the invoice.paid
 //      outbox event) only when the payments cover the total.
 //
@@ -69,7 +70,13 @@ export async function applyInvoicePayment(tx, input) {
   const paidBefore = await invoiceAmountPaid(tx, invoice.id);
   const { balanceDue } = invoiceBalance(invoice.total, paidBefore);
   const amount = roundMoney(input.amount ?? balanceDue);
-  if (!(amount > 0)) throw new InvalidPaymentAmountError();
+  // Nothing owed (a $0 invoice, or one already covered): a $0 record closes
+  // it as PAID. Otherwise the amount must be positive and within the balance.
+  const nothingOwed = balanceDue <= CENT_TOLERANCE;
+  if (nothingOwed ? amount !== 0 : !(amount > 0)) {
+    if (amount > 0) throw new InvoiceOverpaymentError(balanceDue);
+    throw new InvalidPaymentAmountError();
+  }
   if (amount > balanceDue + CENT_TOLERANCE) throw new InvoiceOverpaymentError(balanceDue);
 
   const payment = await tx.invoicePayment.create({
