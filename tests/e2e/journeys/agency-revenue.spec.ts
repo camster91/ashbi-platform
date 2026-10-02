@@ -64,7 +64,12 @@ test('agency sells, contracts, invoices and collects payment end to end', async 
     for (const item of LINE_ITEMS) {
       await expect(clientPage.getByRole('cell', { name: item.description })).toBeVisible();
     }
-    await expect(clientPage.getByText(money(PROPOSAL_TOTAL), { exact: true })).toBeVisible();
+    // The proposal shows the pre-tax subtotal, the HST its invoice adds, and
+    // the total that invoice will bill (any currency symbol in front).
+    const amount = (value: number) => new RegExp(`^\\D*${money(value).replace(/[.,]/g, '\\$&')}$`);
+    await expect(clientPage.getByText(amount(PROPOSAL_TOTAL)).first()).toBeVisible();
+    await expect(clientPage.getByText('HST (13%)', { exact: true })).toBeVisible();
+    await expect(clientPage.getByText(amount(INVOICE_TOTAL)).first()).toBeVisible();
     await clientPage.getByRole('button', { name: 'Approve Proposal' }).click();
     await expect(clientPage.getByRole('heading', { name: 'Proposal Approved' })).toBeVisible();
   });
