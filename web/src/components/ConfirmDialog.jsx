@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import Button from './ui/Button';
 import Modal, { ModalFooter } from './Modal';
 
@@ -14,6 +15,7 @@ export default function ConfirmDialog({
   destructive = true,
   children,
 }) {
+  const descriptionId = useId();
   const close = () => {
     if (pending) return;
     onCancel();
@@ -26,8 +28,9 @@ export default function ConfirmDialog({
       title={title}
       size="sm"
       showCloseButton={!pending}
+      ariaDescribedBy={description ? descriptionId : undefined}
     >
-      <p className="text-sm text-muted-foreground">{description}</p>
+      <p id={descriptionId} className="text-sm text-muted-foreground">{description}</p>
       {children}
       {error && (
         <p role="alert" className="mt-4 text-sm text-destructive">

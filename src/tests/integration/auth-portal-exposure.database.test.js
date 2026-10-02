@@ -300,6 +300,74 @@ test('API keys, the Google Calendar callback and the client-facing portal views'
     const staffList = await inject('GET', `/api/attachments?entityType=PROJECT&entityId=${project.id}`, { cookies: staffCookies(team) });
     assert.equal(staffList.statusCode, 200, staffList.body);
     assert.equal(staffList.json().find((row) => row.id === recording.id).clientVisible, false, 'recordings stay internal');
+
+    // ── 9. Bulk share after the deploy that hid staff files ──────────────────
+    const bulk = (cookies, projectId, payload) => inject('PATCH', `/api/projects/${projectId}/attachments/client-visibility`, { cookies, payload });
+    const other = await mkUser(orgA, 'other-staff', 'TEAM');
+    const otherProject = await prisma.project.create({ data: { organizationId: orgA, clientId: client.id, name: 'Other project' } });
+    const elsewhere = await prisma.attachment.create({ data: {
+      organizationId: orgA, filename: `authfix-elsewhere-${suffix}.pdf`, originalName: 'elsewhere.pdf', mimeType: 'application/pdf', size: 1,
+      path: `/uploads/authfix-elsewhere-${suffix}.pdf`, entityType: 'PROJECT', entityId: otherProject.id, uploadedById: team.id,
+    } });
+    const foreign = await prisma.attachment.create({ data: {
+      organizationId: orgB, filename: `authfix-foreign-${suffix}.pdf`, originalName: 'foreign.pdf', mimeType: 'application/pdf', size: 1,
+      path: `/uploads/authfix-foreign-${suffix}.pdf`, entityType: 'PROJECT', entityId: projectB.id, uploadedById: adminB.id,
+    } });
+    assert.equal((await bulk(clientCookies, project.id, { clientVisible: true })).statusCode, 403, 'a client session cannot reach the staff API');
+    assert.equal((await bulk(staffCookies(adminB), project.id, { clientVisible: true })).statusCode, 404, 'another organization cannot see the project');
+    assert.equal((await bulk(staffCookies(team), project.id, { clientVisible: 'yes' })).statusCode, 400, 'the body is validated');
+    const refusedIds = await bulk(staffCookies(team), project.id, { clientVisible: true, attachmentIds: [elsewhere.id, foreign.id] });
+    assert.equal(refusedIds.statusCode, 200, refusedIds.body);
+    assert.deepEqual(refusedIds.json(), {
+      changed: 0, changedIds: [], unchanged: 0,
+      skipped: [{ id: elsewhere.id, reason: 'not_found' }, { id: foreign.id, reason: 'not_found' }],
+    });
+    for (const row of [elsewhere, foreign]) {
+      assert.equal((await prisma.attachment.findUnique({ where: { id: row.id } })).clientVisible, false, 'files outside the project are never changed');
+    }
+    // Staff who neither uploaded the files nor are admins change nothing.
+    const notMine = await bulk(staffCookies(other), project.id, { clientVisible: true });
+    assert.equal(notMine.statusCode, 200, notMine.body);
+    assert.equal(notMine.json().changed, 0);
+    assert.deepEqual(notMine.json().skipped.map((skip) => skip.reason), ['not_permitted', 'not_permitted', 'not_permitted', 'not_permitted']);
+    assert.deepEqual(await documentNames(), ['brief.pdf', 'homepage.pdf']);
+
+    const bulkShared = await bulk(staffCookies(team), project.id, { clientVisible: true });
+    assert.equal(bulkShared.statusCode, 200, bulkShared.body);
+    const sharedIds = [recording.id, deliverable.id, reviewed.id, internalReview.id];
+    assert.deepEqual([...bulkShared.json().changedIds].sort(), [...sharedIds].sort());
+    assert.equal(bulkShared.json().unchanged, 2, 'the client upload and the already shared file');
+    assert.deepEqual(bulkShared.json().skipped, []);
+    assert.deepEqual(await documentNames(), ['brief.pdf', 'deliverable.pdf', 'homepage.pdf', 'internal-review.pdf', 'screen-recording.webm'],
+      'bulk share lists the files in the portal (a quarantined file stays out)');
+    const bulkAudit = await prisma.auditEvent.findMany({ where: { organizationId: orgA, action: 'attachment.client_visibility_changed', entityId: { in: sharedIds } } });
+    const sharedAudit = bulkAudit.filter((event) => event.metadata.bulk === true);
+    assert.deepEqual(sharedAudit.map((event) => event.entityId).sort(), [...sharedIds].sort(), 'one audit event per changed file');
+    for (const event of sharedAudit) {
+      assert.deepEqual({ ...event.metadata }, { projectId: project.id, fromVisible: false, toVisible: true, bulk: true });
+      assert.equal(event.actorUserId, team.id);
+    }
+
+    // Undo: the inverse value with exactly the changed ids.
+    const undone = await bulk(staffCookies(team), project.id, { clientVisible: false, attachmentIds: bulkShared.json().changedIds });
+    assert.equal(undone.statusCode, 200, undone.body);
+    assert.equal(undone.json().changed, 4);
+    assert.deepEqual(await documentNames(), ['brief.pdf', 'homepage.pdf'], 'undo restores the portal list');
+
+    // An admin hides everything staff shared; the client's own upload stays.
+    const hidden = await bulk(staffCookies(admin), project.id, { clientVisible: false });
+    assert.equal(hidden.statusCode, 200, hidden.body);
+    assert.deepEqual(hidden.json().changedIds, [quarantined.id]);
+    assert.deepEqual(hidden.json().skipped, [{ id: uploadedRow.id, reason: 'client_upload' }]);
+    assert.deepEqual(await documentNames(), ['brief.pdf', 'homepage.pdf'], 'the client upload and the review-shared file stay');
+    // The staff list says which files the client sees through a shared review.
+    const reviewFlags = await inject('GET', `/api/attachments?entityType=PROJECT&entityId=${project.id}`, { cookies: staffCookies(team) });
+    assert.equal(reviewFlags.statusCode, 200, reviewFlags.body);
+    const flagged = Object.fromEntries(reviewFlags.json().map((row) => [row.originalName, row.sharedViaReview]));
+    assert.equal(flagged['homepage.pdf'], true, 'in a review shared with the client');
+    assert.equal(flagged['internal-review.pdf'], false, 'in an internal review only');
+    assert.equal(flagged['deliverable.pdf'], false);
+    assert.equal(reviewFlags.json().find((row) => row.id === uploadedRow.id).uploadedBy.role, 'CLIENT');
   } finally {
     await app.close();
     for (const name of writtenFiles) await fs.rm(path.join(UPLOAD_DIR, name), { force: true });

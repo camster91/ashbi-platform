@@ -658,6 +658,16 @@ export const api = {
   // Share a project file with the client portal's Documents (or stop sharing).
   setAttachmentClientVisibility: (id, clientVisible) =>
     request(`/attachments/${id}/client-visibility`, { method: 'PATCH', body: { clientVisible } }),
+  // Share many of a project's files at once (or stop sharing them): the listed
+  // attachmentIds, or every project file when omitted. Answers
+  // { changed, changedIds, unchanged, skipped: [{ id, reason }] }. `silent`
+  // skips the global error toast for callers that report failures themselves.
+  setProjectAttachmentsClientVisibility: (projectId, clientVisible, attachmentIds, { silent = false } = {}) =>
+    request(`/projects/${projectId}/attachments/client-visibility`, {
+      method: 'PATCH',
+      body: attachmentIds ? { clientVisible, attachmentIds } : { clientVisible },
+      silent,
+    }),
   // Chat media (docs/chat-media.md): upload first as a pending chat upload,
   // then send the message with its `attachmentIds`.
   uploadChatFile: (projectId, file, options = {}) => {

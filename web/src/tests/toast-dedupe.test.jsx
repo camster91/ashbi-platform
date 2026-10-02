@@ -23,6 +23,15 @@ describe('toast deduplication', () => {
     act(() => { toast.error('Request failed', 'Another problem'); });
     expect(screen.getByText('Another problem')).toBeInTheDocument();
   });
+
+  it('always shows an action toast that opts out with dedupe: false', () => {
+    let toast;
+    render(<ToastProvider><Trigger onReady={(t) => { toast = t; }} /></ToastProvider>);
+    const undoToast = () => toast.success({ title: 'Shared 2 files with the client', duration: 10000, dedupe: false, action: { label: 'Undo', onClick: () => {} } });
+    act(() => { undoToast(); undoToast(); });
+    expect(screen.getAllByText('Shared 2 files with the client')).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Undo' })).toHaveLength(2);
+  });
 });
 
 describe('global API error toasts', () => {

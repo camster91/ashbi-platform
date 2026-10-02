@@ -3837,6 +3837,28 @@
         ],
         "type": "object"
       },
+      "ProjectAttachmentsClientVisibility": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentIds": {
+            "items": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "type": "array"
+          },
+          "clientVisible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "clientVisible"
+        ],
+        "type": "object"
+      },
       "ProjectContextUpdate": {
         "properties": {
           "clientGoals": {
@@ -23486,6 +23508,68 @@
           }
         ],
         "summary": "POST /api/projects/:id/ai-plan",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/projects/{id}/attachments/client-visibility": {
+      "patch": {
+        "operationId": "patch_api_projects_id_attachments_client_visibility",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectAttachmentsClientVisibility"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PATCH /api/projects/:id/attachments/client-visibility",
         "tags": [
           "projects"
         ],
