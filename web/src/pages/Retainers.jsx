@@ -24,6 +24,8 @@ import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Button, Card, LoadingState } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
+import { formatMoney } from '../lib/format';
+import { formatByCurrency, monthlyRevenueByCurrency, retainerMonthlyCharge } from '../lib/retainer-money';
 
 function HoursBar({ percentUsed }) {
   const color =
@@ -122,7 +124,11 @@ export default function Retainers() {
     });
   };
 
-  const totalMrr = allRetainers.reduce((sum, r) => sum + (r.monthlyAmountUsd || 0), 0);
+  // Monthly revenue from active plans, per currency (CAD and USD are never
+  // added together).
+  const revenueByCurrency = monthlyRevenueByCurrency(
+    allRetainers.filter((r) => !r.retainerStatus || r.retainerStatus === 'ACTIVE'),
+  );
   const atRiskCount = allRetainers.filter(r => r.scopeCreepRisk).length;
 
   return (
@@ -152,8 +158,8 @@ export default function Retainers() {
             <p className="text-2xl font-bold mt-1">{allRetainers.length}</p>
           </Card>
           <Card className="p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Monthly Revenue (USD)</p>
-            <p className="text-2xl font-bold mt-1">${totalMrr.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Monthly revenue</p>
+            <p className="text-2xl font-bold mt-1 break-words">{formatByCurrency(revenueByCurrency)}</p>
           </Card>
           <Card className="p-4">
             <div className="flex items-center gap-2">
@@ -306,16 +312,18 @@ export default function Retainers() {
                 </form>
               ) : (
                 <div className="space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
                       <Link to={`/client/${plan.clientId}`} className="text-sm font-semibold text-foreground hover:text-primary">
                         {plan.client?.name || plan.clientId}
                       </Link>
-                      {plan.monthlyAmountUsd && (
-                        <span className="ml-2 text-xs text-muted-foreground">${plan.monthlyAmountUsd?.toLocaleString()}/mo USD</span>
+                      {/* Amounts render only when set and above zero: a bare
+                          `{amount && ...}` printed a stray "0". */}
+                      {Number(plan.monthlyAmountUsd) > 0 && (
+                        <span className="ml-2 text-xs text-muted-foreground">{formatMoney(plan.monthlyAmountUsd, 'USD')}/mo</span>
                       )}
-                      {plan.monthlyAmountCad && (
-                        <span className="ml-2 text-xs text-muted-foreground">${plan.monthlyAmountCad?.toLocaleString()}/mo CAD</span>
+                      {Number(plan.monthlyAmountCad) > 0 && (
+                        <span className="ml-2 text-xs text-muted-foreground">{formatMoney(plan.monthlyAmountCad, 'CAD')} CAD/mo</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
@@ -332,7 +340,7 @@ export default function Retainers() {
                         type="button"
                         aria-label="Generate monthly invoice"
                         onClick={() => {
-                          const currency = plan.monthlyAmountCad && !plan.monthlyAmountUsd ? 'CAD' : 'USD';
+                          const currency = retainerMonthlyCharge(plan)?.currency || 'USD';
                           generateInvoiceMutation.reset();
                           setInvoiceToGenerate({ plan, currency });
                         }}
@@ -416,7 +424,7 @@ export default function Retainers() {
       <ConfirmDialog
         isOpen={Boolean(invoiceToGenerate)}
         title="Generate retainer invoice"
-        description={invoiceToGenerate ? `Generate a ${invoiceToGenerate.currency} invoice for ${invoiceToGenerate.plan.client?.name || invoiceToGenerate.plan.clientId}? Amount: $${invoiceToGenerate.currency === 'CAD' ? invoiceToGenerate.plan.monthlyAmountCad : invoiceToGenerate.plan.monthlyAmountUsd} ${invoiceToGenerate.currency}. This creates a draft invoice; it is not sent automatically.` : ''}
+        description={invoiceToGenerate ? `Generate a ${invoiceToGenerate.currency} invoice for ${invoiceToGenerate.plan.client?.name || invoiceToGenerate.plan.clientId}? Amount: ${formatMoney(invoiceToGenerate.currency === 'CAD' ? invoiceToGenerate.plan.monthlyAmountCad : invoiceToGenerate.plan.monthlyAmountUsd, invoiceToGenerate.currency)} ${invoiceToGenerate.currency}. This creates a draft invoice; it is not sent automatically.` : ''}
         confirmLabel="Generate invoice"
         destructive={false}
         onConfirm={() => invoiceToGenerate && generateInvoiceMutation.mutate({ clientId: invoiceToGenerate.plan.clientId, data: { currency: invoiceToGenerate.currency } })}

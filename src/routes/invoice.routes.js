@@ -12,6 +12,8 @@ import { InvalidPaymentAmountError, InvoiceOverpaymentError, recordManualPayment
 import { invoiceAmountPaid, invoiceBalance, withInvoiceBalance } from '../utils/invoice-balance.js';
 import { clampTake } from '../utils/query-limits.js';
 import { firstRecurringDate } from '../jobs/recurring-invoices.js';
+import { proposalTaxRate, taxTypeForRate } from '../utils/proposal-totals.js';
+import { invoiceTotals, lineTotal } from '../utils/money-totals.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
@@ -28,16 +30,10 @@ function roundMoney(value) {
 // Proposals are pre-tax. One converted from an estimate carries the
 // estimate's tax rate in its metadata (proposalDataFromEstimate in
 // estimate.routes.js) so the invoice bills the estimate's total; any other
-// proposal is invoiced at the Ontario HST default.
+// proposal is invoiced at the Ontario HST default. The proposal pages show
+// the same tax (proposalTaxSummary in src/utils/proposal-totals.js).
 export function proposalInvoiceTaxRate(proposal) {
-  try {
-    const metadata = proposal?.metadata ? JSON.parse(proposal.metadata) : null;
-    const rate = Number(metadata?.taxRate);
-    if (metadata?.source === 'estimate' && Number.isFinite(rate) && rate >= 0 && rate <= 100) return rate;
-  } catch {
-    // Unparseable metadata: fall back to the default rate.
-  }
-  return HST_RATE;
+  return proposalTaxRate(proposal);
 }
 
 // The list's ?sort= and ?order= come from the query string; anything outside
@@ -78,12 +74,11 @@ export default async function invoiceRoutes(fastify, options = {}) {
     if (!expired) fastify.log.warn({ invoiceId: invoice.id, reason }, `${reason}: Checkout session was not expired at Stripe`);
   }
 
+  // Shared with estimates, proposals and the recurring job
+  // (src/utils/money-totals.js) so every document rounds the same cents.
   function calcTotals(lineItems, taxRate, discountAmount = 0) {
-    const subtotal = lineItems.reduce((sum, li) => sum + li.total, 0);
-    const discounted = Math.max(0, subtotal - discountAmount);
-    const tax = parseFloat(((discounted * taxRate) / 100).toFixed(2));
-    const total = parseFloat((discounted + tax).toFixed(2));
-    return { subtotal: parseFloat(subtotal.toFixed(2)), tax, total };
+    const { subtotal, tax, total } = invoiceTotals(lineItems, taxRate, discountAmount);
+    return { subtotal, tax, total };
   }
 
   function processLineItems(lineItems) {
@@ -92,7 +87,7 @@ export default async function invoiceRoutes(fastify, options = {}) {
       itemType: li.itemType || 'LABOR',
       quantity: parseFloat(li.quantity) || 1,
       unitPrice: parseFloat(li.unitPrice) || 0,
-      total: parseFloat(((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0)).toFixed(2)),
+      total: lineTotal(parseFloat(li.quantity) || 1, parseFloat(li.unitPrice) || 0),
       position: li.position ?? idx,
     }));
   }
@@ -837,7 +832,9 @@ export default async function invoiceRoutes(fastify, options = {}) {
           subtotal,
           discountAmount: proposal.discount || 0,
           taxRate,
-          taxType: taxRate > 0 ? 'HST' : 'NONE',
+          // HST only for the 13% Ontario default; another rate gets the
+          // neutral "Tax" rather than a tax name it may not be.
+          taxType: taxTypeForRate(taxRate),
           tax,
           total,
           notes: `Invoice for proposal: ${proposal.title}`,

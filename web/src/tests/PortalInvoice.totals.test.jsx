@@ -66,3 +66,16 @@ describe('public invoice totals', () => {
     expect(screen.queryByRole('button', { name: /Pay Now/ })).not.toBeInTheDocument();
   });
 });
+
+describe('public invoice status and tax label', () => {
+  beforeEach(() => getPortalInvoice.mockReset());
+
+  it('shows a partly paid invoice as partly paid, with a neutral tax label', async () => {
+    getPortalInvoice.mockResolvedValue(invoice({ taxType: 'TAX', taxRate: 5, amountPaid: 300, balanceDue: 717 }));
+    renderInvoice();
+    expect(await screen.findByText('Partly paid')).toBeInTheDocument();
+    expect(screen.getByText('Tax (5%)')).toBeInTheDocument();
+    expect(screen.getByText('Paid so far')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pay Now - $717.00 USD' })).toBeInTheDocument();
+  });
+});

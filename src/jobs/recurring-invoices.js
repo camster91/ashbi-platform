@@ -1,5 +1,6 @@
 // Recurring invoice processor. Scheduling is owned by BullMQ in queue.js.
 
+import { invoiceTotals } from '../utils/money-totals.js';
 import { prisma } from '../config/db.js';
 import logger from '../utils/logger.js';
 import { allocateInvoiceNumber } from '../utils/invoice.js';
@@ -108,11 +109,9 @@ export async function processRecurringInvoices(tenantPrisma, invoiceNumberAlloca
           position: li.position ?? idx,
         }));
 
-        // Calculate totals from line items
-        const subtotal = lineItemsData.reduce((sum, li) => sum + li.total, 0);
-        const discounted = Math.max(0, subtotal - (invoice.discountAmount || 0));
-        const tax = parseFloat(((discounted * invoice.taxRate) / 100).toFixed(2));
-        const total = parseFloat((discounted + tax).toFixed(2));
+        // Totals from the line items, with the arithmetic every invoice uses
+        // (src/utils/money-totals.js).
+        const { subtotal, tax, total } = invoiceTotals(lineItemsData, invoice.taxRate, invoice.discountAmount || 0);
 
         // One copy per run at most: the next date is the first boundary after
         // now (anchored on the issue date), so a source that was due for
@@ -148,7 +147,7 @@ export async function processRecurringInvoices(tenantPrisma, invoiceNumberAlloca
             taxRate: invoice.taxRate,
             taxType: invoice.taxType,
             discountAmount: invoice.discountAmount || 0,
-            subtotal: parseFloat(subtotal.toFixed(2)),
+            subtotal,
             tax,
             total,
             clientId: invoice.clientId,

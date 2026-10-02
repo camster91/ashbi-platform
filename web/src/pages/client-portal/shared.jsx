@@ -9,6 +9,7 @@ import { formatInvoiceMoney } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import usePortalLightTheme from '../../hooks/usePortalLightTheme';
 import { statusColor, statusLabel } from '../../lib/status';
+import { invoiceDisplayStatus } from '../../lib/invoice-status';
 import { uploadFileWithProgress } from '../../lib/upload';
 import MessageAttachments from '../../components/media/MessageAttachments';
 import { AttachmentToolbar, AttachmentTray, useCaptureDialog, useDropAndPaste } from '../../components/media/ComposerAttachments';
@@ -118,6 +119,14 @@ export function statusBadge(status) {
   if (s === 'PENDING' || s === 'DRAFT') return <PortalBadge color="warning">DUE</PortalBadge>;
   if (s === 'VOID') return <PortalBadge color="default">VOID</PortalBadge>;
   return <PortalBadge color="default">{s}</PortalBadge>;
+}
+
+/** An invoice's badge: PARTLY PAID while some is paid and a balance is left. */
+export function invoiceStatusBadge(invoice) {
+  if (invoice && invoiceDisplayStatus(invoice) === 'PARTLY_PAID') {
+    return <PortalBadge color="warning">PARTLY PAID</PortalBadge>;
+  }
+  return statusBadge(invoice?.status);
 }
 
 export function StatusBadge({ color, children }) {

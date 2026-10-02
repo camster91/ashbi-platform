@@ -1330,7 +1330,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `subtotal` | Float | required | `0` |  |  |
 | `discountAmount` | Float | required | `0` |  |  |
 | `taxRate` | Float | required | `13` |  | HST 13% default for Ontario |
-| `taxType` | String | required | `"HST"` |  | HST \| GST \| PST \| NONE |
+| `taxType` | String | required | `"HST"` |  | HST \| GST \| PST \| TAX (neutral "Tax" for a rate that is not a named tax) \| NONE |
 | `tax` | Float | required | `0` |  |  |
 | `total` | Float | required | `0` |  |  |
 | `notes` | String | optional |  |  |  |

@@ -2,6 +2,12 @@
 // nothing else stores it. Shared by manual payments, Stripe Checkout (which
 // charges the balance), overdue reminders and the invoice API.
 
+// Invoices the client still owes on: sent (or viewed) and not yet paid, or
+// overdue. One list for every "outstanding" and "unpaid" figure (client
+// page, dashboard). Paying through the public link is governed separately
+// by INVOICE_OPEN_STATUSES in public-document-access.js.
+export const UNPAID_INVOICE_STATUSES = Object.freeze(['SENT', 'VIEWED', 'OVERDUE']);
+
 // Money is stored as Float; amounts within half a cent are equal.
 export const CENT_TOLERANCE = 0.005;
 

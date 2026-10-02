@@ -8,7 +8,8 @@ import FormData from 'form-data';
 import crypto from 'crypto';
 import { resolveTenantOrganizationIds, runTenantJob } from '../jobs/tenant-iteration.js';
 import { sendInvoiceOverdueEmail } from './email.service.js';
-import { formatMoney } from '../utils/money.js';
+import { defaultInvoiceCurrency, formatMoney } from '../utils/money.js';
+import { proposalTaxSummary } from '../utils/proposal-totals.js';
 import { invoiceBalance } from '../utils/invoice-balance.js';
 import { invoicePublicAccessFailure } from '../utils/public-document-access.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
@@ -129,6 +130,41 @@ async function getClientEmail(clientId) {
 
 // ==================== TRIGGER: PROPOSAL APPROVED ====================
 
+/**
+ * The draft contract made from an approved proposal. Its money matches what
+ * the client approved and what the proposal's invoice bills: the pre-tax
+ * subtotal (less any discount), the tax line and the total with tax
+ * (proposalTaxSummary). Proposals carry no currency; they are invoiced in
+ * the workspace default.
+ */
+export function proposalContractContent(proposal) {
+  const currency = defaultInvoiceCurrency();
+  const money = (value) => formatMoney(value, currency);
+  const { taxRate, taxType, tax, totalWithTax } = proposalTaxSummary(proposal);
+  const taxName = taxType === 'HST' || taxType === 'GST' || taxType === 'PST' ? taxType : 'Tax';
+  const discount = Number(proposal.discount) || 0;
+  const rows = [
+    `<p>Subtotal: ${money(proposal.subtotal)}</p>`,
+    ...(discount > 0 ? [`<p>Discount: -${money(discount)}</p>`] : []),
+    ...(tax > 0 ? [`<p>${taxName} (${taxRate}%): ${money(tax)}</p>`] : []),
+    `<p><strong>Total: ${money(totalWithTax)}</strong></p>`,
+  ];
+  return `
+      <h1>${proposal.title}</h1>
+      <h2>Scope of Work</h2>
+      <p>This contract covers the following deliverables as outlined in the approved proposal:</p>
+      <ul>
+        ${(proposal.lineItems || []).map(li =>
+          `<li><strong>${li.description}</strong> — ${li.quantity} x ${money(li.unitPrice)} = ${money(li.total)}</li>`
+        ).join('\n')}
+      </ul>
+      <h2>Total</h2>
+      ${rows.join('\n      ')}
+      <h2>Terms</h2>
+      <p>By signing below, the client agrees to the scope and pricing outlined above.</p>
+    `.trim();
+}
+
 export async function onProposalApproved(proposalId) {
   console.log(`[Automation] Proposal approved: ${proposalId}`);
 
@@ -148,20 +184,7 @@ export async function onProposalApproved(proposalId) {
     }
 
     // Action 1: Auto-create contract from proposal
-    const contractContent = `
-      <h1>${proposal.title}</h1>
-      <h2>Scope of Work</h2>
-      <p>This contract covers the following deliverables as outlined in the approved proposal:</p>
-      <ul>
-        ${proposal.lineItems.map(li =>
-          `<li><strong>${li.description}</strong> — ${li.quantity} x $${li.unitPrice.toFixed(2)} = $${li.total.toFixed(2)}</li>`
-        ).join('\n')}
-      </ul>
-      <h2>Total</h2>
-      <p><strong>$${proposal.total.toFixed(2)}</strong></p>
-      <h2>Terms</h2>
-      <p>By signing below, the client agrees to the scope and pricing outlined above.</p>
-    `.trim();
+    const contractContent = proposalContractContent(proposal);
 
     const contract = await prisma.contract.create({
       data: {

@@ -16,6 +16,8 @@ import { formatInvoiceMoney, formatInvoiceDate } from '../lib/format';
 import LoadingState from '../components/ui/LoadingState';
 import usePortalLightTheme from '../hooks/usePortalLightTheme';
 import StatusBadge from '../components/ui/StatusBadge';
+import PortalLineItems from '../components/PortalLineItems';
+import { invoiceDisplayStatus, taxTypeLabel } from '../lib/invoice-status';
 
 function formatDate(date) {
   return formatInvoiceDate(date, { month: 'long' });
@@ -77,14 +79,14 @@ export default function PortalInvoice() {
   const showPayButton = (invoice.status === 'SENT' || invoice.status === 'OVERDUE') && balanceDue > 0;
   const currency = invoice.currency;
   const taxLabel = invoice.taxType && invoice.taxType !== 'NONE'
-    ? `${invoice.taxType}${invoice.taxRate != null ? ` (${invoice.taxRate}%)` : ''}`
+    ? `${taxTypeLabel(invoice.taxType)}${invoice.taxRate != null ? ` (${invoice.taxRate}%)` : ''}`
     : 'Tax';
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="bg-card border-b border-border/40 shadow-sm">
-        <div className="max-w-3xl mx-auto px-6 py-6">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
           <div className="flex items-center gap-3 mb-1">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-warning" />
@@ -95,7 +97,7 @@ export default function PortalInvoice() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         {/* Paid confirmation */}
         {isPaid && (
           <div role="status" aria-live="polite" className="rounded-xl border border-success/30 bg-success/5 p-6 text-center">
@@ -117,7 +119,7 @@ export default function PortalInvoice() {
                 <h2 className="text-lg font-bold text-foreground">
                   {invoice.invoiceNumber || invoice.number || `INV-${invoice.id}`}
                 </h2>
-                <StatusBadge domain="invoice" status={invoice.status} audience="client" className="px-2.5 font-semibold" />
+                <StatusBadge domain="invoice" status={invoiceDisplayStatus(invoice)} audience="client" className="px-2.5 font-semibold" />
               </div>
               {invoice.clientName && (
                 <p className="text-sm text-muted-foreground mt-1">For: {invoice.clientName}</p>
@@ -151,36 +153,18 @@ export default function PortalInvoice() {
 
         {/* Line Items */}
         <div className="bg-card rounded-xl border border-border/40 overflow-hidden">
-          <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" tabIndex={0} role="region" aria-label="Invoice line items">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/50 text-left">
-                  <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Qty</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Rate</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/25">
-                {invoice.lineItems?.map((item, i) => {
-                  const rate = Number(item.rate || item.unitPrice || 0);
-                  const qty = Number(item.quantity || 1);
-                  const amount = Number(item.amount || item.total || (qty * rate));
-                  return (
-                    <tr key={i} className="hover:bg-muted/50">
-                      <td className="px-6 py-4 text-sm text-foreground">{item.description}</td>
-                      <td className="px-6 py-4 text-sm text-muted-foreground text-right">{qty}</td>
-                      <td className="px-6 py-4 text-sm text-muted-foreground text-right">{formatInvoiceMoney(rate, currency)}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-foreground text-right">{formatInvoiceMoney(amount, currency)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <PortalLineItems
+            label="Invoice line items"
+            formatAmount={(value) => formatInvoiceMoney(value, currency)}
+            items={(invoice.lineItems || []).map((item) => {
+              const rate = Number(item.rate || item.unitPrice || 0);
+              const quantity = Number(item.quantity || 1);
+              return { description: item.description, quantity, rate, amount: Number(item.amount || item.total || (quantity * rate)) };
+            })}
+          />
 
           {/* Totals */}
-          <div className="border-t border-border/40 bg-muted/50 px-6 py-4 space-y-2">
+          <div className="border-t border-border/40 bg-muted/50 px-4 sm:px-6 py-4 space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
               <span className="text-foreground">{formatInvoiceMoney(subtotal, currency)}</span>
@@ -204,7 +188,7 @@ export default function PortalInvoice() {
             {invoice.status !== 'PAID' && amountPaid > 0 && (
               <>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Paid</span>
+                  <span className="text-muted-foreground">Paid so far</span>
                   <span className="text-foreground">-{formatInvoiceMoney(amountPaid, currency)}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm font-semibold">

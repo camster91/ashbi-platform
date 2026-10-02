@@ -104,6 +104,57 @@ test('money and counts come from database aggregates, never from a capped list r
   assert.equal(stats.activeRetainerCount, 150);
 });
 
+test('VIEWED invoices are unpaid: counted as outstanding, and overdue once past due', async () => {
+  const handler = await statsHandler();
+  const stats = await handler({
+    user: { id: 'u1', role: 'ADMIN' },
+    organizationId: 'org-1',
+    prisma: fakePrisma({
+      invoicesByStatus: {
+        DRAFT: [],
+        SENT: [{ total: 100, status: 'SENT', dueDate: new Date(Date.now() + 864e5) }],
+        VIEWED: [
+          { total: 40, status: 'VIEWED', dueDate: new Date(Date.now() + 864e5) },
+          { total: 60, status: 'VIEWED', dueDate: new Date(Date.now() - 864e5), paid: 10 },
+        ],
+        OVERDUE: [],
+      },
+    }),
+  });
+  assert.equal(stats.totalOutstanding, 190);
+  assert.equal(stats.outstandingCount, 3);
+  assert.equal(stats.overdueCount, 1);
+  assert.equal(stats.overdueAmount, 50);
+});
+
+test('MRR counts CAD retainers in CAD, and reports mixed currencies apart', async () => {
+  const handler = await statsHandler();
+  const plans = [
+    { retainerStatus: 'ACTIVE', monthlyAmountUsd: null, monthlyAmountCad: 3000 },
+    { retainerStatus: 'ACTIVE', monthlyAmountUsd: 0, monthlyAmountCad: 1500 },
+    { retainerStatus: 'PAUSED', monthlyAmountUsd: null, monthlyAmountCad: 9999 },
+  ];
+  // Applies the where clauses the dashboard sends (ACTIVE, and "no USD rate").
+  const aggregate = async ({ where }) => {
+    const rows = plans.filter((plan) => plan.retainerStatus === where.retainerStatus)
+      .filter((plan) => !where.OR || !(Number(plan.monthlyAmountUsd) > 0));
+    const sum = (key) => rows.reduce((total, plan) => total + (Number(plan[key]) || 0), 0) || null;
+    return { _sum: { monthlyAmountUsd: sum('monthlyAmountUsd'), monthlyAmountCad: sum('monthlyAmountCad') }, _count: { _all: rows.length } };
+  };
+  const prisma = fakePrisma({ invoicesByStatus: { DRAFT: [], SENT: [], OVERDUE: [] } });
+  prisma.retainerPlan.aggregate = aggregate;
+  let stats = await handler({ user: { id: 'u1', role: 'ADMIN' }, organizationId: 'org-1', prisma });
+  assert.deepEqual([stats.mrr, stats.mrrCurrency], [4500, 'CAD'], 'CAD retainers are not US$0');
+  assert.deepEqual(stats.mrrByCurrency, { CAD: 4500 });
+  assert.equal(stats.activeRetainerCount, 2);
+
+  // A plan with a USD rate counts in USD (the currency it is invoiced in), once.
+  plans.push({ retainerStatus: 'ACTIVE', monthlyAmountUsd: 999, monthlyAmountCad: 1350 });
+  stats = await handler({ user: { id: 'u1', role: 'ADMIN' }, organizationId: 'org-1', prisma });
+  assert.deepEqual([stats.mrr, stats.mrrCurrency], [null, null]);
+  assert.deepEqual(stats.mrrByCurrency, { USD: 999, CAD: 4500 });
+});
+
 test('outstanding and overdue amounts are balances after partial payments', async () => {
   const handler = await statsHandler();
   const stats = await handler({

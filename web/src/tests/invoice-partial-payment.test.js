@@ -26,6 +26,23 @@ describe('recording a (partial) invoice payment', () => {
     expect(paymentAmountError('', 0)).toMatch(/Enter the amount/);
   });
 
+  it('refuses more than two decimal places with a clear message', () => {
+    expect(paymentAmountError('12.345', 63)).toMatch(/at most 2 decimal places/);
+    expect(paymentAmountError('0.001', 63)).toMatch(/at most 2 decimal places/);
+    expect(paymentAmountError('12.34', 63)).toBeNull();
+    expect(paymentAmountError('12.3', 63)).toBeNull();
+  });
+
+  it('opens the payment dialog on the amount field', () => {
+    expect(source).toContain('ref={paymentAmountRef}');
+    expect(source).toContain('paymentAmountRef.current?.focus()');
+  });
+
+  it('shows the recurrence in plain words, not a raw interval badge', () => {
+    expect(source).toContain('recurrenceSummary(invoice)');
+    expect(source).not.toContain('{invoice.recurringInterval}');
+  });
+
   it('labels the amount field, disables submit on an invalid amount and shows what is still owed', () => {
     expect(source).toContain('htmlFor="invoice-payment-amount"');
     expect(source).toContain('id="invoice-payment-amount"');

@@ -68,7 +68,7 @@ test('the public view returns an explicit safe shape', async (t) => {
   assert.equal(response.statusCode, 200, response.body);
   const body = response.json();
   assert.deepEqual(Object.keys(body).sort(), [
-    'clientName', 'createdAt', 'description', 'lineItems', 'sentAt', 'status', 'subtotal', 'tax', 'title', 'total', 'validUntil',
+    'clientName', 'createdAt', 'description', 'lineItems', 'sentAt', 'status', 'subtotal', 'tax', 'taxRate', 'title', 'total', 'validUntil',
   ]);
   assert.equal(body.clientName, 'Avery Client');
   assert.deepEqual(Object.keys(body.lineItems[0]).sort(), ['amount', 'description', 'quantity', 'rate']);
@@ -160,6 +160,8 @@ test('staff can reissue a link for a SENT estimate, audited; not for other state
   assert.equal(response.statusCode, 200, response.body);
   assert.match(response.json().viewToken, /^[A-Za-z0-9_-]{43}$/);
   assert.notEqual(response.json().viewToken, 'strong-token');
+  assert.ok(response.json().clientLink.endsWith(`/portal/estimate/${response.json().viewToken}`), 'the hub link staff copy');
+  assert.equal('status' in response.json(), false);
   assert.ok(new Date(response.json().publicAccessExpiresAt) > new Date());
   assert.equal(row.publicAccessRevokedAt, null);
   assert.equal(audits.at(-1).action, 'estimate.link_reissued');

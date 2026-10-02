@@ -26,6 +26,7 @@ import { useSocket } from '../hooks/useSocket';
 import { Card, Skeleton } from '../components/ui';
 import { formatRelativeTime, cn } from '../lib/utils';
 import { formatDate, formatMoney } from '../lib/format';
+import { mrrLabel } from '../lib/retainer-money';
 import TimeTrackerWidget from '../components/widgets/TimeTrackerWidget';
 import UpcomingEventsWidget from '../components/widgets/UpcomingEventsWidget';
 import OutreachFunnelWidget from '../components/widgets/OutreachFunnelWidget';
@@ -159,7 +160,7 @@ export default function Dashboard() {
             iconColor="text-success"
             iconBg="bg-success/10"
             label="MRR"
-            value={formatMoney(stats?.mrr || 0, 'USD', { compact: true })}
+            value={mrrLabel(stats)}
             subtitle={
               <span className="text-xs text-muted-foreground">
                 {stats?.activeRetainerCount > 0
@@ -736,7 +737,7 @@ function ClientHealthCard({ client, navigate }) {
             retainerBadge[client.retainerStatus] || 'bg-muted text-muted-foreground'
           )}>
             {client.retainerStatus.replace('_', ' ')}
-            {client.monthlyAmount > 0 && ` · ${formatMoney(client.monthlyAmount, 'USD')}/mo`}
+            {client.monthlyAmount > 0 && ` · ${formatMoney(client.monthlyAmount, client.monthlyCurrency || 'USD')}/mo`}
           </span>
         )}
 

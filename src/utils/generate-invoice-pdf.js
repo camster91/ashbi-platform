@@ -174,7 +174,9 @@ export async function generateInvoicePdf(invoice, { compress = true } = {}) {
     if (invoice.discountAmount > 0) {
       totalRows.push([`Discount`, `-${fmt(invoice.discountAmount)}`, false]);
     }
-    totalRows.push([`${invoice.taxType || 'HST'} (${invoice.taxRate ?? 13}%)`, fmt(invoice.tax), false]);
+    // TAX is the neutral label for a rate that is not a named tax.
+    const taxName = invoice.taxType === 'TAX' ? 'Tax' : (invoice.taxType || 'HST');
+    totalRows.push([`${taxName} (${invoice.taxRate ?? 13}%)`, fmt(invoice.tax), false]);
 
     // Paid amount
     // Shared balance arithmetic (rounded to cents), so float sums of partial
