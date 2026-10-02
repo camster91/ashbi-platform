@@ -109,10 +109,11 @@ test('agency sells, contracts, invoices and collects payment end to end', async 
   const invoice = await test.step('admin invoices the accepted work', async () => {
     await page.goto(`/proposal/${proposal.id}`);
     await page.getByRole('button', { name: 'Create Invoice' }).click();
-    await expect(page).toHaveURL(/\/invoices$/);
     const { invoices } = await json(await admin.get(`/api/invoices?clientId=${client.id}`));
     expect(invoices).toHaveLength(1);
     const created = invoices[0];
+    // Creating the invoice opens it.
+    await expect(page).toHaveURL(new RegExp(`/invoices/${created.id}$`));
     expect(created.proposalId).toBe(proposal.id);
     expect(created.status).toBe('DRAFT');
     expect(created.subtotal).toBe(PROPOSAL_TOTAL);
