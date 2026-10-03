@@ -71,6 +71,7 @@ jobs:
         env:
           RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
           RELEASE_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          GITHUB_TOKEN: ${{ github.token }}
           COOLIFY_RELEASE_ENABLED: ${{ vars.COOLIFY_RELEASE_ENABLED }}
           COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
