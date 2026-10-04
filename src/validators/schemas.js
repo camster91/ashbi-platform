@@ -1881,6 +1881,8 @@ export const emailTriageDraftUpdateSchema = z.object({
 export const gmailDraftReplySchema = z.object({
   // The hub thread to draft a reply for; the route generates the body itself.
   hubThreadId: cuidId,
+  // An approved saved draft on that thread: its text is used instead of AI.
+  responseId: cuidId.optional(),
 });
 
 export const inboxUnmatchedAssignSchema = z.object({

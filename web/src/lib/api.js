@@ -325,6 +325,8 @@ export const api = {
     request(`/responses/${id}/approve`, { method: 'POST' }),
   rejectResponse: (id, reason) =>
     request(`/responses/${id}/reject`, { method: 'POST', body: { reason } }),
+  markResponseSent: (id) =>
+    request(`/responses/${id}/sent`, { method: 'POST' }),
 
   // Clients
   getClients: (params = {}) => {
@@ -1075,8 +1077,9 @@ export const api = {
     request('/gmail/status'),
   gmailSend: (data) =>
     request('/gmail/send', { method: 'POST', body: data }),
-  gmailDraftReply: (hubThreadId) =>
-    request('/gmail/draft-reply', { method: 'POST', body: { hubThreadId } }),
+  // With responseId, the reply uses that approved saved draft instead of AI.
+  gmailDraftReply: (hubThreadId, responseId) =>
+    request('/gmail/draft-reply', { method: 'POST', body: responseId ? { hubThreadId, responseId } : { hubThreadId } }),
   gmailSyncNow: () =>
     request('/gmail/sync-now', { method: 'POST' }),
 

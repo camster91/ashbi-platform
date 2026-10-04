@@ -308,7 +308,7 @@ export default async function gmailRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(gmailDraftReplySchema),
   }, async (request, reply) => {
-    const { hubThreadId } = request.body;
+    const { hubThreadId, responseId } = request.body;
 
     if (!hubThreadId) {
       return reply.status(400).send({ error: 'Missing hubThreadId' });
@@ -330,6 +330,20 @@ export default async function gmailRoutes(fastify) {
     }
 
     const latestMessage = thread.messages[0];
+
+    // An approved draft is sent as approved: no AI rewrite.
+    let approved = null;
+    if (responseId) {
+      approved = await request.prisma.response.findFirst({
+        where: { id: responseId, threadId: thread.id },
+        select: { id: true, status: true, subject: true, body: true },
+      });
+      if (!approved) return reply.status(404).send({ error: 'Saved draft not found' });
+      if (approved.status !== 'APPROVED') {
+        return reply.status(409).send({ error: 'This draft is not approved yet', code: 'RESPONSE_NOT_APPROVED' });
+      }
+    }
+
     const signature = replySignature(request.user, await organizationNameFor(request));
     const conversation = thread.messages.reverse().map(m =>
       `${m.direction === 'INBOUND' ? 'From client' : 'From us'}: ${m.bodyText?.substring(0, 500)}`
@@ -351,22 +365,24 @@ ${conversation}
 
 Write a helpful, professional reply that addresses the client's needs. Be concise.`;
 
-    let draftBody = '';
+    let draftBody = approved?.body || '';
     let notice = null;
-    try {
-      draftBody = await aiClient.chat({ system, prompt, temperature: 0.7 });
-    } catch (err) {
-      // Canned fallback is intentional; record why without any content, and
-      // tell the person the draft is a template rather than an AI reply.
-      fastify.log.warn({ errorCode: err?.code ?? err?.name ?? 'unknown' }, 'AI draft unavailable; using the template reply');
-      draftBody = `Hi,\n\nThank you for your email regarding "${thread.subject}". I'll get back to you shortly.\n\nBest,${signature ? `\n${signature}` : ''}`;
-      // AI control errors carry fixed, caller-safe messages; anything else
-      // gets a fixed one.
-      const reason = isAiControlError(err) ? aiErrorBody(err) : { error: 'AI could not write this reply.', code: 'AI_DRAFT_FAILED' };
-      notice = {
-        code: reason.code,
-        message: `${reason.error} A short template reply was added instead; edit it before sending.`,
-      };
+    if (!approved) {
+      try {
+        draftBody = await aiClient.chat({ system, prompt, temperature: 0.7 });
+      } catch (err) {
+        // Canned fallback is intentional; record why without any content, and
+        // tell the person the draft is a template rather than an AI reply.
+        fastify.log.warn({ errorCode: err?.code ?? err?.name ?? 'unknown' }, 'AI draft unavailable; using the template reply');
+        draftBody = `Hi,\n\nThank you for your email regarding "${thread.subject}". I'll get back to you shortly.\n\nBest,${signature ? `\n${signature}` : ''}`;
+        // AI control errors carry fixed, caller-safe messages; anything else
+        // gets a fixed one.
+        const reason = isAiControlError(err) ? aiErrorBody(err) : { error: 'AI could not write this reply.', code: 'AI_DRAFT_FAILED' };
+        notice = {
+          code: reason.code,
+          message: `${reason.error} A short template reply was added instead; edit it before sending.`,
+        };
+      }
     }
 
     // Extract Gmail thread ID from messages
@@ -381,7 +397,8 @@ Write a helpful, professional reply that addresses the client's needs. Be concis
 
     return {
       draft: draftBody,
-      subject: `Re: ${thread.subject}`,
+      subject: approved?.subject || `Re: ${thread.subject}`,
+      responseId: approved?.id ?? null,
       to: latestMessage?.senderEmail,
       gmailThreadId,
       lastMessageId,

@@ -20,6 +20,7 @@ import {
   Mail,
   Copy,
   Save,
+  Pencil,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import LoadingState from '../components/ui/LoadingState';
@@ -35,10 +36,12 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import Modal, { ModalFooter } from '../components/Modal';
+import ResponseReviewActions from '../components/ResponseReviewActions';
 
-// What saving a response does today: it is stored on the conversation for
-// the team and is not sent or routed to anyone (sending is Reply via Gmail).
-export const DRAFT_HINT = 'Saved drafts stay on this conversation. Nothing is sent to the client; use Reply via Gmail to send.';
+// What saving a response does: it is stored on the conversation for the team.
+// Nothing is sent; a saved draft can be sent for approval, and an approved one
+// is sent with Reply via Gmail.
+export const DRAFT_HINT = 'Saved drafts stay on this conversation. Nothing is sent to the client until someone sends it with Reply via Gmail.';
 
 const RESPONSE_STATUS_LABELS = {
   DRAFT: 'Draft',
@@ -84,10 +87,75 @@ export function gmailConnectionLine({ checking, failed, status }) {
   return 'Sends through the connected Gmail mailbox.';
 }
 
+const draftActionClass = 'min-h-11 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
+/** What can happen next to a saved draft, by its status. */
+function SavedDraftActions({ response, threadSubject, isAdmin, resolved, editing, onEdit, onSubmit, submitting, onSend, preparingSend }) {
+  const { status } = response;
+  const editable = status === 'DRAFT' || status === 'REJECTED';
+  return (
+    <div className="mt-3 space-y-2">
+      {status === 'REJECTED' && response.rejectionReason && (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-foreground">
+          <span className="font-medium">Returned:</span> {response.rejectionReason}
+        </p>
+      )}
+      {status === 'PENDING_APPROVAL' && !isAdmin && (
+        <p className="text-xs text-muted-foreground">An admin will approve it or return it with a reason.</p>
+      )}
+      {status === 'APPROVED' && (
+        <p className="text-xs text-muted-foreground">
+          Approved{response.approvedBy?.name ? ` by ${response.approvedBy.name}` : ''}. Not sent yet.
+        </p>
+      )}
+      {status === 'SENT' && response.sentAt && (
+        <p className="text-xs text-muted-foreground">Sent {new Date(response.sentAt).toLocaleString()}</p>
+      )}
+      {editable && !resolved && (
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={editing}
+            className={cn(draftActionClass, 'border border-border hover:bg-muted')}
+          >
+            <Pencil className="w-4 h-4" aria-hidden="true" />
+            {editing ? 'Editing above' : 'Edit'}
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={submitting || editing}
+            className={cn(draftActionClass, 'bg-primary text-primary-foreground hover:opacity-90')}
+          >
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Shield className="w-4 h-4" aria-hidden="true" />}
+            {status === 'REJECTED' ? 'Ask for approval again' : 'Ask for approval'}
+          </button>
+        </div>
+      )}
+      {status === 'PENDING_APPROVAL' && isAdmin && (
+        <ResponseReviewActions response={response} threadSubject={threadSubject} />
+      )}
+      {status === 'APPROVED' && !resolved && (
+        <button
+          type="button"
+          onClick={onSend}
+          disabled={preparingSend}
+          className={cn(draftActionClass, 'w-full bg-primary text-primary-foreground hover:opacity-90 sm:w-auto')}
+        >
+          {preparingSend ? <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Mail className="w-4 h-4" aria-hidden="true" />}
+          Send via Gmail
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function Thread() {
   const { id } = useParams();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
   const toast = useToast();
   const [responseText, setResponseText] = useState('');
   const [noteText, setNoteText] = useState('');
@@ -99,6 +167,10 @@ export default function Thread() {
   const [gmailDraftMeta, setGmailDraftMeta] = useState(null); // { gmailThreadId, lastMessageId }
   const [gmailDraftNotice, setGmailDraftNotice] = useState('');
   const [gmailCopied, setGmailCopied] = useState(false);
+  // The approved saved draft the Gmail reply is sending, if any.
+  const [gmailResponseId, setGmailResponseId] = useState(null);
+  // The saved draft being edited in the composer, if any.
+  const [editingResponseId, setEditingResponseId] = useState(null);
 
   const {
     data: thread,
@@ -133,15 +205,41 @@ export default function Thread() {
     },
   });
 
-  // Saves the text as a draft on this conversation. Nothing is sent.
+  // Saves the text as a draft on this conversation (or updates the draft being
+  // edited). Nothing is sent.
   const saveDraftMutation = useMutation({
-    mutationFn: (body) => api.createResponse(id, { subject: `Re: ${thread.subject}`, body, tone: 'professional' }),
+    mutationFn: (body) => (editingResponseId
+      ? api.updateResponse(editingResponseId, { body })
+      : api.createResponse(id, { subject: `Re: ${thread.subject}`, body, tone: 'professional' })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['thread', id] });
       setResponseText('');
+      setEditingResponseId(null);
       toast.success('Draft saved', 'It is listed under Saved drafts. Nothing was sent to the client.');
     },
   });
+
+  const submitForApprovalMutation = useMutation({
+    mutationFn: (responseId) => api.submitResponse(responseId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['thread', id] });
+      queryClient.invalidateQueries({ queryKey: ['responses', 'pending'] });
+      toast.success('Sent for approval', 'An admin can approve it or return it with a reason. Nothing was sent to the client.');
+    },
+    onError: (error) => toast.error('Could not send for approval', error?.message),
+  });
+
+  const editDraft = (response) => {
+    setEditingResponseId(response.id);
+    setResponseText(response.body || '');
+    saveDraftMutation.reset();
+  };
+
+  const cancelEdit = () => {
+    setEditingResponseId(null);
+    setResponseText('');
+    saveDraftMutation.reset();
+  };
 
   const noteMutation = useMutation({
     mutationFn: (content) => api.addNote(id, content),
@@ -163,9 +261,11 @@ export default function Thread() {
     onError: () => toast.error('Failed to resolve thread'),
   });
 
+  // With an approved saved draft's id, the reply carries that text unchanged.
   const gmailDraftMutation = useMutation({
-    mutationFn: () => api.gmailDraftReply(id),
+    mutationFn: (responseId) => api.gmailDraftReply(id, responseId),
     onSuccess: (data) => {
+      setGmailResponseId(data.responseId || null);
       gmailSendMutation.reset();
       setGmailReplyText(data.draft || '');
       setGmailReplySubject(data.subject || `Re: ${thread?.subject}`);
@@ -185,14 +285,23 @@ export default function Thread() {
       meta: gmailDraftMeta,
       hubThreadId: id,
     })),
-    onSuccess: () => {
+    onSuccess: async () => {
+      const sentResponseId = gmailResponseId;
       setShowGmailReply(false);
       setGmailReplyText('');
       setGmailReplyTo('');
       setGmailReplySubject('');
       setGmailDraftMeta(null);
-      queryClient.invalidateQueries({ queryKey: ['thread', id] });
+      setGmailResponseId(null);
       toast.success('Reply sent via Gmail');
+      if (sentResponseId) {
+        try {
+          await api.markResponseSent(sentResponseId);
+        } catch (error) {
+          toast.error('The email was sent, but the saved draft still shows Approved', error?.message);
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ['thread', id] });
     },
   });
 
@@ -357,11 +466,18 @@ export default function Thread() {
               </div>
               <div>
                 <label htmlFor="gmail-reply-message" className="block text-sm font-medium mb-1.5">Message</label>
+                {gmailResponseId && (
+                  <p id="gmail-reply-approved" className="mb-1.5 text-xs text-muted-foreground">
+                    This is the approved text, so it can&apos;t be changed here. To change it, edit the saved draft and ask for approval again.
+                  </p>
+                )}
                 <textarea
                   id="gmail-reply-message"
                   value={gmailReplyText}
                   onChange={(e) => setGmailReplyText(e.target.value)}
                   rows={10}
+                  readOnly={Boolean(gmailResponseId)}
+                  aria-describedby={gmailResponseId ? 'gmail-reply-approved' : undefined}
                   disabled={gmailSendMutation.isPending}
                   className="w-full px-3 py-2 border border-border bg-background rounded-lg text-base resize-y focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono leading-relaxed"
                   required
@@ -555,7 +671,7 @@ export default function Thread() {
           {thread.status !== 'RESOLVED' && (
             <div className="bg-card rounded-xl border border-border overflow-hidden">
               <div className="px-5 py-3 border-b border-border flex justify-between items-center">
-                <h2 className="font-heading font-semibold">Compose Response</h2>
+                <h2 className="font-heading font-semibold">{editingResponseId ? 'Edit saved draft' : 'Compose Response'}</h2>
                 <button
                   type="button"
                   onClick={() => draftMutation.mutate()}
@@ -590,15 +706,27 @@ export default function Thread() {
                     <Shield className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
                     {DRAFT_HINT}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => saveDraftMutation.mutate(responseText)}
-                    disabled={!responseText.trim() || saveDraftMutation.isPending}
-                    className="min-h-11 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center gap-2 text-sm font-medium transition-all hover-lift"
-                  >
-                    <Save className="w-4 h-4" aria-hidden="true" />
-                    {saveDraftMutation.isPending ? 'Saving…' : 'Save draft'}
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    {editingResponseId && (
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        disabled={saveDraftMutation.isPending}
+                        className="min-h-11 px-4 py-2 border border-border rounded-lg hover:bg-muted disabled:opacity-50 text-sm font-medium"
+                      >
+                        Cancel edit
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => saveDraftMutation.mutate(responseText)}
+                      disabled={!responseText.trim() || saveDraftMutation.isPending}
+                      className="min-h-11 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center gap-2 text-sm font-medium transition-all hover-lift"
+                    >
+                      <Save className="w-4 h-4" aria-hidden="true" />
+                      {saveDraftMutation.isPending ? 'Saving…' : editingResponseId ? 'Save changes' : 'Save draft'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -685,7 +813,19 @@ export default function Thread() {
                       </span>
                       <span className="text-xs text-muted-foreground">{response.draftedBy?.name}</span>
                     </div>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{response.body}</p>
+                    <p className="max-h-48 overflow-y-auto whitespace-pre-wrap text-sm text-muted-foreground">{response.body}</p>
+                    <SavedDraftActions
+                      response={response}
+                      threadSubject={thread.subject}
+                      isAdmin={isAdmin}
+                      resolved={thread.status === 'RESOLVED'}
+                      editing={editingResponseId === response.id}
+                      onEdit={() => editDraft(response)}
+                      onSubmit={() => submitForApprovalMutation.mutate(response.id)}
+                      submitting={submitForApprovalMutation.isPending && submitForApprovalMutation.variables === response.id}
+                      onSend={() => gmailDraftMutation.mutate(response.id)}
+                      preparingSend={gmailDraftMutation.isPending && gmailDraftMutation.variables === response.id}
+                    />
                   </li>
                 ))}
               </ul>
