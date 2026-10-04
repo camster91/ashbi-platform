@@ -351,7 +351,7 @@ function InvoicesTab({ invoices, token }) {
             const isPaid = inv.status?.toUpperCase() === 'PAID';
             // Pay opens the public invoice page, which starts a fresh Stripe
             // Checkout session; void and draft invoices are never payable.
-            const canPay = !isPaid && ['SENT', 'OVERDUE'].includes(inv.status?.toUpperCase()) && Boolean(inv.payUrl);
+            const canPay = !isPaid && UNPAID_INVOICE_STATUSES.includes(inv.status?.toUpperCase()) && Boolean(inv.payUrl);
             return (
               <Card key={inv.id} padding="none" className="p-5">
                 <div className="flex flex-col gap-3">

@@ -2,7 +2,7 @@
 // Stripe Checkout. Callers run it inside a transaction:
 //
 //   1. claimPayableInvoice: an UPDATE that only matches while the invoice is
-//      payable (SENT or OVERDUE). Its row lock is held until commit, so
+//      payable (SENT, VIEWED or OVERDUE). Its row lock is held until commit, so
 //      concurrent payments run one after the other and each reads the
 //      balance only after the previous one committed.
 //   2. applyInvoicePayment: reads the balance (total minus the payment
@@ -15,11 +15,12 @@
 // from the old balance can then no longer be stored (ensureCheckoutSession
 // compare-and-sets on the attempt) and the next pay link uses a fresh key.
 import { recordInvoicePaid } from './domain-event-producers.js';
-import { CENT_TOLERANCE, invoiceAmountPaid, invoiceBalance, roundMoney } from '../utils/invoice-balance.js';
+import { CENT_TOLERANCE, invoiceAmountPaid, invoiceBalance, roundMoney, UNPAID_INVOICE_STATUSES } from '../utils/invoice-balance.js';
 
-// Only an issued, open invoice takes payments: a DRAFT has not been sent, a
-// PAID one is settled and a VOID one was cancelled.
-export const PAYABLE_INVOICE_STATUSES = Object.freeze(['SENT', 'OVERDUE']);
+// Only an issued, open invoice (SENT, VIEWED or OVERDUE) takes payments: a
+// DRAFT has not been sent, a PAID one is settled and a VOID one was
+// cancelled. VIEWED is treated as SENT.
+export const PAYABLE_INVOICE_STATUSES = UNPAID_INVOICE_STATUSES;
 
 export class InvoiceOverpaymentError extends Error {
   /** @param {number} balanceDue */

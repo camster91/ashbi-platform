@@ -90,6 +90,13 @@ describe('Invoices list', () => {
     expect(screen.getAllByRole('textbox', { name: 'Line item 1 description' })).toHaveLength(1);
   });
 
+  it('shows a VIEWED invoice as Viewed and still offers Mark Paid', async () => {
+    api.getInvoices.mockResolvedValue({ invoices: [{ ...INVOICES[1], id: 'v1', invoiceNumber: 'INV-9', status: 'VIEWED', isRecurring: false }], total: 1, stats: {} });
+    renderPage();
+    expect((await screen.findAllByText('Viewed')).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /Mark Paid/ }).length).toBeGreaterThan(0);
+  });
+
   it('tells staff when a sent invoice was not emailed', async () => {
     api.getInvoices.mockResolvedValue({ invoices: [{ ...INVOICES[1], id: 'd1', invoiceNumber: 'INV-3', status: 'DRAFT', isRecurring: false }], total: 1, stats: {} });
     api.sendInvoice.mockResolvedValue({ id: 'd1', status: 'SENT', emailSent: false });

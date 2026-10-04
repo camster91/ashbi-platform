@@ -3,10 +3,17 @@
 // charges the balance), overdue reminders and the invoice API.
 
 // Invoices the client still owes on: sent (or viewed) and not yet paid, or
-// overdue. One list for every "outstanding" and "unpaid" figure (client
-// page, dashboard). Paying through the public link is governed separately
-// by INVOICE_OPEN_STATUSES in public-document-access.js.
+// overdue. VIEWED behaves exactly like SENT everywhere. This is the one list
+// of open invoice statuses: every "outstanding" and "unpaid" figure (client
+// page, dashboard, invoice stats), payability (manual and Stripe, see
+// PAYABLE_INVOICE_STATUSES / SETTLEABLE_INVOICE_STATUSES), the public link
+// (INVOICE_OPEN_STATUSES), the chaser and the overdue job all reuse it.
 export const UNPAID_INVOICE_STATUSES = Object.freeze(['SENT', 'VIEWED', 'OVERDUE']);
+
+// Issued and unpaid but not (yet) stored as OVERDUE: the overdue job moves
+// these to OVERDUE once past due, and until it runs they count as overdue
+// whenever their due date has passed.
+export const SENT_INVOICE_STATUSES = Object.freeze(['SENT', 'VIEWED']);
 
 // Money is stored as Float; amounts within half a cent are equal.
 export const CENT_TOLERANCE = 0.005;

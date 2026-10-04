@@ -17,7 +17,7 @@ import LoadingState from '../components/ui/LoadingState';
 import usePortalLightTheme from '../hooks/usePortalLightTheme';
 import StatusBadge from '../components/ui/StatusBadge';
 import PortalLineItems from '../components/PortalLineItems';
-import { invoiceDisplayStatus, taxTypeLabel } from '../lib/invoice-status';
+import { invoiceDisplayStatus, isOpenInvoice, taxTypeLabel } from '../lib/invoice-status';
 
 function formatDate(date) {
   return formatInvoiceDate(date, { month: 'long' });
@@ -76,7 +76,8 @@ export default function PortalInvoice() {
   const isPaid = invoice.status === 'PAID';
   const { subtotal, discount, tax, total, amountPaid, balanceDue } = invoiceAmounts(invoice);
   // Nothing to collect on a zero (or negative) balance.
-  const showPayButton = (invoice.status === 'SENT' || invoice.status === 'OVERDUE') && balanceDue > 0;
+  // SENT, VIEWED (this page was opened before) or OVERDUE.
+  const showPayButton = isOpenInvoice(invoice) && balanceDue > 0;
   const currency = invoice.currency;
   const taxLabel = invoice.taxType && invoice.taxType !== 'NONE'
     ? `${taxTypeLabel(invoice.taxType)}${invoice.taxRate != null ? ` (${invoice.taxRate}%)` : ''}`

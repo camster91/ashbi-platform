@@ -56,6 +56,7 @@ export async function generateInvoicePdf(invoice, { compress = true } = {}) {
     const statusColors = {
       PAID: GREEN,
       SENT: BRAND_BLUE,
+      VIEWED: BRAND_BLUE,
       DRAFT: MUTED,
       OVERDUE: RED,
       VOID: MUTED,

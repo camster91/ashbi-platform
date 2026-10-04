@@ -6,12 +6,13 @@ import { recordAuditEvent } from './audit-event.service.js';
 import { sendOperationalAlert } from '../observability/alerts.js';
 import defaultLogger from '../utils/logger.js';
 import { withInvoiceBalance } from '../utils/invoice-balance.js';
-import { applyInvoicePayment, claimPayableInvoice, InvoiceOverpaymentError } from './invoice-settlement.js';
+import { applyInvoicePayment, claimPayableInvoice, InvoiceOverpaymentError, PAYABLE_INVOICE_STATUSES } from './invoice-settlement.js';
 
 let stripe = null;
 
-// Only open invoices may be settled by a Checkout completion.
-export const SETTLEABLE_INVOICE_STATUSES = Object.freeze(['SENT', 'OVERDUE']);
+// Only open invoices (SENT, VIEWED or OVERDUE) may be settled by a Checkout
+// completion: the same set that takes manual payments.
+export const SETTLEABLE_INVOICE_STATUSES = PAYABLE_INVOICE_STATUSES;
 
 function getStripe() {
   if (!stripe && env.stripeSecretKey) {

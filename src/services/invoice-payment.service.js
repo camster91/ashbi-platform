@@ -2,7 +2,7 @@
 //
 // The balance is the invoice total minus the sum of its InvoicePayment rows;
 // nothing else stores it. A payment that leaves a balance keeps the invoice
-// open (SENT/OVERDUE) and only a payment that covers the total moves it to
+// open (SENT/VIEWED/OVERDUE) and only a payment that covers the total moves it to
 // PAID and writes the invoice.paid outbox event. A payment larger than the
 // balance, or of zero or less, is refused. A DRAFT is not payable: it has to
 // be sent first.
@@ -34,7 +34,7 @@ export const UNPAYABLE_STATUSES = Object.freeze(['PAID', 'VOID']);
  *   correlationId?: string | null,
  * }} input
  * @returns {Promise<{ invoice: any, paidInvoice: any, payment: any, fullyPaid: boolean, amount: number, clearedCheckoutSessionId: string | null } | null>}
- *   null when the invoice was not payable (not SENT/OVERDUE) at write time
+ *   null when the invoice was not payable (not SENT/VIEWED/OVERDUE) at write time
  *   (nothing was written). Throws InvoiceOverpaymentError or
  *   InvalidPaymentAmountError (nothing written).
  */

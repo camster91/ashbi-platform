@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   invoiceBalanceDue,
   invoiceDisplayStatus,
+  isOpenInvoice,
   isPartlyPaid,
   recurrenceSummary,
   taxTypeLabel,
@@ -10,7 +11,7 @@ import {
 } from '../lib/invoice-status';
 import { getStatus } from '../lib/status';
 import { StatusBadge } from '../components/ui';
-import { invoiceStatusBadge } from '../pages/client-portal/shared';
+import { invoiceStatusBadge, statusBadge } from '../pages/client-portal/shared';
 import { InvoiceAmount } from '../pages/ClientPortal';
 
 const partlyPaid = { status: 'SENT', total: 1130, amountPaid: 300, balanceDue: 830, currency: 'CAD' };
@@ -64,6 +65,18 @@ describe('client portal invoice amounts', () => {
     expect(screen.getByText('Balance due')).toBeInTheDocument();
     expect(screen.getByText('Paid so far $300.00 CAD of $1,130.00 CAD')).toBeInTheDocument();
     expect(screen.queryByText('$1,130.00 CAD')).not.toBeInTheDocument();
+  });
+
+  it('treats a VIEWED invoice as open: labelled Viewed for staff, awaiting payment for the client', () => {
+    expect(isOpenInvoice({ status: 'VIEWED' })).toBe(true);
+    expect(isOpenInvoice({ status: 'SENT' })).toBe(true);
+    expect(isOpenInvoice({ status: 'PAID' })).toBe(false);
+    expect(isOpenInvoice({ status: 'DRAFT' })).toBe(false);
+    expect(invoiceDisplayStatus({ status: 'VIEWED', isOverdue: true })).toBe('OVERDUE');
+    expect(invoiceDisplayStatus({ status: 'VIEWED', total: 100, amountPaid: 40, balanceDue: 60 })).toBe('PARTLY_PAID');
+    render(<div><StatusBadge domain="invoice" status="VIEWED" />{statusBadge('VIEWED')}</div>);
+    expect(screen.getByText('Viewed')).toBeInTheDocument();
+    expect(screen.getByText('AWAITING PAYMENT')).toBeInTheDocument();
   });
 
   it('treats a VIEWED invoice as unpaid', () => {

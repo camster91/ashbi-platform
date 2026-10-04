@@ -148,7 +148,7 @@ test('recurring invoices: first date is in the future and only issued invoices a
   // A back-dated issue date does not create a backlog.
   assert.equal(firstRecurringDate(new Date('2026-01-31T00:00:00.000Z'), 'MONTHLY', now).toISOString(), '2026-10-31T00:00:00.000Z');
   assert.equal(firstRecurringDate(new Date('2025-02-15T00:00:00.000Z'), 'ANNUALLY', now).toISOString(), '2027-02-15T00:00:00.000Z');
-  assert.deepEqual([...RECURRING_SOURCE_STATUSES], ['SENT', 'OVERDUE', 'PAID']);
+  assert.deepEqual([...RECURRING_SOURCE_STATUSES], ['SENT', 'VIEWED', 'OVERDUE', 'PAID']);
 
   const base = { clientId: 'cmclient0000000000000000', lineItems: [{ description: 'x', quantity: 1, unitPrice: 1 }] };
   assert.equal(createInvoiceSchema.safeParse({ ...base, isRecurring: true }).success, false);
@@ -162,7 +162,7 @@ test('the recurring job only selects and claims issued source invoices', async (
     invoice: { findMany: async ({ where }) => { wheres.push(where); return []; } },
   };
   await processRecurringInvoices(client, async () => ({}), { now: new Date('2026-10-01T00:00:00.000Z') });
-  assert.deepEqual(wheres[0].status, { in: ['SENT', 'OVERDUE', 'PAID'] });
+  assert.deepEqual(wheres[0].status, { in: ['SENT', 'VIEWED', 'OVERDUE', 'PAID'] });
   assert.equal(wheres[0].isRecurring, true);
 });
 

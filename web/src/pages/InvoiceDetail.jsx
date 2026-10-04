@@ -18,7 +18,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
 import { buildInvoiceUpdatePayload, INVOICE_CURRENCY_OPTIONS } from '../lib/invoice-payloads';
 import { formatInvoiceMoney, formatInvoiceDate, toDateInputValue } from '../lib/format';
-import { invoiceDisplayStatus, recurrenceSummary, taxTypeLabel } from '../lib/invoice-status';
+import { invoiceDisplayStatus, isOpenInvoice, recurrenceSummary, taxTypeLabel } from '../lib/invoice-status';
 
 const HST_RATE = 13;
 const INITIAL_PAYMENT_FORM = { paymentMethod: 'BANK', paymentNotes: '', transactionId: '', amount: '' };
@@ -292,7 +292,8 @@ export default function InvoiceDetail() {
   const displayStatus = invoiceDisplayStatus(invoice);
   const repeats = recurrenceSummary(invoice);
   const isDraft = invoice.status === 'DRAFT';
-  const isSent = invoice.status === 'SENT' || invoice.isOverdue;
+  // Sent, viewed by the client, or overdue: payable and resendable.
+  const isSent = isOpenInvoice(invoice) || invoice.isOverdue;
   const isPaid = invoice.status === 'PAID';
   // An invoice with recorded payments cannot be voided (the API answers 409).
   const hasPayments = invoice.amountPaid > 0;

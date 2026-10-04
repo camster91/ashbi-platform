@@ -4,6 +4,7 @@
 // workflow. See docs/operator-queue.md for the source-to-view mapping.
 
 import logger from '../utils/logger.js';
+import { UNPAID_INVOICE_STATUSES } from '../utils/invoice-balance.js';
 import { REVIEW_STAFF_ROLES } from './media-review.service.js';
 
 export const WORK_QUEUE_VIEWS = Object.freeze(['needs_action', 'awaiting_approval', 'waiting_on_client', 'at_risk']);
@@ -425,7 +426,7 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
       const invoices = await prisma.invoice.findMany({
         where: {
           deletedAt: null,
-          status: { in: ['SENT', 'OVERDUE'] },
+          status: { in: [...UNPAID_INVOICE_STATUSES] },
           ...(filters.clientId ? { clientId: filters.clientId } : {}),
           ...(filters.projectId ? { projectId: filters.projectId } : {}),
           ...(filters.owner === 'me' ? { createdById: user.id } : {}),
