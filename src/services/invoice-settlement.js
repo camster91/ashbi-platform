@@ -19,7 +19,7 @@ import { CENT_TOLERANCE, invoiceAmountPaid, invoiceBalance, roundMoney, UNPAID_I
 
 // Only an issued, open invoice (SENT, VIEWED or OVERDUE) takes payments: a
 // DRAFT has not been sent, a PAID one is settled and a VOID one was
-// cancelled. A client opening their invoice link must not make it unpayable.
+// cancelled. VIEWED is treated as SENT.
 export const PAYABLE_INVOICE_STATUSES = UNPAID_INVOICE_STATUSES;
 
 export class InvoiceOverpaymentError extends Error {

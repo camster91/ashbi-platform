@@ -129,8 +129,8 @@ export default async function invoiceRoutes(fastify, options = {}) {
     const where = {};
     if (clientId) where.clientId = clientId;
     if (projectId) where.projectId = projectId;
-    // "SENT" lists every sent-but-unpaid invoice, including ones the client
-    // has opened (VIEWED behaves exactly like SENT).
+    // "SENT" lists every sent-but-unpaid invoice, including any marked
+    // VIEWED (VIEWED behaves exactly like SENT).
     if (status === 'SENT') where.status = { in: [...SENT_INVOICE_STATUSES] };
     else if (status && status !== 'OVERDUE') where.status = status;
     const and = [];
@@ -229,7 +229,7 @@ export default async function invoiceRoutes(fastify, options = {}) {
     };
 
     for (const row of byStatus) {
-      // A VIEWED invoice is a sent one the client has opened.
+      // A VIEWED invoice counts as sent.
       const key = row.status === 'VIEWED' ? 'sent' : row.status === 'OVERDUE' ? 'overdue' : row.status.toLowerCase();
       if (!totals[key]) continue;
       const count = row._count._all;

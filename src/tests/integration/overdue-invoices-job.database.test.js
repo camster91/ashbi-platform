@@ -36,7 +36,7 @@ test('the overdue job processes every overdue invoice in every organization', {
       } });
       // Two just-overdue invoices (no project: activity logging cannot be
       // tenant-scoped for them) and one 10 days overdue, per organization.
-      // The second one the client has opened (VIEWED), which is chased and
+      // The second one is VIEWED, which is chased and
       // moved to OVERDUE exactly like SENT.
       for (const [n, daysOverdue, currency] of [[1, 2, 'CAD'], [2, 3, 'USD'], [3, 10, 'CAD']]) {
         await raw.invoice.create({ data: {

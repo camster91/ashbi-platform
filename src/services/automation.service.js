@@ -419,7 +419,7 @@ async function claimOverdueStage(db, invoice, stage, now) {
 
 async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
   // Compare-and-set: never overwrite a payment or void that just landed.
-  // SENT or VIEWED (opened by the client) past due becomes OVERDUE.
+  // SENT or VIEWED (treated as SENT) past due becomes OVERDUE.
   if (SENT_INVOICE_STATUSES.includes(invoice.status)) {
     const moved = await db.invoice.updateMany({ where: { id: invoice.id, status: invoice.status }, data: { status: 'OVERDUE' } });
     if (moved.count !== 1) return { reminded: false, skipped: 'changed' };

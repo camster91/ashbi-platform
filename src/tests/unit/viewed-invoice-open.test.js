@@ -1,4 +1,4 @@
-// A VIEWED invoice (one the client has opened) behaves exactly like a SENT
+// A VIEWED invoice behaves exactly like a SENT
 // one everywhere: it is payable (Stripe Checkout and manual payments, single
 // and bulk), its public link stays open, it is listed and payable in the
 // client portal, the chaser and work queue pick it up, the invoice stats count

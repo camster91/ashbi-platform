@@ -80,7 +80,7 @@ describe('public invoice status and tax label', () => {
   });
 });
 
-describe('public invoice the client has already opened', () => {
+describe('public invoice marked VIEWED', () => {
   beforeEach(() => getPortalInvoice.mockReset());
 
   it('still offers Pay Now on a VIEWED invoice, labelled as awaiting payment', async () => {

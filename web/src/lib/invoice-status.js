@@ -9,8 +9,8 @@ import { formatDate } from './format';
 const CENT = 0.005;
 // Invoices the client still owes on (mirrors UNPAID_INVOICE_STATUSES in
 // src/utils/invoice-balance.js): every "outstanding" / "unpaid" figure, and
-// every place an invoice can be paid, marked paid or resent. VIEWED (the
-// client opened the link) behaves exactly like SENT.
+// every place an invoice can be paid, marked paid or resent. VIEWED behaves
+// exactly like SENT.
 export const UNPAID_INVOICE_STATUSES = Object.freeze(['SENT', 'VIEWED', 'OVERDUE']);
 const OPEN_STATUSES = UNPAID_INVOICE_STATUSES;
 

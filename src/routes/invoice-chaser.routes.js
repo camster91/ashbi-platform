@@ -37,7 +37,7 @@ export default async function invoiceChaserRoutes(fastify) {
     const { invoiceId } = request.body || {};
 
     // Get overdue invoices (or a specific one)
-    // Open invoices: SENT, VIEWED (opened by the client) or OVERDUE.
+    // Open invoices: SENT, VIEWED (treated as SENT) or OVERDUE.
     const where = { status: { in: [...UNPAID_INVOICE_STATUSES] } };
     if (invoiceId) {
       where.id = invoiceId;

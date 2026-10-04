@@ -560,7 +560,7 @@ describe('Invoice CRUD', { skip }, () => {
 
 });
 
-// A VIEWED invoice (the client opened it) behaves exactly like SENT: listed
+// A VIEWED invoice behaves exactly like SENT: listed
 // under the "Sent" filter, counted as outstanding, payable from the public
 // page and by mark-paid, overdue once past due, and voidable.
 describe('VIEWED invoices behave like SENT', { skip }, () => {
