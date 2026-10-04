@@ -9,7 +9,7 @@ import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { defaultInvoiceCurrency, normalizeInvoiceCurrency } from '../utils/money.js';
 import { InvalidPaymentAmountError, InvoiceOverpaymentError, recordManualPayment, settleInvoiceManually } from '../services/invoice-payment.service.js';
-import { invoiceAmountPaid, invoiceBalance, withInvoiceBalance } from '../utils/invoice-balance.js';
+import { invoiceAmountPaid, invoiceBalance, SENT_INVOICE_STATUSES, UNPAID_INVOICE_STATUSES, withInvoiceBalance } from '../utils/invoice-balance.js';
 import { clampTake } from '../utils/query-limits.js';
 import { firstRecurringDate } from '../jobs/recurring-invoices.js';
 import { proposalTaxRate, taxTypeForRate } from '../utils/proposal-totals.js';
@@ -17,7 +17,8 @@ import { invoiceTotals, lineTotal } from '../utils/money-totals.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
-const VOIDABLE_STATUSES = new Set(['DRAFT', 'SENT', 'OVERDUE']);
+// Any unpaid invoice (DRAFT, SENT, VIEWED, OVERDUE) can be voided.
+const VOIDABLE_STATUSES = new Set(['DRAFT', ...UNPAID_INVOICE_STATUSES]);
 
 class InvoiceHasPaymentsError extends Error {}
 
@@ -111,10 +112,10 @@ export default async function invoiceRoutes(fastify, options = {}) {
     });
   }
 
-  // Overdue = stored OVERDUE (set by the overdue job) or SENT past its due
-  // date (before the job has run).
+  // Overdue = stored OVERDUE (set by the overdue job) or SENT/VIEWED past
+  // its due date (before the job has run).
   function isOverdueInvoice(inv, now = new Date()) {
-    return inv.status === 'OVERDUE' || Boolean(inv.status === 'SENT' && inv.dueDate && new Date(inv.dueDate) < now);
+    return inv.status === 'OVERDUE' || Boolean(SENT_INVOICE_STATUSES.includes(inv.status) && inv.dueDate && new Date(inv.dueDate) < now);
   }
 
   function flagOverdue(inv) {
@@ -128,12 +129,15 @@ export default async function invoiceRoutes(fastify, options = {}) {
     const where = {};
     if (clientId) where.clientId = clientId;
     if (projectId) where.projectId = projectId;
-    if (status && status !== 'OVERDUE') where.status = status;
+    // "SENT" lists every sent-but-unpaid invoice, including ones the client
+    // has opened (VIEWED behaves exactly like SENT).
+    if (status === 'SENT') where.status = { in: [...SENT_INVOICE_STATUSES] };
+    else if (status && status !== 'OVERDUE') where.status = status;
     const and = [];
     if (status === 'OVERDUE') {
       and.push({ OR: [
         { status: 'OVERDUE' },
-        { status: 'SENT', dueDate: { lt: new Date() } },
+        { status: { in: [...SENT_INVOICE_STATUSES] }, dueDate: { lt: new Date() } },
       ] });
     }
     if (search) {
@@ -180,8 +184,8 @@ export default async function invoiceRoutes(fastify, options = {}) {
   });
 
   // Collection stats. Buckets are disjoint so no invoice is counted twice:
-  //   sent    = SENT and not yet past due
-  //   overdue = stored OVERDUE, or SENT past its due date
+  //   sent    = SENT or VIEWED and not yet past due
+  //   overdue = stored OVERDUE, or SENT/VIEWED past its due date
   //   totalOutstanding = sent + overdue (every open invoice once)
   // Money is grouped by currency in `byCurrency`; the top-level amounts are
   // only filled when every invoice shares one currency (`mixedCurrency`
@@ -197,13 +201,13 @@ export default async function invoiceRoutes(fastify, options = {}) {
       }),
       fastify.prisma.invoice.groupBy({
         by: ['currency'],
-        where: { status: 'SENT', dueDate: { lt: now } },
+        where: { status: { in: [...SENT_INVOICE_STATUSES] }, dueDate: { lt: now } },
         _count: { _all: true },
         _sum: { total: true },
       }),
       // Partial payments on open invoices: outstanding money is the balance.
       fastify.prisma.invoicePayment.findMany({
-        where: { invoice: { status: { in: ['SENT', 'OVERDUE'] } } },
+        where: { invoice: { status: { in: [...UNPAID_INVOICE_STATUSES] } } },
         select: { amount: true, invoice: { select: { status: true, currency: true, dueDate: true } } },
       }),
     ]);
@@ -225,14 +229,15 @@ export default async function invoiceRoutes(fastify, options = {}) {
     };
 
     for (const row of byStatus) {
-      const key = row.status === 'OVERDUE' ? 'overdue' : row.status.toLowerCase();
+      // A VIEWED invoice is a sent one the client has opened.
+      const key = row.status === 'VIEWED' ? 'sent' : row.status === 'OVERDUE' ? 'overdue' : row.status.toLowerCase();
       if (!totals[key]) continue;
       const count = row._count._all;
       const amount = row._sum.total ?? 0;
       add(totals, key, count, amount);
       add(bucketFor(row.currency), key, count, amount);
     }
-    // Move SENT-but-past-due from "sent" to "overdue".
+    // Move SENT/VIEWED-but-past-due from "sent" to "overdue".
     for (const row of sentPastDue) {
       const count = row._count._all;
       const amount = row._sum.total ?? 0;

@@ -3,7 +3,7 @@
 import aiClient from '../ai/client.js';
 import { validateBody, invoiceChaserSchema } from '../validators/schemas.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
-import { withInvoiceBalance } from '../utils/invoice-balance.js';
+import { UNPAID_INVOICE_STATUSES, withInvoiceBalance } from '../utils/invoice-balance.js';
 import { invoicePublicAccessFailure } from '../utils/public-document-access.js';
 import { organizationNameFor, senderDescription, signOffName } from '../utils/organization-name.js';
 
@@ -37,7 +37,8 @@ export default async function invoiceChaserRoutes(fastify) {
     const { invoiceId } = request.body || {};
 
     // Get overdue invoices (or a specific one)
-    const where = { status: { in: ['SENT', 'OVERDUE'] } };
+    // Open invoices: SENT, VIEWED (opened by the client) or OVERDUE.
+    const where = { status: { in: [...UNPAID_INVOICE_STATUSES] } };
     if (invoiceId) {
       where.id = invoiceId;
     } else {
@@ -139,7 +140,7 @@ ${signOff ? `Sign off as ${signOff}.` : 'Sign off without a name; the sender wil
 
     const invoices = await prisma.invoice.findMany({
       where: {
-        status: { in: ['SENT', 'OVERDUE'] },
+        status: { in: [...UNPAID_INVOICE_STATUSES] },
         dueDate: { lt: now }
       },
       include: {

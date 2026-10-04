@@ -115,7 +115,8 @@ export function statusBadge(status) {
   if (s === 'PAID') return <PortalBadge color="success">PAID</PortalBadge>;
   if (s === 'OVERDUE') return <PortalBadge color="danger">OVERDUE</PortalBadge>;
   // Same client wording as PortalInvoice (lib/status.js clientLabel).
-  if (s === 'SENT') return <PortalBadge color="warning">AWAITING PAYMENT</PortalBadge>;
+  // A VIEWED invoice is a sent one the client has opened: still owed.
+  if (s === 'SENT' || s === 'VIEWED') return <PortalBadge color="warning">AWAITING PAYMENT</PortalBadge>;
   if (s === 'PENDING' || s === 'DRAFT') return <PortalBadge color="warning">DUE</PortalBadge>;
   if (s === 'VOID') return <PortalBadge color="default">VOID</PortalBadge>;
   return <PortalBadge color="default">{s}</PortalBadge>;

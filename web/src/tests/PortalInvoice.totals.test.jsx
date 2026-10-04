@@ -79,3 +79,14 @@ describe('public invoice status and tax label', () => {
     expect(screen.getByRole('button', { name: 'Pay Now - $717.00 USD' })).toBeInTheDocument();
   });
 });
+
+describe('public invoice the client has already opened', () => {
+  beforeEach(() => getPortalInvoice.mockReset());
+
+  it('still offers Pay Now on a VIEWED invoice, labelled as awaiting payment', async () => {
+    getPortalInvoice.mockResolvedValue(invoice({ status: 'VIEWED' }));
+    renderInvoice();
+    expect(await screen.findByRole('button', { name: 'Pay Now - $1,017.00 USD' })).toBeInTheDocument();
+    expect(screen.getByText('Awaiting Payment')).toBeInTheDocument();
+  });
+});

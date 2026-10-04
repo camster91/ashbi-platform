@@ -19,7 +19,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { buildInvoiceCreatePayload, INVOICE_CURRENCY_OPTIONS } from '../lib/invoice-payloads';
 import { formatInvoiceMoney, formatInvoiceDate } from '../lib/format';
 import { statusLabel } from '../lib/status';
-import { invoiceBalanceDue, invoiceDisplayStatus, recurrenceSummary, taxTypeLabel } from '../lib/invoice-status';
+import { invoiceBalanceDue, invoiceDisplayStatus, isOpenInvoice, recurrenceSummary, taxTypeLabel } from '../lib/invoice-status';
 import useIsSmUp from '../hooks/useIsSmUp';
 import { invoiceTotals, lineTotal } from '../lib/money-totals';
 
@@ -229,8 +229,8 @@ export default function Invoices() {
   const invoices = invoiceData.invoices || [];
   const stats = invoiceData.stats || {};
 
-  // Sort: overdue first, then partly paid and sent, then draft, then paid, then void
-  const PRIORITY = { OVERDUE: 0, PARTLY_PAID: 1, SENT: 1, DRAFT: 2, PAID: 3, VOID: 4 };
+  // Sort: overdue first, then partly paid, sent and viewed, then draft, then paid, then void
+  const PRIORITY = { OVERDUE: 0, PARTLY_PAID: 1, SENT: 1, VIEWED: 1, DRAFT: 2, PAID: 3, VOID: 4 };
   const sortedInvoices = [...invoices].sort((a, b) => {
     const aS = invoiceDisplayStatus(a);
     const bS = invoiceDisplayStatus(b);
@@ -432,7 +432,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
           {invoice.status === 'DRAFT' && isAdmin && (
             <Button size="sm" variant="outline" onClick={onSend} loading={sendLoading} leftIcon={<Send className="w-3 h-3" />}>Send</Button>
           )}
-          {(invoice.status === 'SENT' || invoice.isOverdue) && (
+          {(isOpenInvoice(invoice) || invoice.isOverdue) && (
             <Button size="sm" variant="outline" onClick={onMarkPaid} leftIcon={<DollarSign className="w-3 h-3" />}>Mark Paid</Button>
           )}
           {isAdmin && invoice.status !== 'PAID' && !(invoice.amountPaid > 0) && (
@@ -493,13 +493,13 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
               Send
             </Button>
           )}
-          {(invoice.status === 'SENT' || invoice.isOverdue) && (
+          {(isOpenInvoice(invoice) || invoice.isOverdue) && (
             <Button size="sm" variant="outline" leftIcon={<DollarSign className="w-3 h-3" />}
               onClick={(e) => { e.stopPropagation(); onMarkPaid(); }}>
               Mark Paid
             </Button>
           )}
-          {invoice.viewToken && (invoice.status === 'SENT' || invoice.isOverdue) && (
+          {invoice.viewToken && (isOpenInvoice(invoice) || invoice.isOverdue) && (
             <a href={`/portal/invoice/${invoice.viewToken}`} target="_blank" rel="noopener noreferrer"
               className="p-1.5 text-muted-foreground hover:text-foreground rounded"
               onClick={(e) => e.stopPropagation()} title="Client pay page">
@@ -825,7 +825,7 @@ function InvoiceCreateForm({
 
 // ─── Collections Dashboard ────────────────────────────────────────────────────
 function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
-  const overdue = invoices.filter(i => i.isOverdue || i.status === 'OVERDUE' || (i.status === 'SENT' && i.dueDate && new Date(i.dueDate) < new Date()));
+  const overdue = invoices.filter(i => i.isOverdue || i.status === 'OVERDUE' || (['SENT', 'VIEWED'].includes(i.status) && i.dueDate && new Date(i.dueDate) < new Date()));
 
   return (
     <div className="space-y-6">

@@ -10,7 +10,7 @@ import { resolveTenantOrganizationIds, runTenantJob } from '../jobs/tenant-itera
 import { sendInvoiceOverdueEmail } from './email.service.js';
 import { defaultInvoiceCurrency, formatMoney } from '../utils/money.js';
 import { proposalTaxSummary } from '../utils/proposal-totals.js';
-import { invoiceBalance } from '../utils/invoice-balance.js';
+import { invoiceBalance, SENT_INVOICE_STATUSES, UNPAID_INVOICE_STATUSES } from '../utils/invoice-balance.js';
 import { invoicePublicAccessFailure } from '../utils/public-document-access.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
 import { emitNotification } from './notification.service.js';
@@ -363,7 +363,8 @@ export async function onContractSigned(contractId) {
 const OVERDUE_ESCALATION_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OVERDUE_PAGE_SIZE = 200;
-const OPEN_INVOICE_STATUSES = ['SENT', 'OVERDUE'];
+// SENT, VIEWED and OVERDUE: a viewed invoice is chased like a sent one.
+const OPEN_INVOICE_STATUSES = [...UNPAID_INVOICE_STATUSES];
 
 function hubUrl() {
   return process.env.APP_URL || process.env.HUB_URL || 'https://hub.ashbi.ca';
@@ -418,8 +419,9 @@ async function claimOverdueStage(db, invoice, stage, now) {
 
 async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
   // Compare-and-set: never overwrite a payment or void that just landed.
-  if (invoice.status === 'SENT') {
-    const moved = await db.invoice.updateMany({ where: { id: invoice.id, status: 'SENT' }, data: { status: 'OVERDUE' } });
+  // SENT or VIEWED (opened by the client) past due becomes OVERDUE.
+  if (SENT_INVOICE_STATUSES.includes(invoice.status)) {
+    const moved = await db.invoice.updateMany({ where: { id: invoice.id, status: invoice.status }, data: { status: 'OVERDUE' } });
     if (moved.count !== 1) return { reminded: false, skipped: 'changed' };
   }
   const { stage, daysOverdue } = overdueReminderStage(invoice, now);

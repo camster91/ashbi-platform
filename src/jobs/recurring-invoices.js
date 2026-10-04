@@ -32,13 +32,13 @@ export function getNextRecurringDate(currentDate, interval) {
 }
 
 // Which invoices can be the template for the next generated copy. Only an
-// invoice that was actually issued to the client (SENT, OVERDUE or PAID)
+// invoice that was actually issued to the client (SENT, VIEWED, OVERDUE or PAID)
 // recurs: a DRAFT is still being edited and may never be sent, so copying it
 // would bill the client for terms they never received, and a VOID invoice was
 // cancelled. A recurring draft starts generating once it is sent; if its
 // recurringNextDate already passed by then, the next run bills one copy and
 // moves the date to the next future boundary (no backlog of copies).
-export const RECURRING_SOURCE_STATUSES = Object.freeze(['SENT', 'OVERDUE', 'PAID']);
+export const RECURRING_SOURCE_STATUSES = Object.freeze(['SENT', 'VIEWED', 'OVERDUE', 'PAID']);
 
 const INTERVAL_MONTHS = Object.freeze({ MONTHLY: 1, QUARTERLY: 3, ANNUALLY: 12 });
 
