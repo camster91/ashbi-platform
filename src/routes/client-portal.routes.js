@@ -343,7 +343,7 @@ export default async function clientPortalRoutes(fastify) {
 
     const sessionToken = signUserSession(fastify.jwt, principal.user, { contactId: principal.contact.id });
 
-    reply
+    return reply
       .setCookie('token', sessionToken, {
         path: '/',
         httpOnly: true,
@@ -1099,7 +1099,7 @@ export default async function clientPortalRoutes(fastify) {
 
     const pdfBuffer = await generateInvoicePdf(invoice);
 
-    reply
+    return reply
       .header('Content-Type', 'application/pdf')
       .header('Content-Disposition', `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`)
       .send(pdfBuffer);
