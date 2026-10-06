@@ -1,4 +1,5 @@
-// Email Service — Ashbi-branded client emails via Mailgun
+// Email Service — client emails via Mailgun, branded with the sending
+// organization's company name and website (src/services/branding.service.js).
 // Reads HTML templates from src/emails/, replaces {{variable}} placeholders, and sends via Mailgun API.
 // Falls back to console.log when MAILGUN_API_KEY is not configured.
 
@@ -8,6 +9,7 @@ import path from 'path';
 import { mailgunTrackingFields } from './mailgun-delivery.service.js';
 import { formatMoney } from '../utils/money.js';
 import { renderEmailTheme } from '../emails/theme.js';
+import { brandedSender, sanitizeHeader, systemSender } from './branding.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = path.join(__dirname, '..', 'emails');
@@ -16,7 +18,51 @@ const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
 const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'ashbi.ca';
 const MAILGUN_API_URL = `https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages`;
 
-const FROM_DEFAULT = `Ashbi <hub@${MAILGUN_DOMAIN}>`;
+// Mail with no organization behind it is sent in the product's name.
+const FROM_DEFAULT = systemSender(MAILGUN_DOMAIN, 'hub');
+
+/**
+ * The From header for an organization's client email: its company name at
+ * the configured address (the product name when it has none).
+ * @param {{ companyName?: string } | null | undefined} branding
+ */
+export function senderFor(branding) {
+  return branding?.companyName ? brandedSender(branding, MAILGUN_DOMAIN, 'hub') : FROM_DEFAULT;
+}
+
+/** An http(s) website URL for a brand's website setting, or ''. */
+function websiteUrl(website) {
+  const value = String(website || '').trim();
+  if (!value) return '';
+  const url = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol) && parsed.hostname ? parsed.href : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * The brand placeholders every client email template uses: {{companyName}},
+ * {{companyWebsite}} and {{companyWebsiteLabel}} (empty when unknown; the
+ * templates hide those parts with {{#name}}...{{/name}} sections).
+ * @param {{ companyName?: string, website?: string | null } | null | undefined} branding
+ */
+export function brandEmailVariables(branding) {
+  const companyWebsite = websiteUrl(branding?.website);
+  return {
+    companyName: String(branding?.companyName || '').trim(),
+    companyWebsite,
+    companyWebsiteLabel: companyWebsite ? companyWebsite.replace(/^https?:\/\//i, '').replace(/\/$/, '') : '',
+  };
+}
+
+/** " from <company>" for a subject line, or '' without a company name. */
+function fromCompany(branding) {
+  const name = String(branding?.companyName || '').trim();
+  return name ? ` from ${name}` : '';
+}
 
 /**
  * Replace {{variable}} placeholders in an HTML string with actual values.
@@ -30,8 +76,19 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * {{#name}}...{{/name}} keeps its content only when `name` has a non-empty
+ * value (no nesting), so optional brand parts disappear cleanly.
+ */
+export function renderSections(html, variables = {}) {
+  return html.replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (match, key, inner) => {
+    const value = variables[key];
+    return value !== undefined && value !== null && String(value).trim() !== '' ? inner : '';
+  });
+}
+
 export function replaceVariables(html, variables = {}) {
-  return html.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+  return renderSections(html, variables).replace(/\{\{(\w+)\}\}/g, (match, key) => {
     return variables[key] !== undefined ? escapeHtml(variables[key]) : match;
   });
 }
@@ -56,7 +113,7 @@ export async function loadTemplate(templateName, variables = {}) {
  * @param {string} opts.to       - Recipient email
  * @param {string} opts.subject  - Email subject line
  * @param {string} opts.html     - Rendered HTML body
- * @param {string} [opts.from]   - Sender (defaults to Ashbi <hub@ashbi.ca>)
+ * @param {string} [opts.from]   - Sender (defaults to the product-named hub@ address)
  * @param {string} [opts.replyTo]- Reply-To header
  * @param {string} [opts.text]   - Plain-text fallback
  * @param {{documentType: string, documentId: string}} [opts.tracking] - Adds Mailgun `v:`
@@ -71,10 +128,10 @@ export async function sendMailgunEmail({ to, subject, html, from, replyTo, text,
   }
 
   const formData = new URLSearchParams();
-  formData.append('from', from || FROM_DEFAULT);
+  formData.append('from', sanitizeHeader(from || FROM_DEFAULT));
   formData.append('to', to);
-  if (replyTo) formData.append('h:Reply-To', replyTo);
-  formData.append('subject', subject);
+  if (replyTo) formData.append('h:Reply-To', sanitizeHeader(replyTo));
+  formData.append('subject', sanitizeHeader(subject));
   formData.append('html', html);
   if (text) formData.append('text', text);
   for (const [key, value] of Object.entries(mailgunTrackingFields(tracking))) formData.append(key, value);
@@ -110,13 +167,14 @@ export async function sendMailgunEmail({ to, subject, html, from, replyTo, text,
  * @param {string} opts.subject    - Email subject line
  * @param {string} opts.template   - Template filename (e.g. 'welcome.html')
  * @param {object} opts.variables  - Key-value pairs for {{variable}} replacement
- * @param {string} [opts.from]    - Sender email (defaults to Ashbi <hub@ashbi.ca>)
+ * @param {string} [opts.from]    - Sender (defaults to the organization's name, see senderFor)
+ * @param {object} [opts.branding] - The organization's branding (resolveBranding)
  * @param {string} [opts.replyTo]  - Reply-To header
  * @returns {Promise<{ok: boolean, id?: string, error?: string}>}
  */
-export async function sendEmail({ to, subject, template, variables = {}, from, replyTo, tracking }) {
-  const html = await loadTemplate(template, variables);
-  return sendMailgunEmail({ to, subject, html, from, replyTo, tracking });
+export async function sendEmail({ to, subject, template, variables = {}, from, replyTo, tracking, branding }) {
+  const html = await loadTemplate(template, { ...brandEmailVariables(branding), ...variables });
+  return sendMailgunEmail({ to, subject, html, from: from || senderFor(branding), replyTo, tracking });
 }
 
 /**
@@ -124,10 +182,12 @@ export async function sendEmail({ to, subject, template, variables = {}, from, r
  * These wrap sendEmail with the correct template filename.
  */
 
-export async function sendWelcomeEmail({ to, clientName, portalLink, senderName, from, replyTo }) {
+export async function sendWelcomeEmail({ to, clientName, portalLink, senderName, from, replyTo, branding }) {
+  const company = String(branding?.companyName || '').trim();
   return sendEmail({
+    branding,
     to,
-    subject: `Welcome to Ashbi, ${clientName}`,
+    subject: company ? `Welcome to ${company}, ${clientName}` : `Welcome, ${clientName}`,
     template: 'welcome.html',
     variables: { clientName, portalLink, senderName },
     from,
@@ -135,10 +195,11 @@ export async function sendWelcomeEmail({ to, clientName, portalLink, senderName,
   });
 }
 
-export async function sendInvoiceCreatedEmail({ to, clientName, invoiceNumber, amount, dueDate, payLink, from, replyTo }) {
+export async function sendInvoiceCreatedEmail({ to, clientName, invoiceNumber, amount, dueDate, payLink, from, replyTo, branding }) {
   return sendEmail({
+    branding,
     to,
-    subject: `Invoice ${invoiceNumber} from Ashbi`,
+    subject: `Invoice ${invoiceNumber}${fromCompany(branding)}`,
     template: 'invoice-created.html',
     variables: { clientName, invoiceNumber, amount, dueDate, payLink },
     from,
@@ -159,10 +220,11 @@ function formatInvoiceDueDate(dueDate) {
  * Checkout URL expires within 24 hours, so it is never emailed (a
  * `paymentLink` argument is ignored).
  */
-export function buildInvoiceDeliveryEmail({ to, clientName, invoiceNumber, total, currency, dueDate, viewUrl, invoiceId }) {
+export function buildInvoiceDeliveryEmail({ to, clientName, invoiceNumber, total, currency, dueDate, viewUrl, invoiceId, branding }) {
   return {
+    branding,
     to,
-    subject: `Invoice ${invoiceNumber} from Ashbi`,
+    subject: `Invoice ${invoiceNumber}${fromCompany(branding)}`,
     template: 'invoice-created.html',
     variables: {
       clientName: clientName || 'there',
@@ -185,10 +247,11 @@ export async function sendInvoiceDeliveryEmail(options) {
 }
 
 /** Overdue reminder; the pay link is the public invoice page. */
-export function buildInvoiceOverdueEmail({ to, clientName, invoiceNumber, total, currency, daysOverdue, viewUrl, invoiceId }) {
+export function buildInvoiceOverdueEmail({ to, clientName, invoiceNumber, total, currency, daysOverdue, viewUrl, invoiceId, branding }) {
   return {
+    branding,
     to,
-    subject: `Overdue: Invoice ${invoiceNumber}`,
+    subject: `Overdue: Invoice ${invoiceNumber}${fromCompany(branding)}`,
     template: 'invoice-overdue.html',
     variables: {
       clientName: clientName || 'there',
@@ -210,8 +273,9 @@ export async function sendInvoiceOverdueEmail(options) {
   }
 }
 
-export async function sendInvoicePaidEmail({ to, clientName, invoiceNumber, amount, paidDate, from, replyTo }) {
+export async function sendInvoicePaidEmail({ to, clientName, invoiceNumber, amount, paidDate, from, replyTo, branding }) {
   return sendEmail({
+    branding,
     to,
     subject: `Payment Confirmed — Invoice ${invoiceNumber}`,
     template: 'invoice-paid.html',
@@ -221,8 +285,9 @@ export async function sendInvoicePaidEmail({ to, clientName, invoiceNumber, amou
   });
 }
 
-export async function sendProposalSentEmail({ to, clientName, proposalTitle, amount, viewLink, expiresDate, from, replyTo }) {
+export async function sendProposalSentEmail({ to, clientName, proposalTitle, amount, viewLink, expiresDate, from, replyTo, branding }) {
   return sendEmail({
+    branding,
     to,
     subject: `Proposal: ${proposalTitle}`,
     template: 'proposal-sent.html',
@@ -232,8 +297,9 @@ export async function sendProposalSentEmail({ to, clientName, proposalTitle, amo
   });
 }
 
-export async function sendContractSignEmail({ to, clientName, contractTitle, signLink, expiresDate, from, replyTo, contractId }) {
+export async function sendContractSignEmail({ to, clientName, contractTitle, signLink, expiresDate, from, replyTo, contractId, branding }) {
   return sendEmail({
+    branding,
     ...(contractId ? { tracking: { documentType: 'contract', documentId: contractId } } : {}),
     to,
     subject: `Contract Ready to Sign: ${contractTitle}`,
@@ -244,8 +310,9 @@ export async function sendContractSignEmail({ to, clientName, contractTitle, sig
   });
 }
 
-export async function sendProjectUpdateEmail({ to, clientName, projectName, oldStatus, newStatus, portalLink, from, replyTo }) {
+export async function sendProjectUpdateEmail({ to, clientName, projectName, oldStatus, newStatus, portalLink, from, replyTo, branding }) {
   return sendEmail({
+    branding,
     to,
     subject: `Project Update: ${projectName} — ${newStatus}`,
     template: 'project-update.html',
@@ -255,10 +322,11 @@ export async function sendProjectUpdateEmail({ to, clientName, projectName, oldS
   });
 }
 
-export async function sendMessageNewEmail({ to, clientName, senderName, messagePreview, portalLink, from, replyTo }) {
+export async function sendMessageNewEmail({ to, clientName, senderName, messagePreview, portalLink, from, replyTo, branding }) {
   // Compute sender initial for the avatar bubble
   const senderInitial = (senderName || '?').charAt(0).toUpperCase();
   return sendEmail({
+    branding,
     to,
     subject: `New message from ${senderName}`,
     template: 'message-new.html',

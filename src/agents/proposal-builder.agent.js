@@ -10,6 +10,30 @@ import logger from '../utils/logger.js';
 import PDFDocument from 'pdfkit';
 import { computeProposalLineItems, proposalTotals } from '../utils/proposal-totals.js';
 import { senderDescription } from '../utils/organization-name.js';
+import env from '../config/env.js';
+import { brandedPdfFilename, escapeHtml } from '../services/branding.service.js';
+
+/**
+ * The brand a proposal is written in: the organization's branding
+ * (resolveBranding), or just its name when that is all the caller has.
+ * @param {object | null | undefined} branding
+ * @param {string} [organizationName]
+ */
+function proposalBrand(branding, organizationName = '') {
+  const companyName = String(branding?.companyName || organizationName || '').trim();
+  return { ...(branding || {}), companyName };
+}
+
+/** The proposal footer line: the custom proposal footer, or the agency's contact details. */
+function proposalFooterLine(brand) {
+  const custom = String(brand?.proposalFooter || '').trim();
+  if (custom) return escapeHtml(custom);
+  return [brand?.companyName, brand?.address, brand?.email, brand?.website]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join(' &nbsp;|&nbsp; ');
+}
 
 // Pricing tiers (hardcoded for now, can be updated via UI)
 const PRICING_TIERS = {
@@ -29,11 +53,11 @@ const PRICING_TIERS = {
   }
 };
 
-// Proposal templates
+// Proposal templates. The ids (ashbi-*) are stored keys and stay as they are.
 const PROPOSAL_TEMPLATES = [
-  { id: 'ashbi-branding', name: 'Ashbi Branding', description: 'Full branding proposal with logo, identity, and brand guidelines' },
-  { id: 'ashbi-packaging', name: 'Ashbi Packaging', description: 'Product packaging design proposal with print specifications' },
-  { id: 'ashbi-shopify', name: 'Ashbi Shopify', description: 'E-commerce store setup proposal with theme customization' },
+  { id: 'ashbi-branding', name: 'Branding', description: 'Full branding proposal with logo, identity, and brand guidelines' },
+  { id: 'ashbi-packaging', name: 'Packaging', description: 'Product packaging design proposal with print specifications' },
+  { id: 'ashbi-shopify', name: 'Shopify', description: 'E-commerce store setup proposal with theme customization' },
   { id: 'generic', name: 'Generic', description: 'General-purpose proposal template' }
 ];
 
@@ -82,9 +106,15 @@ function getRecommendedTiers(projectType, budget) {
 }
 
 /**
- * Build the proposal HTML document with Ashbi branding
+ * Build the proposal HTML document in the sending organization's branding.
+ * @param {object} proposalData
+ * @param {object} leadData
+ * @param {{ companyName?: string, proposalFooter?: string | null, address?: string | null, email?: string | null, website?: string | null }} [branding]
  */
-function buildProposalHtml(proposalData, leadData) {
+function buildProposalHtml(proposalData, leadData, branding = {}) {
+  const brand = proposalBrand(branding);
+  const companyName = escapeHtml(brand.companyName);
+  const footerLine = proposalFooterLine(brand);
   const today = new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
   const validUntil = new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -132,7 +162,7 @@ function buildProposalHtml(proposalData, leadData) {
 <body>
   <div class="container">
     <div class="header">
-      <div class="logo">ASHBI</div>
+      ${companyName ? `<div class="logo">${companyName}</div>` : ''}
       <h1 class="proposal-title">${proposalData.title || 'Project Proposal'}</h1>
       <div class="proposal-meta">
         Prepared for ${leadData.name}${leadData.company ? `, ${leadData.company}` : ''} &nbsp;|&nbsp; ${today}
@@ -148,7 +178,7 @@ function buildProposalHtml(proposalData, leadData) {
 
     <div class="section">
       <h2>Executive Summary</h2>
-      <p>${proposalData.executiveSummary || proposalData.summary || 'Thank you for considering Ashbi for your project. We look forward to delivering exceptional results.'}</p>
+      <p>${proposalData.executiveSummary || proposalData.summary || `Thank you for considering ${companyName || 'us'} for your project. We look forward to delivering exceptional results.`}</p>
     </div>
 
     <div class="section">
@@ -240,9 +270,9 @@ function buildProposalHtml(proposalData, leadData) {
     </div>
 
     <div class="footer">
-      <p>Ashbi &nbsp;|&nbsp; Toronto, ON &nbsp;|&nbsp; hello@ashbi.design</p>
+      ${footerLine ? `<p>${footerLine}</p>` : ''}
       <p>Proposal ID: ${proposalData.id || 'DRAFT'} &nbsp;|&nbsp; Valid until ${validUntil}</p>
-      ${proposalData.trackingId ? `<img src="https://api.ashbi.design/track/${proposalData.trackingId}" class="tracking-pixel" alt="">` : ''}
+      ${proposalData.trackingId ? `<img src="${escapeHtml(`${env.appUrl}/track/${encodeURIComponent(proposalData.trackingId)}`)}" class="tracking-pixel" alt="">` : ''}
     </div>
   </div>
 </body>
@@ -252,14 +282,17 @@ function buildProposalHtml(proposalData, leadData) {
 /**
  * Generate a full proposal from lead data using AI
  * @param {object} leadData
- * @param {{ sender?: { name?: string } | null, organizationName?: string }} [writer] who the proposal is from
+ * @param {{ sender?: { name?: string } | null, organizationName?: string, branding?: object | null }} [writer]
+ *   who the proposal is from; branding (resolveBranding) names the agency in
+ *   the document, falling back to organizationName
  */
-async function generateProposal(leadData, { sender = null, organizationName = '' } = {}) {
+async function generateProposal(leadData, { sender = null, organizationName = '', branding = null } = {}) {
+  const brand = proposalBrand(branding, organizationName);
   const { name, company, email, projectType, budget, timeline, notes } = leadData;
   const budgetNum = parseFloat(budget) || 0;
   const recommendedTiers = getRecommendedTiers(projectType, budgetNum);
 
-  const systemPrompt = `You are a proposal writer for a creative agency, writing on behalf of ${senderDescription(sender, organizationName)}.
+  const systemPrompt = `You are a proposal writer for a creative agency, writing on behalf of ${senderDescription(sender, brand.companyName)}.
 You create professional, direct proposals with no fluff for branding, packaging design, and web development work.
 Brand voice: confident, professional, no salesy language. Focus on value and outcomes. Do not invent facts about the agency that you were not given.`;
 
@@ -318,7 +351,7 @@ Return JSON with these exact fields:
     }
   }
 
-  const html = buildProposalHtml(proposalData, leadData);
+  const html = buildProposalHtml(proposalData, leadData, brand);
 
   return {
     ...proposalData,
@@ -366,8 +399,6 @@ async function generatePdf(proposalHtml) {
         if (trimmed === trimmed.toUpperCase() && trimmed.length < 50 && trimmed.length > 3) {
           doc.fontSize(14).font('Helvetica-Bold');
           y += 5;
-        } else if (trimmed.startsWith('ASHBI')) {
-          doc.fontSize(24).font('Helvetica-Bold');
         } else {
           doc.fontSize(11).font('Helvetica');
         }
@@ -406,14 +437,15 @@ async function generatePdf(proposalHtml) {
 /**
  * Create a Gmail draft with the proposal PDF attached
  */
-async function createProposalDraft(proposal, leadEmail, { sender = null, organizationName = '' } = {}) {
+async function createProposalDraft(proposal, leadEmail, { sender = null, organizationName = '', branding = null } = {}) {
+  const brand = proposalBrand(branding, organizationName);
   try {
     const pdfBuffer = await generatePdf(proposal.html);
 
     const subject = proposal.title || `Proposal for ${proposal.leadData?.name}`;
     const firstName = (proposal.leadData?.name || 'there').split(' ')[0];
     // Signed by the person sending it and their workspace, never one agency.
-    const signature = replySignature(sender, organizationName);
+    const signature = replySignature(sender, brand.companyName);
 
     const emailBody = `Hi ${firstName},
 
@@ -426,7 +458,7 @@ Looking forward to potentially working together.
 Best,${signature ? `\n${signature}` : ''}`;
 
     // Create draft with PDF attachment via gmail-draft agent
-    const attachmentName = `Ashbi_Proposal_${proposal.id || Date.now()}.pdf`;
+    const attachmentName = brandedPdfFilename(brand.companyName, 'Proposal', proposal.id || Date.now());
     const draftResult = await createDraftWithAttachment(leadEmail, subject, emailBody, pdfBuffer, attachmentName);
 
     return {
@@ -670,6 +702,7 @@ async function getProposalStats() {
 }
 
 export {
+  buildProposalHtml,
   generateProposal,
   generatePdf,
   createProposalDraft,

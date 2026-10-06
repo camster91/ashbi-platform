@@ -6,6 +6,8 @@ import { createNumberedInvoice, isUniqueViolationOn } from '../utils/invoice.js'
 import { createPublicAccessWindow, invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
 import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
+import { publicBrand, resolveBrandingForDocument } from '../services/branding.service.js';
+import env from '../config/env.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { defaultInvoiceCurrency, normalizeInvoiceCurrency } from '../utils/money.js';
 import { InvalidPaymentAmountError, InvoiceOverpaymentError, recordManualPayment, settleInvoiceManually } from '../services/invoice-payment.service.js';
@@ -616,8 +618,10 @@ export default async function invoiceRoutes(fastify, options = {}) {
     let emailSent = false;
     if (primaryContact?.email) {
       try {
-        const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${access.token}`;
+        const viewUrl = `${env.appUrl}/portal/invoice/${access.token}`;
+        const branding = await resolveBrandingForDocument(fastify.prisma, invoice);
         const delivery = await deliverInvoiceEmail({
+          branding,
           to: primaryContact.email,
           clientName: primaryContact.name || invoice.client.name,
           invoiceNumber: invoice.invoiceNumber,
@@ -686,7 +690,8 @@ export default async function invoiceRoutes(fastify, options = {}) {
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
 
     try {
-      const pdfBuffer = await generateInvoicePdf(invoice);
+      const branding = await resolveBrandingForDocument(fastify.prisma, invoice);
+      const pdfBuffer = await generateInvoicePdf(invoice, { branding });
       const filename = `${invoice.invoiceNumber}.pdf`;
       reply.header('Content-Type', 'application/pdf');
       reply.header('Content-Disposition', `attachment; filename="${filename}"`);
@@ -887,7 +892,8 @@ export default async function invoiceRoutes(fastify, options = {}) {
       stripeCheckoutAttempt,
       ...safe
     } = invoice;
-    return safe;
+    const brand = publicBrand(await resolveBrandingForDocument(fastify.prisma, invoice));
+    return { ...safe, brand };
   });
 
   fastify.post('/:id/public-link/revoke', { onRequest: [fastify.authenticate] }, async (request, reply) => {
@@ -914,8 +920,10 @@ export default async function invoiceRoutes(fastify, options = {}) {
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     const contact = invoice.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
-    const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${invoice.viewToken}`;
+    const viewUrl = `${env.appUrl}/portal/invoice/${invoice.viewToken}`;
+    const branding = await resolveBrandingForDocument(request.prisma, invoice);
     const delivery = await sendInvoiceDeliveryEmail({
+      branding,
       to: contact.email,
       clientName: contact.name || invoice.client.name,
       invoiceNumber: invoice.invoiceNumber,

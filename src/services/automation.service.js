@@ -16,10 +16,20 @@ import { outboundSignal } from '../utils/outbound-timeouts.js';
 import { emitNotification } from './notification.service.js';
 import { getRealtimeEmitter } from '../realtime/emitter.js';
 import { wonStageFor } from './dealPipeline.service.js';
+import env from '../config/env.js';
+import { brandedSender, escapeHtml, resolveBranding, resolveBrandingForDocument, systemSender } from './branding.service.js';
 
 // ==================== EMAIL HELPER ====================
 
-async function sendEmail(to, subject, html) {
+/**
+ * Sent in the organization's name (its company name at the configured
+ * no-reply address); without an organization, in the product's name.
+ * @param {string} to
+ * @param {string} subject
+ * @param {string} html
+ * @param {{ organizationId?: string | null, branding?: object | null }} [sender]
+ */
+async function sendEmail(to, subject, html, { organizationId = null, branding = null } = {}) {
   if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return false;
   if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) {
     console.log(`[Automation] Email not configured — would send to ${to}: ${subject}`);
@@ -33,8 +43,11 @@ async function sendEmail(to, subject, html) {
       key: process.env.MAILGUN_API_KEY
     });
 
+    const brand = branding || (organizationId ? await resolveBranding(prisma, organizationId) : null);
     await client.messages.create(process.env.MAILGUN_DOMAIN, {
-      from: `Ashbi Design <noreply@${process.env.MAILGUN_DOMAIN}>`,
+      from: brand?.companyName
+        ? brandedSender(brand, process.env.MAILGUN_DOMAIN)
+        : systemSender(process.env.MAILGUN_DOMAIN),
       to,
       subject,
       html
@@ -306,10 +319,12 @@ export async function onContractSigned(contractId) {
     // Action 2: Send welcome email to client
     const contact = await getClientEmail(contract.clientId);
     if (contact) {
-      const hubUrl = process.env.HUB_URL || 'https://hub.ashbi.ca';
+      const hubUrl = process.env.HUB_URL || env.hubUrl;
+      const branding = await resolveBranding(prisma, contract.client.organizationId);
+      const companyName = String(branding.companyName || '').trim();
       await sendEmail(
         contact.email,
-        `Welcome! Your project "${project.name}" is underway - Ashbi Design`,
+        `Welcome! Your project "${project.name}" is underway${companyName ? ` - ${companyName}` : ''}`,
         `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #1a1a2e;">Welcome aboard, ${contact.name || contract.client.name}!</h2>
@@ -325,10 +340,11 @@ export async function onContractSigned(contractId) {
             </p>
             <p style="color: #666; font-size: 14px; margin-top: 32px;">
               If you have any questions, just reply to this email.<br/>
-              — The Ashbi Design Team
+              — The ${companyName ? `${escapeHtml(companyName)} ` : ''}Team
             </p>
           </div>
-        `
+        `,
+        { branding },
       );
     }
 
@@ -367,7 +383,7 @@ const OVERDUE_PAGE_SIZE = 200;
 const OPEN_INVOICE_STATUSES = [...UNPAID_INVOICE_STATUSES];
 
 function hubUrl() {
-  return process.env.APP_URL || process.env.HUB_URL || 'https://hub.ashbi.ca';
+  return process.env.APP_URL || process.env.HUB_URL || env.appUrl;
 }
 
 // Best-effort side effect: log and continue so one failing step (activity
@@ -442,7 +458,9 @@ async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
   if (contact?.email && linkUsable) {
     let delivery;
     try {
+      const branding = await resolveBrandingForDocument(db, invoice);
       delivery = await sendOverdueEmail({
+        branding,
         to: contact.email,
         clientName: contact.name || invoice.client?.name,
         invoiceNumber: invoice.invoiceNumber,
@@ -635,7 +653,7 @@ async function executeAction(action, triggerData, workflow) {
 
   switch (type) {
     case 'SEND_EMAIL':
-      return executeSendEmail(config, triggerData);
+      return executeSendEmail(config, triggerData, workflow);
     case 'CREATE_TASK':
       return executeCreateTask(config, triggerData, workflow);
     case 'SEND_TELEGRAM':
@@ -651,7 +669,7 @@ async function executeAction(action, triggerData, workflow) {
   }
 }
 
-async function executeSendEmail(config, triggerData) {
+async function executeSendEmail(config, triggerData, workflow) {
   const { to, subject, body } = config;
 
   // Resolve template variables
@@ -665,7 +683,7 @@ async function executeSendEmail(config, triggerData) {
 
   // If email is configured, send it
   if (process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN) {
-    return sendEmail(resolvedTo, resolvedSubject, resolvedBody);
+    return sendEmail(resolvedTo, resolvedSubject, resolvedBody, { organizationId: triggerData?.organizationId || workflow?.organizationId || null });
   }
 
   // Otherwise just log
@@ -930,7 +948,7 @@ async function executeWorkflowAction(action, context, runId) {
         const subject = interpolateTemplate(config.subject || '', context);
         const body = interpolateTemplate(config.body || '', context);
         const html = config.html ? interpolateTemplate(config.html, context) : `<p>${body}</p>`;
-        const sent = await sendEmail(to, subject, html);
+        const sent = await sendEmail(to, subject, html, { organizationId: context?.organizationId || null });
         result.status = sent ? 'SUCCESS' : 'FAILED';
         result.message = sent ? `Email sent to ${to}` : `Failed to send email to ${to}`;
         break;

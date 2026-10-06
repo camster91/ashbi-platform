@@ -10,13 +10,19 @@ test('invoice delivery falls back to the authorized portal URL when Stripe payme
     total: 1250,
     dueDate: new Date('2026-09-15T00:00:00.000Z'),
     viewUrl: 'https://hub.ashbi.test/portal/invoice/safe-token',
+    branding: { companyName: 'Northwind Studio' },
   });
 
   assert.equal(delivery.to, 'client@example.test');
-  assert.equal(delivery.subject, 'Invoice INV-1042 from Ashbi');
+  assert.equal(delivery.subject, 'Invoice INV-1042 from Northwind Studio');
   assert.equal(delivery.template, 'invoice-created.html');
   assert.equal(delivery.variables.clientName, 'Avery Client');
   assert.equal(delivery.variables.amount, '$1,250.00 CAD');
   assert.equal(delivery.variables.payLink, 'https://hub.ashbi.test/portal/invoice/safe-token');
   assert.match(delivery.variables.dueDate, /September 15, 2026/);
+});
+
+test('invoice delivery without branding names no agency', () => {
+  const delivery = buildInvoiceDeliveryEmail({ to: 'client@example.test', invoiceNumber: 'INV-7', total: 10, viewUrl: 'https://hub.test/p' });
+  assert.equal(delivery.subject, 'Invoice INV-7');
 });

@@ -24,7 +24,12 @@ import {
   proposalBuilderEmailSchema,
   proposalBuilderUpdateSchema,
 } from '../validators/schemas.js';
-import { organizationNameFor } from '../utils/organization-name.js';
+import { brandedPdfFilename, escapeHtml, resolveBranding } from '../services/branding.service.js';
+
+/** The signed-in organization's branding for the proposal it builds. */
+function requestBranding(request) {
+  return resolveBranding(request.prisma, request.user?.organizationId);
+}
 
 
 // ProposalBuilderError codes and the fixed message each answers with.
@@ -62,7 +67,7 @@ export default async function proposalBuilderRoutes(fastify) {
         budget,
         timeline,
         notes
-      }, { sender: request.user, organizationName: await organizationNameFor(request) });
+      }, { sender: request.user, branding: await requestBranding(request) });
 
       // Save as draft if clientId provided
       let savedProposal = null;
@@ -167,7 +172,7 @@ export default async function proposalBuilderRoutes(fastify) {
       try {
         draftResult = await createProposalDraft(proposalData, recipientEmail, {
           sender: request.user,
-          organizationName: await organizationNameFor(request),
+          branding: await requestBranding(request),
         });
       } catch (draftErr) {
         console.warn('Gmail draft creation failed:', draftErr.message);
@@ -420,6 +425,7 @@ export default async function proposalBuilderRoutes(fastify) {
         proposalHtml = proposal.notes || "";
       }
 
+      const branding = await requestBranding(request);
       // If no HTML stored, generate it from the proposal data
       if (!proposalHtml) {
         const leadData = {
@@ -437,11 +443,11 @@ export default async function proposalBuilderRoutes(fastify) {
           })) || []
         };
         // Use basic HTML since we don't have AI generation here
-        proposalHtml = buildFallbackProposalHtml(proposalData, leadData);
+        proposalHtml = buildFallbackProposalHtml(proposalData, leadData, branding);
       }
 
       const pdfBuffer = await generatePdf(proposalHtml);
-      const filename = `Ashbi_Proposal_${proposal.id}.pdf`;
+      const filename = brandedPdfFilename(branding.companyName, 'Proposal', proposal.id);
 
       return reply
         .header("Content-Type", "application/pdf")
@@ -454,8 +460,17 @@ export default async function proposalBuilderRoutes(fastify) {
   });
 }
 
-// Helper to build basic proposal HTML when AI is not available
-function buildFallbackProposalHtml(proposalData, leadData) {
+// Helper to build basic proposal HTML when AI is not available, in the
+// organization's branding (resolveBranding).
+export function buildFallbackProposalHtml(proposalData, leadData, branding = {}) {
+  const companyName = escapeHtml(String(branding?.companyName || '').trim());
+  const footerLine = String(branding?.proposalFooter || '').trim()
+    ? escapeHtml(String(branding.proposalFooter).trim())
+    : [branding?.companyName, branding?.address, branding?.email, branding?.website]
+      .map((part) => String(part || '').trim())
+      .filter(Boolean)
+      .map(escapeHtml)
+      .join(' | ');
   const today = new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
   const validUntil = new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -484,7 +499,7 @@ function buildFallbackProposalHtml(proposalData, leadData) {
 <body>
   <div class="container">
     <div class="header">
-      <div class="logo">ASHBI</div>
+      ${companyName ? `<div class="logo">${companyName}</div>` : ''}
       <h1 class="proposal-title">${proposalData.title || 'Project Proposal'}</h1>
       <div>Prepared for ${leadData.name}${leadData.company ? `, ${leadData.company}` : ''} | ${today}</div>
     </div>
@@ -508,7 +523,7 @@ function buildFallbackProposalHtml(proposalData, leadData) {
       </div>
     </div>
     <div class="footer">
-      <p>Ashbi | Toronto, ON | hello@ashbi.design</p>
+      ${footerLine ? `<p>${footerLine}</p>` : ''}
       <p>Valid until ${validUntil}</p>
     </div>
   </div>
