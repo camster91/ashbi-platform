@@ -11,10 +11,7 @@ import invoiceRoutes from '../../routes/invoice.routes.js';
 import portalRoutes from '../../routes/portal.routes.js';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../../utils/request-context.js';
-import { shouldSkipHeavyTests } from '../_test-skip.js';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
-
-const skip = shouldSkipHeavyTests();
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -27,7 +24,6 @@ let createdInvoiceId;
 let createdInvoiceNumber;
 
 before(async () => {
-  if (skip) return;
   fastify = Fastify({ logger: false });
   await fastify.register(cookie);
   await fastify.register(jwt, {
@@ -104,7 +100,6 @@ before(async () => {
 });
 
 after(async () => {
-  if (skip) return;
   // Cleanup
   await rawPrisma.invoicePayment.deleteMany({ where: { invoice: { clientId: testClientId } } });
   await rawPrisma.invoiceLineItem.deleteMany({ where: { invoice: { clientId: testClientId } } });
@@ -126,7 +121,7 @@ function authHeader() {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('Invoice CRUD', { skip }, () => {
+describe('Invoice CRUD', () => {
 
   test('POST /api/invoices — create invoice with all fields', async () => {
     const res = await fastify.inject({
@@ -563,7 +558,7 @@ describe('Invoice CRUD', { skip }, () => {
 // A VIEWED invoice behaves exactly like SENT: listed
 // under the "Sent" filter, counted as outstanding, payable from the public
 // page and by mark-paid, overdue once past due, and voidable.
-describe('VIEWED invoices behave like SENT', { skip }, () => {
+describe('VIEWED invoices behave like SENT', () => {
   async function sentInvoice(title, unitPrice) {
     const created = await fastify.inject({
       method: 'POST', url: '/api/invoices', headers: authHeader(),
