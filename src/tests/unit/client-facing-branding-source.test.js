@@ -25,6 +25,7 @@ const CLIENT_FACING = [
   'src/services/automation.service.js',
   'src/services/contractTemplates.service.js',
   'src/services/email.service.js',
+  'src/services/weeklyReport.service.js',
   'src/utils/generate-contract-pdf.js',
   'src/utils/generate-invoice-pdf.js',
   ...fs.readdirSync(path.join(ROOT, 'src/emails')).filter((name) => name.endsWith('.html')).map((name) => `src/emails/${name}`),
@@ -38,7 +39,7 @@ const CLIENT_FACING = [
 ];
 
 // "Ashbi Design", the "ASHBI" logo text, the agency's domains and its people.
-const BRAND_TEXT = /Ashbi Design|\bASHBI\b(?!_)|ashbi\.ca|ashbi\.design|cameron@|'cameron'|\bashbi<\/h1>|>ashbi</;
+const BRAND_TEXT = /Ashbi Design|Ashbi Team|\bASHBI\b(?!_)|ashbi\.ca|ashbi\.design|cameron@|'cameron'|\bashbi<\/h1>|>ashbi</;
 
 function codeLines(source) {
   return source
