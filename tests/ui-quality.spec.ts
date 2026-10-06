@@ -78,7 +78,7 @@ async function mockExtraApi(page: Page) {
     if (path === '/responses/pending') return json(route, []);
     if (path === '/credentials') return json(route, { credentials: [] });
     if (path === '/trash') return json(route, { items: [], total: 0 });
-    if (path === '/brand') return json(route, { companyName: 'Ashbi Design', primaryColor: '#c9a84c', accentColor: '#1e293b' });
+    if (path === '/brand') return json(route, { companyName: 'Northwind Studio', primaryColor: '#c9a84c', accentColor: '#1e293b' });
     if (path === '/team') return json(route, [{ ...adminUser, isActive: true, utilizationPercent: 45, assignedTasks: 3, capacityStatus: 'available' }]);
     if (path === '/team/workload') return json(route, []);
     if (path === '/contracts') return json(route, []);

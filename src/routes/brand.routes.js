@@ -8,6 +8,7 @@ import {
   DEFAULT_UPLOADS_DIR, brandLogoRelativePath, removeStoredBrandLogo, sendStoredUpload, writeUploadThenPersist,
 } from '../utils/stored-upload.js';
 import { findBrandSettings, getOrCreateBrandSettings } from '../services/brand-settings.service.js';
+import { effectiveCompanyName } from '../services/branding.service.js';
 
 const LOGO_REPLACE_ATTEMPTS = 3;
 
@@ -45,8 +46,15 @@ export default async function brandRoutes(fastify, options = {}) {
 
   // ─── GET / — get brand settings (create default if none) ────────────────────
   // Every read and write below is scoped to the caller's organization.
+  // A row auto-created with the legacy "Ashbi Design" default reads as the
+  // organization's own name (as on every client-facing document); the stored
+  // value changes only when an admin saves the form.
   fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
-    return getOrCreateBrandSettings(request.prisma, request.user.organizationId);
+    const settings = await getOrCreateBrandSettings(request.prisma, request.user.organizationId);
+    const organization = request.prisma.organization?.findUnique
+      ? await request.prisma.organization.findUnique({ where: { id: request.user.organizationId }, select: { name: true } })
+      : null;
+    return { ...settings, companyName: effectiveCompanyName(settings.companyName, organization?.name) };
   });
 
   // ─── PUT / — update brand settings (admin only) ─────────────────────────────

@@ -54,6 +54,10 @@ async function buildApp(t, row) {
       },
     },
     auditEvent: { create: async ({ data }) => { audits.push(data); return data; } },
+    // The estimate's organization's branding (issue #531).
+    client: { findUnique: async ({ where }) => (where.id === 'client-a' ? { organizationId: 'org-a' } : null) },
+    organization: { findUnique: async ({ where }) => (where.id === 'org-a' ? { name: 'Northwind Studio', logo: null } : null) },
+    brandSettings: { findUnique: async () => null },
   };
   app.decorate('prisma', prisma);
   app.addHook('onRequest', async (request) => { request.prisma = prisma; });
@@ -68,9 +72,10 @@ test('the public view returns an explicit safe shape', async (t) => {
   assert.equal(response.statusCode, 200, response.body);
   const body = response.json();
   assert.deepEqual(Object.keys(body).sort(), [
-    'clientName', 'createdAt', 'description', 'lineItems', 'sentAt', 'status', 'subtotal', 'tax', 'taxRate', 'title', 'total', 'validUntil',
+    'brand', 'clientName', 'createdAt', 'description', 'lineItems', 'sentAt', 'status', 'subtotal', 'tax', 'taxRate', 'title', 'total', 'validUntil',
   ]);
   assert.equal(body.clientName, 'Avery Client');
+  assert.deepEqual(body.brand, { companyName: 'Northwind Studio', logoUrl: null });
   assert.deepEqual(Object.keys(body.lineItems[0]).sort(), ['amount', 'description', 'quantity', 'rate']);
   assert.doesNotMatch(response.body, /draftData|unsaved internal draft|avery@example|deliveryMessageId|viewToken|strong-token|margin|estimate-a|client-a/);
 });
@@ -151,6 +156,10 @@ test('staff can reissue a link for a SENT estimate, audited; not for other state
       update: async ({ data }) => { Object.assign(row, data); return { id: row.id, viewToken: row.viewToken, publicAccessExpiresAt: row.publicAccessExpiresAt }; },
     },
     auditEvent: { create: async ({ data }) => { audits.push(data); return data; } },
+    // The estimate's organization's branding (issue #531).
+    client: { findUnique: async ({ where }) => (where.id === 'client-a' ? { organizationId: 'org-a' } : null) },
+    organization: { findUnique: async ({ where }) => (where.id === 'org-a' ? { name: 'Northwind Studio', logo: null } : null) },
+    brandSettings: { findUnique: async () => null },
   };
   app.addHook('onRequest', async (request) => { request.prisma = prisma; });
   await app.register(estimateRoutes);

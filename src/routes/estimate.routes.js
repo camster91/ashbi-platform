@@ -9,6 +9,7 @@ import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-d
 import { recordAuditEvent, recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { computeProposalLineItems, proposalTotals } from '../utils/proposal-totals.js';
 import { invoiceTotals, lineTotal, roundMoney } from '../utils/money-totals.js';
+import { brandedSender, escapeHtml, publicBrand, resolveBrandingForClient } from '../services/branding.service.js';
 
 // Estimates a client may see through the public link. A DRAFT is never public,
 // whatever token it holds.
@@ -387,15 +388,19 @@ export default async function estimateRoutes(fastify) {
           key: env.mailgunApiKey
         });
 
+        // Sent in the estimate's organization's name (resolveBranding).
+        const branding = await resolveBrandingForClient(request.prisma, estimate.clientId);
+        const companyName = String(branding.companyName || '').trim();
+        const fromCompany = companyName ? ` from ${companyName}` : '';
         const sent = await mgClient.messages.create(env.mailgunDomain, {
           ...mailgunTrackingFields({ documentType: 'estimate', documentId: estimate.id }),
-          from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
+          from: brandedSender(branding, env.mailgunDomain),
           to: estimate.client.email,
-          subject: `Estimate from Ashbi Design — $${updated.total.toLocaleString()}`,
+          subject: `Estimate${fromCompany} — $${updated.total.toLocaleString()}`,
           html: `
             <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:40px;border-radius:12px;">
-              <h2 style="color:#c9a84c;margin-top:0;">New Estimate from Ashbi Design</h2>
-              <p>Hello ${estimate.client.name},</p>
+              <h2 style="color:#c9a84c;margin-top:0;">New Estimate${escapeHtml(fromCompany)}</h2>
+              <p>Hello ${escapeHtml(estimate.client.name)},</p>
               <p>We've prepared an estimate for you. Please review and approve or decline at your convenience.</p>
               <p><strong>Amount:</strong> $${updated.total.toLocaleString()}</p>
               <p><strong>Status:</strong> Pending your review</p>
@@ -442,7 +447,8 @@ export default async function estimateRoutes(fastify) {
     });
     const failure = publicEstimateFailure(estimate);
     if (failure) return reply.status(failure.statusCode).send({ error: failure.error });
-    return publicEstimateView(estimate);
+    const brand = publicBrand(await resolveBrandingForClient(request.prisma, estimate.clientId));
+    return { ...publicEstimateView(estimate), brand };
   });
 
   // Client approve/decline estimate
@@ -484,7 +490,8 @@ export default async function estimateRoutes(fastify) {
       metadata: { fromStatus: 'SENT', toStatus: newStatus, via: 'public_link', total: estimate.total },
     });
 
-    return publicEstimateView({ ...estimate, status: newStatus });
+    const brand = publicBrand(await resolveBrandingForClient(request.prisma, estimate.clientId));
+    return { ...publicEstimateView({ ...estimate, status: newStatus }), brand };
   });
 
   // Issue a fresh public link for a SENT estimate (after a revocation, an

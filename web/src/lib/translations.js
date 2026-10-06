@@ -87,7 +87,7 @@ export const translations = {
       feature1: 'AI help for triage, updates and proposals',
       feature2: 'Clients, projects and billing together',
       feature3: 'Automated follow-ups and reporting',
-      copyright: '© 2026 Ashbi Design. All rights reserved.',
+      copyright: '© 2026 Ashbi Hub. All rights reserved.',
     },
   },
   es: {
@@ -176,7 +176,7 @@ export const translations = {
       feature1: 'Ayuda de IA para clasificar, informar y proponer',
       feature2: 'Clientes, proyectos y facturación juntos',
       feature3: 'Seguimientos automáticos e informes',
-      copyright: '© 2026 Ashbi Design. Todos los derechos reservados.',
+      copyright: '© 2026 Ashbi Hub. Todos los derechos reservados.',
     },
   },
 };

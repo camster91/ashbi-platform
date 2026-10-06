@@ -16,6 +16,7 @@ import { accountThrottle } from '../auth/credential-throttle.js';
 import { isMfaEnrollmentRequired } from '../auth/mfa-enforcement.js';
 import { resolveRequestSession } from '../auth/request-session.js';
 import { AccountWithoutOrganizationError } from '../auth/providers/local.provider.js';
+import { brandedSender, escapeHtml, resolveBranding, systemSender } from '../services/branding.service.js';
 import {
   IMPERSONATION_COOKIE,
   clearImpersonationCookieOptions,
@@ -161,7 +162,8 @@ async function sendPasswordResetEmailViaMailgun({ to, resetLink }) {
   const mg = new Mailgun(FormData);
   const client = mg.client({ username: 'api', key: env.mailgunApiKey });
   await client.messages.create(env.mailgunDomain, {
-    from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
+    // No organization is known before the reset: the product's name.
+    from: systemSender(env.mailgunDomain),
     to,
     subject: 'Reset Your Password — Ashbi Hub',
     html: `
@@ -839,14 +841,17 @@ export default async function authRoutes(fastify, options = {}) {
           key: env.mailgunApiKey
         });
 
+        // Sent in the inviting agency's name (resolveBranding).
+        const branding = await resolveBranding(request.prisma, request.user.organizationId);
+        const companyName = String(branding.companyName || '').trim();
         await mgClient.messages.create(env.mailgunDomain, {
-          from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
+          from: brandedSender(branding, env.mailgunDomain),
           to: email,
-          subject: 'You have been invited to Ashbi Hub',
+          subject: companyName ? `${companyName} invited you to their client portal` : 'You have been invited to Ashbi Hub',
           html: `
             <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:40px;border-radius:12px;">
               <h2 style="color:#c9a84c;margin-top:0;">You've been invited</h2>
-              <p>You have been invited to join Ashbi Hub. Click the button below to access your client portal.</p>
+              <p>You have been invited to join ${companyName ? `the ${escapeHtml(companyName)} client portal` : 'Ashbi Hub'}. Click the button below to access your client portal.</p>
               <a href="${inviteLink}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#c9a84c;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Access Client Portal</a>
               <p style="font-size:14px;color:#94a3b8;">Or copy this link: <code style="color:#e2e8f0;word-break:break-all;">${inviteLink}</code></p>
               <p style="font-size:12px;color:#94a3b8;">This link will expire in 7 days.</p>

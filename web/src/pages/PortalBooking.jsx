@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
-  Sparkles,
   CheckCircle,
   Calendar,
   Clock,
@@ -13,6 +12,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import PortalBrand, { PortalBrandFooter } from '../components/PortalBrand';
 import { cn } from '../lib/utils';
 import usePortalLightTheme from '../hooks/usePortalLightTheme';
 
@@ -233,6 +233,8 @@ export default function PortalBooking() {
   });
 
   const slots = slotsData?.slots || slotsData || [];
+  // The booking organization's name and logo, sent with the availability.
+  const brand = slotsData?.brand;
   const slotZone = slotUtcOffsetLabel(selectedDate, Array.isArray(slots) ? slots.find((slot) => slot?.start) : null);
   const zoneText = slotZone ? `our local time (${slotZone})` : 'our local time';
 
@@ -265,12 +267,7 @@ export default function PortalBooking() {
       <div className="min-h-screen bg-background">
         <header className="bg-card border-b border-border/40 shadow-sm">
           <div className="max-w-3xl mx-auto px-6 py-6">
-            <div className="flex items-center gap-3 mb-1">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-warning" />
-              </div>
-              <span className="text-sm font-medium text-muted-foreground">Ashbi Design</span>
-            </div>
+            <PortalBrand brand={brand} />
             <h1 className="text-2xl font-bold text-foreground mt-3">Book a Call</h1>
           </div>
         </header>
@@ -300,7 +297,7 @@ export default function PortalBooking() {
             </div>
           </div>
           <div className="text-center py-6">
-            <p className="text-xs text-muted-foreground">Powered by Ashbi Design</p>
+            <PortalBrandFooter brand={brand} />
           </div>
         </main>
       </div>
@@ -312,12 +309,7 @@ export default function PortalBooking() {
       {/* Header */}
       <header className="bg-card border-b border-border/40 shadow-sm">
         <div className="max-w-3xl mx-auto px-6 py-6">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-warning" />
-            </div>
-            <span className="text-sm font-medium text-muted-foreground">Ashbi Design</span>
-          </div>
+          <PortalBrand brand={brand} />
           <h1 className="text-2xl font-bold text-foreground mt-3">Book a Call</h1>
           <p className="text-muted-foreground mt-1">Schedule a consultation with our team</p>
         </div>
@@ -484,7 +476,7 @@ export default function PortalBooking() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-muted-foreground">Powered by Ashbi Design</p>
+          <PortalBrandFooter brand={brand} />
         </div>
       </main>
     </div>
