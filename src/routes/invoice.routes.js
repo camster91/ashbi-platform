@@ -6,10 +6,12 @@ import { createNumberedInvoice, isUniqueViolationOn } from '../utils/invoice.js'
 import { createPublicAccessWindow, invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
 import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
+import { publicBrand, resolveBrandingForDocument } from '../services/branding.service.js';
+import env from '../config/env.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { defaultInvoiceCurrency, normalizeInvoiceCurrency } from '../utils/money.js';
 import { InvalidPaymentAmountError, InvoiceOverpaymentError, recordManualPayment, settleInvoiceManually } from '../services/invoice-payment.service.js';
-import { invoiceAmountPaid, invoiceBalance, withInvoiceBalance } from '../utils/invoice-balance.js';
+import { invoiceAmountPaid, invoiceBalance, SENT_INVOICE_STATUSES, UNPAID_INVOICE_STATUSES, withInvoiceBalance } from '../utils/invoice-balance.js';
 import { clampTake } from '../utils/query-limits.js';
 import { firstRecurringDate } from '../jobs/recurring-invoices.js';
 import { proposalTaxRate, taxTypeForRate } from '../utils/proposal-totals.js';
@@ -17,7 +19,8 @@ import { invoiceTotals, lineTotal } from '../utils/money-totals.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
-const VOIDABLE_STATUSES = new Set(['DRAFT', 'SENT', 'OVERDUE']);
+// Any unpaid invoice (DRAFT, SENT, VIEWED, OVERDUE) can be voided.
+const VOIDABLE_STATUSES = new Set(['DRAFT', ...UNPAID_INVOICE_STATUSES]);
 
 class InvoiceHasPaymentsError extends Error {}
 
@@ -111,10 +114,10 @@ export default async function invoiceRoutes(fastify, options = {}) {
     });
   }
 
-  // Overdue = stored OVERDUE (set by the overdue job) or SENT past its due
-  // date (before the job has run).
+  // Overdue = stored OVERDUE (set by the overdue job) or SENT/VIEWED past
+  // its due date (before the job has run).
   function isOverdueInvoice(inv, now = new Date()) {
-    return inv.status === 'OVERDUE' || Boolean(inv.status === 'SENT' && inv.dueDate && new Date(inv.dueDate) < now);
+    return inv.status === 'OVERDUE' || Boolean(SENT_INVOICE_STATUSES.includes(inv.status) && inv.dueDate && new Date(inv.dueDate) < now);
   }
 
   function flagOverdue(inv) {
@@ -128,12 +131,15 @@ export default async function invoiceRoutes(fastify, options = {}) {
     const where = {};
     if (clientId) where.clientId = clientId;
     if (projectId) where.projectId = projectId;
-    if (status && status !== 'OVERDUE') where.status = status;
+    // "SENT" lists every sent-but-unpaid invoice, including any marked
+    // VIEWED (VIEWED behaves exactly like SENT).
+    if (status === 'SENT') where.status = { in: [...SENT_INVOICE_STATUSES] };
+    else if (status && status !== 'OVERDUE') where.status = status;
     const and = [];
     if (status === 'OVERDUE') {
       and.push({ OR: [
         { status: 'OVERDUE' },
-        { status: 'SENT', dueDate: { lt: new Date() } },
+        { status: { in: [...SENT_INVOICE_STATUSES] }, dueDate: { lt: new Date() } },
       ] });
     }
     if (search) {
@@ -180,8 +186,8 @@ export default async function invoiceRoutes(fastify, options = {}) {
   });
 
   // Collection stats. Buckets are disjoint so no invoice is counted twice:
-  //   sent    = SENT and not yet past due
-  //   overdue = stored OVERDUE, or SENT past its due date
+  //   sent    = SENT or VIEWED and not yet past due
+  //   overdue = stored OVERDUE, or SENT/VIEWED past its due date
   //   totalOutstanding = sent + overdue (every open invoice once)
   // Money is grouped by currency in `byCurrency`; the top-level amounts are
   // only filled when every invoice shares one currency (`mixedCurrency`
@@ -197,13 +203,13 @@ export default async function invoiceRoutes(fastify, options = {}) {
       }),
       fastify.prisma.invoice.groupBy({
         by: ['currency'],
-        where: { status: 'SENT', dueDate: { lt: now } },
+        where: { status: { in: [...SENT_INVOICE_STATUSES] }, dueDate: { lt: now } },
         _count: { _all: true },
         _sum: { total: true },
       }),
       // Partial payments on open invoices: outstanding money is the balance.
       fastify.prisma.invoicePayment.findMany({
-        where: { invoice: { status: { in: ['SENT', 'OVERDUE'] } } },
+        where: { invoice: { status: { in: [...UNPAID_INVOICE_STATUSES] } } },
         select: { amount: true, invoice: { select: { status: true, currency: true, dueDate: true } } },
       }),
     ]);
@@ -225,14 +231,15 @@ export default async function invoiceRoutes(fastify, options = {}) {
     };
 
     for (const row of byStatus) {
-      const key = row.status === 'OVERDUE' ? 'overdue' : row.status.toLowerCase();
+      // A VIEWED invoice counts as sent.
+      const key = row.status === 'VIEWED' ? 'sent' : row.status === 'OVERDUE' ? 'overdue' : row.status.toLowerCase();
       if (!totals[key]) continue;
       const count = row._count._all;
       const amount = row._sum.total ?? 0;
       add(totals, key, count, amount);
       add(bucketFor(row.currency), key, count, amount);
     }
-    // Move SENT-but-past-due from "sent" to "overdue".
+    // Move SENT/VIEWED-but-past-due from "sent" to "overdue".
     for (const row of sentPastDue) {
       const count = row._count._all;
       const amount = row._sum.total ?? 0;
@@ -611,8 +618,10 @@ export default async function invoiceRoutes(fastify, options = {}) {
     let emailSent = false;
     if (primaryContact?.email) {
       try {
-        const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${access.token}`;
+        const viewUrl = `${env.appUrl}/portal/invoice/${access.token}`;
+        const branding = await resolveBrandingForDocument(fastify.prisma, invoice);
         const delivery = await deliverInvoiceEmail({
+          branding,
           to: primaryContact.email,
           clientName: primaryContact.name || invoice.client.name,
           invoiceNumber: invoice.invoiceNumber,
@@ -681,7 +690,8 @@ export default async function invoiceRoutes(fastify, options = {}) {
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
 
     try {
-      const pdfBuffer = await generateInvoicePdf(invoice);
+      const branding = await resolveBrandingForDocument(fastify.prisma, invoice);
+      const pdfBuffer = await generateInvoicePdf(invoice, { branding });
       const filename = `${invoice.invoiceNumber}.pdf`;
       reply.header('Content-Type', 'application/pdf');
       reply.header('Content-Disposition', `attachment; filename="${filename}"`);
@@ -882,7 +892,8 @@ export default async function invoiceRoutes(fastify, options = {}) {
       stripeCheckoutAttempt,
       ...safe
     } = invoice;
-    return safe;
+    const brand = publicBrand(await resolveBrandingForDocument(fastify.prisma, invoice));
+    return { ...safe, brand };
   });
 
   fastify.post('/:id/public-link/revoke', { onRequest: [fastify.authenticate] }, async (request, reply) => {
@@ -909,8 +920,10 @@ export default async function invoiceRoutes(fastify, options = {}) {
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     const contact = invoice.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
-    const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${invoice.viewToken}`;
+    const viewUrl = `${env.appUrl}/portal/invoice/${invoice.viewToken}`;
+    const branding = await resolveBrandingForDocument(request.prisma, invoice);
     const delivery = await sendInvoiceDeliveryEmail({
+      branding,
       to: contact.email,
       clientName: contact.name || invoice.client.name,
       invoiceNumber: invoice.invoiceNumber,

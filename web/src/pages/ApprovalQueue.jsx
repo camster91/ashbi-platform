@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { CheckCircle, XCircle, Eye, ChevronRight, Mail, FileText, DollarSign, Megaphone, Code } from 'lucide-react';
 import { safeHtml } from '../lib/safeHtml';
 import { api } from '../lib/api';
@@ -62,6 +64,13 @@ export default function ApprovalQueue() {
   const [loadError, setLoadError] = useState(null);
   const [actionError, setActionError] = useState('');
   const fetchingRef = useRef(false);
+  // Client replies waiting for approval live on their own screen.
+  const pendingReplies = useQuery({
+    queryKey: ['responses', 'pending'],
+    queryFn: () => api.getPendingResponses(),
+    refetchInterval: 30_000,
+  });
+  const pendingReplyCount = Array.isArray(pendingReplies.data) ? pendingReplies.data.length : 0;
   const [selectedId, setSelectedId] = useState(null);
   const [filterStatus, setFilterStatus] = useState('PENDING');
   const [filterType, setFilterType] = useState('');
@@ -133,6 +142,15 @@ export default function ApprovalQueue() {
               <span className="px-2 py-0.5 bg-destructive text-destructive-foreground text-xs font-bold rounded-full">{pendingCount}</span>
             )}
           </div>
+          <Link
+            to="/approvals/replies"
+            className="mb-3 flex min-h-11 items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span>Client replies to approve</span>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${pendingReplyCount > 0 ? 'bg-warning text-warning-foreground' : 'bg-muted text-muted-foreground'}`}>
+              {pendingReplies.isError ? '!' : pendingReplyCount}
+            </span>
+          </Link>
           <div className="flex gap-2">
             <select aria-label="Filter by status"
               value={filterStatus}

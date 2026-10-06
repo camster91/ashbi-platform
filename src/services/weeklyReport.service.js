@@ -2,6 +2,7 @@
 
 import aiClient from '../ai/client.js';
 import prisma from '../config/db.js';
+import { resolveBranding } from './branding.service.js';
 
 export async function generateWeeklyReport(clientId) {
   const sevenDaysAgo = new Date();
@@ -59,6 +60,10 @@ export async function generateWeeklyReport(clientId) {
     };
   });
 
+  // Signed in the agency's own name (its brand settings), never another's.
+  const { companyName } = await resolveBranding(prisma, client.organizationId);
+  const signOff = companyName ? `A professional sign-off from "The ${companyName} Team"` : 'A professional sign-off from "The Team"';
+
   // Use AI to draft the report email
   const prompt = `You are writing a weekly status report email for a client named "${client.name}".
 
@@ -70,7 +75,7 @@ Write a professional, friendly weekly summary email. Include:
 - A brief greeting
 - Project-by-project highlights (tasks completed, hours worked, any revision rounds)
 - Overall status / what's coming next week
-- A professional sign-off from "The Ashbi Team"
+- ${signOff}
 
 Keep it concise but informative. Do NOT use markdown formatting — write in plain email style.
 

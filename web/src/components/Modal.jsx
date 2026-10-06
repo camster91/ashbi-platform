@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useCallback, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -109,7 +110,11 @@ export default function Modal({
     full: 'max-w-[90vw]',
   };
 
-  return (
+  // Rendered into document.body: a page wrapper that is a stacking context
+  // (an opacity or transform animation held with fill-mode forwards, such as
+  // `animate-fade-in`) would otherwise trap the dialog below fixed page
+  // chrome like the Getting started button (#529).
+  return createPortal(
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
       <div
@@ -159,7 +164,8 @@ export default function Modal({
           <div className="px-4 py-4 sm:px-6">{children}</div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

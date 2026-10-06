@@ -13,6 +13,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { PortalBrandFooter } from '../components/PortalBrand';
 import { cn, formatDate } from '../lib/utils';
 import LoadingState from '../components/ui/LoadingState';
 import usePortalLightTheme from '../hooks/usePortalLightTheme';
@@ -140,19 +141,16 @@ export default function PortalEstimate() {
         {/* From / To / Details */}
         <div className="bg-card rounded-xl border border-border/40 p-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {/* From */}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">From</p>
-              <div className="flex items-center gap-2">
-                <Building2 className="text-primary w-4 h-4" />
-                <span className="text-primary text-sm font-semibold">
-                  {estimate.agencyName || estimate.fromName || 'Ashbi Design'}
-                </span>
+            {/* From: the sending agency (brand from the public estimate API) */}
+            {estimate.brand?.companyName && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">From</p>
+                <div className="flex items-center gap-2">
+                  <Building2 className="text-primary w-4 h-4" />
+                  <span className="text-primary text-sm font-semibold">{estimate.brand.companyName}</span>
+                </div>
               </div>
-              {estimate.agencyEmail && (
-                <p className="text-xs text-muted-foreground mt-1 ml-6">{estimate.agencyEmail}</p>
-              )}
-            </div>
+            )}
 
             {/* To */}
             <div>
@@ -298,7 +296,7 @@ export default function PortalEstimate() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-muted-foreground">Powered by Ashbi Design</p>
+          <PortalBrandFooter brand={estimate?.brand} />
         </div>
       </main>
     </div>

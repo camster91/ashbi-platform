@@ -1,7 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
-  Sparkles,
   CheckCircle,
   FileText,
   Calendar,
@@ -11,13 +10,14 @@ import {
   Clock,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import PortalBrand, { PortalBrandFooter } from '../components/PortalBrand';
 import { cn } from '../lib/utils';
 import { formatInvoiceMoney, formatInvoiceDate } from '../lib/format';
 import LoadingState from '../components/ui/LoadingState';
 import usePortalLightTheme from '../hooks/usePortalLightTheme';
 import StatusBadge from '../components/ui/StatusBadge';
 import PortalLineItems from '../components/PortalLineItems';
-import { invoiceDisplayStatus, taxTypeLabel } from '../lib/invoice-status';
+import { invoiceDisplayStatus, isOpenInvoice, taxTypeLabel } from '../lib/invoice-status';
 
 function formatDate(date) {
   return formatInvoiceDate(date, { month: 'long' });
@@ -76,7 +76,8 @@ export default function PortalInvoice() {
   const isPaid = invoice.status === 'PAID';
   const { subtotal, discount, tax, total, amountPaid, balanceDue } = invoiceAmounts(invoice);
   // Nothing to collect on a zero (or negative) balance.
-  const showPayButton = (invoice.status === 'SENT' || invoice.status === 'OVERDUE') && balanceDue > 0;
+  // SENT, VIEWED (this page was opened before) or OVERDUE.
+  const showPayButton = isOpenInvoice(invoice) && balanceDue > 0;
   const currency = invoice.currency;
   const taxLabel = invoice.taxType && invoice.taxType !== 'NONE'
     ? `${taxTypeLabel(invoice.taxType)}${invoice.taxRate != null ? ` (${invoice.taxRate}%)` : ''}`
@@ -87,12 +88,7 @@ export default function PortalInvoice() {
       {/* Header */}
       <header className="bg-card border-b border-border/40 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-warning" />
-            </div>
-            <span className="text-sm font-medium text-muted-foreground">Ashbi Design</span>
-          </div>
+          <PortalBrand brand={invoice?.brand} />
           <h1 className="text-2xl font-bold text-foreground mt-3">Invoice</h1>
         </div>
       </header>
@@ -234,7 +230,7 @@ export default function PortalInvoice() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-muted-foreground">Powered by Ashbi Design</p>
+          <PortalBrandFooter brand={invoice?.brand} />
         </div>
       </main>
     </div>

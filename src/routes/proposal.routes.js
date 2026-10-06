@@ -18,10 +18,12 @@ import { recordProposalApproved } from '../services/domain-event-producers.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { deliveryFieldsFromSend, mailgunTrackingFields, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { computeProposalLineItems, proposalTaxSummary, proposalTotals } from '../utils/proposal-totals.js';
+import { brandedSender, escapeHtml, publicBrand, resolveBrandingForClient } from '../services/branding.service.js';
 
 // Returns the provider result ({ ok, id?, error? }), or null when no send was
 // attempted (test mode).
-async function sendProposalEmail(to, clientName, proposalTitle, portalUrl, proposalId) {
+// Sent in the proposal's organization's name (resolveBranding).
+async function sendProposalEmail(to, clientName, proposalTitle, portalUrl, proposalId, branding) {
   // ASHI_RUN_EMAIL_TESTS is intentionally read directly from process.env
   // (not env.*) because it is a developer-only test toggle and is never
   // wired into env.js. NODE_ENV === 'test' is also read directly because
@@ -32,20 +34,22 @@ async function sendProposalEmail(to, clientName, proposalTitle, portalUrl, propo
   try {
     const mg = new Mailgun(FormData);
     const client = mg.client({ username: 'api', key: env.mailgunApiKey });
+    const companyName = escapeHtml(String(branding?.companyName || '').trim());
+    const footer = [companyName, escapeHtml(String(branding?.website || '').trim())].filter(Boolean).join(' · ');
     const sent = await client.messages.create(env.mailgunDomain, {
       ...mailgunTrackingFields({ documentType: 'proposal', documentId: proposalId }),
-      from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
+      from: brandedSender(branding, env.mailgunDomain),
       to,
       subject: `Your Proposal is Ready — ${proposalTitle}`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          <h2 style="color: #1a1a1a;">Hi ${clientName},</h2>
+          <h2 style="color: #1a1a1a;">Hi ${escapeHtml(clientName)},</h2>
           <p style="color: #444; line-height: 1.6;">
-            Your proposal from Ashbi Design is ready for review.
+            Your proposal${companyName ? ` from ${companyName}` : ''} is ready for review.
             Please take a moment to review the details and let us know if you have any questions.
           </p>
           <div style="text-align: center; margin: 32px 0;">
-            <a href="${portalUrl}" style="background: #6366f1; color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">
+            <a href="${escapeHtml(portalUrl)}" style="background: #6366f1; color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">
               View Proposal
             </a>
           </div>
@@ -53,7 +57,7 @@ async function sendProposalEmail(to, clientName, proposalTitle, portalUrl, propo
             You can approve, decline, or ask questions directly through the proposal page.
           </p>
           <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;" />
-          <p style="color: #aaa; font-size: 12px;">Ashbi Design · Toronto, Canada · hub.ashbi.ca</p>
+          ${footer ? `<p style="color: #aaa; font-size: 12px;">${footer}</p>` : ''}
         </div>
       `,
     });
@@ -374,7 +378,8 @@ export default async function proposalRoutes(fastify) {
     let deliveryFields = null;
     if (primaryEmail && proposal.viewToken) {
       const portalUrl = `${env.portalBaseUrl}/portal/proposal/${proposal.viewToken}`;
-      const delivery = await sendProposalEmail(primaryEmail, primaryName, proposal.title, portalUrl, proposal.id);
+      const branding = await resolveBrandingForClient(request.prisma, proposal.clientId);
+      const delivery = await sendProposalEmail(primaryEmail, primaryName, proposal.title, portalUrl, proposal.id, branding);
       emailSent = Boolean(delivery?.ok);
       deliveryFields = await recordProposalDelivery(request.prisma, proposal.id, delivery);
     }
@@ -402,7 +407,8 @@ export default async function proposalRoutes(fastify) {
     const contact = proposal.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
     const portalUrl = `${env.portalBaseUrl}/portal/proposal/${proposal.viewToken}`;
-    const delivery = await sendProposalEmail(contact.email, contact.name || proposal.client.name, proposal.title, portalUrl, proposal.id);
+    const branding = await resolveBrandingForClient(request.prisma, proposal.clientId);
+    const delivery = await sendProposalEmail(contact.email, contact.name || proposal.client.name, proposal.title, portalUrl, proposal.id, branding);
     await recordProposalDelivery(request.prisma, proposal.id, delivery);
     if (!delivery?.ok) return reply.status(503).send({ error: 'Proposal email delivery is unavailable', retryable: true });
     return { emailSent: true };
@@ -582,7 +588,8 @@ export default async function proposalRoutes(fastify) {
       proposal.status = 'VIEWED';
     }
 
-    return publicProposalView(proposal);
+    const brand = publicBrand(await resolveBrandingForClient(request.prisma, proposal.client?.id));
+    return { ...publicProposalView(proposal), brand };
   });
 
   // PUBLIC: Client approves proposal

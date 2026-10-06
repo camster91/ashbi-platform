@@ -10,6 +10,7 @@ import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES, publicAccessFailure 
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { recordContractSigned, recordProposalApproved } from '../services/domain-event-producers.js';
 import env from '../config/env.js';
+import { publicBrand, resolveBranding, resolveBrandingForClient, resolveBrandingForDocument } from '../services/branding.service.js';
 
 // Per-IP limits for the unauthenticated capability-link routes that still use
 // the legacy never-expiring project and intake-form view tokens (security
@@ -57,6 +58,8 @@ export default async function portalRoutes(fastify) {
         description: true,
         status: true,
         updatedAt: true,
+        // Names the agency's brand below; never returned.
+        organizationId: true,
         client: { select: { name: true } },
         revisionRounds: {
           orderBy: { roundNumber: 'desc' },
@@ -111,7 +114,9 @@ export default async function portalRoutes(fastify) {
         category: t.category,
         dueDate: t.dueDate
       })),
-      updatedAt: project.updatedAt
+      updatedAt: project.updatedAt,
+      // The agency's name and public logo (never its contact details).
+      brand: publicBrand(await resolveBranding(request.prisma, project.organizationId)),
     };
   });
 
@@ -175,7 +180,8 @@ export default async function portalRoutes(fastify) {
         quantity: li.quantity,
         unitPrice: li.unitPrice,
         total: li.total
-      }))
+      })),
+      brand: publicBrand(await resolveBrandingForClient(request.prisma, proposal.clientId)),
     };
   });
 
@@ -321,7 +327,8 @@ export default async function portalRoutes(fastify) {
       createdBy: { name: contract.createdBy.name },
       signedAt: contract.signedAt,
       clientSigName: contract.clientSigName,
-      createdAt: contract.createdAt
+      createdAt: contract.createdAt,
+      brand: publicBrand(await resolveBrandingForClient(request.prisma, contract.clientId)),
     };
   });
 
@@ -471,7 +478,8 @@ export default async function portalRoutes(fastify) {
         amount: p.amount,
         method: p.method,
         paidAt: p.paidAt
-      }))
+      })),
+      brand: publicBrand(await resolveBrandingForDocument(request.prisma, invoice)),
     };
   });
 
@@ -538,6 +546,7 @@ export default async function portalRoutes(fastify) {
       description: form.description,
       fields: JSON.parse(form.fields || '[]'),
       clientName: form.client?.name,
+      brand: publicBrand(await resolveBrandingForClient(request.prisma, form.clientId)),
     };
   });
 
@@ -672,7 +681,7 @@ export default async function portalRoutes(fastify) {
       });
     }
 
-    return { date, slots };
+    return { date, slots, brand: publicBrand(await resolveBranding(request.prisma, owner.organizationId)) };
   });
 
   // Book a time slot

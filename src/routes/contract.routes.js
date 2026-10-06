@@ -4,6 +4,7 @@ import logger from '../utils/logger.js';
 import { sendContractSignEmail } from '../services/email.service.js';
 import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { renderTemplate } from '../services/contractTemplates.service.js';
+import { publicBrand, resolveBranding, resolveBrandingForClient } from '../services/branding.service.js';
 import { validateBody, createContractSchema, contractDraftUpdateSchema, contractSignSchema } from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
@@ -14,14 +15,14 @@ import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-d
 // Returns the provider result ({ ok, id?, error? }), or null when no send was
 // attempted (test mode). The helper used to return `true` whenever it did not
 // throw, even when Mailgun rejected the message.
-async function sendContractEmail(to, clientName, contractTitle, signUrl, contractId) {
+async function sendContractEmail(to, clientName, contractTitle, signUrl, contractId, branding) {
   // NODE_ENV/ASHBI_RUN_EMAIL_TESTS read directly because they are dev-only
   // test toggles not exposed in env.js. See proposal.routes.js for the same
   // pattern.
   if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return null;
   if (!env.mailgunApiKey || !env.mailgunDomain) return { ok: false, error: 'Mailgun not configured' };
   try {
-    return await sendContractSignEmail({ to, clientName, contractTitle, signLink: signUrl, contractId });
+    return await sendContractSignEmail({ to, clientName, contractTitle, signLink: signUrl, contractId, branding });
   } catch (err) {
     logger.error({ errorName: err?.name, errorCode: err?.code }, '[Contract] Email send error');
     return { ok: false, error: 'Contract email send error' };
@@ -82,7 +83,8 @@ export default async function contractRoutes(fastify) {
     let contractContent = content;
     if (!contractContent && templateType) {
       const client = await fastify.prisma.client.findUnique({ where: { id: clientId } });
-      const rendered = renderTemplate(templateType, { clientName: client?.name || '' });
+      const branding = await resolveBranding(request.prisma, request.user.organizationId);
+      const rendered = renderTemplate(templateType, { clientName: client?.name || '' }, branding);
       contractContent = rendered?.content || '';
     }
 
@@ -124,13 +126,14 @@ export default async function contractRoutes(fastify) {
 
     const deliverables = '<ul>' + proposal.lineItems.map(li => `<li>${li.description} (${li.quantity}x @ $${li.unitPrice})</li>`).join('') + '</ul>';
 
+    const branding = await resolveBranding(request.prisma, request.user.organizationId);
     const rendered = renderTemplate('PROJECT', {
       clientName: proposal.client.name,
       projectName: proposal.title,
       price: proposal.total.toFixed(2),
       timeline: 'To be determined',
       deliverables
-    });
+    }, branding);
 
     try {
       return await fastify.prisma.contract.create({
@@ -187,7 +190,8 @@ export default async function contractRoutes(fastify) {
     if (primaryContact?.email) {
       const baseUrl = env.appUrl;
       const signUrl = `${baseUrl}/portal/contract/${access.token}`;
-      const delivery = await sendContractEmail(primaryContact.email, primaryContact.name || contract.client?.name, contract.title || 'Service Agreement', signUrl, contract.id);
+      const branding = await resolveBrandingForClient(fastify.prisma, contract.clientId);
+      const delivery = await sendContractEmail(primaryContact.email, primaryContact.name || contract.client?.name, contract.title || 'Service Agreement', signUrl, contract.id, branding);
       emailSent = Boolean(delivery?.ok);
       deliveryFields = await recordContractDelivery(fastify.prisma, contract.id, delivery);
     }
@@ -220,7 +224,8 @@ export default async function contractRoutes(fastify) {
       deliveryError,
       ...publicContract
     } = contract;
-    return publicContract;
+    const brand = publicBrand(await resolveBrandingForClient(fastify.prisma, clientId));
+    return { ...publicContract, brand };
   });
 
   // POST /sign/:signToken — PUBLIC — client signs contract
@@ -313,7 +318,8 @@ export default async function contractRoutes(fastify) {
     const contact = contract.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
     const signUrl = `${env.appUrl}/portal/contract/${contract.signToken}`;
-    const delivery = await sendContractEmail(contact.email, contact.name || contract.client.name, contract.title, signUrl, contract.id);
+    const branding = await resolveBrandingForClient(fastify.prisma, contract.clientId);
+    const delivery = await sendContractEmail(contact.email, contact.name || contract.client.name, contract.title, signUrl, contract.id, branding);
     await recordContractDelivery(request.prisma, contract.id, delivery);
     if (!delivery?.ok) return reply.status(503).send({ error: 'Contract email delivery is unavailable', retryable: true });
     return { emailSent: true };
@@ -350,7 +356,8 @@ export default async function contractRoutes(fastify) {
     });
     if (!contract) return reply.status(404).send({ error: 'Contract not found' });
 
-    const pdfBuffer = await generateContractPdf(contract);
+    const branding = await resolveBrandingForClient(fastify.prisma, contract.clientId);
+    const pdfBuffer = await generateContractPdf(contract, branding);
 
     const safeFilename = contractPdfFilename(contract);
     reply.header('Content-Type', 'application/pdf');

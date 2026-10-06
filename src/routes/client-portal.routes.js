@@ -42,6 +42,7 @@ import { invoiceBalance } from '../utils/invoice-balance.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
 import { insensitiveEquals } from '../utils/insensitive-equals.js';
 import { CLIENT_TASK_COLUMN_STATUSES } from '../shared/client-task-columns.js';
+import { brandedSender, escapeHtml, publicBrand, resolveBranding, resolveBrandingForClient, resolveBrandingForDocument, sanitizeHeader } from '../services/branding.service.js';
 
 // The project document fields the client portal returns (docs list, upload).
 const PORTAL_DOCUMENT_SELECT = Object.freeze({
@@ -101,7 +102,8 @@ const PORTAL_BASE = env.hubUrl;
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 
 // ── Mailgun helper (no-op if not configured) ────────────────────────────────
-async function sendMagicLinkEmail(toEmail, toName, magicLink) {
+// Sent in the client's agency's name (its BrandSettings / organization name).
+async function sendMagicLinkEmail(toEmail, toName, magicLink, branding) {
   const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
   const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN;
   if (!MAILGUN_API_KEY || !MAILGUN_DOMAIN) {
@@ -112,13 +114,14 @@ async function sendMagicLinkEmail(toEmail, toName, magicLink) {
   const safeName = String(toName).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
   const safeLink = String(magicLink).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 
+  const companyName = sanitizeHeader(branding?.companyName);
   const body = new URLSearchParams();
-  body.append('from', `Ashbi Design <noreply@${MAILGUN_DOMAIN}>`);
+  body.append('from', brandedSender(branding, MAILGUN_DOMAIN));
   body.append('to', `${toName} <${toEmail}>`);
-  body.append('subject', 'Your Ashbi Design Client Portal Link');
+  body.append('subject', companyName ? `Your ${companyName} Client Portal Link` : 'Your Client Portal Link');
   body.append('html', `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#2e2958;color:#f1f5f9;padding:40px;border-radius:12px;">
-      <h2 style="color:#e6f354;margin-top:0;">Ashbi Design — Client Portal</h2>
+      <h2 style="color:#e6f354;margin-top:0;">${companyName ? `${escapeHtml(companyName)} — ` : ''}Client Portal</h2>
       <p>Hi ${safeName},</p>
       <p>Click the button below to access your portal. This link expires in <strong>1 hour</strong>.</p>
       <a href="${safeLink}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#e6f354;color:#2e2958;border-radius:8px;text-decoration:none;font-weight:600;">
@@ -307,7 +310,8 @@ export default async function clientPortalRoutes(fastify) {
     const token = fastify.jwt.sign(magicLinkClaims(user, contact), { expiresIn: '1h' });
     // Magic link now goes to the verify endpoint which POSTs the token
     const magicLink = `${PORTAL_BASE}/client-portal/verify?token=${token}`;
-    await sendMagicLinkEmail(contact.email, contact.name, magicLink);
+    const branding = await resolveBranding(request.prisma, contact.client.organizationId);
+    await sendMagicLinkEmail(contact.email, contact.name, magicLink, branding);
 
     return { sent: true };
   });
@@ -343,7 +347,7 @@ export default async function clientPortalRoutes(fastify) {
 
     const sessionToken = signUserSession(fastify.jwt, principal.user, { contactId: principal.contact.id });
 
-    reply
+    return reply
       .setCookie('token', sessionToken, {
         path: '/',
         httpOnly: true,
@@ -389,7 +393,9 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(404).send({ error: 'Not found' });
     }
 
-    return { client, contact };
+    // The agency's name and public logo for the portal header.
+    const brand = publicBrand(await resolveBrandingForClient(request.prisma, clientId));
+    return { client, contact, brand };
   });
 
   // ── Projects ─────────────────────────────────────────────────────────────────
@@ -1021,7 +1027,7 @@ export default async function clientPortalRoutes(fastify) {
     }
 
     try {
-      const pdfBuffer = await generateContractPdf(contract);
+      const pdfBuffer = await generateContractPdf(contract, await resolveBrandingForClient(request.prisma, contract.clientId));
       return reply
         .header('Content-Type', 'application/pdf')
         .header('Content-Disposition', `attachment; filename="${contractPdfFilename(contract)}.pdf"`)
@@ -1097,9 +1103,10 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(404).send({ error: 'Invoice not found' });
     }
 
-    const pdfBuffer = await generateInvoicePdf(invoice);
+    const branding = await resolveBrandingForDocument(request.prisma, invoice);
+    const pdfBuffer = await generateInvoicePdf(invoice, { branding });
 
-    reply
+    return reply
       .header('Content-Type', 'application/pdf')
       .header('Content-Disposition', `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`)
       .send(pdfBuffer);

@@ -36,10 +36,12 @@ test('the overdue job processes every overdue invoice in every organization', {
       } });
       // Two just-overdue invoices (no project: activity logging cannot be
       // tenant-scoped for them) and one 10 days overdue, per organization.
+      // The second one is VIEWED, which is chased and
+      // moved to OVERDUE exactly like SENT.
       for (const [n, daysOverdue, currency] of [[1, 2, 'CAD'], [2, 3, 'USD'], [3, 10, 'CAD']]) {
         await raw.invoice.create({ data: {
           id: `${org}-inv-${n}`, invoiceNumber: `OVD-${n}`, clientId: `${org}-client`, createdById: `${org}-admin`,
-          status: 'SENT', total: 100 * n, currency, dueDate: new Date(Date.now() - daysOverdue * DAY),
+          status: n === 2 ? 'VIEWED' : 'SENT', total: 100 * n, currency, dueDate: new Date(Date.now() - daysOverdue * DAY),
           sentAt: new Date(Date.now() - 30 * DAY), viewToken: `${org}-token-${n}`,
           publicAccessExpiresAt: new Date(Date.now() - daysOverdue * DAY),
         } });
@@ -59,6 +61,7 @@ test('the overdue job processes every overdue invoice in every organization', {
       assert.ok(invoice.reminderSentAt, `${invoice.id} records its reminder`);
     }
     assert.equal(sent.length, 6, 'one templated reminder per invoice');
+    assert.equal(sent.filter((message) => message.invoiceNumber === 'OVD-2').length, 2, 'past-due VIEWED invoices are reminded');
     const usd = sent.find((message) => message.invoiceNumber === 'OVD-2');
     assert.equal(usd.currency, 'USD');
     assert.match(usd.viewUrl, /\/portal\/invoice\/overdue-org-.*-token-2$/);

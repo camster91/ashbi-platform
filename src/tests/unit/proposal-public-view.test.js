@@ -32,6 +32,11 @@ test('the public proposal link returns only client-facing fields', async (t) => 
       findUnique: async (args) => { query = args; return structuredClone(STORED); },
       update: async () => ({}),
     },
+    // The proposal's organization's branding (issue #531): a legacy default
+    // row is shown as the organization's own name.
+    client: { findUnique: async ({ where }) => (where.id === 'c1' ? { organizationId: 'org-1' } : null) },
+    organization: { findUnique: async () => ({ name: 'Northwind Studio', logo: null }) },
+    brandSettings: { findUnique: async () => ({ companyName: 'Ashbi Design', logoUrl: '/uploads/brand/logo.png', email: 'hi@northwind.test' }) },
   };
   const app = Fastify();
   app.decorate('authenticate', async () => {});
@@ -49,11 +54,15 @@ test('the public proposal link returns only client-facing fields', async (t) => 
   const body = response.json();
   assert.deepEqual(Object.keys(body.client).sort(), ['email', 'id', 'name']);
   assert.deepEqual(Object.keys(body).sort(), [
-    'approvedAt', 'client', 'createdAt', 'createdBy', 'declinedAt', 'discount', 'id', 'lineItems', 'notes', 'sentAt',
+    'approvedAt', 'brand', 'client', 'createdAt', 'createdBy', 'declinedAt', 'discount', 'id', 'lineItems', 'notes', 'sentAt',
     'status', 'subtotal', 'tax', 'taxRate', 'taxType', 'title', 'total', 'totalWithTax', 'validUntil',
   ]);
   assert.deepEqual(Object.keys(body.lineItems[0]).sort(), ['description', 'id', 'quantity', 'total', 'unitPrice']);
   assert.deepEqual(body.createdBy, { name: 'Cameron' });
+  // Only the name and a publicly loadable logo: a staff-only stored upload
+  // and the brand's contact details stay private.
+  assert.deepEqual(body.brand, { companyName: 'Northwind Studio', logoUrl: null });
+  assert.doesNotMatch(response.body, /Ashbi Design|hi@northwind|uploads\/brand/);
   assert.equal(body.status, 'VIEWED');
   assert.deepEqual([body.tax, body.totalWithTax], [50, 1050]);
   assert.doesNotMatch(

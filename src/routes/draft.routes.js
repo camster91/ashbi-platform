@@ -54,7 +54,7 @@ export default async function draftRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(draftUpsertSchema),
   }, async (request, reply) => {
-    if (!ensureValidRequest(request, reply)) return;
+    if (!ensureValidRequest(request, reply)) return reply;
     const { entity, id: entityId } = request.params;
     const { data, expectedRevision, baseUpdatedAt } = request.body;
     const where = ownerWhere(request, entity, entityId);
@@ -106,7 +106,7 @@ export default async function draftRoutes(fastify) {
   });
 
   fastify.get('/:entity/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!ensureValidRequest(request, reply)) return;
+    if (!ensureValidRequest(request, reply)) return reply;
     const where = ownerWhere(request, request.params.entity, request.params.id);
     try {
       const record = await request.prisma.formDraft.findFirst({ where });
@@ -119,7 +119,7 @@ export default async function draftRoutes(fastify) {
   });
 
   fastify.delete('/:entity/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!ensureValidRequest(request, reply)) return;
+    if (!ensureValidRequest(request, reply)) return reply;
     const expectedRevision = request.query?.revision ? Number(request.query.revision) : undefined;
     const where = ownerWhere(request, request.params.entity, request.params.id);
     if (expectedRevision) where.revision = expectedRevision;

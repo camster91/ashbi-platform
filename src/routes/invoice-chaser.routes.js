@@ -3,12 +3,14 @@
 import aiClient from '../ai/client.js';
 import { validateBody, invoiceChaserSchema } from '../validators/schemas.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
-import { withInvoiceBalance } from '../utils/invoice-balance.js';
+import { UNPAID_INVOICE_STATUSES, withInvoiceBalance } from '../utils/invoice-balance.js';
 import { invoicePublicAccessFailure } from '../utils/public-document-access.js';
-import { organizationNameFor, senderDescription, signOffName } from '../utils/organization-name.js';
+import { senderDescription, signOffName } from '../utils/organization-name.js';
+import env from '../config/env.js';
+import { resolveBranding } from '../services/branding.service.js';
 
 function hubUrl() {
-  return process.env.APP_URL || process.env.HUB_URL || 'https://hub.ashbi.ca';
+  return process.env.APP_URL || process.env.HUB_URL || env.appUrl;
 }
 
 // Like the overdue reminder job: chase what is still owed (the balance after
@@ -37,7 +39,8 @@ export default async function invoiceChaserRoutes(fastify) {
     const { invoiceId } = request.body || {};
 
     // Get overdue invoices (or a specific one)
-    const where = { status: { in: ['SENT', 'OVERDUE'] } };
+    // Open invoices: SENT, VIEWED (treated as SENT) or OVERDUE.
+    const where = { status: { in: [...UNPAID_INVOICE_STATUSES] } };
     if (invoiceId) {
       where.id = invoiceId;
     } else {
@@ -64,7 +67,8 @@ export default async function invoiceChaserRoutes(fastify) {
 
     const reminders = [];
     // Signed by the person generating the reminders and their workspace.
-    const organizationName = await organizationNameFor(request);
+    // The agency's client-facing name (BrandSettings, else the organization's).
+    const { companyName: organizationName } = await resolveBranding(request.prisma, request.user?.organizationId);
     const signOff = signOffName(request.user, organizationName);
 
     for (const loaded of invoices) {
@@ -139,7 +143,7 @@ ${signOff ? `Sign off as ${signOff}.` : 'Sign off without a name; the sender wil
 
     const invoices = await prisma.invoice.findMany({
       where: {
-        status: { in: ['SENT', 'OVERDUE'] },
+        status: { in: [...UNPAID_INVOICE_STATUSES] },
         dueDate: { lt: now }
       },
       include: {

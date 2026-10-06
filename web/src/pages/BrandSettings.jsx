@@ -148,7 +148,7 @@ export default function BrandSettings() {
                     value={form.website || ''}
                     onChange={e => update('website', e.target.value)}
                     className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="https://ashbi.ca"
+                    placeholder="https://example.com"
                   />
                 </div>
               </div>
@@ -161,7 +161,7 @@ export default function BrandSettings() {
                     value={form.email || ''}
                     onChange={e => update('email', e.target.value)}
                     className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="hello@ashbi.ca"
+                    placeholder="hello@example.com"
                   />
                 </div>
               </div>
@@ -339,7 +339,7 @@ export default function BrandSettings() {
                       {(form.companyName || 'A')[0]}
                     </div>
                   )}
-                  <h3 className="font-bold text-foreground text-lg">{form.companyName || 'Ashbi Design'}</h3>
+                  <h3 className="font-bold text-foreground text-lg">{form.companyName || 'Your company name'}</h3>
                   {form.address && <p className="text-xs text-muted-foreground mt-1 whitespace-pre-line">{form.address}</p>}
                 </div>
                 <div className="text-right text-xs text-muted-foreground space-y-0.5">

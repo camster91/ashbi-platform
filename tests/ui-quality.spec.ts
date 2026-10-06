@@ -75,9 +75,10 @@ async function mockExtraApi(page: Page) {
     if (path === '/assets') return json(route, { assets: [], total: 0 });
     if (path === '/approvals') return json(route, { approvals: [], total: 0 });
     if (path === '/approvals/stats') return json(route, { pending: 0, approved: 0, rejected: 0 });
+    if (path === '/responses/pending') return json(route, []);
     if (path === '/credentials') return json(route, { credentials: [] });
     if (path === '/trash') return json(route, { items: [], total: 0 });
-    if (path === '/brand') return json(route, { companyName: 'Ashbi Design', primaryColor: '#c9a84c', accentColor: '#1e293b' });
+    if (path === '/brand') return json(route, { companyName: 'Northwind Studio', primaryColor: '#c9a84c', accentColor: '#1e293b' });
     if (path === '/team') return json(route, [{ ...adminUser, isActive: true, utilizationPercent: 45, assignedTasks: 3, capacityStatus: 'available' }]);
     if (path === '/team/workload') return json(route, []);
     if (path === '/contracts') return json(route, []);
@@ -114,6 +115,7 @@ const screens: Screen[] = [
   { name: 'assets', path: '/assets', ready: page => expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible() },
   { name: 'project planner', path: '/project-planner', ready: page => expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible() },
   { name: 'approvals', path: '/approvals', ready: page => expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible() },
+  { name: 'client replies to approve', path: '/approvals/replies', ready: page => expect(page.getByRole('heading', { name: 'Client replies to approve', level: 1 })).toBeVisible() },
   { name: 'credentials', path: '/credentials', ready: page => expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible() },
   { name: 'trash', path: '/trash', ready: page => expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible() },
   { name: 'brand settings', path: '/admin/brand', ready: page => expect(page.getByLabel('Company Name')).toBeVisible() },

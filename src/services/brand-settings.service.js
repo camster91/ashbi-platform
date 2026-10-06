@@ -14,18 +14,23 @@ export async function findBrandSettings(db, organizationId) {
 }
 
 /**
- * The organization's brand settings, created with the schema defaults when it
- * has none yet. An upsert on the unique organizationId, so concurrent first
- * reads cannot create two rows.
+ * The organization's brand settings, created when it has none yet with the
+ * organization's own name as the company name (the schema default for the
+ * other fields). An upsert on the unique organizationId, so concurrent first
+ * reads cannot create two rows. Existing rows are never changed here.
  * @param {any} db
  * @param {string} organizationId
  */
 export async function getOrCreateBrandSettings(db, organizationId) {
   if (!organizationId) throw new Error('organizationId is required to resolve brand settings');
+  const organization = db.organization?.findUnique
+    ? await db.organization.findUnique({ where: { id: organizationId }, select: { name: true } })
+    : null;
+  const companyName = typeof organization?.name === 'string' ? organization.name.trim() : '';
   try {
     return await db.brandSettings.upsert({
       where: { organizationId },
-      create: { organizationId },
+      create: { organizationId, ...(companyName && { companyName }) },
       update: {},
     });
   } catch (error) {

@@ -559,3 +559,86 @@ describe('Invoice CRUD', { skip }, () => {
   });
 
 });
+
+// A VIEWED invoice behaves exactly like SENT: listed
+// under the "Sent" filter, counted as outstanding, payable from the public
+// page and by mark-paid, overdue once past due, and voidable.
+describe('VIEWED invoices behave like SENT', { skip }, () => {
+  async function sentInvoice(title, unitPrice) {
+    const created = await fastify.inject({
+      method: 'POST', url: '/api/invoices', headers: authHeader(),
+      payload: {
+        clientId: testClientId, title, dueDate: '2027-05-31T23:59:59.000Z', taxRate: 0,
+        lineItems: [{ description: title, itemType: 'OTHER', quantity: 1, unitPrice }],
+      },
+    });
+    assert.equal(created.statusCode, 200, created.body);
+    const { id } = JSON.parse(created.body);
+    const sent = await fastify.inject({ method: 'POST', url: `/api/invoices/${id}/send`, headers: authHeader() });
+    assert.equal(sent.statusCode, 200, sent.body);
+    return id;
+  }
+
+  async function stats() {
+    const res = await fastify.inject({ method: 'GET', url: '/api/invoices/stats', headers: authHeader() });
+    assert.equal(res.statusCode, 200, res.body);
+    return JSON.parse(res.body);
+  }
+
+  test('counts, lists, pays and voids a VIEWED invoice like a SENT one', async () => {
+    const id = await sentInvoice('Viewed invoice', 250);
+    const asSent = await stats();
+    await rawPrisma.invoice.update({ where: { id }, data: { status: 'VIEWED' } });
+    const asViewed = await stats();
+    assert.deepEqual(asViewed.sent, asSent.sent, 'VIEWED counts as sent');
+    assert.equal(asViewed.totalOutstanding, asSent.totalOutstanding);
+
+    const listed = JSON.parse((await fastify.inject({ method: 'GET', url: '/api/invoices?status=SENT', headers: authHeader() })).body);
+    assert.ok(listed.invoices.some((inv) => inv.id === id && inv.status === 'VIEWED'), 'the Sent filter lists VIEWED invoices');
+
+    // Past due: overdue in the list and the stats.
+    await rawPrisma.invoice.update({ where: { id }, data: { dueDate: new Date(Date.now() - 86_400_000) } });
+    const overdueList = JSON.parse((await fastify.inject({ method: 'GET', url: '/api/invoices?status=OVERDUE', headers: authHeader() })).body);
+    const overdueRow = overdueList.invoices.find((inv) => inv.id === id);
+    assert.ok(overdueRow?.isOverdue, 'a past-due VIEWED invoice is overdue');
+    const pastDue = await stats();
+    assert.equal(pastDue.overdue.count, asViewed.overdue.count + 1);
+    assert.equal(pastDue.sent.count, asViewed.sent.count - 1);
+
+    // The public page still opens and the pay route passes the status gate
+    // (Stripe is not configured in tests, so no session is created).
+    const invoice = await rawPrisma.invoice.findUnique({ where: { id } });
+    const page = await fastify.inject({ method: 'GET', url: `/api/portal/invoice/${invoice.viewToken}` });
+    assert.equal(page.statusCode, 200, page.body);
+    assert.equal(JSON.parse(page.body).status, 'VIEWED');
+    const pay = await fastify.inject({ method: 'POST', url: `/api/portal/invoice/${invoice.viewToken}/pay` });
+    assert.notEqual(pay.statusCode, 409, pay.body);
+    assert.notEqual(pay.statusCode, 400, pay.body);
+
+    // Partial then full manual payment.
+    const partial = await fastify.inject({ method: 'POST', url: `/api/invoices/${id}/mark-paid`, headers: authHeader(), payload: { paymentMethod: 'BANK', amount: 100 } });
+    assert.equal(partial.statusCode, 200, partial.body);
+    assert.equal(JSON.parse(partial.body).status, 'VIEWED');
+    const full = await fastify.inject({ method: 'POST', url: `/api/invoices/${id}/mark-paid`, headers: authHeader(), payload: { paymentMethod: 'BANK' } });
+    assert.equal(full.statusCode, 200, full.body);
+    assert.equal(JSON.parse(full.body).status, 'PAID');
+  });
+
+  test('bulk mark-paid and void accept VIEWED invoices', async () => {
+    const bulkId = await sentInvoice('Viewed bulk', 40);
+    const voidId = await sentInvoice('Viewed void', 60);
+    await rawPrisma.invoice.updateMany({ where: { id: { in: [bulkId, voidId] } }, data: { status: 'VIEWED' } });
+
+    const bulk = await fastify.inject({ method: 'POST', url: '/api/invoices/bulk/mark-paid', headers: authHeader(), payload: { ids: [bulkId], paymentMethod: 'CASH' } });
+    assert.equal(bulk.statusCode, 200, bulk.body);
+    assert.equal(JSON.parse(bulk.body).updated, 1, bulk.body);
+    assert.equal((await rawPrisma.invoice.findUnique({ where: { id: bulkId } })).status, 'PAID');
+
+    const voided = await fastify.inject({ method: 'DELETE', url: `/api/invoices/${voidId}`, headers: authHeader() });
+    assert.equal(voided.statusCode, 200, voided.body);
+    assert.equal(JSON.parse(voided.body).voidedFromStatus, 'VIEWED');
+    const undone = await fastify.inject({ method: 'POST', url: `/api/invoices/${voidId}/undo-void`, headers: authHeader() });
+    assert.equal(undone.statusCode, 200, undone.body);
+    assert.equal(JSON.parse(undone.body).status, 'VIEWED');
+  });
+});
