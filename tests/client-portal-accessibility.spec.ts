@@ -63,7 +63,8 @@ test.describe('Client portal accessibility', () => {
       const pathname = new URL(request.url()).pathname;
       const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
       if (pathname.endsWith('/verify-token')) return json({ user: { role: 'CLIENT' } });
-      if (pathname.endsWith('/me')) return json({ client: { name: 'Fixture Client' }, contact: { name: 'Fixture Contact' } });
+      // The agency's own brand (issue #531), never another workspace's name.
+      if (pathname.endsWith('/me')) return json({ client: { name: 'Fixture Client' }, contact: { name: 'Fixture Contact' }, brand: { companyName: 'Fixture Agency', logoUrl: null } });
       if (pathname.endsWith('/contracts')) return json([{ id: 'contract-a', title: 'Project agreement', status: 'SENT', signToken: 'sign-a', canReview: true }]);
       if (pathname.endsWith('/projects/project-a/revisions/revision-a/respond')) {
         revisionPayload = request.postDataJSON();
@@ -108,6 +109,9 @@ test.describe('Client portal accessibility', () => {
     await expect(page.getByRole('status')).toContainText('feedback was sent');
     expect(projectFeedback).toBe('The new direction looks good.');
 
+    await expect(page.locator('header').getByText('Fixture Agency')).toBeVisible();
+    await expect(page.getByText('Ashbi Design')).toHaveCount(0);
+
     await page.getByRole('tab', { name: 'Contracts (1)' }).click();
     await expect(page.getByRole('link', { name: 'Review and sign' })).toHaveAttribute('href', '/portal/contract/sign-a');
   });
@@ -116,7 +120,7 @@ test.describe('Client portal accessibility', () => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await page.goto('/client-portal');
-      await expect(page.getByRole('heading', { name: 'Ashbi Design' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Client Portal' })).toBeVisible();
 
       const dimensions = await page.evaluate(() => ({
         clientWidth: document.documentElement.clientWidth,
@@ -133,7 +137,7 @@ test.describe('Client portal accessibility', () => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/client-portal');
 
-    const subtitle = page.getByText('Client Portal', { exact: true });
+    const subtitle = page.getByText('Sign in with your email', { exact: true });
     const email = page.getByPlaceholder('your@email.com');
 
     // The portal is built on the shared primitives (#316): muted text and field
@@ -159,7 +163,7 @@ test.describe('Client portal accessibility', () => {
   test('stays on the light token set when the OS prefers dark', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto('/client-portal');
-    await expect(page.getByRole('heading', { name: 'Ashbi Design' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Client Portal' })).toBeVisible();
     await expect(page.locator('html')).not.toHaveClass(/(^|\s)dark(\s|$)/);
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -170,7 +174,7 @@ test.describe('Client portal accessibility', () => {
   test('login has no automatically detectable WCAG A or AA violations', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/client-portal');
-    await expect(page.getByRole('heading', { name: 'Ashbi Design' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Client Portal' })).toBeVisible();
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])

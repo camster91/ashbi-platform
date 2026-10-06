@@ -13,10 +13,13 @@ import {
   projectAiPlanSchema,
   projectTemplateSaveSchema,
   projectFromTemplateSchema,
+  projectAttachmentsClientVisibilitySchema,
   TEAM_MEMBER_ROLES,
 } from '../validators/schemas.js';
+import { setProjectAttachmentsClientVisibility } from '../services/attachment-visibility.service.js';
 import bus, { EVENTS } from '../utils/events.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
+import { organizationNameFor } from '../utils/organization-name.js';
 
 /**
  * Check that a project's client and default owner belong to the caller's
@@ -213,6 +216,21 @@ export default async function projectRoutes(fastify) {
     bus.emit(EVENTS.PROJECT_UPDATED, { project, user: request.user });
 
     return project;
+  });
+
+  // Share many of the project's files with the client portal at once (or stop
+  // sharing them): every PROJECT file, or the listed attachmentIds. Same rule
+  // per file as PATCH /api/attachments/:id/client-visibility (the uploader or
+  // an admin); other files are skipped and reported, never an error.
+  fastify.patch('/:id/attachments/client-visibility', {
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(projectAttachmentsClientVisibilitySchema)],
+  }, async (request, reply) => {
+    const { clientVisible, attachmentIds } = request.body;
+    const { statusCode, body } = await setProjectAttachmentsClientVisibility(request.prisma, request, {
+      projectId: request.params.id, clientVisible, attachmentIds,
+    });
+    return reply.status(statusCode).send(body);
   });
 
   // Get AI-generated project plan
@@ -491,8 +509,10 @@ export default async function projectRoutes(fastify) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
+    const organizationName = await organizationNameFor(request);
+
     try {
-      const systemPrompt = `You are a project manager for a design agency called Ashbi Design. Given a project brief, generate a structured project plan.
+      const systemPrompt = `You are a project manager for ${organizationName ? `a design agency called ${organizationName}` : 'a design agency'}. Given a project brief, generate a structured project plan.
 
 Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 {

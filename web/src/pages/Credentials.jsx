@@ -19,10 +19,12 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import LoadingState from '../components/ui/LoadingState';
 import { cn, formatDate } from '../lib/utils';
 import QueryErrorState from '../components/QueryErrorState';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { buildCredentialPayload } from '../lib/form-payloads';
 
 const categories = [
   { value: 'WP_ADMIN', label: 'WP Admin', icon: Globe },
@@ -67,6 +69,8 @@ export default function Credentials() {
   // Inline result of a click that reads a secret (edit, copy, reveal). The
   // request is sent with userInitiated so the global toast reports it too.
   const [secretError, setSecretError] = useState('');
+  // Inline result of the create/edit form (missing client, rejected save).
+  const [formError, setFormError] = useState('');
 
   const { data: credentials = [], isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['credentials', filterCategory, filterClient],
@@ -80,12 +84,7 @@ export default function Credentials() {
     },
   });
 
-  const { data: clientsData = {} } = useQuery({
-    queryKey: ['clients'],
-    queryFn: async () => api.getClients(),
-  });
-
-  const clients = clientsData.clients || [];
+  const { data: clients } = useClients();
 
   const createMutation = useMutation({
     mutationFn: (data) => api.createCredential(data),
@@ -93,6 +92,7 @@ export default function Credentials() {
       queryClient.invalidateQueries({ queryKey: ['credentials'] });
       resetForm();
     },
+    onError: (err) => setFormError(err?.message || 'The credential could not be saved. Try again.'),
   });
 
   const updateMutation = useMutation({
@@ -101,6 +101,7 @@ export default function Credentials() {
       queryClient.invalidateQueries({ queryKey: ['credentials'] });
       resetForm();
     },
+    onError: (err) => setFormError(err?.message || 'The credential could not be saved. Try again.'),
   });
 
   const deleteMutation = useMutation({
@@ -112,6 +113,7 @@ export default function Credentials() {
   });
 
   function resetForm() {
+    setFormError('');
     setForm(emptyForm);
     setShowForm(false);
     setEditingId(null);
@@ -140,11 +142,14 @@ export default function Credentials() {
 
   function handleSubmit(e) {
     e.preventDefault();
-    const data = {
-      ...form,
-      clientId: form.clientId || undefined,
-      projectId: form.projectId || undefined,
-    };
+    // Every credential belongs to a client or a project (the server enforces
+    // the same rule); this form only offers clients.
+    if (!form.clientId && !form.projectId) {
+      setFormError('Choose the client this credential belongs to.');
+      return;
+    }
+    setFormError('');
+    const data = buildCredentialPayload(form, { editing: Boolean(editingId) });
     if (editingId) {
       updateMutation.mutate({ id: editingId, data });
     } else {
@@ -262,9 +267,9 @@ export default function Credentials() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Label *</label>
-                <input
-                  type="password"
+                <label htmlFor="credential-label" className="block text-sm font-medium text-foreground mb-1">Label *</label>
+                <input id="credential-label"
+                  type="text"
                   value={form.label}
                   onChange={(e) => setForm({ ...form, label: e.target.value })}
                   required
@@ -273,8 +278,8 @@ export default function Credentials() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Category</label>
-                <select aria-label="Category"
+                <label htmlFor="credential-category" className="block text-sm font-medium text-foreground mb-1">Category</label>
+                <select id="credential-category" aria-label="Category"
                   value={form.category}
                   onChange={(e) => setForm({ ...form, category: e.target.value })}
                   className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -285,8 +290,8 @@ export default function Credentials() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Username</label>
-                <input
+                <label htmlFor="credential-username" className="block text-sm font-medium text-foreground mb-1">Username</label>
+                <input id="credential-username"
                   type="text"
                   value={form.username}
                   onChange={(e) => setForm({ ...form, username: e.target.value })}
@@ -295,9 +300,10 @@ export default function Credentials() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Password *</label>
-                <input
-                  type="text"
+                <label htmlFor="credential-password" className="block text-sm font-medium text-foreground mb-1">Password *</label>
+                <input id="credential-password"
+                  type="password"
+                  autoComplete="new-password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   required
@@ -306,9 +312,9 @@ export default function Credentials() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">URL</label>
-                <input
-                  type="text"
+                <label htmlFor="credential-url" className="block text-sm font-medium text-foreground mb-1">URL</label>
+                <input id="credential-url"
+                  type="url"
                   value={form.url}
                   onChange={(e) => setForm({ ...form, url: e.target.value })}
                   placeholder="https://example.com/wp-admin"
@@ -316,13 +322,14 @@ export default function Credentials() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Client</label>
-                <select aria-label="Client"
+                <label htmlFor="credential-client" className="block text-sm font-medium text-foreground mb-1">Client *</label>
+                <select id="credential-client" aria-label="Client"
                   value={form.clientId}
-                  onChange={(e) => setForm({ ...form, clientId: e.target.value })}
+                  onChange={(e) => { setForm({ ...form, clientId: e.target.value }); setFormError(''); }}
+                  aria-required={!form.projectId}
                   className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
-                  <option value="">No client</option>
+                  <option value="">{form.projectId ? 'No client (project credential)' : 'Select a client'}</option>
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -330,8 +337,8 @@ export default function Credentials() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
-              <textarea
+              <label htmlFor="credential-notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+              <textarea id="credential-notes"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 rows={2}
@@ -339,6 +346,9 @@ export default function Credentials() {
                 className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
               />
             </div>
+            {formError && (
+              <p role="alert" className="text-sm text-destructive">{formError}</p>
+            )}
             <div className="flex gap-2">
               <button
                 type="submit"

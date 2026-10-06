@@ -21,6 +21,10 @@ describe('silent mutation feedback', () => {
 
   it('reports invoice reminder generation failures', () => {
     const page = readPage('InvoiceChaser');
-    expect(page).toContain("onError: (error) => toast.error(error.message || 'Failed to generate invoice reminders')");
+    // Failures are shown on the page (a banner and a note on each invoice);
+    // see InvoiceChaser.failures.test.jsx for the behaviour.
+    expect(page).toContain('onError: (error, variables) => {');
+    expect(page).toContain('setBanner({ ...failure, retryInvoiceId: variables?.invoiceId || null });');
+    expect(page).toContain('splitReminders(data.reminders)');
   });
 });

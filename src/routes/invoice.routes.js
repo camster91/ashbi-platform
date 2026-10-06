@@ -1,34 +1,54 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
-import { CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, expireCheckoutSession, handleCheckoutFailure, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout } from '../services/stripe.service.js';
+import { CheckoutNotPayableError, CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, expireCheckoutSession, handleCheckoutFailure, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout, recordRefusedCheckout } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
-import { createNumberedInvoice } from '../utils/invoice.js';
+import { createNumberedInvoice, isUniqueViolationOn } from '../utils/invoice.js';
 import { createPublicAccessWindow, invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
 import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
+import { publicBrand, resolveBrandingForDocument } from '../services/branding.service.js';
+import env from '../config/env.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { defaultInvoiceCurrency, normalizeInvoiceCurrency } from '../utils/money.js';
-import { settleInvoiceManually } from '../services/invoice-payment.service.js';
+import { InvalidPaymentAmountError, InvoiceOverpaymentError, recordManualPayment, settleInvoiceManually } from '../services/invoice-payment.service.js';
+import { invoiceAmountPaid, invoiceBalance, SENT_INVOICE_STATUSES, UNPAID_INVOICE_STATUSES, withInvoiceBalance } from '../utils/invoice-balance.js';
+import { clampTake } from '../utils/query-limits.js';
+import { firstRecurringDate } from '../jobs/recurring-invoices.js';
+import { proposalTaxRate, taxTypeForRate } from '../utils/proposal-totals.js';
+import { invoiceTotals, lineTotal } from '../utils/money-totals.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
-const VOIDABLE_STATUSES = new Set(['DRAFT', 'SENT', 'OVERDUE']);
+// Any unpaid invoice (DRAFT, SENT, VIEWED, OVERDUE) can be voided.
+const VOIDABLE_STATUSES = new Set(['DRAFT', ...UNPAID_INVOICE_STATUSES]);
 
-// Prisma reports the violated unique constraint as meta.target (field list
-// or index name) or, through the pg driver adapter, as
-// meta.driverAdapterError.cause.constraint.
-export function isUniqueViolationOn(error, { index, fields = [] }) {
-  if (error?.code !== 'P2002') return false;
-  const target = error.meta?.target;
-  const targets = Array.isArray(target) ? target : (target ? [target] : []);
-  const constraint = error.meta?.driverAdapterError?.cause?.constraint;
-  if (constraint?.index) targets.push(constraint.index);
-  if (Array.isArray(constraint?.fields)) targets.push(...constraint.fields);
-  return targets.some((value) => value === index || fields.includes(String(value).replace(/"/g, '')));
-}
+class InvoiceHasPaymentsError extends Error {}
+
+export { isUniqueViolationOn };
 
 function roundMoney(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+// Proposals are pre-tax. One converted from an estimate carries the
+// estimate's tax rate in its metadata (proposalDataFromEstimate in
+// estimate.routes.js) so the invoice bills the estimate's total; any other
+// proposal is invoiced at the Ontario HST default. The proposal pages show
+// the same tax (proposalTaxSummary in src/utils/proposal-totals.js).
+export function proposalInvoiceTaxRate(proposal) {
+  return proposalTaxRate(proposal);
+}
+
+// The list's ?sort= and ?order= come from the query string; anything outside
+// these allowlists falls back to the default rather than reaching Prisma.
+export const INVOICE_SORT_FIELDS = Object.freeze([
+  'createdAt', 'updatedAt', 'issueDate', 'dueDate', 'invoiceNumber', 'title', 'status', 'total', 'paidAt', 'sentAt',
+]);
+
+export function invoiceListOrderBy(sort, order) {
+  const field = INVOICE_SORT_FIELDS.includes(sort) ? sort : 'createdAt';
+  const direction = order === 'asc' || order === 'desc' ? order : 'desc';
+  return { [field]: direction };
 }
 
 // Bulk send works through each draft sequentially (Checkout + email per
@@ -49,18 +69,19 @@ export default async function invoiceRoutes(fastify, options = {}) {
   // A voided invoice must not stay payable through a stored Checkout session:
   // forget it on the invoice and ask Stripe to expire it (best-effort; a
   // completion that still arrives is refused as INVOICE_VOID).
-  async function retireCheckoutSession(invoice) {
+  // `reason` names why the session is retired (voided invoice, payment
+  // recorded) in the warning when Stripe could not expire it.
+  async function retireCheckoutSession(invoice, reason = 'Voided invoice') {
     if (!invoice.stripeCheckoutSessionId) return;
     const expired = await expireSession(invoice.stripeCheckoutSessionId, { log: fastify.log });
-    if (!expired) fastify.log.warn({ invoiceId: invoice.id }, 'Voided invoice Checkout session was not expired at Stripe');
+    if (!expired) fastify.log.warn({ invoiceId: invoice.id, reason }, `${reason}: Checkout session was not expired at Stripe`);
   }
 
+  // Shared with estimates, proposals and the recurring job
+  // (src/utils/money-totals.js) so every document rounds the same cents.
   function calcTotals(lineItems, taxRate, discountAmount = 0) {
-    const subtotal = lineItems.reduce((sum, li) => sum + li.total, 0);
-    const discounted = Math.max(0, subtotal - discountAmount);
-    const tax = parseFloat(((discounted * taxRate) / 100).toFixed(2));
-    const total = parseFloat((discounted + tax).toFixed(2));
-    return { subtotal: parseFloat(subtotal.toFixed(2)), tax, total };
+    const { subtotal, tax, total } = invoiceTotals(lineItems, taxRate, discountAmount);
+    return { subtotal, tax, total };
   }
 
   function processLineItems(lineItems) {
@@ -69,19 +90,23 @@ export default async function invoiceRoutes(fastify, options = {}) {
       itemType: li.itemType || 'LABOR',
       quantity: parseFloat(li.quantity) || 1,
       unitPrice: parseFloat(li.unitPrice) || 0,
-      total: parseFloat(((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0)).toFixed(2)),
+      total: lineTotal(parseFloat(li.quantity) || 1, parseFloat(li.unitPrice) || 0),
       position: li.position ?? idx,
     }));
   }
 
   // A manual payment both settles the invoice and adds a ledger row; both are
   // audited so either can be found from its own entity id.
-  async function recordPaymentAudit(request, { invoice, paymentId, amount, method, bulk }) {
-    await recordRequestAuditEvent(fastify.prisma, request, {
-      action: 'invoice.paid',
-      entityId: invoice.id,
-      metadata: { fromStatus: invoice.status, toStatus: 'PAID', method, bulk, total: invoice.total, currency: invoice.currency },
-    });
+  // A partial payment writes only the ledger event; invoice.paid is written
+  // when the payments cover the total and the invoice moved to PAID.
+  async function recordPaymentAudit(request, { invoice, paymentId, amount, method, bulk, fullyPaid = true }) {
+    if (fullyPaid) {
+      await recordRequestAuditEvent(fastify.prisma, request, {
+        action: 'invoice.paid',
+        entityId: invoice.id,
+        metadata: { fromStatus: invoice.status, toStatus: 'PAID', method, bulk, total: invoice.total, currency: invoice.currency },
+      });
+    }
     await recordRequestAuditEvent(fastify.prisma, request, {
       action: 'payment.recorded',
       entityId: paymentId ?? null,
@@ -89,10 +114,10 @@ export default async function invoiceRoutes(fastify, options = {}) {
     });
   }
 
-  // Overdue = stored OVERDUE (set by the overdue job) or SENT past its due
-  // date (before the job has run).
+  // Overdue = stored OVERDUE (set by the overdue job) or SENT/VIEWED past
+  // its due date (before the job has run).
   function isOverdueInvoice(inv, now = new Date()) {
-    return inv.status === 'OVERDUE' || Boolean(inv.status === 'SENT' && inv.dueDate && new Date(inv.dueDate) < now);
+    return inv.status === 'OVERDUE' || Boolean(SENT_INVOICE_STATUSES.includes(inv.status) && inv.dueDate && new Date(inv.dueDate) < now);
   }
 
   function flagOverdue(inv) {
@@ -101,17 +126,20 @@ export default async function invoiceRoutes(fastify, options = {}) {
 
   // ─── GET / — list invoices ──────────────────────────────────────────────────
   fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
-    const { clientId, projectId, status, search, sort = 'createdAt', order = 'desc', limit, offset } = request.query;
+    const { clientId, projectId, status, search, sort, order, limit, offset } = request.query;
 
     const where = {};
     if (clientId) where.clientId = clientId;
     if (projectId) where.projectId = projectId;
-    if (status && status !== 'OVERDUE') where.status = status;
+    // "SENT" lists every sent-but-unpaid invoice, including any marked
+    // VIEWED (VIEWED behaves exactly like SENT).
+    if (status === 'SENT') where.status = { in: [...SENT_INVOICE_STATUSES] };
+    else if (status && status !== 'OVERDUE') where.status = status;
     const and = [];
     if (status === 'OVERDUE') {
       and.push({ OR: [
         { status: 'OVERDUE' },
-        { status: 'SENT', dueDate: { lt: new Date() } },
+        { status: { in: [...SENT_INVOICE_STATUSES] }, dueDate: { lt: new Date() } },
       ] });
     }
     if (search) {
@@ -132,23 +160,34 @@ export default async function invoiceRoutes(fastify, options = {}) {
           createdBy: { select: { id: true, name: true } },
           _count: { select: { lineItems: true, payments: true } }
         },
-        orderBy: { [sort]: order },
-        take: limit ? parseInt(limit) : undefined,
-        skip: offset ? parseInt(offset) : undefined,
+        orderBy: invoiceListOrderBy(sort, order),
+        ...(limit ? { take: clampTake(limit) } : {}),
+        ...(Number.parseInt(offset, 10) > 0 ? { skip: Number.parseInt(offset, 10) } : {}),
       }),
       fastify.prisma.invoice.count({ where })
     ]);
 
+    // amountPaid / balanceDue from the payment rows (partial payments keep
+    // an invoice open).
+    const paidRows = invoices.length > 0
+      ? await fastify.prisma.invoicePayment.groupBy({
+        by: ['invoiceId'],
+        where: { invoiceId: { in: invoices.map((inv) => inv.id) } },
+        _sum: { amount: true },
+      })
+      : [];
+    const paidByInvoice = new Map(paidRows.map((row) => [row.invoiceId, row._sum.amount ?? 0]));
+
     return {
-      invoices: invoices.map(flagOverdue),
+      invoices: invoices.map((inv) => flagOverdue({ ...inv, ...invoiceBalance(inv.total, paidByInvoice.get(inv.id) ?? 0) })),
       total,
       stats: await getStats()
     };
   });
 
   // Collection stats. Buckets are disjoint so no invoice is counted twice:
-  //   sent    = SENT and not yet past due
-  //   overdue = stored OVERDUE, or SENT past its due date
+  //   sent    = SENT or VIEWED and not yet past due
+  //   overdue = stored OVERDUE, or SENT/VIEWED past its due date
   //   totalOutstanding = sent + overdue (every open invoice once)
   // Money is grouped by currency in `byCurrency`; the top-level amounts are
   // only filled when every invoice shares one currency (`mixedCurrency`
@@ -156,7 +195,7 @@ export default async function invoiceRoutes(fastify, options = {}) {
   // Counts are always totals across currencies.
   async function getStats() {
     const now = new Date();
-    const [byStatus, sentPastDue] = await Promise.all([
+    const [byStatus, sentPastDue, openPayments] = await Promise.all([
       fastify.prisma.invoice.groupBy({
         by: ['status', 'currency'],
         _count: { _all: true },
@@ -164,9 +203,14 @@ export default async function invoiceRoutes(fastify, options = {}) {
       }),
       fastify.prisma.invoice.groupBy({
         by: ['currency'],
-        where: { status: 'SENT', dueDate: { lt: now } },
+        where: { status: { in: [...SENT_INVOICE_STATUSES] }, dueDate: { lt: now } },
         _count: { _all: true },
         _sum: { total: true },
+      }),
+      // Partial payments on open invoices: outstanding money is the balance.
+      fastify.prisma.invoicePayment.findMany({
+        where: { invoice: { status: { in: [...UNPAID_INVOICE_STATUSES] } } },
+        select: { amount: true, invoice: { select: { status: true, currency: true, dueDate: true } } },
       }),
     ]);
 
@@ -187,20 +231,27 @@ export default async function invoiceRoutes(fastify, options = {}) {
     };
 
     for (const row of byStatus) {
-      const key = row.status === 'OVERDUE' ? 'overdue' : row.status.toLowerCase();
+      // A VIEWED invoice counts as sent.
+      const key = row.status === 'VIEWED' ? 'sent' : row.status === 'OVERDUE' ? 'overdue' : row.status.toLowerCase();
       if (!totals[key]) continue;
       const count = row._count._all;
       const amount = row._sum.total ?? 0;
       add(totals, key, count, amount);
       add(bucketFor(row.currency), key, count, amount);
     }
-    // Move SENT-but-past-due from "sent" to "overdue".
+    // Move SENT/VIEWED-but-past-due from "sent" to "overdue".
     for (const row of sentPastDue) {
       const count = row._count._all;
       const amount = row._sum.total ?? 0;
       for (const buckets of [totals, bucketFor(row.currency)]) {
         add(buckets, 'sent', -count, -amount);
         add(buckets, 'overdue', count, amount);
+      }
+    }
+    for (const payment of openPayments) {
+      const key = isOverdueInvoice(payment.invoice, now) ? 'overdue' : 'sent';
+      for (const buckets of [totals, bucketFor(payment.invoice.currency)]) {
+        buckets[key].amount = roundMoney(buckets[key].amount - payment.amount);
       }
     }
     for (const buckets of [totals, ...Object.values(byCurrency)]) {
@@ -265,7 +316,7 @@ export default async function invoiceRoutes(fastify, options = {}) {
       }
     });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
-    return flagOverdue(invoice);
+    return flagOverdue(await withInvoiceBalance(fastify.prisma, invoice));
   });
 
   // ─── POST / — create invoice ────────────────────────────────────────────────
@@ -295,6 +346,7 @@ export default async function invoiceRoutes(fastify, options = {}) {
 
     const processedItems = processLineItems(lineItems);
     const { subtotal, tax, total } = calcTotals(processedItems, taxRate, discountAmount);
+    const effectiveIssueDate = issueDate ? new Date(issueDate) : new Date();
 
     // The number is allocated from the organization's counter inside the
     // same transaction as the insert (src/utils/invoice.js).
@@ -314,9 +366,12 @@ export default async function invoiceRoutes(fastify, options = {}) {
         notes: notes || null,
         internalNotes: internalNotes || null,
         dueDate: dueDate ? new Date(dueDate) : null,
-        issueDate: issueDate ? new Date(issueDate) : new Date(),
+        issueDate: effectiveIssueDate,
         isRecurring,
         recurringInterval: isRecurring ? recurringInterval : null,
+        // The recurring job selects on recurringNextDate, so it is set here
+        // (and kept in step by PUT /:id); without it nothing ever recurs.
+        recurringNextDate: isRecurring ? firstRecurringDate(effectiveIssueDate, recurringInterval) : null,
         createdById: request.user.id,
         lineItems: {
           create: processedItems
@@ -366,6 +421,20 @@ export default async function invoiceRoutes(fastify, options = {}) {
     if (projectId !== undefined) updateData.projectId = projectId || null;
     if (isRecurring !== undefined) updateData.isRecurring = isRecurring;
     if (recurringInterval !== undefined) updateData.recurringInterval = recurringInterval;
+    // Keep the recurring schedule in step with the flag, interval and issue
+    // date: turning recurrence off clears it, any change recomputes it.
+    const nextIsRecurring = isRecurring ?? invoice.isRecurring;
+    if (!nextIsRecurring) {
+      if (isRecurring === false) {
+        updateData.recurringInterval = null;
+        updateData.recurringNextDate = null;
+      }
+    } else if (isRecurring !== undefined || recurringInterval !== undefined || issueDate !== undefined) {
+      const interval = (recurringInterval !== undefined ? recurringInterval : invoice.recurringInterval) || null;
+      if (!interval) return reply.status(400).send({ error: 'recurringInterval is required for a recurring invoice' });
+      updateData.recurringInterval = interval;
+      updateData.recurringNextDate = firstRecurringDate(updateData.issueDate ?? invoice.issueDate, interval);
+    }
 
     if (lineItems) {
       await fastify.prisma.invoiceLineItem.deleteMany({ where: { invoiceId: request.params.id } });
@@ -404,6 +473,43 @@ export default async function invoiceRoutes(fastify, options = {}) {
     });
   });
 
+  // Void one invoice: compare-and-set from the status read (only a voidable
+  // status), retire its Checkout session and audit the transition. Returns
+  // the voided invoice, or null when it changed (paid, voided) meanwhile.
+  // An invoice with recorded payments is never voided (the money would be
+  // left unapplied): { refused: 'has_payments' }. The transition takes the
+  // row lock that every payment claims first (invoice-settlement.js), so the
+  // payment check after it sees any payment that committed before.
+  async function voidInvoice(request, invoice, { bulk = false } = {}) {
+    const voidedAt = new Date();
+    const outcome = await request.prisma.$transaction(async (tx) => {
+      const claimed = await tx.invoice.updateMany({
+        where: { id: invoice.id, status: { in: [...VOIDABLE_STATUSES] } },
+        data: { status: 'VOID', voidedAt, voidedFromStatus: invoice.status, ...CLEARED_CHECKOUT_FIELDS },
+      });
+      if (claimed.count !== 1) return null;
+      if (await invoiceAmountPaid(tx, invoice.id) > 0) throw new InvoiceHasPaymentsError();
+      return { voidedAt };
+    }).catch((error) => {
+      if (error instanceof InvoiceHasPaymentsError) return { refused: 'has_payments' };
+      throw error;
+    });
+    if (!outcome || outcome.refused) return outcome;
+    await retireCheckoutSession(invoice);
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'invoice.voided',
+      entityId: invoice.id,
+      metadata: {
+        fromStatus: invoice.status,
+        toStatus: 'VOID',
+        total: invoice.total,
+        currency: invoice.currency,
+        ...(bulk ? { bulk: true } : {}),
+      },
+    });
+    return { voidedAt };
+  }
+
   // ─── DELETE /:id — archive/void invoice ────────────────────────────────────
   fastify.delete('/:id', { onRequest: [fastify.adminOnly] }, async (request, reply) => {
     const invoice = await request.prisma.invoice.findUnique({ where: { id: request.params.id } });
@@ -413,15 +519,15 @@ export default async function invoiceRoutes(fastify, options = {}) {
       return reply.status(409).send({ error: 'Invoice is already void or cannot be voided' });
     }
 
-    const voidedAt = new Date();
-    const updated = await request.prisma.invoice.update({
-      where: { id: request.params.id },
-      data: { status: 'VOID', voidedAt, voidedFromStatus: invoice.status, ...CLEARED_CHECKOUT_FIELDS }
-    });
-    await retireCheckoutSession(invoice);
+    const voided = await voidInvoice(request, invoice);
+    if (voided?.refused === 'has_payments') {
+      return reply.status(409).send({ error: 'Invoice has recorded payments and cannot be voided', code: 'INVOICE_HAS_PAYMENTS' });
+    }
+    if (!voided) return reply.status(409).send({ error: 'Invoice is already void or cannot be voided' });
+    const updated = await request.prisma.invoice.findUnique({ where: { id: invoice.id } });
     return {
       ...updated,
-      undoExpiresAt: new Date(voidedAt.getTime() + VOID_UNDO_WINDOW_MS),
+      undoExpiresAt: new Date(voided.voidedAt.getTime() + VOID_UNDO_WINDOW_MS),
     };
   });
 
@@ -444,7 +550,14 @@ export default async function invoiceRoutes(fastify, options = {}) {
           voidedFromStatus: null,
         },
       });
-    }, { isolationLevel: 'Serializable' });
+    }, { isolationLevel: 'Serializable' }).catch((error) => {
+      // A voided retainer invoice whose month was billed again since cannot
+      // come back: one live retainer invoice per client and month.
+      if (isUniqueViolationOn(error, { index: 'invoices_clientId_retainerPeriod_live_key', fields: ['retainerPeriod'] })) {
+        return reply.status(409).send({ error: 'This retainer month has been invoiced again since the void', code: 'RETAINER_PERIOD_ALREADY_INVOICED' });
+      }
+      throw error;
+    });
   });
 
   // Single path for sending a draft (used by POST /:id/send and bulk send):
@@ -477,6 +590,12 @@ export default async function invoiceRoutes(fastify, options = {}) {
         viewToken: access.token,
         publicAccessExpiresAt: access.expiresAt,
         publicAccessRevokedAt: access.revokedAt,
+        // A recurring draft from before recurringNextDate was maintained (or
+        // one the backfill skipped because it was a draft) starts recurring
+        // once it is issued.
+        ...(invoice.isRecurring && invoice.recurringInterval && !invoice.recurringNextDate
+          ? { recurringNextDate: firstRecurringDate(invoice.issueDate, invoice.recurringInterval) }
+          : {}),
       },
     });
     if (claimed.count !== 1) {
@@ -487,7 +606,7 @@ export default async function invoiceRoutes(fastify, options = {}) {
     // Attempt Stripe payment link
     try {
       // The Checkout return URLs must point at the token issued by this send.
-      const checkoutInvoice = { ...invoice, status: 'SENT', viewToken: access.token };
+      const checkoutInvoice = { ...(await withInvoiceBalance(fastify.prisma, invoice)), status: 'SENT', viewToken: access.token };
       const result = await createCheckout(checkoutInvoice);
       if (result) Object.assign(updateData, checkoutPersistenceData(checkoutInvoice, result));
     } catch (err) {
@@ -499,8 +618,10 @@ export default async function invoiceRoutes(fastify, options = {}) {
     let emailSent = false;
     if (primaryContact?.email) {
       try {
-        const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${access.token}`;
+        const viewUrl = `${env.appUrl}/portal/invoice/${access.token}`;
+        const branding = await resolveBrandingForDocument(fastify.prisma, invoice);
         const delivery = await deliverInvoiceEmail({
+          branding,
           to: primaryContact.email,
           clientName: primaryContact.name || invoice.client.name,
           invoiceNumber: invoice.invoiceNumber,
@@ -569,7 +690,8 @@ export default async function invoiceRoutes(fastify, options = {}) {
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
 
     try {
-      const pdfBuffer = await generateInvoicePdf(invoice);
+      const branding = await resolveBrandingForDocument(fastify.prisma, invoice);
+      const pdfBuffer = await generateInvoicePdf(invoice, { branding });
       const filename = `${invoice.invoiceNumber}.pdf`;
       reply.header('Content-Type', 'application/pdf');
       reply.header('Content-Disposition', `attachment; filename="${filename}"`);
@@ -586,7 +708,10 @@ export default async function invoiceRoutes(fastify, options = {}) {
     return reply.redirect(301, `/api/invoices/${request.params.id}/pdf`);
   });
 
-  // ─── POST /:id/mark-paid — mark as paid ────────────────────────────────────
+  // ─── POST /:id/mark-paid — record a payment ────────────────────────────────
+  // `amount` defaults to the remaining balance. A payment that leaves a
+  // balance keeps the invoice open (amountPaid/balanceDue in the response);
+  // one that covers the total marks it PAID. More than the balance is a 400.
   fastify.post('/:id/mark-paid', { onRequest: [fastify.authenticate], preHandler: [validateBody(markInvoicePaidSchema)] }, async (request, reply) => {
     const { method, paymentMethod: requestedPaymentMethod, paymentNotes, transactionId, amount, paidAt } = request.body;
     const paymentMethod = requestedPaymentMethod || method || 'OTHER';
@@ -594,28 +719,45 @@ export default async function invoiceRoutes(fastify, options = {}) {
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
     if (invoice.status === 'PAID') return reply.status(400).send({ error: 'Invoice already paid' });
     if (invoice.status === 'VOID') return reply.status(400).send({ error: 'Cannot pay a voided invoice' });
+    // A draft has not been issued: send it first, then record payments.
+    if (invoice.status === 'DRAFT') return reply.status(400).send({ error: 'Send the invoice before recording a payment', code: 'INVOICE_NOT_SENT' });
 
     const paidDate = paidAt ? new Date(paidAt) : new Date();
 
-    // Compare-and-set: the transition, payment and outbox event
-    // (docs/event-outbox.md) commit together, and only if the invoice is still
-    // payable, so a concurrent mark-paid or Stripe settlement cannot double-pay.
-    const updated = await settleInvoiceManually(fastify.prisma, {
-      invoice,
-      method: paymentMethod,
-      amount: amount ?? invoice.total,
-      paidAt: paidDate,
-      invoiceFields: { paymentNotes: paymentNotes || null, transactionId: transactionId || null },
-      paymentFields: { notes: paymentNotes || null, transactionId: transactionId || null },
-      correlationId: request.id,
-    });
-    if (!updated) return reply.status(409).send({ error: 'Invoice is no longer payable', code: 'INVOICE_NOT_PAYABLE' });
+    // Compare-and-set: the payment, any transition to PAID and its outbox
+    // event (docs/event-outbox.md) commit together, and only if the invoice
+    // is still payable, so a concurrent mark-paid or Stripe settlement cannot
+    // double-pay (src/services/invoice-payment.service.js).
+    let recorded;
+    try {
+      recorded = await recordManualPayment(fastify.prisma, {
+        invoice,
+        method: paymentMethod,
+        amount: amount ?? null,
+        paidAt: paidDate,
+        invoiceFields: { paymentNotes: paymentNotes || null, transactionId: transactionId || null },
+        paymentFields: { notes: paymentNotes || null, transactionId: transactionId || null },
+        correlationId: request.id,
+      });
+    } catch (error) {
+      if (error instanceof InvoiceOverpaymentError) {
+        return reply.status(400).send({ error: 'Payment exceeds the balance due', code: error.code, balanceDue: error.balanceDue });
+      }
+      if (error instanceof InvalidPaymentAmountError) {
+        return reply.status(400).send({ error: 'Payment amount must be greater than zero', code: error.code });
+      }
+      throw error;
+    }
+    if (!recorded) return reply.status(409).send({ error: 'Invoice is no longer payable', code: 'INVOICE_NOT_PAYABLE' });
+    // The session the payment cleared under the row lock, which may have
+    // been stored after this request first read the invoice.
+    await retireCheckoutSession({ id: invoice.id, stripeCheckoutSessionId: recorded.clearedCheckoutSessionId }, 'Payment recorded');
 
     await recordPaymentAudit(request, {
-      invoice, paymentId: updated.payment?.id, amount: amount ?? invoice.total, method: paymentMethod, bulk: false,
+      invoice, paymentId: recorded.payment?.id, amount: recorded.amount, method: paymentMethod, bulk: false, fullyPaid: recorded.fullyPaid,
     });
 
-    return updated.paidInvoice;
+    return recorded.invoice;
   });
 
   // ─── POST /:id/payment-link — generate or return Stripe payment link ───────
@@ -634,6 +776,7 @@ export default async function invoiceRoutes(fastify, options = {}) {
       if (!result) return reply.status(503).send({ error: 'Stripe not configured' });
       return { paymentLinkUrl: result.paymentLink, reused: result.reused };
     } catch (err) {
+      if (err instanceof CheckoutNotPayableError) return reply.status(409).send({ error: 'Invoice is not awaiting payment', code: err.code });
       fastify.log.error({ err }, 'Failed to create Stripe payment link');
       return reply.status(500).send({ error: 'Failed to create payment link' });
     }
@@ -683,7 +826,8 @@ export default async function invoiceRoutes(fastify, options = {}) {
       position: idx,
     }));
 
-    const { subtotal, tax, total } = calcTotals(processedItems, HST_RATE, proposal.discount || 0);
+    const taxRate = proposalInvoiceTaxRate(proposal);
+    const { subtotal, tax, total } = calcTotals(processedItems, taxRate, proposal.discount || 0);
 
     try {
       return await createNumberedInvoice(fastify.prisma, {
@@ -697,8 +841,10 @@ export default async function invoiceRoutes(fastify, options = {}) {
           proposalId: proposal.id,
           subtotal,
           discountAmount: proposal.discount || 0,
-          taxRate: HST_RATE,
-          taxType: 'HST',
+          taxRate,
+          // HST only for the 13% Ontario default; another rate gets the
+          // neutral "Tax" rather than a tax name it may not be.
+          taxType: taxTypeForRate(taxRate),
           tax,
           total,
           notes: `Invoice for proposal: ${proposal.title}`,
@@ -746,7 +892,8 @@ export default async function invoiceRoutes(fastify, options = {}) {
       stripeCheckoutAttempt,
       ...safe
     } = invoice;
-    return safe;
+    const brand = publicBrand(await resolveBrandingForDocument(fastify.prisma, invoice));
+    return { ...safe, brand };
   });
 
   fastify.post('/:id/public-link/revoke', { onRequest: [fastify.authenticate] }, async (request, reply) => {
@@ -773,8 +920,10 @@ export default async function invoiceRoutes(fastify, options = {}) {
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     const contact = invoice.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
-    const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${invoice.viewToken}`;
+    const viewUrl = `${env.appUrl}/portal/invoice/${invoice.viewToken}`;
+    const branding = await resolveBrandingForDocument(request.prisma, invoice);
     const delivery = await sendInvoiceDeliveryEmail({
+      branding,
       to: contact.email,
       clientName: contact.name || invoice.client.name,
       invoiceNumber: invoice.invoiceNumber,
@@ -820,6 +969,7 @@ export default async function invoiceRoutes(fastify, options = {}) {
         await recordCheckoutAuditEvents(fastify.prisma, request, event, result);
       } catch (err) {
         const failure = handleCheckoutFailure(err, { event, route: '/api/invoices/stripe-webhook', log: fastify.log });
+        await recordRefusedCheckout(fastify.prisma, request, event, failure);
         // Permanent rejections are acknowledged so Stripe stops retrying them.
         if (failure.acknowledged) return reply.status(200).send({ received: true, recorded: false, code: failure.code });
         return reply.status(failure.statusCode).send({ error: failure.error, code: failure.code });
@@ -843,8 +993,9 @@ export default async function invoiceRoutes(fastify, options = {}) {
     const method = paymentMethod || 'OTHER';
     let updated = 0;
     // Additive to the original `{ updated }` response: why each other id was
-    // left alone (not_found, already_paid, void, or changed when another
-    // payment settled it between the read and the compare-and-set).
+    // left alone (not_found, already_paid, void, draft, invalid_amount, or
+    // changed when another payment settled it between the read and the
+    // compare-and-set).
     const skipped = [];
 
     for (const id of ids) {
@@ -852,12 +1003,25 @@ export default async function invoiceRoutes(fastify, options = {}) {
       if (!invoice) { skipped.push({ id, reason: 'not_found' }); continue; }
       if (invoice.status === 'PAID') { skipped.push({ id, reason: 'already_paid' }); continue; }
       if (invoice.status === 'VOID') { skipped.push({ id, reason: 'void' }); continue; }
+      if (invoice.status === 'DRAFT') { skipped.push({ id, reason: 'draft' }); continue; }
 
-      const settled = await settleInvoiceManually(fastify.prisma, {
-        invoice, method, amount: invoice.total, paidAt: paidDate, correlationId: request.id,
-      });
+      // Settles the remaining balance (after any partial payments). One
+      // invoice that cannot take the payment never stops the rest.
+      let settled;
+      try {
+        settled = await settleInvoiceManually(fastify.prisma, {
+          invoice, method, paidAt: paidDate, correlationId: request.id,
+        });
+      } catch (error) {
+        if (error instanceof InvoiceOverpaymentError || error instanceof InvalidPaymentAmountError) {
+          skipped.push({ id, reason: 'invalid_amount' });
+          continue;
+        }
+        throw error;
+      }
       if (!settled) { skipped.push({ id, reason: 'changed' }); continue; }
-      await recordPaymentAudit(request, { invoice, paymentId: settled.payment?.id, amount: invoice.total, method, bulk: true });
+      await retireCheckoutSession({ id: invoice.id, stripeCheckoutSessionId: settled.clearedCheckoutSessionId }, 'Payment recorded');
+      await recordPaymentAudit(request, { invoice, paymentId: settled.payment?.id, amount: settled.amount, method, bulk: true, fullyPaid: settled.fullyPaid });
       updated++;
     }
 
@@ -896,7 +1060,9 @@ export default async function invoiceRoutes(fastify, options = {}) {
   });
 
   // ─── POST /bulk/archive — archive (void) multiple invoices ──────────────────
-  fastify.post('/bulk/archive', { onRequest: [fastify.authenticate],
+  // Admin only, like DELETE /:id: each invoice goes through the same
+  // compare-and-set void, Checkout retirement and audit event.
+  fastify.post('/bulk/archive', { onRequest: [fastify.adminOnly],
     preHandler: validateBody(invoiceBulkArchiveSchema),
   }, async (request, reply) => {
     const { ids } = request.body;
@@ -905,18 +1071,22 @@ export default async function invoiceRoutes(fastify, options = {}) {
     }
 
     let archived = 0;
+    // Additive to the original `{ archived }` response: why each other id
+    // was left alone.
+    const skipped = [];
     for (const id of ids) {
-      const invoice = await fastify.prisma.invoice.findUnique({ where: { id } });
-      if (!invoice || invoice.status === 'PAID' || invoice.status === 'VOID') continue;
-
-      await fastify.prisma.invoice.update({
-        where: { id },
-        data: { status: 'VOID', voidedAt: new Date(), voidedFromStatus: invoice.status, ...CLEARED_CHECKOUT_FIELDS }
-      });
-      await retireCheckoutSession(invoice);
+      const invoice = await request.prisma.invoice.findUnique({ where: { id } });
+      if (!invoice) { skipped.push({ id, reason: 'not_found' }); continue; }
+      if (!VOIDABLE_STATUSES.has(invoice.status)) {
+        skipped.push({ id, reason: invoice.status === 'PAID' ? 'paid' : invoice.status === 'VOID' ? 'void' : 'not_voidable' });
+        continue;
+      }
+      const voided = await voidInvoice(request, invoice, { bulk: true });
+      if (voided?.refused === 'has_payments') { skipped.push({ id, reason: 'has_payments' }); continue; }
+      if (!voided) { skipped.push({ id, reason: 'changed' }); continue; }
       archived++;
     }
 
-    return { archived };
+    return { archived, skipped };
   });
 }

@@ -36,6 +36,15 @@ export default async function assetLibraryRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(assetCreateSchema),
   }, async (request, reply) => {
+    // request.prisma is tenant-scoped: a client from another organization
+    // (or a mistyped id) is not found, and no asset is created for it.
+    const client = await request.prisma.client.findFirst({
+      where: { id: request.body.clientId },
+      select: { id: true },
+    });
+    if (!client) {
+      return reply.status(404).send({ error: 'Client not found' });
+    }
     const asset = await createAsset(request.body);
     return reply.status(201).send(asset);
   });

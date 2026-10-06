@@ -1,6 +1,8 @@
 import { decrypt, encrypt } from '../utils/crypto.js';
 import { consumeOAuthState, issueOAuthState } from '../auth/oauth-state.js';
 import env from '../config/env.js';
+import { prisma as rawPrisma } from '../config/db.js';
+import { isMfaEnrollmentRequired, MFA_ENROLLMENT_REQUIRED_CODE } from '../auth/mfa-enforcement.js';
 import {
   GOOGLE_SYNC_STALE_LOCK_MS,
   createGoogleCalendarClient,
@@ -35,6 +37,10 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
   const revokeToken = options.revokeGoogleToken ?? revokeGoogleToken;
   const staleLockMs = options.staleLockMs ?? GOOGLE_SYNC_STALE_LOCK_MS;
   const now = options.now ?? (() => new Date());
+  // The callback carries no session (tenancy-exempt), so the global MFA hook
+  // has no principal there: the requirement is checked for the state's user
+  // on the raw (not tenant-scoped) client.
+  const mfaEnrollmentRequired = options.isMfaEnrollmentRequired ?? ((userId) => isMfaEnrollmentRequired(rawPrisma, userId));
   // Side-effecting GET: it binds a Google account to the caller, so a support
   // view (#416) must never reach it (see src/auth/impersonation.js).
   fastify.get('/oauth/start', { onRequest: [fastify.authenticate], config: { sideEffectingGet: true } }, async (request, reply) => {
@@ -66,6 +72,30 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
       return reply.status(401).send({ error: 'Invalid Google OAuth state', code: 'GOOGLE_CALENDAR_OAUTH_STATE_INVALID' });
     }
 
+    // The callback is tenancy-exempt (no session cookie arrives with the
+    // provider's redirect), so every query names the organization and user
+    // from the signed state: the connection is bound to that member of that
+    // organization only. All checks run before the authorization code is
+    // exchanged, so a refused callback never obtains a Google token.
+    const { organizationId, userId } = oauthState;
+    const owner = await fastify.prisma.user.findFirst({
+      where: { id: userId, organizationId, isActive: true },
+      select: { id: true },
+    });
+    if (!owner) {
+      return reply.status(401).send({ error: 'Invalid Google OAuth state', code: 'GOOGLE_CALENDAR_OAUTH_STATE_INVALID' });
+    }
+    const existing = await fastify.prisma.googleCalendarConnection.findFirst({ where: { userId } });
+    if (existing && existing.organizationId !== organizationId) {
+      return reply.status(409).send({ error: 'Google Calendar is connected in another organization', code: 'GOOGLE_CALENDAR_CONNECTION_CONFLICT' });
+    }
+    // Organization MFA requirement (docs/privileged-actions.md): a member who
+    // must still enroll cannot complete the connection. A browser navigation,
+    // so the refusal returns to Settings with the reason.
+    if (await mfaEnrollmentRequired(userId)) {
+      return reply.redirect(`/settings?googleCalendar=error&code=${MFA_ENROLLMENT_REQUIRED_CODE}`);
+    }
+
     let tokenResult;
     try {
       tokenResult = await createOAuthClient().getToken(code);
@@ -83,12 +113,11 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
       refreshTokenEncrypted: encryptSecret(refreshToken), scopes: JSON.stringify(scope),
       status: 'ACTIVE', lastError: null, disconnectedAt: null,
     };
-    const existing = await fastify.prisma.googleCalendarConnection.findFirst({ where: { userId: oauthState.userId } });
     if (existing) {
       await fastify.prisma.googleCalendarConnection.update({ where: { id: existing.id }, data });
     } else {
       await fastify.prisma.googleCalendarConnection.create({
-        data: { organizationId: oauthState.organizationId, userId: oauthState.userId, ...data },
+        data: { organizationId, userId, ...data },
       });
     }
     // OAuth callbacks are browser navigations. Return the user to the

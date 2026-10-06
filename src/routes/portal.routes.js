@@ -1,6 +1,8 @@
 // Client Portal routes (public - no auth required, token-based access)
 
-import { ensureCheckoutSession } from '../services/stripe.service.js';
+import { CheckoutNotPayableError, ensureCheckoutSession } from '../services/stripe.service.js';
+import { invoiceBalance } from '../utils/invoice-balance.js';
+import { proposalTaxSummary } from '../utils/proposal-totals.js';
 import { onProposalApproved, onContractSigned } from '../services/automation.service.js';
 import crypto from 'crypto';
 import { validateBody, bookingSchema, contractSignSchema, formSubmitSchema, proposalDeclineSchema } from '../validators/schemas.js';
@@ -8,6 +10,7 @@ import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES, publicAccessFailure 
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { recordContractSigned, recordProposalApproved } from '../services/domain-event-producers.js';
 import env from '../config/env.js';
+import { publicBrand, resolveBranding, resolveBrandingForClient, resolveBrandingForDocument } from '../services/branding.service.js';
 
 // Per-IP limits for the unauthenticated capability-link routes that still use
 // the legacy never-expiring project and intake-form view tokens (security
@@ -16,6 +19,22 @@ import env from '../config/env.js';
 // a public intake form, never acting with a staff member's authority
 // (`config.public`, see src/auth/mfa-enforcement.js).
 const PUBLIC = { config: { public: true } };
+
+// The client-safe task fields the public project link returns.
+const PUBLIC_PORTAL_TASK_SELECT = Object.freeze({
+  id: true,
+  title: true,
+  status: true,
+  priority: true,
+  category: true,
+  dueDate: true,
+});
+const PUBLIC_PORTAL_TASK_ORDER = Object.freeze([{ priority: 'asc' }, { createdAt: 'desc' }]);
+// Other open tasks are capped; tasks waiting on the client are loaded on
+// their own (with a far higher cap) so "Waiting on you" is never emptied by
+// the cap on the rest.
+const PUBLIC_PORTAL_OPEN_TASK_LIMIT = 20;
+const PUBLIC_PORTAL_WAITING_TASK_LIMIT = 100;
 const LEGACY_LINK_VIEW_RATE_LIMIT = { config: { public: true, rateLimit: { max: 30, timeWindow: '1 minute' } } };
 const LEGACY_LINK_SUBMIT_RATE_LIMIT = { config: { public: true, rateLimit: { max: 10, timeWindow: '15 minutes' } } };
 
@@ -26,24 +45,27 @@ export default async function portalRoutes(fastify) {
   fastify.get('/:token', LEGACY_LINK_VIEW_RATE_LIMIT, async (request, reply) => {
     const { token } = request.params;
 
-    const project = await request.prisma.project.findUnique({
-      where: { viewToken: token },
-      include: {
+    // A trashed or cancelled project is not shown, as in the signed-in
+    // client portal.
+    const project = await request.prisma.project.findFirst({
+      where: { viewToken: token, deletedAt: null, status: { not: 'CANCELLED' } },
+      // An explicit select: the internal health rating, AI summary and notes
+      // are never loaded for this public view.
+      select: {
+        // Used to load the client's waiting tasks below; never returned.
+        id: true,
+        name: true,
+        description: true,
+        status: true,
+        updatedAt: true,
+        // Names the agency's brand below; never returned.
+        organizationId: true,
         client: { select: { name: true } },
         revisionRounds: {
           orderBy: { roundNumber: 'desc' },
-          take: 10
-        },
-        notes: {
-          where: { isPinned: true },
-          orderBy: { updatedAt: 'desc' },
-          take: 5,
-          select: {
-            id: true,
-            title: true,
-            content: true,
-            updatedAt: true
-          }
+          take: 10,
+          // The same client-facing fields as the signed-in portal.
+          select: { id: true, roundNumber: true, status: true, notes: true, requestedAt: true, approvedAt: true, updatedAt: true },
         },
         milestones: {
           orderBy: { dueDate: 'asc' },
@@ -56,17 +78,10 @@ export default async function portalRoutes(fastify) {
           }
         },
         tasks: {
-          where: { status: { not: 'COMPLETED' } },
-          orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
-          take: 20,
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            priority: true,
-            category: true,
-            dueDate: true
-          }
+          where: { status: { notIn: ['COMPLETED', 'WAITING_CLIENT'] } },
+          orderBy: PUBLIC_PORTAL_TASK_ORDER,
+          take: PUBLIC_PORTAL_OPEN_TASK_LIMIT,
+          select: PUBLIC_PORTAL_TASK_SELECT,
         }
       }
     });
@@ -75,24 +90,33 @@ export default async function portalRoutes(fastify) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
+    const waitingOnClient = await request.prisma.task.findMany({
+      where: { projectId: project.id, status: 'WAITING_CLIENT' },
+      orderBy: PUBLIC_PORTAL_TASK_ORDER,
+      take: PUBLIC_PORTAL_WAITING_TASK_LIMIT,
+      select: PUBLIC_PORTAL_TASK_SELECT,
+    });
+
+    // Client-facing: never the internal health rating, the AI summary, or
+    // project notes (pinning a note is a staff feature, not a publish action;
+    // notes have no client-visible flag).
     return {
       name: project.name,
       description: project.description,
       status: project.status,
-      health: project.health,
       clientName: project.client?.name,
-      aiSummary: project.aiSummary,
       milestones: project.milestones,
       revisionRounds: project.revisionRounds,
-      pinnedNotes: project.notes,
-      activeTasks: project.tasks.map(t => ({
+      activeTasks: [...waitingOnClient, ...project.tasks].map(t => ({
         title: t.title,
         status: t.status,
         priority: t.priority,
         category: t.category,
         dueDate: t.dueDate
       })),
-      updatedAt: project.updatedAt
+      updatedAt: project.updatedAt,
+      // The agency's name and public logo (never its contact details).
+      brand: publicBrand(await resolveBranding(request.prisma, project.organizationId)),
     };
   });
 
@@ -140,6 +164,9 @@ export default async function portalRoutes(fastify) {
       subtotal: proposal.subtotal,
       discount: proposal.discount,
       total: proposal.total,
+      // The tax its invoice will add and the total it will bill, so the
+      // client approves the amount they will be invoiced.
+      ...proposalTaxSummary(proposal),
       notes: proposal.notes,
       sentAt: proposal.sentAt,
       approvedAt: proposal.approvedAt,
@@ -153,7 +180,8 @@ export default async function portalRoutes(fastify) {
         quantity: li.quantity,
         unitPrice: li.unitPrice,
         total: li.total
-      }))
+      })),
+      brand: publicBrand(await resolveBrandingForClient(request.prisma, proposal.clientId)),
     };
   });
 
@@ -173,18 +201,21 @@ export default async function portalRoutes(fastify) {
     if (proposal.status === 'DECLINED') {
       return reply.status(400).send({ error: 'Proposal was declined' });
     }
+    if (!['SENT', 'VIEWED'].includes(proposal.status)) {
+      return reply.status(409).send({ error: 'Proposal is not awaiting approval' });
+    }
     if (proposal.validUntil && new Date(proposal.validUntil) < new Date()) {
       return reply.status(400).send({ error: 'Proposal has expired' });
     }
 
-    // Compare-and-set on the status read above: two concurrent approvals
+    // Compare-and-set on an awaiting-answer status: two concurrent approvals
     // (double click, replayed link) must not both run the automation or
     // both write an audit event.
     // The approval and its outbox event (docs/event-outbox.md) commit together.
     const approvedAt = new Date();
     const transitioned = await request.prisma.$transaction(async (tx) => {
       const result = await tx.proposal.updateMany({
-        where: { id: proposal.id, status: proposal.status, publicAccessRevokedAt: null },
+        where: { id: proposal.id, status: { in: ['SENT', 'VIEWED'] }, publicAccessRevokedAt: null },
         data: {
           status: 'APPROVED',
           approvedAt,
@@ -236,20 +267,26 @@ export default async function portalRoutes(fastify) {
       return reply.status(400).send({ error: 'Proposal already declined' });
     }
 
-    const updated = await request.prisma.proposal.update({
-      where: { id: proposal.id },
+    // Compare-and-set: only a proposal still awaiting an answer can be
+    // declined, so a decline racing an approval never overwrites it.
+    const declinedAt = new Date();
+    const transitioned = await request.prisma.proposal.updateMany({
+      where: { id: proposal.id, status: { in: ['SENT', 'VIEWED'] }, publicAccessRevokedAt: null },
       data: {
         status: 'DECLINED',
-        declinedAt: new Date(),
-        publicAccessRevokedAt: new Date(),
+        declinedAt,
+        publicAccessRevokedAt: declinedAt,
         // Store decline reason in internalNotes (no dedicated field)
         internalNotes: reason
           ? `${proposal.internalNotes ? proposal.internalNotes + '\n' : ''}[Client declined] ${reason}`
           : proposal.internalNotes
       }
     });
+    if (transitioned.count !== 1) {
+      return reply.status(409).send({ error: 'Proposal is no longer awaiting a decision' });
+    }
 
-    return { success: true, status: 'DECLINED', declinedAt: updated.declinedAt };
+    return { success: true, status: 'DECLINED', declinedAt };
   });
 
   // ==================== CONTRACTS ====================
@@ -290,7 +327,8 @@ export default async function portalRoutes(fastify) {
       createdBy: { name: contract.createdBy.name },
       signedAt: contract.signedAt,
       clientSigName: contract.clientSigName,
-      createdAt: contract.createdAt
+      createdAt: contract.createdAt,
+      brand: publicBrand(await resolveBrandingForClient(request.prisma, contract.clientId)),
     };
   });
 
@@ -420,6 +458,8 @@ export default async function portalRoutes(fastify) {
       taxType: invoice.taxType,
       tax: invoice.tax,
       total: invoice.total,
+      // What is still owed after partial payments (the pay button charges it).
+      ...invoiceBalance(invoice.total, invoice.payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)),
       notes: invoice.notes,
       paidAt: invoice.paidAt,
       sentAt: invoice.sentAt,
@@ -438,7 +478,8 @@ export default async function portalRoutes(fastify) {
         amount: p.amount,
         method: p.method,
         paidAt: p.paidAt
-      }))
+      })),
+      brand: publicBrand(await resolveBrandingForDocument(request.prisma, invoice)),
     };
   });
 
@@ -472,6 +513,7 @@ export default async function portalRoutes(fastify) {
 
       return { checkoutUrl: result.paymentLink };
     } catch (error) {
+      if (error instanceof CheckoutNotPayableError) return reply.status(409).send({ error: 'Invoice is not awaiting payment', code: error.code });
       fastify.log.error('Stripe payment link creation failed:', error);
       return reply.status(500).send({ error: 'Failed to create payment session' });
     }
@@ -504,6 +546,7 @@ export default async function portalRoutes(fastify) {
       description: form.description,
       fields: JSON.parse(form.fields || '[]'),
       clientName: form.client?.name,
+      brand: publicBrand(await resolveBrandingForClient(request.prisma, form.clientId)),
     };
   });
 
@@ -627,13 +670,18 @@ export default async function portalRoutes(fastify) {
       if (slotStart <= now) continue;
 
       slots.push({
+        // The wall-clock "HH:MM" the booking form sends back as `time`. It is
+        // in the server's local timezone (slotStart above and POST /booking
+        // both parse `${date}T${time}` as server-local); there is no
+        // configured booking timezone to label it with.
+        time: `${String(hour).padStart(2, '0')}:00`,
         start: slotStart.toISOString(),
         end: slotEnd.toISOString(),
         available: !hasConflict
       });
     }
 
-    return { date, slots };
+    return { date, slots, brand: publicBrand(await resolveBranding(request.prisma, owner.organizationId)) };
   });
 
   // Book a time slot

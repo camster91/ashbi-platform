@@ -2,7 +2,9 @@
 
 import {
   validateBody,
+  validateParams,
   responseCreateSchema,
+  responseThreadParamsSchema,
   responseUpdateSchema,
   responseRejectSchema,
 } from '../validators/schemas.js';
@@ -35,10 +37,19 @@ export default async function responseRoutes(fastify) {
   // Create draft response for thread
   fastify.post('/:threadId/drafts', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(responseCreateSchema),
+    preHandler: [validateParams(responseThreadParamsSchema), validateBody(responseCreateSchema)],
   }, async (request, reply) => {
     const { threadId } = request.params;
     const { subject, body, tone, aiGenerated = false, aiOptions } = request.body;
+
+    // request.prisma is tenant-scoped: a thread from another workspace is 404.
+    const thread = await request.prisma.thread.findFirst({
+      where: { id: threadId },
+      select: { id: true },
+    });
+    if (!thread) {
+      return reply.status(404).send({ error: 'Thread not found' });
+    }
 
     const response = await request.prisma.response.create({
       data: {

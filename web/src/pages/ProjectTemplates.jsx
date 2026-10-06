@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { FileText, Trash2, Plus, ArrowRight, ListTodo, Clock, FolderOpen } from 'lucide-react';
 import QueryErrorState from '../components/QueryErrorState';
@@ -37,10 +38,7 @@ export default function ProjectTemplates() {
     queryFn: () => api.getProjectTemplates(),
   });
 
-  const { data: clients = [], isLoading: clientsLoading, isFetching: clientsFetching, error: clientsError, refetch: refetchClients } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
-  });
+  const { data: clients, isLoading: clientsLoading, isFetching: clientsFetching, error: clientsError, refetch: refetchClients } = useClients();
 
   const createFromTemplate = useMutation({
     mutationFn: (data) => api.createProjectFromTemplate(data),

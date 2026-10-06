@@ -1,6 +1,7 @@
 import logger from '../utils/logger.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../utils/request-context.js';
+import { requestPath } from '../config/http.js';
 // CRITICAL: Import the NAMED `prisma` (the raw soft-delete-extended client
 // at src/config/db.js line ~110), NOT the default export (the outer
 // request-context-aware Proxy at line ~133). The default Proxy calls
@@ -55,7 +56,12 @@ export function isTenancyExemptUrl(url) {
     url.startsWith('/api/invoices/stripe-webhook') ||
     url.startsWith('/api/mailgun') ||
     url.startsWith('/api/slack/events') ||
+    // OAuth provider callbacks: the provider redirects the browser here, often
+    // without the session cookie (SameSite=Strict in production). The signed,
+    // browser-bound state (src/auth/oauth-state.js) authenticates the request
+    // and names the organization; each handler scopes its writes to it.
     url.startsWith('/api/slack/oauth/callback') ||
+    url.startsWith('/api/google-calendar/oauth/callback') ||
     // Probes read no tenant data; match the path so `?strict=1` and the
     // staff/loopback detail view are covered too.
     /^\/api\/(?:live|health(?:\/details)?)(?:\?|$)/.test(url)
@@ -89,13 +95,17 @@ function impersonationOf(request) {
  */
 export async function tenancyMiddleware(request, reply) {
   // Only enforce tenancy on API routes
-  if (!request.url.startsWith('/api/')) {
+  // Decide on the route the router matched, never the raw URL string.
+  const path = requestPath(request);
+  // An unmatched URL (the not-found pass, e.g. after the SPA static wildcard
+  // found no file) reaches no handler that reads data; let it answer 404.
+  if (!path.startsWith('/api/') || request.is404) {
     request.prisma = prisma;
     enterRequestContext({ prisma, organizationId: null });
     return;
   }
 
-  if (isTenancyExemptUrl(request.url)) {
+  if (isTenancyExemptUrl(path)) {
     request.prisma = prisma; // Use global for auth/portal/health/public routes
     enterRequestContext({ prisma, organizationId: null, impersonation: impersonationOf(request) });
     return;

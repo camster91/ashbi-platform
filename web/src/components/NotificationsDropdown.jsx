@@ -3,6 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import { api } from '../lib/api';
+import {
+  DROPDOWN_NOTIFICATIONS_LIMIT,
+  dropdownNotificationsKey,
+  invalidateNotifications,
+  unreadNotificationsKey,
+} from '../lib/notificationKeys';
 import { formatRelativeTime, cn } from '../lib/utils';
 import useSocket from '../hooks/useSocket';
 import { useToast } from '../hooks/useToast';
@@ -74,13 +80,13 @@ export default function NotificationsDropdown() {
   const navigate = useNavigate();
 
   const { data: notifications, isError: notificationsFailed, refetch: refetchNotifications } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => api.getNotifications({ limit: 10 }).then((r) => r?.notifications ?? []),
+    queryKey: dropdownNotificationsKey,
+    queryFn: () => api.getNotifications({ limit: DROPDOWN_NOTIFICATIONS_LIMIT }).then((r) => r?.notifications ?? []),
     refetchInterval: 30000,
   });
 
   const { data: unreadCount } = useQuery({
-    queryKey: ['notifications-unread'],
+    queryKey: unreadNotificationsKey,
     queryFn: api.getUnreadCount,
     refetchInterval: 30000,
   });
@@ -88,16 +94,14 @@ export default function NotificationsDropdown() {
   const markReadMutation = useMutation({
     mutationFn: (id) => api.markNotificationRead(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
+      invalidateNotifications(queryClient);
     },
   });
 
   const markAllReadMutation = useMutation({
     mutationFn: () => api.markAllNotificationsRead(),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
+      invalidateNotifications(queryClient);
     },
   });
 
@@ -106,8 +110,7 @@ export default function NotificationsDropdown() {
     if (!socket) return;
 
     const handleNewNotification = (data) => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
+      invalidateNotifications(queryClient);
 
       // Show toast
       if (data?.title || data?.message) {
@@ -276,11 +279,11 @@ export default function NotificationsDropdown() {
           </div>
 
           {/* Footer */}
-          <div className="px-4 py-2.5 border-t border-border">
+          <div className="px-4 py-1 border-t border-border">
             <Link
               to="/notifications"
               onClick={() => setIsOpen(false)}
-              className="block text-center text-xs font-medium text-brand-indigo hover:text-brand-lime dark:text-foreground dark:hover:text-brand-lime transition-colors"
+              className="flex min-h-11 items-center justify-center rounded-lg text-center text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-brand-indigo hover:text-brand-lime dark:text-foreground dark:hover:text-brand-lime transition-colors"
             >
               View all notifications
             </Link>

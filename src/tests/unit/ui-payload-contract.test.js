@@ -16,6 +16,15 @@ import Fastify from 'fastify';
 const schemas = await import('../../validators/schemas.js');
 const { default: estimateRoutes, computeEstimateTotals, estimateValidThrough } = await import('../../routes/estimate.routes.js');
 const { expenseListOrderBy } = await import('../../routes/expense.routes.js');
+const { default: timeSessionRoutes } = await import('../../routes/time-sessions.routes.js');
+const { default: invoiceChaserRoutes, CHASE_ALL_LIMIT } = await import('../../routes/invoice-chaser.routes.js');
+const { default: rateCardRoutes } = await import('../../routes/rate-card.routes.js');
+const { default: responseRoutes } = await import('../../routes/response.routes.js');
+const { default: assetLibraryRoutes } = await import('../../routes/asset-library.routes.js');
+const { encodeAssetTags, serializeAsset } = await import('../../services/assetLibrary.service.js');
+const { CONTRACT_TEMPLATE_TYPES } = await import('../../services/contractTemplates.service.js');
+const { enterRequestContext } = await import('../../utils/request-context.js');
+const formPayloads = await import('../../../web/src/lib/form-payloads.js');
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const source = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
@@ -30,6 +39,38 @@ function parses(schema, payload) {
 function rejects(schema, payload) {
   assert.equal(schema.safeParse(payload).success, false, `expected ${JSON.stringify(payload)} to be rejected`);
 }
+
+// A Fastify app whose authenticate hook gives the handler `prisma` both as
+// request.prisma and through the request context (services and fastify.prisma
+// read it from there in production).
+async function appWith(t, routes, prefix, prisma, user = { id: 'user_1', organizationId: 'org_1', role: 'ADMIN' }) {
+  const app = Fastify();
+  app.decorate('prisma', prisma);
+  const authenticate = async (request) => {
+    request.user = user;
+    request.prisma = prisma;
+    enterRequestContext({ prisma, organizationId: user.organizationId });
+  };
+  app.decorate('authenticate', authenticate);
+  // Like src/index.js adminOnly: authenticated, then ADMIN only.
+  app.decorate('adminOnly', async (request, reply) => {
+    await authenticate(request);
+    if (request.user.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
+    return undefined;
+  });
+  await app.register(routes, { prefix });
+  t.after(() => app.close());
+  return app;
+}
+
+// What fetch sends: JSON drops undefined fields.
+const wire = (payload) => JSON.parse(JSON.stringify(payload));
+
+const sliceBetween = (text, start, end) => {
+  const from = text.indexOf(start);
+  assert.ok(from >= 0, `${start} not found`);
+  return text.slice(from, text.indexOf(end, from));
+};
 
 describe('Expenses page (web/src/pages/Expenses.jsx handleSubmit)', () => {
   const created = {
@@ -348,5 +389,351 @@ describe('Clients (web/src/components/CreateClientModal.jsx and PUT /api/clients
     const body = parses(schemas.updateClientSchema, payload);
     for (const key of Object.keys(payload)) assert.ok(key in body, `${key} reaches the handler`);
     rejects(schemas.updateClientSchema, { relationshipStatus: 'GONE' });
+  });
+});
+
+describe('Header timer (web/src/components/LiveTimer.jsx handleStart)', () => {
+  it('starts with the project chosen in the picker', () => {
+    const body = parses(schemas.timeSessionStartSchema, { projectId: 'project_1', description: undefined });
+    assert.equal(body.projectId, 'project_1');
+    const page = source('web/src/components/LiveTimer.jsx');
+    assert.match(page, /startMutation\.mutate\(\{ projectId, description:/);
+  });
+
+  it('answers 400 without a project, 404 for a project outside the organization, 201 otherwise', async (t) => {
+    const sessions = [];
+    const prisma = {
+      project: { findFirst: async ({ where }) => (where.id === 'project_1' && where.deletedAt === null ? { id: 'project_1' } : null) },
+      timeSession: {
+        findMany: async () => [],
+        create: async ({ data }) => { const row = { id: `s${sessions.length + 1}`, ...data }; sessions.push(row); return row; },
+      },
+    };
+    prisma.$transaction = async (fn) => fn(prisma);
+    const app = await appWith(t, timeSessionRoutes, '/api/time-sessions', prisma);
+
+    const noProject = await app.inject({ method: 'POST', url: '/api/time-sessions', payload: { description: 'Header timer' } });
+    assert.equal(noProject.statusCode, 400, noProject.body);
+    assert.match(noProject.json().error, /projectId/);
+
+    const foreign = await app.inject({ method: 'POST', url: '/api/time-sessions', payload: { projectId: 'project_other' } });
+    assert.equal(foreign.statusCode, 404, foreign.body);
+    assert.equal(sessions.length, 0, 'no session is started for an unknown project');
+
+    const started = await app.inject({ method: 'POST', url: '/api/time-sessions', payload: { projectId: 'project_1' } });
+    assert.equal(started.statusCode, 201, started.body);
+    assert.equal(sessions[0].projectId, 'project_1');
+    assert.equal(sessions[0].isRunning, true);
+  });
+});
+
+describe('Retainers page (web/src/pages/Retainers.jsx)', () => {
+  // createForm as the page initialises it, then as staff fill it in.
+  const blankForm = { clientId: 'client_1', tier: 'custom', hoursPerMonth: 20, monthlyAmountUsd: '', monthlyAmountCad: '' };
+
+  it('creates with the default custom tier, number inputs coerced and empty amounts omitted', () => {
+    const body = parses(schemas.createRetainerSchema, wire(formPayloads.buildRetainerCreatePayload(blankForm)));
+    assert.deepEqual(body, { clientId: 'client_1', tier: 'custom', hoursPerMonth: 20 });
+    const typed = parses(schemas.createRetainerSchema, formPayloads.buildRetainerCreatePayload({
+      ...blankForm, hoursPerMonth: '40', monthlyAmountUsd: '2000', monthlyAmountCad: '2700.50',
+    }));
+    assert.deepEqual([typed.hoursPerMonth, typed.monthlyAmountUsd, typed.monthlyAmountCad], [40, 2000, 2700.5]);
+    rejects(schemas.createRetainerSchema, formPayloads.buildRetainerCreatePayload({ ...blankForm, hoursPerMonth: '' }));
+  });
+
+  it('accepts every tier that is stored or offered', () => {
+    for (const tier of ['999', '1999', '3999', 'custom']) {
+      assert.equal(parses(schemas.createRetainerSchema, { clientId: 'client_1', tier, hoursPerMonth: 20 }).tier, tier);
+      assert.equal(parses(schemas.updateRetainerSchema, { tier }).tier, tier);
+    }
+    rejects(schemas.updateRetainerSchema, { tier: 'gold' });
+  });
+
+  it('edits without resending the tier and clears an emptied amount', () => {
+    // handleEdit: amounts fall back to '' when the plan has none.
+    const plan = { tier: '1999', hoursPerMonth: 40, monthlyAmountUsd: 1999, monthlyAmountCad: null };
+    const toEditForm = (p) => ({ hoursPerMonth: p.hoursPerMonth, monthlyAmountUsd: p.monthlyAmountUsd ?? '', monthlyAmountCad: p.monthlyAmountCad ?? '' });
+    assert.match(source('web/src/pages/Retainers.jsx'), /monthlyAmountUsd: plan\.monthlyAmountUsd \?\? '',\s*monthlyAmountCad: plan\.monthlyAmountCad \?\? '',/);
+    const editForm = toEditForm(plan);
+    const body = parses(schemas.updateRetainerSchema, formPayloads.buildRetainerUpdatePayload(editForm));
+    assert.deepEqual(body, { hoursPerMonth: 40, monthlyAmountUsd: 1999, monthlyAmountCad: null });
+    // A stored 0 round-trips as 0, not as a cleared amount.
+    const zero = parses(schemas.updateRetainerSchema, formPayloads.buildRetainerUpdatePayload(toEditForm({ ...plan, monthlyAmountUsd: 0, monthlyAmountCad: 0 })));
+    assert.deepEqual([zero.monthlyAmountUsd, zero.monthlyAmountCad], [0, 0]);
+    assert.equal(parses(schemas.updateRetainerSchema, formPayloads.buildRetainerUpdatePayload({ ...editForm, monthlyAmountUsd: '0' })).monthlyAmountUsd, 0);
+    const typed = parses(schemas.updateRetainerSchema, formPayloads.buildRetainerUpdatePayload({ ...editForm, hoursPerMonth: '30', monthlyAmountUsd: '2500' }));
+    assert.deepEqual([typed.hoursPerMonth, typed.monthlyAmountUsd], [30, 2500]);
+  });
+
+  it('logs hours entered as text', () => {
+    const body = parses(schemas.logRetainerHoursSchema, wire(formPayloads.buildRetainerLogHoursPayload({ hours: '1.5', description: '' })));
+    assert.deepEqual(body, { hours: 1.5 });
+    rejects(schemas.logRetainerHoursSchema, formPayloads.buildRetainerLogHoursPayload({ hours: '', description: 'x' }));
+  });
+
+  it('builds every request through the payload helpers', () => {
+    const page = source('web/src/pages/Retainers.jsx');
+    assert.match(page, /createMutation\.mutate\(buildRetainerCreatePayload\(createForm\)\)/);
+    assert.match(page, /data: buildRetainerUpdatePayload\(editForm\)/);
+    assert.match(page, /data: buildRetainerLogHoursPayload\(logForm\)/);
+    assert.ok(schemas.RETAINER_TIER_VALUES.includes('custom'));
+  });
+});
+
+describe('Project page (web/src/pages/Project.jsx)', () => {
+  it('opens a revision round without notes', () => {
+    assert.deepEqual(parses(schemas.revisionCreateNewSchema, {}), {});
+    assert.equal(parses(schemas.revisionCreateNewSchema, { notes: ' Logo tweaks ' }).notes, 'Logo tweaks');
+    assert.match(source('web/src/pages/Project.jsx'), /createRevisionMutation\.mutate\(\{\}\)/);
+  });
+
+  it('pastes a message from every offered source', () => {
+    const page = source('web/src/pages/Project.jsx');
+    const offered = optionValues(sliceBetween(page, 'id="paste-message-source"', '</select>'));
+    assert.deepEqual([...offered].sort(), [...schemas.MESSAGE_PASTE_SOURCES].sort());
+    for (const pasteSource of offered) {
+      const body = parses(schemas.messagePasteSchema, { content: 'Can we move the launch?', source: pasteSource, projectId: 'project_1' });
+      assert.deepEqual(body, { content: 'Can we move the launch?', source: pasteSource, projectId: 'project_1' });
+    }
+    rejects(schemas.messagePasteSchema, { content: '   ', source: 'email', projectId: 'project_1' });
+    rejects(schemas.messagePasteSchema, { content: 'x', source: 'fax', projectId: 'project_1' });
+  });
+
+  it('drafts a client update with the notes and the revision toggle', () => {
+    // api.draftProjectUpdate(id, data) sends { projectId, ...data }.
+    const body = parses(schemas.aiDraftUpdateSchema, { projectId: 'project_1', rawNotes: 'Homepage done', includeRevisionStatus: true });
+    assert.deepEqual(body, { projectId: 'project_1', rawNotes: 'Homepage done', includeRevisionStatus: true });
+    rejects(schemas.aiDraftUpdateSchema, { projectId: 'project_1', rawNotes: '', includeRevisionStatus: false });
+    assert.match(source('web/src/pages/Project.jsx'), /draftUpdateMutation\.mutate\(\{ rawNotes: draftNotes, includeRevisionStatus: includeRevisions \}\)/);
+  });
+});
+
+describe('Thread response (web/src/pages/Thread.jsx submitMutation)', () => {
+  it('submits a response with the thread only in the URL', async (t) => {
+    const payload = { subject: 'Re: Launch date', body: 'We can launch Friday.', tone: 'professional' };
+    parses(schemas.responseCreateSchema, payload);
+    const created = [];
+    const prisma = {
+      thread: { findFirst: async ({ where }) => (where.id === 'thread_1' ? { id: 'thread_1' } : null) },
+      response: { create: async ({ data }) => { created.push(data); return { id: 'resp_1', ...data }; } },
+    };
+    const app = await appWith(t, responseRoutes, '/api/responses', prisma);
+
+    const ok = await app.inject({ method: 'POST', url: '/api/responses/thread_1/drafts', payload });
+    assert.equal(ok.statusCode, 201, ok.body);
+    assert.equal(created[0].threadId, 'thread_1');
+    assert.equal(created[0].status, 'DRAFT');
+
+    const foreign = await app.inject({ method: 'POST', url: '/api/responses/thread_other/drafts', payload });
+    assert.equal(foreign.statusCode, 404, foreign.body);
+    assert.equal(created.length, 1);
+  });
+});
+
+describe('Credentials page (web/src/pages/Credentials.jsx handleSubmit)', () => {
+  const form = { label: 'WP Admin', username: '', password: 'placeholder-value', url: '', notes: '', category: 'WP_ADMIN', clientId: 'client_1', projectId: '' };
+
+  it('creates without empty username and URL', () => {
+    const body = parses(schemas.credentialCreateSchema, wire(formPayloads.buildCredentialPayload(form)));
+    assert.equal('username' in body, false);
+    assert.equal('url' in body, false);
+    assert.equal(body.clientId, 'client_1');
+    const full = parses(schemas.credentialCreateSchema, formPayloads.buildCredentialPayload({ ...form, username: 'admin', url: 'https://example.com/wp-admin' }));
+    assert.deepEqual([full.username, full.url], ['admin', 'https://example.com/wp-admin']);
+  });
+
+  it('keeps the client-or-project rule; the page asks for a client first', () => {
+    rejects(schemas.credentialCreateSchema, formPayloads.buildCredentialPayload({ ...form, clientId: '' }));
+    const page = source('web/src/pages/Credentials.jsx');
+    assert.match(page, /if \(!form\.clientId && !form\.projectId\) \{\s*setFormError\('Choose the client this credential belongs to\.'\)/);
+  });
+
+  it('clears an emptied username or URL on edit', () => {
+    const body = parses(schemas.credentialUpdateSchema, formPayloads.buildCredentialPayload(form, { editing: true }));
+    assert.equal(body.username, null);
+    assert.equal(body.url, null);
+    assert.equal(body.notes, '');
+  });
+
+  it('masks the password, not the label', () => {
+    const page = source('web/src/pages/Credentials.jsx');
+    assert.match(sliceBetween(page, 'Label *</label>', '/>'), /type="text"/);
+    assert.match(sliceBetween(page, 'Password *</label>', '/>'), /type="password"/);
+  });
+});
+
+describe('Asset Library (web/src/pages/AssetLibrary.jsx handleCreate)', () => {
+  const newAsset = { name: 'Primary logo', type: 'IMAGE', category: 'logo', url: 'https://cdn.example.com/logo.svg', description: 'Full-colour mark' };
+
+  it('sends the API type values and keeps client, category and description', () => {
+    const page = source('web/src/pages/AssetLibrary.jsx');
+    const offered = [...sliceBetween(page, 'const ASSET_TYPES', '];').matchAll(/value: '([A-Z_]+)'/g)].map((m) => m[1]);
+    assert.ok(offered.length >= 5);
+    const categories = [...sliceBetween(page, 'const CATEGORIES', '];').matchAll(/'([a-z]+)'/g)].map((m) => m[1]);
+    assert.deepEqual(categories, schemas.ASSET_CATEGORIES);
+    for (const type of offered) {
+      const body = parses(schemas.assetCreateSchema, formPayloads.buildAssetCreatePayload({ ...newAsset, type }, ' client_1 '));
+      assert.deepEqual(body, { ...newAsset, type, clientId: 'client_1' });
+    }
+    rejects(schemas.assetCreateSchema, { ...newAsset, type: 'image', clientId: 'client_1' });
+    rejects(schemas.assetCreateSchema, { ...newAsset });
+    assert.equal('clientId' in parses(schemas.assetUpdateSchema, { clientId: 'client_2', name: 'x' }), false);
+    assert.deepEqual(parses(schemas.assetCreateSchema, { ...newAsset, clientId: 'client_1', tags: ['brand'] }).tags, ['brand']);
+    for (const tag of ['category:photo', 'Category:logo']) {
+      rejects(schemas.assetCreateSchema, { ...newAsset, clientId: 'client_1', tags: [tag] });
+      rejects(schemas.assetUpdateSchema, { tags: ['brand', tag] });
+    }
+  });
+
+  it('stores the category as a tag and the description as alt text', () => {
+    const stored = encodeAssetTags(['brand'], 'logo');
+    assert.deepEqual(JSON.parse(stored), ['category:logo', 'brand']);
+    const asset = serializeAsset({ id: 'a1', tags: stored, altText: 'Full-colour mark' });
+    assert.deepEqual([asset.tags, asset.category, asset.description], [['brand'], 'logo', 'Full-colour mark']);
+    assert.deepEqual(serializeAsset({ id: 'a2', tags: 'not json', altText: null }).tags, []);
+  });
+
+  it('creates only for a client in the organization', async (t) => {
+    const rows = [];
+    const prisma = {
+      client: { findFirst: async ({ where }) => (where.id === 'client_1' ? { id: 'client_1' } : null) },
+      asset: { create: async ({ data }) => { const row = { id: 'asset_1', ...data }; rows.push(row); return row; } },
+    };
+    const app = await appWith(t, assetLibraryRoutes, '/api/assets', prisma);
+    const payload = formPayloads.buildAssetCreatePayload(newAsset, 'client_1');
+
+    const foreign = await app.inject({ method: 'POST', url: '/api/assets', payload: { ...payload, clientId: 'client_other' } });
+    assert.equal(foreign.statusCode, 404, foreign.body);
+    assert.equal(rows.length, 0);
+
+    const created = await app.inject({ method: 'POST', url: '/api/assets', payload });
+    assert.equal(created.statusCode, 201, created.body);
+    assert.deepEqual([rows[0].clientId, rows[0].type, rows[0].altText, rows[0].tags], ['client_1', 'IMAGE', 'Full-colour mark', '["category:logo"]']);
+    assert.deepEqual([created.json().category, created.json().description], ['logo', 'Full-colour mark']);
+  });
+});
+
+describe('Rate cards (web/src/pages/RateCards.jsx handleSubmit)', () => {
+  // A card is scoped to the organization only through its client, so the
+  // modal requires one and the API refuses null (the database-backed proof is
+  // src/tests/integration/rate-card-tenancy.database.test.js).
+  const card = {
+    name: 'Standard rates',
+    clientId: 'client_1',
+    isDefault: false,
+    rates: [{ serviceName: 'Design', unit: 'hour', rate: 120, description: '' }],
+  };
+
+  it('creates and updates with the chosen client, never null', () => {
+    assert.equal(parses(schemas.rateCardSchema, card).clientId, 'client_1');
+    assert.equal(parses(schemas.rateCardSchema.partial(), card).clientId, 'client_1');
+    rejects(schemas.rateCardSchema, { ...card, clientId: null });
+    const { clientId: _omitted, ...withoutClient } = card;
+    rejects(schemas.rateCardSchema, withoutClient);
+    rejects(schemas.rateCardSchema.partial(), { clientId: null });
+    assert.equal('clientId' in parses(schemas.rateCardSchema.partial(), withoutClient), false);
+  });
+
+  it('offers no client-less option', () => {
+    const page = source('web/src/pages/RateCards.jsx');
+    const select = sliceBetween(page, 'id="rate-card-client"', '</select>');
+    assert.match(select, /<option value="" disabled>Select a client<\/option>/);
+    assert.match(select, /\brequired\b/);
+    assert.doesNotMatch(page, /clientId: clientId \|\| null/);
+  });
+
+  it('PUT keeps the client when it is omitted and refuses null', async (t) => {
+    const rows = new Map([['rc_1', { id: 'rc_1', name: 'Acme rates', clientId: 'client_1', rates: [], isDefault: false }]]);
+    const prisma = {
+      rateCard: {
+        findUnique: async ({ where }) => rows.get(where.id) ?? null,
+        updateMany: async () => ({ count: 0 }),
+        update: async ({ where, data }) => { const row = { ...rows.get(where.id), ...data }; rows.set(where.id, row); return row; },
+      },
+    };
+    const app = await appWith(t, rateCardRoutes, '/api/rate-cards', prisma);
+    const cleared = await app.inject({ method: 'PUT', url: '/api/rate-cards/rc_1', payload: { ...card, clientId: null } });
+    assert.equal(cleared.statusCode, 400, cleared.body);
+    assert.equal(rows.get('rc_1').clientId, 'client_1');
+
+    const renamed = await app.inject({ method: 'PUT', url: '/api/rate-cards/rc_1', payload: { name: 'Renamed' } });
+    assert.equal(renamed.statusCode, 200, renamed.body);
+    assert.deepEqual([rows.get('rc_1').name, rows.get('rc_1').clientId], ['Renamed', 'client_1']);
+  });
+});
+
+describe('Invoice Chaser (web/src/pages/InvoiceChaser.jsx)', () => {
+  it('generates all with {} and one with an invoiceId', () => {
+    assert.deepEqual(parses(schemas.invoiceChaserSchema, {}), {});
+    assert.equal(parses(schemas.invoiceChaserSchema, { invoiceId: 'inv_1' }).invoiceId, 'inv_1');
+    assert.match(source('web/src/pages/InvoiceChaser.jsx'), /chaseMutation\.mutate\(\{\}\)/);
+  });
+
+  it('chases the 20 longest-overdue invoices when no invoiceId is sent', async (t) => {
+    const queries = [];
+    const prisma = { invoice: { findMany: async (args) => { queries.push(args); return []; } } };
+    const app = await appWith(t, invoiceChaserRoutes, '/api/invoice-chaser', prisma);
+    const res = await app.inject({ method: 'POST', url: '/api/invoice-chaser/chase', payload: {} });
+    assert.equal(res.statusCode, 200, res.body);
+    assert.deepEqual(res.json(), { message: 'No overdue invoices found', reminders: [] });
+    assert.equal('id' in queries[0].where, false);
+    assert.ok(queries[0].where.dueDate.lt instanceof Date);
+    assert.equal(queries[0].take, CHASE_ALL_LIMIT);
+    assert.equal(CHASE_ALL_LIMIT, 20);
+    assert.deepEqual(queries[0].orderBy, { dueDate: 'asc' });
+
+    // One named invoice: no date filter and no cap.
+    await app.inject({ method: 'POST', url: '/api/invoice-chaser/chase', payload: { invoiceId: 'inv_1' } });
+    assert.equal(queries[1].where.id, 'inv_1');
+    assert.equal('take' in queries[1], false);
+  });
+
+  it('is admin-only, like the page (AdminRoute)', async (t) => {
+    const queries = [];
+    const prisma = { invoice: { findMany: async (args) => { queries.push(args); return []; } } };
+    const app = await appWith(t, invoiceChaserRoutes, '/api/invoice-chaser', prisma, { id: 'user_2', organizationId: 'org_1', role: 'TEAM' });
+    const chase = await app.inject({ method: 'POST', url: '/api/invoice-chaser/chase', payload: {} });
+    assert.equal(chase.statusCode, 403, chase.body);
+    const overdue = await app.inject({ method: 'GET', url: '/api/invoice-chaser/overdue' });
+    assert.equal(overdue.statusCode, 403, overdue.body);
+    assert.equal(queries.length, 0);
+    assert.match(source('web/src/App.jsx'), /path="\/invoice-chaser" element=\{<AdminRoute><InvoiceChaser \/><\/AdminRoute>\}/);
+  });
+});
+
+describe('Contracts page (web/src/pages/Contracts.jsx)', () => {
+  it('creates from every offered template, including the Mutual NDA', () => {
+    const page = source('web/src/pages/Contracts.jsx');
+    const offered = [...sliceBetween(page, 'const templateTypes', '];').matchAll(/value: '([A-Z_]+)'/g)].map((m) => m[1]);
+    assert.ok(offered.includes('NDA'));
+    assert.deepEqual([...offered].sort(), [...CONTRACT_TEMPLATE_TYPES].sort());
+    for (const templateType of offered) {
+      assert.equal(parses(schemas.createContractSchema, { clientId: 'client_1', title: 'Agreement', templateType }).templateType, templateType);
+    }
+    rejects(schemas.createContractSchema, { clientId: 'client_1', title: 'Agreement', templateType: 'HOURLY' });
+  });
+
+  it('refines with the single message /api/ai/chat expects', () => {
+    const payload = formPayloads.buildContractRefineChatPayload('Make it shorter', '<h1>Retainer Service Agreement</h1>');
+    const body = parses(schemas.aiChatSchema, payload);
+    assert.match(body.message, /Make it shorter/);
+    assert.equal(formPayloads.buildContractRefineChatPayload('x', 'y'.repeat(formPayloads.AI_CHAT_MESSAGE_MAX_LENGTH)), null);
+    assert.doesNotMatch(source('web/src/pages/Contracts.jsx'), /messages: \[/);
+  });
+});
+
+describe('Public booking (web/src/pages/PortalBooking.jsx handleSubmit)', () => {
+  it('sends the topic as notes', () => {
+    const body = parses(schemas.bookingSchema, { date: '2026-10-05', time: '10:00', name: 'Sam', email: 'sam@example.com', notes: 'Website refresh' });
+    assert.equal(body.notes, 'Website refresh');
+    parses(schemas.bookingSchema, { date: '2026-10-05', time: '10:00', name: 'Sam', email: 'sam@example.com', notes: undefined });
+    const page = source('web/src/pages/PortalBooking.jsx');
+    assert.match(page, /notes: topic\.trim\(\) \|\| undefined/);
+    assert.doesNotMatch(page, /\btopic: topic/);
+  });
+
+  it('selects slots by the HH:MM time the availability route returns', () => {
+    assert.match(source('src/routes/portal.routes.js'), /time: `\$\{String\(hour\)\.padStart\(2, '0'\)\}:00`/);
+    assert.match(source('web/src/pages/PortalBooking.jsx'), /slot\.time/);
   });
 });

@@ -2,12 +2,13 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { preferredScrollBehavior } from '../lib/motion';
 import './client-portal/portal.css';
-import { API, portalFetch, downloadPortalInvoice, downloadPortalContract, fmt, fmtDate, statusBadge, StatusBadge, projectStatusLabel, projectStatusColor, Icons, useProjectChat, PortalChatComposer, PortalMessageAttachments, canSendPortalMessage, PortalProgress, usePortalLightTheme, portalFieldClass, portalFieldStyles, busyLabelButtonClass, pageTitleClass, sectionTitleClass, labelClass } from './client-portal/shared';
+import { API, portalFetch, downloadPortalInvoice, downloadPortalContract, fmt, fmtDate, invoiceStatusBadge, StatusBadge, projectStatusLabel, projectStatusColor, Icons, useProjectChat, PortalChatComposer, PortalMessageAttachments, canSendPortalMessage, PortalProgress, usePortalLightTheme, portalFieldClass, portalFieldStyles, busyLabelButtonClass, pageTitleClass, sectionTitleClass, labelClass } from './client-portal/shared';
 import { Alert, Button, Card, CardDescription, CardTitle, Input, LoadingState, StatCard } from '../components/ui';
 import { buttonStyles } from '../components/ui/Button';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../components/ui/SlowNotice';
 import { cn } from '../lib/utils';
 import { formatInvoiceDate } from '../lib/format';
+import { invoiceBalanceDue, isPartlyPaid, UNPAID_INVOICE_STATUSES } from '../lib/invoice-status';
 
 // Heavy sections load on demand so the portal route chunk stays in budget.
 // Their Suspense fallback is a named polite status with the slow-state copy.
@@ -82,8 +83,8 @@ function LoginScreen() {
     <div className="flex min-h-screen items-center justify-center bg-primary p-4">
       <Card padding="none" className="w-full max-w-[380px] px-8 py-10 text-center">
         <div className="mb-3 flex justify-center">{Icons.logo}</div>
-        <h1 className="m-0 text-2xl font-bold text-foreground">Ashbi Design</h1>
-        <CardDescription className="mt-1 font-medium">Client Portal</CardDescription>
+        <h1 className="m-0 text-2xl font-bold text-foreground">Client Portal</h1>
+        <CardDescription className="mt-1 font-medium">Sign in with your email</CardDescription>
 
         {sent ? (
           <div className="py-4">
@@ -127,13 +128,14 @@ function LoginScreen() {
 function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSelectedProject }) {
   const activeProjects = projects.filter(p => !['LAUNCHED', 'CANCELLED', 'ON_HOLD'].includes(p.status));
   const overdueInvoices = invoices.filter(i => i.status?.toUpperCase() === 'OVERDUE');
-  // Outstanding amounts are summed per currency; different currencies are
-  // never added together.
+  // Outstanding is what is still owed (each open invoice's balance after
+  // payments), summed per currency; different currencies are never added
+  // together.
   const unpaidByCurrency = invoices
-    .filter(i => ['SENT', 'OVERDUE', 'PENDING'].includes(i.status?.toUpperCase()))
+    .filter(i => UNPAID_INVOICE_STATUSES.includes(i.status?.toUpperCase()))
     .reduce((totals, i) => {
       const currency = (i.currency || 'CAD').toUpperCase();
-      totals[currency] = (totals[currency] || 0) + (i.total || 0);
+      totals[currency] = Math.round(((totals[currency] || 0) + invoiceBalanceDue(i)) * 100) / 100;
       return totals;
     }, {});
   const unpaidEntries = Object.entries(unpaidByCurrency);
@@ -214,7 +216,6 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
                   <span className="font-semibold text-foreground">{p.name}</span>
                   <StatusBadge color={projectStatusColor(p.status)}>{projectStatusLabel(p.status)}</StatusBadge>
                 </div>
-                {p.aiSummary && <p className="mb-2 text-sm text-muted-foreground">{p.aiSummary}</p>}
                 <div className="mb-1.5 flex justify-between text-xs text-muted-foreground">
                   <span>Progress</span>
                   <span className="font-semibold text-foreground">{p.progressPct}%</span>
@@ -241,13 +242,13 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-sm font-semibold text-primary">{inv.invoiceNumber}</span>
-                    {statusBadge(inv.status)}
+                    {invoiceStatusBadge(inv)}
                   </div>
                   {inv.dueDate && inv.status !== 'PAID' && (
                     <p className="mt-1 text-xs text-muted-foreground">Due {formatInvoiceDate(inv.dueDate)}</p>
                   )}
                 </div>
-                <span className="text-lg font-bold text-foreground">{fmt(inv.total, inv.currency)}</span>
+                <InvoiceAmount invoice={inv} className="text-lg" />
               </Card>
             ))}
             {invoices.length > 3 && (
@@ -282,7 +283,6 @@ function ProjectsTab({ projects, setSelectedProject }) {
                 </div>
                 <StatusBadge color={projectStatusColor(p.status)}>{projectStatusLabel(p.status)}</StatusBadge>
               </div>
-              {p.aiSummary && <p className="mb-3 text-sm text-muted-foreground">{p.aiSummary}</p>}
               {p.totalTasks > 0 && (
                 <div>
                   <div className="mb-1.5 flex justify-between text-xs text-muted-foreground">
@@ -295,6 +295,30 @@ function ProjectsTab({ projects, setSelectedProject }) {
             </Card>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// An invoice's amount: what is still owed on an open invoice (its balance
+// after payments, with "Paid so far" once something is paid), the total on a
+// paid one.
+export function InvoiceAmount({ invoice, className }) {
+  const isOpen = UNPAID_INVOICE_STATUSES.includes(invoice.status?.toUpperCase());
+  if (!isOpen) {
+    return <span className={cn('shrink-0 text-right font-bold text-foreground', className)}>{fmt(invoice.total, invoice.currency)}</span>;
+  }
+  const partlyPaid = isPartlyPaid(invoice);
+  return (
+    <div className="shrink-0 text-right">
+      <span className={cn('block font-bold text-foreground', className)}>{fmt(invoiceBalanceDue(invoice), invoice.currency)}</span>
+      {partlyPaid && (
+        <>
+          <span className="block text-xs text-muted-foreground">Balance due</span>
+          <span className="block text-xs text-muted-foreground">
+            Paid so far {fmt(invoice.amountPaid, invoice.currency)} of {fmt(invoice.total, invoice.currency)}
+          </span>
+        </>
       )}
     </div>
   );
@@ -327,15 +351,15 @@ function InvoicesTab({ invoices, token }) {
             const isPaid = inv.status?.toUpperCase() === 'PAID';
             // Pay opens the public invoice page, which starts a fresh Stripe
             // Checkout session; void and draft invoices are never payable.
-            const canPay = !isPaid && ['SENT', 'OVERDUE'].includes(inv.status?.toUpperCase()) && Boolean(inv.payUrl);
+            const canPay = !isPaid && UNPAID_INVOICE_STATUSES.includes(inv.status?.toUpperCase()) && Boolean(inv.payUrl);
             return (
               <Card key={inv.id} padding="none" className="p-5">
                 <div className="flex flex-col gap-3">
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-mono text-sm font-semibold text-primary">{inv.invoiceNumber}</span>
-                        {statusBadge(inv.status)}
+                        {invoiceStatusBadge(inv)}
                       </div>
                       {(inv.title || inv.notes) && (
                         <p className="mt-1 truncate text-sm text-muted-foreground">{inv.title || inv.notes}</p>
@@ -346,7 +370,7 @@ function InvoicesTab({ invoices, token }) {
                         {inv.paidAt && <span>Paid: {fmtDate(inv.paidAt)}</span>}
                       </div>
                     </div>
-                    <span className="ml-4 text-xl font-bold text-foreground">{fmt(inv.total, inv.currency)}</span>
+                    <InvoiceAmount invoice={inv} className="text-xl" />
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {canPay && (
@@ -580,6 +604,9 @@ function PortalDashboard({ token }) {
     { id: 'chat', label: 'Chat', icon: Icons.chat },
   ];
 
+  // The agency's name from GET /api/client-portal/me (its brand settings).
+  const brandName = typeof me?.brand?.companyName === 'string' ? me.brand.companyName.trim() : '';
+
   // If a project is selected, show project detail
   const showProjectDetail = activeTab === 'projects' && selectedProject;
 
@@ -590,7 +617,7 @@ function PortalDashboard({ token }) {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             {Icons.logo}
-            <span className="text-lg font-bold text-primary-foreground">Ashbi</span>
+            {brandName && <span className="text-lg font-bold text-primary-foreground">{brandName}</span>}
           </div>
           <span className="text-xs text-primary-foreground/30">|</span>
           <span className="text-sm text-primary-foreground/70">{clientName}</span>
@@ -657,7 +684,7 @@ function PortalDashboard({ token }) {
 
       {/* Footer */}
       <footer className="px-4 py-8 text-center text-xs text-muted-foreground">
-        &copy; {new Date().getFullYear()} Ashbi Design &mdash; ashbi.ca
+        {brandName && <>&copy; {new Date().getFullYear()} {brandName}</>}
       </footer>
     </div>
   );

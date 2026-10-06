@@ -7,6 +7,9 @@ import { softDelete } from '../services/trash.service.js';
 import { deliveryFieldsFromSend, mailgunTrackingFields, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { recordAuditEvent, recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { computeProposalLineItems, proposalTotals } from '../utils/proposal-totals.js';
+import { invoiceTotals, lineTotal, roundMoney } from '../utils/money-totals.js';
+import { brandedSender, escapeHtml, publicBrand, resolveBrandingForClient } from '../services/branding.service.js';
 
 // Estimates a client may see through the public link. A DRAFT is never public,
 // whatever token it holds.
@@ -31,6 +34,9 @@ export function publicEstimateView(estimate) {
     })),
     subtotal: estimate.subtotal,
     tax: estimate.tax,
+    // The rate staff entered, for the "Tax (5%)" label; null on estimates
+    // from before it was stored.
+    taxRate: estimate.taxRate ?? null,
     total: estimate.total,
     validUntil: estimate.validUntil ?? null,
     sentAt: estimate.sentAt ?? null,
@@ -39,7 +45,6 @@ export function publicEstimateView(estimate) {
   };
 }
 
-const roundMoney = (value) => parseFloat((Number(value) || 0).toFixed(2));
 
 // A date-only "valid until" (the Estimates page's date input) is stored as
 // 23:59:59.999Z of that calendar day. The client may be anywhere, so the
@@ -60,7 +65,7 @@ export function estimateValidThrough(validUntil) {
 
 /** A line's amount as stored and shown: round2(quantity * rate). */
 export function estimateLineAmount(item) {
-  return roundMoney((Number(item?.quantity) || 0) * (Number(item?.rate) || 0));
+  return lineTotal(item?.quantity, item?.rate);
 }
 
 /**
@@ -74,10 +79,15 @@ export function estimateLineAmount(item) {
  */
 export function computeEstimateTotals(lineItems, { taxRate, tax } = {}) {
   const items = Array.isArray(lineItems) ? lineItems : [];
-  const subtotal = roundMoney(items.reduce((sum, item) => sum + estimateLineAmount(item), 0));
-  const taxAmount = taxRate !== undefined && taxRate !== null
-    ? roundMoney((subtotal * Number(taxRate)) / 100)
-    : roundMoney(tax);
+  const lines = items.map((item) => ({ total: estimateLineAmount(item) }));
+  if (taxRate !== undefined && taxRate !== null) {
+    // The invoice's own arithmetic (src/utils/money-totals.js), so the
+    // estimate, its proposal and the invoice agree to the cent.
+    const { subtotal, tax: taxAmount, total } = invoiceTotals(lines, taxRate, 0);
+    return { subtotal, tax: taxAmount, total };
+  }
+  const { subtotal } = invoiceTotals(lines, 0, 0);
+  const taxAmount = roundMoney(tax);
   return { subtotal, tax: taxAmount, total: roundMoney(subtotal + taxAmount) };
 }
 
@@ -114,6 +124,73 @@ export function estimateStatusChangeError(from, to) {
   return `An estimate cannot move from ${from} to ${to} here. ${via}.`;
 }
 
+const PROPOSAL_VALIDITY_MS = 30 * 24 * 60 * 60 * 1000;
+
+// Estimates POST /:id/convert accepts (the CONVERTED transition above).
+export const ESTIMATE_CONVERTIBLE_STATUSES = Object.freeze(['APPROVED', 'SENT']);
+
+/**
+ * The Proposal a converted estimate becomes. Proposals are pre-tax (subtotal
+ * minus discount, see src/utils/proposal-totals.js), so the line items and
+ * subtotal match the estimate's and the estimate's tax rate travels in
+ * metadata; an invoice created from the proposal applies that rate, which
+ * gives the estimate's total again. Legacy estimates without a stored
+ * taxRate carry the rate their fixed tax amount implies.
+ */
+export function proposalDataFromEstimate(estimate, { createdById, now = new Date() }) {
+  const estimateLines = Array.isArray(estimate.lineItems) ? estimate.lineItems : [];
+  const lineItems = computeProposalLineItems(estimateLines.map((item) => ({
+    description: typeof item?.description === 'string' && item.description.trim() ? item.description : 'Line item',
+    quantity: Number(item?.quantity) || 0,
+    unitPrice: Number(item?.rate) || 0,
+  })));
+  const { subtotal, total } = proposalTotals(lineItems, 0);
+  const estimateTotals = computeEstimateTotals(estimateLines, { taxRate: estimate.taxRate, tax: estimate.tax });
+  const taxRate = estimate.taxRate !== null && estimate.taxRate !== undefined
+    ? Number(estimate.taxRate)
+    : (estimateTotals.subtotal > 0 ? Math.round((estimateTotals.tax / estimateTotals.subtotal) * 100 * 10000) / 10000 : 0);
+  return {
+    title: estimate.title,
+    notes: estimate.description || null,
+    clientId: estimate.clientId,
+    createdById,
+    status: 'DRAFT',
+    subtotal,
+    discount: 0,
+    total,
+    // A proposal is sent with a future validity: keep the estimate's while it
+    // is still ahead, otherwise give the new draft the usual 30 days.
+    validUntil: estimate.validUntil && new Date(estimate.validUntil) > now
+      ? estimate.validUntil
+      : new Date(now.getTime() + PROPOSAL_VALIDITY_MS),
+    metadata: JSON.stringify({
+      source: 'estimate',
+      estimateId: estimate.id,
+      taxRate,
+      tax: estimateTotals.tax,
+      estimateTotal: estimateTotals.total,
+    }),
+    lineItems: { create: lineItems },
+  };
+}
+
+/**
+ * Why POST /:id/send will not email the client, or null when it will try:
+ * NO_CLIENT_EMAIL (the client has no email address) or EMAIL_NOT_CONFIGURED
+ * (no mail provider). The send itself still succeeds and issues the link.
+ */
+export function estimateEmailSkipReason({ mailConfigured, clientEmail }) {
+  if (!clientEmail || !String(clientEmail).trim()) return 'NO_CLIENT_EMAIL';
+  if (!mailConfigured) return 'EMAIL_NOT_CONFIGURED';
+  return null;
+}
+
+/** The client's estimate page (env.hubUrl), or null for a draft or no token. */
+export function estimateClientLink(estimate) {
+  if (!estimate?.viewToken || estimate.status === 'DRAFT') return null;
+  return `${env.hubUrl}/portal/estimate/${estimate.viewToken}`;
+}
+
 /** Why a public link cannot be used, or null. Unknown and draft look the same. */
 function publicEstimateFailure(estimate, now = new Date()) {
   if (!estimate || !PUBLIC_ESTIMATE_STATUSES.includes(estimate.status)) {
@@ -141,7 +218,9 @@ export default async function estimateRoutes(fastify) {
       take: clampTake(request.query.limit),
     });
 
-    return { estimates };
+    // clientLink: the hub URL staff copy for the client (never for drafts,
+    // whose placeholder token is not public).
+    return { estimates: estimates.map((estimate) => ({ ...estimate, clientLink: estimateClientLink(estimate) })) };
   });
 
   // Get single estimate
@@ -294,8 +373,14 @@ export default async function estimateRoutes(fastify) {
     // Send estimate email with magic link to client
     const portalUrl = `${env.hubUrl}/portal/estimate/${access.token}`;
     let deliveryFields = null;
+    // What happened to the email, so the page can say it plainly (the
+    // estimate is SENT either way and its link works).
+    let emailStatus = estimateEmailSkipReason({
+      mailConfigured: Boolean(env.mailgunApiKey && env.mailgunDomain),
+      clientEmail: estimate.client?.email,
+    });
 
-    if (env.mailgunApiKey && env.mailgunDomain && estimate.client?.email) {
+    if (!emailStatus) {
       try {
         const mg = new Mailgun(FormData);
         const mgClient = mg.client({
@@ -303,15 +388,19 @@ export default async function estimateRoutes(fastify) {
           key: env.mailgunApiKey
         });
 
+        // Sent in the estimate's organization's name (resolveBranding).
+        const branding = await resolveBrandingForClient(request.prisma, estimate.clientId);
+        const companyName = String(branding.companyName || '').trim();
+        const fromCompany = companyName ? ` from ${companyName}` : '';
         const sent = await mgClient.messages.create(env.mailgunDomain, {
           ...mailgunTrackingFields({ documentType: 'estimate', documentId: estimate.id }),
-          from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
+          from: brandedSender(branding, env.mailgunDomain),
           to: estimate.client.email,
-          subject: `Estimate from Ashbi Design — $${updated.total.toLocaleString()}`,
+          subject: `Estimate${fromCompany} — $${updated.total.toLocaleString()}`,
           html: `
             <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:40px;border-radius:12px;">
-              <h2 style="color:#c9a84c;margin-top:0;">New Estimate from Ashbi Design</h2>
-              <p>Hello ${estimate.client.name},</p>
+              <h2 style="color:#c9a84c;margin-top:0;">New Estimate${escapeHtml(fromCompany)}</h2>
+              <p>Hello ${escapeHtml(estimate.client.name)},</p>
               <p>We've prepared an estimate for you. Please review and approve or decline at your convenience.</p>
               <p><strong>Amount:</strong> $${updated.total.toLocaleString()}</p>
               <p><strong>Status:</strong> Pending your review</p>
@@ -323,9 +412,11 @@ export default async function estimateRoutes(fastify) {
         });
         console.log(`[estimate] Estimate email sent to ${estimate.client.email}`);
         deliveryFields = deliveryFieldsFromSend({ ok: true, id: sent?.id });
+        emailStatus = 'SENT';
       } catch (mailErr) {
         console.error('[estimate] Failed to send estimate email:', mailErr.message || mailErr);
         deliveryFields = deliveryFieldsFromSend({ ok: false, error: 'Estimate email send error' });
+        emailStatus = 'FAILED';
       }
       try {
         await request.prisma.estimate.update({ where: { id }, data: deliveryFields });
@@ -340,7 +431,12 @@ export default async function estimateRoutes(fastify) {
       // it to logs; staff can recover it from the authenticated response below.
     }
 
-    return withDeliveryState({ ...updated, ...deliveryFields });
+    return {
+      ...withDeliveryState({ ...updated, ...deliveryFields }),
+      emailSent: emailStatus === 'SENT',
+      emailStatus,
+      clientLink: portalUrl,
+    };
   });
 
   // Public view by token (capability link: expiring, revocable, never a draft)
@@ -351,7 +447,8 @@ export default async function estimateRoutes(fastify) {
     });
     const failure = publicEstimateFailure(estimate);
     if (failure) return reply.status(failure.statusCode).send({ error: failure.error });
-    return publicEstimateView(estimate);
+    const brand = publicBrand(await resolveBrandingForClient(request.prisma, estimate.clientId));
+    return { ...publicEstimateView(estimate), brand };
   });
 
   // Client approve/decline estimate
@@ -393,7 +490,8 @@ export default async function estimateRoutes(fastify) {
       metadata: { fromStatus: 'SENT', toStatus: newStatus, via: 'public_link', total: estimate.total },
     });
 
-    return publicEstimateView({ ...estimate, status: newStatus });
+    const brand = publicBrand(await resolveBrandingForClient(request.prisma, estimate.clientId));
+    return { ...publicEstimateView({ ...estimate, status: newStatus }), brand };
   });
 
   // Issue a fresh public link for a SENT estimate (after a revocation, an
@@ -412,14 +510,15 @@ export default async function estimateRoutes(fastify) {
     const updated = await request.prisma.estimate.update({
       where: { id },
       data: { viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null },
-      select: { id: true, viewToken: true, publicAccessExpiresAt: true },
+      select: { id: true, status: true, viewToken: true, publicAccessExpiresAt: true },
     });
     await recordRequestAuditEvent(request.prisma, request, {
       action: 'estimate.link_reissued',
       entityId: id,
       metadata: { expiresAt: access.expiresAt },
     });
-    return updated;
+    const { status: _status, ...link } = updated;
+    return { ...link, clientLink: estimateClientLink(updated) };
   });
 
   // Revoke the public link (staff). Reissue or re-send issues a new one.
@@ -439,7 +538,11 @@ export default async function estimateRoutes(fastify) {
     return { id, publicAccessRevokedAt: revokedAt };
   });
 
-  // Convert estimate to proposal
+  // Convert estimate to proposal. The estimate moves APPROVED | SENT ->
+  // CONVERTED (see PUT_STATUS_TRANSITIONS above) with a compare-and-set in the
+  // same transaction that creates the proposal, so a double click, a retry or
+  // a client answering at the same moment can never produce two proposals or
+  // a converted estimate without one.
   fastify.post('/:id/convert', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
@@ -449,27 +552,22 @@ export default async function estimateRoutes(fastify) {
       include: { client: { select: { id: true, name: true } } }
     });
     if (!estimate) return reply.status(404).send({ error: 'Estimate not found' });
-    if (!['APPROVED', 'SENT'].includes(estimate.status)) {
+    if (!ESTIMATE_CONVERTIBLE_STATUSES.includes(estimate.status)) {
       return reply.status(400).send({ error: 'Only approved or sent estimates can be converted' });
     }
 
-    const proposal = await request.prisma.proposal.create({
-      data: {
-        title: estimate.title,
-        content: estimate.description || '',
-        clientId: estimate.clientId,
-        lineItems: estimate.lineItems,
-        subtotal: estimate.subtotal,
-        tax: estimate.tax,
-        total: estimate.total,
-        status: 'DRAFT'
-      }
+    const data = proposalDataFromEstimate(estimate, { createdById: request.user.id });
+    const proposal = await request.prisma.$transaction(async (tx) => {
+      const claimed = await tx.estimate.updateMany({
+        where: { id, status: { in: ESTIMATE_CONVERTIBLE_STATUSES } },
+        data: { status: 'CONVERTED' },
+      });
+      if (claimed.count !== 1) return null;
+      return tx.proposal.create({ data, include: { lineItems: true } });
     });
-
-    await request.prisma.estimate.update({
-      where: { id },
-      data: { status: 'CONVERTED' }
-    });
+    if (!proposal) {
+      return reply.status(409).send({ error: 'This estimate was already converted or answered', code: 'ESTIMATE_STATUS_CHANGED' });
+    }
 
     return { proposal, estimateId: id };
   });

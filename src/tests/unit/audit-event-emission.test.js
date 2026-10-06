@@ -26,6 +26,7 @@ const { recordCheckoutAuditEvents } = await import('../../services/stripe.servic
 const providers = await import('../../ai/providers/index.js');
 const { reauthCookies, withSession } = await import('../helpers/reauth.js');
 const { outboxStore } = await import('../helpers/domain-event-fake.js');
+const { applyInvoiceData, statusMatches } = await import('../helpers/fake-invoice-row.js');
 
 const ADMIN = { id: 'admin-1', role: 'ADMIN', organizationId: 'org-1' };
 const FUTURE = new Date(Date.now() + 86_400_000);
@@ -123,13 +124,18 @@ test('marking an invoice paid emits invoice.paid and payment.recorded', async (t
   const tx = {
     invoice: {
       updateMany: async ({ where, data }) => {
-        if (where.status.notIn.includes(stored.status)) return { count: 0 };
-        stored = { ...stored, ...data };
+        if (!statusMatches(stored.status, where.status)) return { count: 0 };
+        stored = applyInvoiceData({ ...stored }, data);
         return { count: 1 };
       },
       findUnique: async () => stored,
+      update: async ({ data }) => { stored = applyInvoiceData({ ...stored }, data); return stored; },
     },
-    invoicePayment: { create: async ({ data }) => ({ id: 'pay-1', ...data }) },
+    invoicePayment: {
+      create: async ({ data }) => ({ id: 'pay-1', ...data }),
+      // No earlier (partial) payments: the balance is the total.
+      aggregate: async () => ({ _sum: { amount: null } }),
+    },
     client: { findUnique: async () => ({ organizationId: 'org-1' }) },
     domainEvent: outbox.domainEvent,
     $executeRaw: outbox.$executeRaw,
@@ -184,12 +190,15 @@ test('bulk actions emit one event per changed invoice', async (t) => {
       update: async ({ where, data }) => ({ ...invoices[where.id], ...data }),
       updateMany: async ({ where }) => {
         const status = invoices[where.id]?.status;
-        // Send claims `status: 'DRAFT'`; settlement guards `status: { notIn }`.
-        const matches = typeof where.status === 'string' ? status === where.status : !where.status.notIn.includes(status);
+        // Send claims `status: 'DRAFT'`; settlement claims `status: { in }`.
+        const matches = statusMatches(status, where.status);
         return { count: matches ? 1 : 0 };
       },
     },
-    invoicePayment: { create: async ({ data }) => ({ id: `pay-${data.invoiceId}`, ...data }) },
+    invoicePayment: {
+      create: async ({ data }) => ({ id: `pay-${data.invoiceId}`, ...data }),
+      aggregate: async () => ({ _sum: { amount: null } }),
+    },
     client: { findUnique: async () => ({ organizationId: 'org-1' }) },
     domainEvent: outbox.domainEvent,
     $executeRaw: outbox.$executeRaw,
@@ -431,6 +440,8 @@ test('auth emits login_failed for known accounts only, and password changes', as
       },
       findFirst: async () => ({ ...accounts['known@x.test'] }),
       update: async () => ({}),
+      // The reset link is consumed with a guarded updateMany.
+      updateMany: async () => ({ count: 1 }),
     },
   };
   const app = await buildApp(t, authRoutes, prisma, {

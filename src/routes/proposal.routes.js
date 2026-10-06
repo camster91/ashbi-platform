@@ -17,10 +17,13 @@ import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { recordProposalApproved } from '../services/domain-event-producers.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { deliveryFieldsFromSend, mailgunTrackingFields, withDeliveryState } from '../services/mailgun-delivery.service.js';
+import { computeProposalLineItems, proposalTaxSummary, proposalTotals } from '../utils/proposal-totals.js';
+import { brandedSender, escapeHtml, publicBrand, resolveBrandingForClient } from '../services/branding.service.js';
 
 // Returns the provider result ({ ok, id?, error? }), or null when no send was
 // attempted (test mode).
-async function sendProposalEmail(to, clientName, proposalTitle, portalUrl, proposalId) {
+// Sent in the proposal's organization's name (resolveBranding).
+async function sendProposalEmail(to, clientName, proposalTitle, portalUrl, proposalId, branding) {
   // ASHI_RUN_EMAIL_TESTS is intentionally read directly from process.env
   // (not env.*) because it is a developer-only test toggle and is never
   // wired into env.js. NODE_ENV === 'test' is also read directly because
@@ -31,20 +34,22 @@ async function sendProposalEmail(to, clientName, proposalTitle, portalUrl, propo
   try {
     const mg = new Mailgun(FormData);
     const client = mg.client({ username: 'api', key: env.mailgunApiKey });
+    const companyName = escapeHtml(String(branding?.companyName || '').trim());
+    const footer = [companyName, escapeHtml(String(branding?.website || '').trim())].filter(Boolean).join(' · ');
     const sent = await client.messages.create(env.mailgunDomain, {
       ...mailgunTrackingFields({ documentType: 'proposal', documentId: proposalId }),
-      from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
+      from: brandedSender(branding, env.mailgunDomain),
       to,
       subject: `Your Proposal is Ready — ${proposalTitle}`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          <h2 style="color: #1a1a1a;">Hi ${clientName},</h2>
+          <h2 style="color: #1a1a1a;">Hi ${escapeHtml(clientName)},</h2>
           <p style="color: #444; line-height: 1.6;">
-            Your proposal from Ashbi Design is ready for review.
+            Your proposal${companyName ? ` from ${companyName}` : ''} is ready for review.
             Please take a moment to review the details and let us know if you have any questions.
           </p>
           <div style="text-align: center; margin: 32px 0;">
-            <a href="${portalUrl}" style="background: #6366f1; color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">
+            <a href="${escapeHtml(portalUrl)}" style="background: #6366f1; color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">
               View Proposal
             </a>
           </div>
@@ -52,7 +57,7 @@ async function sendProposalEmail(to, clientName, proposalTitle, portalUrl, propo
             You can approve, decline, or ask questions directly through the proposal page.
           </p>
           <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;" />
-          <p style="color: #aaa; font-size: 12px;">Ashbi Design · Toronto, Canada · hub.ashbi.ca</p>
+          ${footer ? `<p style="color: #aaa; font-size: 12px;">${footer}</p>` : ''}
         </div>
       `,
     });
@@ -70,31 +75,43 @@ async function recordProposalDelivery(prisma, proposalId, delivery) {
   return data;
 }
 
-function roundMoney(value) {
-  return Math.round((Number(value) || 0) * 100) / 100;
-}
-
-function computeProposalLineItems(lineItems) {
-  return lineItems.map(item => {
-    const quantity = item.quantity ?? 1;
-    return {
-      description: item.description,
-      quantity,
-      unitPrice: item.unitPrice,
-      total: roundMoney(quantity * item.unitPrice),
-    };
-  });
-}
-
-// Subtotal from the line items; a discount can reduce the total to zero but
-// never below it.
-function proposalTotals(lineItems, discount = 0) {
-  const subtotal = roundMoney(lineItems.reduce((sum, item) => sum + (Number(item.total) || 0), 0));
-  const total = roundMoney(Math.max(0, subtotal - (Number(discount) || 0)));
-  return { subtotal, total };
-}
-
 export const PROPOSAL_BULK_SEND_MAX = 25;
+
+// The client fields a public proposal link may show (as /api/portal/proposal).
+export const PUBLIC_PROPOSAL_CLIENT_SELECT = Object.freeze({ id: true, name: true, email: true });
+
+/**
+ * The explicit public shape of a proposal: what the client reads, plus the
+ * tax and total its invoice will bill (from metadata, which stays private).
+ */
+export function publicProposalView(proposal) {
+  return {
+    id: proposal.id,
+    title: proposal.title,
+    status: proposal.status,
+    validUntil: proposal.validUntil ?? null,
+    subtotal: proposal.subtotal,
+    discount: proposal.discount,
+    total: proposal.total,
+    ...proposalTaxSummary(proposal),
+    notes: proposal.notes ?? null,
+    sentAt: proposal.sentAt ?? null,
+    approvedAt: proposal.approvedAt ?? null,
+    declinedAt: proposal.declinedAt ?? null,
+    createdAt: proposal.createdAt,
+    client: proposal.client
+      ? { id: proposal.client.id, name: proposal.client.name, email: proposal.client.email ?? null }
+      : null,
+    createdBy: { name: proposal.createdBy?.name ?? null },
+    lineItems: (proposal.lineItems || []).map((li) => ({
+      id: li.id,
+      description: li.description,
+      quantity: li.quantity,
+      unitPrice: li.unitPrice,
+      total: li.total,
+    })),
+  };
+}
 
 export default async function proposalRoutes(fastify) {
   // List all proposals
@@ -145,7 +162,8 @@ export default async function proposalRoutes(fastify) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
 
-    return withDeliveryState(proposal);
+    // taxRate / taxType / tax / totalWithTax: what its invoice will bill.
+    return withDeliveryState({ ...proposal, ...proposalTaxSummary(proposal) });
   });
 
   // Create proposal
@@ -360,7 +378,8 @@ export default async function proposalRoutes(fastify) {
     let deliveryFields = null;
     if (primaryEmail && proposal.viewToken) {
       const portalUrl = `${env.portalBaseUrl}/portal/proposal/${proposal.viewToken}`;
-      const delivery = await sendProposalEmail(primaryEmail, primaryName, proposal.title, portalUrl, proposal.id);
+      const branding = await resolveBrandingForClient(request.prisma, proposal.clientId);
+      const delivery = await sendProposalEmail(primaryEmail, primaryName, proposal.title, portalUrl, proposal.id, branding);
       emailSent = Boolean(delivery?.ok);
       deliveryFields = await recordProposalDelivery(request.prisma, proposal.id, delivery);
     }
@@ -388,7 +407,8 @@ export default async function proposalRoutes(fastify) {
     const contact = proposal.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
     const portalUrl = `${env.portalBaseUrl}/portal/proposal/${proposal.viewToken}`;
-    const delivery = await sendProposalEmail(contact.email, contact.name || proposal.client.name, proposal.title, portalUrl, proposal.id);
+    const branding = await resolveBrandingForClient(request.prisma, proposal.clientId);
+    const delivery = await sendProposalEmail(contact.email, contact.name || proposal.client.name, proposal.title, portalUrl, proposal.id, branding);
     await recordProposalDelivery(request.prisma, proposal.id, delivery);
     if (!delivery?.ok) return reply.status(503).send({ error: 'Proposal email delivery is unavailable', retryable: true });
     return { emailSent: true };
@@ -525,11 +545,30 @@ export default async function proposalRoutes(fastify) {
   fastify.get('/client/:viewToken', { config: { public: true } }, async (request, reply) => {
     const { viewToken } = request.params;
 
+    // An explicit select: the public link must never load internal client
+    // data (notes, knowledge base, revenue, organization id) or delivery,
+    // AI and draft fields.
     const proposal = await request.prisma.proposal.findUnique({
       where: { viewToken },
-      include: {
-        client: true,
-        lineItems: true,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        validUntil: true,
+        subtotal: true,
+        discount: true,
+        total: true,
+        notes: true,
+        sentAt: true,
+        approvedAt: true,
+        declinedAt: true,
+        createdAt: true,
+        // Read for the access check and the tax; never returned as such.
+        publicAccessExpiresAt: true,
+        publicAccessRevokedAt: true,
+        metadata: true,
+        client: { select: PUBLIC_PROPOSAL_CLIENT_SELECT },
+        lineItems: { select: { id: true, description: true, quantity: true, unitPrice: true, total: true } },
         createdBy: { select: { name: true } }
       }
     });
@@ -549,21 +588,8 @@ export default async function proposalRoutes(fastify) {
       proposal.status = 'VIEWED';
     }
 
-    const {
-      internalNotes,
-      createdById,
-      clientId,
-      projectId,
-      viewToken: storedToken,
-      aiPrompt,
-      metadata,
-      draftData,
-      deletedAt,
-      deliveryMessageId,
-      deliveryError,
-      ...publicProposal
-    } = proposal;
-    return publicProposal;
+    const brand = publicBrand(await resolveBrandingForClient(request.prisma, proposal.client?.id));
+    return { ...publicProposalView(proposal), brand };
   });
 
   // PUBLIC: Client approves proposal
@@ -637,16 +663,22 @@ export default async function proposalRoutes(fastify) {
       return reply.status(409).send({ error: 'Proposal is not awaiting a decision' });
     }
 
-    const updated = await request.prisma.proposal.update({
-      where: { id: proposal.id },
+    // Compare-and-set: a decline racing an approval (or a second decline)
+    // must never overwrite the decision that landed first.
+    const declinedAt = new Date();
+    const transitioned = await request.prisma.proposal.updateMany({
+      where: { id: proposal.id, status: { in: ['SENT', 'VIEWED'] }, publicAccessRevokedAt: null },
       data: {
         status: 'DECLINED',
-        declinedAt: new Date(),
-        publicAccessRevokedAt: new Date(),
+        declinedAt,
+        publicAccessRevokedAt: declinedAt,
       }
     });
+    if (transitioned.count !== 1) {
+      return reply.status(409).send({ error: 'Proposal is not awaiting a decision' });
+    }
 
-    return { status: updated.status, declinedAt: updated.declinedAt };
+    return { status: 'DECLINED', declinedAt };
   });
 
   fastify.post('/:id/public-link/revoke', { onRequest: [fastify.authenticate] }, async (request, reply) => {

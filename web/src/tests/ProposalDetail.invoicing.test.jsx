@@ -1,9 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getProposal = vi.fn();
+const createInvoiceFromProposal = vi.fn();
 
 vi.mock('../lib/api', () => ({
   api: {
@@ -11,7 +12,7 @@ vi.mock('../lib/api', () => ({
     updateProposal: vi.fn(),
     sendProposal: vi.fn(),
     createContractFromProposal: vi.fn(),
-    createInvoiceFromProposal: vi.fn(),
+    createInvoiceFromProposal: (...args) => createInvoiceFromProposal(...args),
   },
 }));
 vi.mock('../hooks/useToast', () => ({
@@ -47,6 +48,8 @@ function renderDetail() {
       <MemoryRouter initialEntries={['/proposal/prop-1']}>
         <Routes>
           <Route path="/proposal/:id" element={<ProposalDetail />} />
+          <Route path="/invoices/:id" element={<p>Invoice page</p>} />
+          <Route path="/invoices" element={<p>Invoice list</p>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -68,5 +71,38 @@ describe('approved proposal invoicing', () => {
     renderDetail();
     expect(await screen.findByRole('button', { name: 'Create Invoice' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Generate Contract' })).not.toBeInTheDocument();
+  });
+});
+
+describe('approved proposal invoice and tax', () => {
+  beforeEach(() => { getProposal.mockReset(); createInvoiceFromProposal.mockReset(); });
+
+  it('lands on the new invoice after Create Invoice', async () => {
+    getProposal.mockResolvedValue(approvedProposal());
+    createInvoiceFromProposal.mockResolvedValue({ id: 'inv-9', invoiceNumber: 'INV-9' });
+    renderDetail();
+    fireEvent.click(await screen.findByRole('button', { name: 'Create Invoice' }));
+    expect(await screen.findByText('Invoice page')).toBeInTheDocument();
+    expect(screen.queryByText('Invoice list')).not.toBeInTheDocument();
+  });
+
+  it('shows the tax the invoice will add and the total it will bill', async () => {
+    getProposal.mockResolvedValue(approvedProposal({
+      subtotal: 1500, total: 1500, taxRate: 5, taxType: 'TAX', tax: 75, totalWithTax: 1575,
+      lineItems: [{ id: 'li-1', description: 'Website', quantity: 1, unitPrice: 1500, total: 1500 }],
+    }));
+    renderDetail();
+    expect(await screen.findByText('Tax (5%)')).toBeInTheDocument();
+    expect(screen.getByText('$1,575.00')).toBeInTheDocument();
+  });
+
+  it('shows the server tax and total, not a local recomputation', async () => {
+    getProposal.mockResolvedValue(approvedProposal({
+      subtotal: 1000.5, total: 1000.5, taxRate: 13, taxType: 'HST', tax: 130.07, totalWithTax: 1130.57,
+      lineItems: [{ id: 'li-1', description: 'Work', quantity: 1, unitPrice: 1000.5, total: 1000.5 }],
+    }));
+    renderDetail();
+    expect(await screen.findByText('$130.07')).toBeInTheDocument();
+    expect(screen.getByText('$1,130.57')).toBeInTheDocument();
   });
 });

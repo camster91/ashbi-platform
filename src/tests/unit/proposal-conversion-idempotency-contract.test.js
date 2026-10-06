@@ -5,7 +5,9 @@ import { readFileSync } from 'node:fs';
 const schema = readFileSync('prisma/schema.prisma', 'utf8');
 const migration = readFileSync('prisma/migrations/20260809223000_unique_invoice_per_proposal/migration.sql', 'utf8');
 const contracts = readFileSync('src/routes/contract.routes.js', 'utf8');
-const invoices = readFileSync('src/routes/invoice.routes.js', 'utf8');
+// The unique-violation classifier lives in src/utils/invoice.js (shared with
+// retainer billing); the route and it are checked together.
+const invoices = readFileSync('src/routes/invoice.routes.js', 'utf8') + readFileSync('src/utils/invoice.js', 'utf8');
 
 test('one proposal can produce at most one invoice at the database boundary', () => {
   const invoiceModel = schema.match(/model Invoice \{[\s\S]*?\n\}/)?.[0] || '';

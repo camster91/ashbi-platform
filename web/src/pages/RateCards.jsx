@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, X, Star, DollarSign } from 'lucide-react';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import { Card, CardContent, Skeleton, LoadingState } from '../components/ui';
 import Button from '../components/ui/Button';
 import Modal, { ModalFooter } from '../components/Modal';
@@ -10,6 +11,15 @@ import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
 
 const EMPTY_RATE_ROW = { serviceName: '', unit: 'hour', rate: '', description: '' };
+
+// Older cards stored the unit as "hr", "hrs", "hours" or "h", newer ones as
+// "hour", so the list showed both "/hr" and "/hour". Show and edit one word.
+const UNIT_ALIASES = { h: 'hour', hr: 'hour', hrs: 'hour', hour: 'hour', hours: 'hour', project: 'project', projects: 'project', item: 'item', items: 'item' };
+
+export function normalizeRateUnit(unit) {
+  const key = String(unit ?? '').trim().toLowerCase();
+  return UNIT_ALIASES[key] || key || 'hour';
+}
 
 export default function RateCards() {
   const queryClient = useQueryClient();
@@ -30,18 +40,14 @@ export default function RateCards() {
   });
 
   const {
-    data: clientsData,
+    data: clients,
     isLoading: clientsLoading,
     isFetching: clientsFetching,
     error: clientsError,
     refetch: refetchClients,
-  } = useQuery({
-    queryKey: ['clients-for-ratecards'],
-    queryFn: () => api.getClients(),
-  });
+  } = useClients();
 
   const rateCards = rateCardsData?.rateCards ?? [];
-  const clients = clientsData?.clients ?? [];
 
   const createMutation = useMutation({
     mutationFn: (data) => api.createRateCard(data),
@@ -228,7 +234,7 @@ function RateCardRow({ card, onEdit, onDelete }) {
                   >
                     <span className="font-medium">{r.serviceName}</span>
                     <span className="text-muted-foreground">
-                      ${typeof r.rate === 'number' ? r.rate.toFixed(2) : r.rate}/{r.unit}
+                      ${typeof r.rate === 'number' ? r.rate.toFixed(2) : r.rate}/{normalizeRateUnit(r.unit)}
                     </span>
                   </span>
                 ))}
@@ -261,7 +267,7 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
   const [isDefault, setIsDefault] = useState(card?.isDefault ?? false);
   const [rates, setRates] = useState(
     card?.rates?.length
-      ? card.rates.map((r) => ({ ...r }))
+      ? card.rates.map((r) => ({ ...r, unit: normalizeRateUnit(r.unit) }))
       : [{ ...EMPTY_RATE_ROW }]
   );
 
@@ -281,10 +287,11 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || !clientId) return;
     onSubmit({
       name: name.trim(),
-      clientId: clientId || null,
+      // Required: a rate card belongs to a client (the API rejects null).
+      clientId,
       isDefault,
       rates: rates.map((r) => ({
         ...r,
@@ -310,7 +317,7 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
               />
             </div>
             <div>
-              <label htmlFor="rate-card-client" className="block text-sm font-medium mb-1.5">Client</label>
+              <label htmlFor="rate-card-client" className="block text-sm font-medium mb-1.5">Client *</label>
               {clientsLoading ? (
                 <LoadingState label="Loading clients…" compact size="sm" />
               ) : clientsError ? (
@@ -321,9 +328,10 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
                   disabled={isLoading}
+                  required
                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 >
-                  <option value="">Global (all clients)</option>
+                  <option value="" disabled>Select a client</option>
                   {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               )}

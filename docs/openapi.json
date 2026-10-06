@@ -441,27 +441,23 @@
       },
       "AiDraftUpdate": {
         "properties": {
-          "notes": {
-            "maxLength": 8000,
-            "minLength": 1,
-            "type": "string"
+          "includeRevisionStatus": {
+            "type": "boolean"
           },
           "projectId": {
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
           },
-          "tone": {
-            "enum": [
-              "professional",
-              "friendly",
-              "concise"
-            ],
+          "rawNotes": {
+            "maxLength": 8000,
+            "minLength": 1,
             "type": "string"
           }
         },
         "required": [
-          "projectId"
+          "projectId",
+          "rawNotes"
         ],
         "type": "object"
       },
@@ -742,6 +738,27 @@
       },
       "AssetCreate": {
         "properties": {
+          "category": {
+            "enum": [
+              "logo",
+              "photo",
+              "illustration",
+              "icon",
+              "template",
+              "guide",
+              "other"
+            ],
+            "type": "string"
+          },
+          "clientId": {
+            "maxLength": 50,
+            "minLength": 1,
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "type": "string"
+          },
           "metadata": {
             "additionalProperties": {},
             "type": "object"
@@ -763,8 +780,10 @@
             "default": "IMAGE",
             "enum": [
               "IMAGE",
-              "VIDEO",
               "DOCUMENT",
+              "VIDEO",
+              "BRAND",
+              "WEBSITE",
               "FONT",
               "COLOR",
               "OTHER"
@@ -779,7 +798,8 @@
         },
         "required": [
           "name",
-          "url"
+          "url",
+          "clientId"
         ],
         "type": "object"
       },
@@ -808,6 +828,22 @@
       },
       "AssetUpdate": {
         "properties": {
+          "category": {
+            "enum": [
+              "logo",
+              "photo",
+              "illustration",
+              "icon",
+              "template",
+              "guide",
+              "other"
+            ],
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "type": "string"
+          },
           "metadata": {
             "additionalProperties": {},
             "type": "object"
@@ -829,8 +865,10 @@
             "default": "IMAGE",
             "enum": [
               "IMAGE",
-              "VIDEO",
               "DOCUMENT",
+              "VIDEO",
+              "BRAND",
+              "WEBSITE",
               "FONT",
               "COLOR",
               "OTHER"
@@ -977,6 +1015,18 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "AttachmentClientVisibility": {
+        "additionalProperties": false,
+        "properties": {
+          "clientVisible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "clientVisible"
+        ],
         "type": "object"
       },
       "Booking": {
@@ -1886,6 +1936,7 @@
             "type": "string"
           },
           "signatureType": {
+            "default": "type",
             "enum": [
               "type",
               "draw"
@@ -1900,7 +1951,6 @@
         },
         "required": [
           "signerName",
-          "signatureType",
           "agreement"
         ],
         "type": "object"
@@ -1984,8 +2034,7 @@
             "enum": [
               "RETAINER",
               "PROJECT",
-              "HOURLY",
-              "FIXED"
+              "NDA"
             ],
             "type": "string"
           },
@@ -2282,6 +2331,7 @@
               "HST",
               "GST",
               "PST",
+              "TAX",
               "NONE"
             ],
             "type": "string"
@@ -2378,7 +2428,7 @@
           },
           "hoursPerMonth": {
             "exclusiveMinimum": 0,
-            "type": "number"
+            "type": "integer"
           },
           "monthlyAmountCad": {
             "minimum": 0,
@@ -2389,7 +2439,12 @@
             "type": "number"
           },
           "tier": {
+            "default": "custom",
             "enum": [
+              "999",
+              "1999",
+              "3999",
+              "custom",
               "BASIC",
               "STANDARD",
               "PREMIUM",
@@ -2400,7 +2455,6 @@
         },
         "required": [
           "clientId",
-          "tier",
           "hoursPerMonth"
         ],
         "type": "object"
@@ -2542,14 +2596,28 @@
             "type": "string"
           },
           "url": {
-            "format": "uri",
-            "maxLength": 2048,
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "username": {
-            "maxLength": 200,
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object"
@@ -2803,6 +2871,11 @@
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
+          },
+          "responseId": {
+            "maxLength": 50,
+            "minLength": 1,
+            "type": "string"
           }
         },
         "required": [
@@ -2823,26 +2896,52 @@
             "type": "string"
           },
           "in_reply_to": {
-            "maxLength": 500,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "pattern": "^[^\\r\\n]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "references": {
-            "maxLength": 500,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "pattern": "^[^\\r\\n]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "subject": {
             "maxLength": 500,
             "minLength": 1,
+            "pattern": "^[^\\r\\n]*$",
             "type": "string"
           },
           "threadId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "to": {
             "format": "email",
             "maxLength": 255,
+            "pattern": "^[^\\r\\n]*$",
             "type": "string"
           }
         },
@@ -2947,9 +3046,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "invoiceId"
-        ],
         "type": "object"
       },
       "LineItemTemplateCreate": {
@@ -3062,7 +3158,8 @@
       "MarkInvoicePaid": {
         "properties": {
           "amount": {
-            "exclusiveMinimum": 0,
+            "maximum": 10000000,
+            "minimum": 0,
             "type": "number"
           },
           "method": {
@@ -3104,34 +3201,29 @@
       },
       "MessagePaste": {
         "properties": {
-          "bodyHtml": {
-            "maxLength": 500000,
-            "type": "string"
-          },
-          "bodyText": {
+          "content": {
             "maxLength": 100000,
             "minLength": 1,
             "type": "string"
           },
-          "senderEmail": {
-            "format": "email",
-            "maxLength": 255,
-            "type": "string"
-          },
-          "senderName": {
-            "maxLength": 200,
+          "projectId": {
+            "maxLength": 50,
             "minLength": 1,
             "type": "string"
           },
-          "subject": {
-            "maxLength": 500,
+          "source": {
+            "default": "other",
+            "enum": [
+              "email",
+              "slack",
+              "upwork",
+              "other"
+            ],
             "type": "string"
           }
         },
         "required": [
-          "bodyText",
-          "senderEmail",
-          "senderName"
+          "content"
         ],
         "type": "object"
       },
@@ -3532,54 +3624,16 @@
       },
       "PipelineDealCreate": {
         "properties": {
-          "amount": {
-            "maximum": 10000000,
-            "minimum": 0,
-            "type": "number"
-          },
           "clientId": {
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
           },
-          "expectedCloseDate": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "type": "string"
-          },
-          "notes": {
-            "maxLength": 10000,
-            "type": "string"
-          },
-          "projectId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
-          },
-          "stageId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "stageId"
-        ],
-        "type": "object"
-      },
-      "PipelineDealUpdate": {
-        "properties": {
-          "amount": {
+          "contactPerson": {
             "anyOf": [
               {
-                "maximum": 10000000,
-                "minimum": 0,
-                "type": "number"
+                "maxLength": 200,
+                "type": "string"
               },
               {
                 "type": "null"
@@ -3597,27 +3651,149 @@
               }
             ]
           },
-          "name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "type": "string"
-          },
           "notes": {
-            "maxLength": 10000,
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "probability": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "UPWORK",
+                  "REFERRAL",
+                  "WEBSITE",
+                  "COLD_OUTREACH",
+                  "OTHER"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "stageId": {
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
           },
-          "status": {
-            "enum": [
-              "OPEN",
-              "WON",
-              "LOST"
-            ],
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
             "type": "string"
+          },
+          "value": {
+            "maximum": 10000000,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "title",
+          "clientId",
+          "stageId"
+        ],
+        "type": "object"
+      },
+      "PipelineDealUpdate": {
+        "properties": {
+          "clientId": {
+            "maxLength": 50,
+            "minLength": 1,
+            "type": "string"
+          },
+          "contactPerson": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expectedCloseDate": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lostReason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "probability": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "UPWORK",
+                  "REFERRAL",
+                  "WEBSITE",
+                  "COLD_OUTREACH",
+                  "OTHER"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stageId": {
+            "maxLength": 50,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "value": {
+            "maximum": 10000000,
+            "minimum": 0,
+            "type": "number"
           }
         },
         "type": "object"
@@ -3690,6 +3866,28 @@
         },
         "required": [
           "brief"
+        ],
+        "type": "object"
+      },
+      "ProjectAttachmentsClientVisibility": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentIds": {
+            "items": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "type": "array"
+          },
+          "clientVisible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "clientVisible"
         ],
         "type": "object"
       },
@@ -3828,35 +4026,61 @@
         "type": "object"
       },
       "ProposalBuilderUpdate": {
+        "additionalProperties": false,
         "properties": {
-          "notes": {
-            "maxLength": 10000,
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "DRAFT",
-              "SENT",
-              "VIEWED",
-              "APPROVED",
-              "DECLINED"
-            ],
-            "type": "string"
-          },
-          "subtotal": {
+          "discount": {
             "maximum": 10000000,
             "minimum": 0,
             "type": "number"
+          },
+          "lineItems": {
+            "items": {
+              "properties": {
+                "category": {
+                  "maxLength": 50,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "description": {
+                  "maxLength": 500,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "quantity": {
+                  "default": 1,
+                  "exclusiveMinimum": 0,
+                  "maximum": 10000,
+                  "type": "number"
+                },
+                "unit": {
+                  "maxLength": 20,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "unitPrice": {
+                  "maximum": 10000000,
+                  "minimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "description",
+                "unitPrice"
+              ],
+              "type": "object"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
+          },
+          "notes": {
+            "maxLength": 10000,
+            "type": "string"
           },
           "title": {
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
-          },
-          "total": {
-            "maximum": 10000000,
-            "minimum": 0,
-            "type": "number"
           },
           "validUntil": {
             "anyOf": [
@@ -4229,7 +4453,8 @@
           }
         },
         "required": [
-          "name"
+          "name",
+          "clientId"
         ],
         "type": "object"
       },
@@ -4341,11 +4566,6 @@
             "minLength": 1,
             "type": "string"
           },
-          "threadId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
-          },
           "tone": {
             "maxLength": 50,
             "minLength": 1,
@@ -4353,7 +4573,6 @@
           }
         },
         "required": [
-          "threadId",
           "subject",
           "body"
         ],
@@ -4403,6 +4622,10 @@
             "exclusiveMinimum": 0,
             "maximum": 180,
             "type": "integer"
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
           },
           "resetHours": {
             "default": false,
@@ -4799,13 +5022,9 @@
         "properties": {
           "notes": {
             "maxLength": 5000,
-            "minLength": 1,
             "type": "string"
           }
         },
-        "required": [
-          "notes"
-        ],
         "type": "object"
       },
       "RevisionUpdateStatus": {
@@ -6208,6 +6427,7 @@
               "HST",
               "GST",
               "PST",
+              "TAX",
               "NONE"
             ],
             "type": "string"
@@ -6328,21 +6548,39 @@
         "properties": {
           "hoursPerMonth": {
             "exclusiveMinimum": 0,
-            "type": "number"
+            "type": "integer"
           },
           "monthlyAmountCad": {
-            "minimum": 0,
-            "type": "number"
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "monthlyAmountUsd": {
-            "minimum": 0,
-            "type": "number"
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "resetHours": {
             "type": "boolean"
           },
           "tier": {
             "enum": [
+              "999",
+              "1999",
+              "3999",
+              "custom",
               "BASIC",
               "STANDARD",
               "PREMIUM",
@@ -9371,6 +9609,68 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/attachments/{id}/client-visibility": {
+      "patch": {
+        "operationId": "patch_api_attachments_id_client_visibility",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentClientVisibility"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PATCH /api/attachments/:id/client-visibility",
+        "tags": [
+          "attachments"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/audit-events": {
       "get": {
         "operationId": "get_api_audit_events",
@@ -9424,6 +9724,8 @@
               "enum": [
                 "invoice.sent",
                 "invoice.paid",
+                "invoice.voided",
+                "payment.refused",
                 "payment.recorded",
                 "proposal.approved",
                 "contract.signed",
@@ -9447,6 +9749,7 @@
                 "client_portal.document_deleted",
                 "client_portal.revision_responded",
                 "client_portal.feedback_submitted",
+                "attachment.client_visibility_changed",
                 "upload.rejected",
                 "ai.connection_connected",
                 "ai.connection_validated",
@@ -15438,6 +15741,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContractSign"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -18549,7 +18862,7 @@
           "google-calendar"
         ],
         "x-access": "public",
-        "x-tenancy": "scoped"
+        "x-tenancy": "exempt"
       }
     },
     "/api/google-calendar/oauth/start": {
@@ -19158,7 +19471,7 @@
         "tags": [
           "invoice-chaser"
         ],
-        "x-access": "staff",
+        "x-access": "admin",
         "x-tenancy": "scoped"
       }
     },
@@ -19194,7 +19507,7 @@
         "tags": [
           "invoice-chaser"
         ],
-        "x-access": "staff",
+        "x-access": "admin",
         "x-tenancy": "scoped"
       }
     },
@@ -19326,7 +19639,7 @@
         "tags": [
           "invoices"
         ],
-        "x-access": "staff",
+        "x-access": "admin",
         "x-tenancy": "scoped"
       }
     },
@@ -23235,6 +23548,68 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/projects/{id}/attachments/client-visibility": {
+      "patch": {
+        "operationId": "patch_api_projects_id_attachments_client_visibility",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectAttachmentsClientVisibility"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PATCH /api/projects/:id/attachments/client-visibility",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/projects/{id}/budget": {
       "get": {
         "operationId": "get_api_projects_id_budget",
@@ -24499,58 +24874,6 @@
           }
         ],
         "summary": "PUT /api/proposal-builder/:id",
-        "tags": [
-          "proposal-builder"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      }
-    },
-    "/api/proposal-builder/{id}/accept": {
-      "post": {
-        "operationId": "post_api_proposal_builder_id_accept",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "POST /api/proposal-builder/:id/accept",
         "tags": [
           "proposal-builder"
         ],
@@ -26523,6 +26846,8 @@
             "name": "threadId",
             "required": true,
             "schema": {
+              "maxLength": 50,
+              "minLength": 1,
               "type": "string"
             }
           }

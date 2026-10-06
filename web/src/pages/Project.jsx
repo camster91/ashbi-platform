@@ -45,6 +45,7 @@ import { useToast } from '../hooks/useToast';
 import ProjectCommunications from '../components/project/ProjectCommunications';
 import ProjectContextCard from '../components/project/ProjectContext';
 import ProjectMedia from '../components/project/ProjectMedia';
+import ProjectFiles from '../components/project/ProjectFiles';
 import ProjectReviews from '../components/project/ProjectReviews';
 import ProjectChat from '../components/ProjectChat';
 import Milestones from '../components/Milestones';
@@ -143,13 +144,18 @@ export default function Project() {
 
   const pasteMutation = useMutation({
     mutationFn: (data) => api.pasteMessage(data),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['project', id] });
       setShowPasteModal(false);
       setPasteContent('');
-      toast.success('Message added to project');
+      // The message is saved even when AI analysis fails; say so.
+      if (data?.analysis?.status === 'failed') {
+        toast.info({ title: 'Message saved without AI analysis', message: data.analysis.error, duration: 0 });
+      } else {
+        toast.success('Message added to project');
+      }
     },
-    onError: () => toast.error('Failed to paste message'),
+    // The failure is shown in the modal (and by the global error toast).
   });
 
   const createRevisionMutation = useMutation({
@@ -421,6 +427,8 @@ export default function Project() {
 
       <ProjectMedia projectId={id} />
 
+      <ProjectFiles projectId={id} />
+
       <ProjectReviews projectId={id} />
 
       <section className="bg-card rounded-xl border border-border">
@@ -509,7 +517,7 @@ export default function Project() {
                   </div>
                   <div className="text-xs text-muted-foreground">Tone: {draftResult.tone}</div>
                   <p className="text-xs text-warning bg-warning/5 p-2 rounded">
-                    Cameron must review and approve before sending to the client.
+                    Nothing is sent from here. Review the draft, then copy it into your email to the client.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Button

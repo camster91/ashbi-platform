@@ -116,7 +116,7 @@ export default function ForgotPassword() {
                 {t('auth.checkYourEmail')}
               </h2>
               <p className="text-muted-foreground">
-                {t('auth.resetSent')} <span className="font-semibold text-foreground">{email}</span>
+                {t('auth.resetSentBefore')} <span className="font-semibold text-foreground break-all">{email}</span>{t('auth.resetSentAfter')}
               </p>
               <p className="text-muted-foreground text-sm mt-2">
                 {t('auth.linkExpiresIn')}

@@ -32,7 +32,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [AshConversation](#model-ashconversation) | `ash_conversations` | yes | no | 7 |
 | [Asset](#model-asset) | `assets` | no | no | 15 |
 | [AssignmentRule](#model-assignmentrule) | `assignment_rules` | yes | no | 11 |
-| [Attachment](#model-attachment) | `attachments` | yes | no | 16 |
+| [Attachment](#model-attachment) | `attachments` | yes | no | 17 |
 | [AuditEvent](#model-auditevent) | `audit_events` | yes | no | 12 |
 | [BrandSettings](#model-brandsettings) | `brand_settings` | yes | no | 15 |
 | [BreakGlassGrant](#model-breakglassgrant) | `break_glass_grants` | yes | no | 14 |
@@ -65,7 +65,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [IntakeFormResponse](#model-intakeformresponse) | `intake_form_responses` | no | no | 8 |
 | [Integration](#model-integration) | `integrations` | yes | no | 11 |
 | [InternalNote](#model-internalnote) | `internal_notes` | no | no | 7 |
-| [Invoice](#model-invoice) | `invoices` | yes | yes | 61 |
+| [Invoice](#model-invoice) | `invoices` | yes | yes | 62 |
 | [InvoiceLineItem](#model-invoicelineitem) | `invoice_line_items` | no | no | 9 |
 | [InvoicePayment](#model-invoicepayment) | `invoice_payments` | no | no | 9 |
 | [LineItemTemplate](#model-lineitemtemplate) | `line_item_templates` | yes | no | 11 |
@@ -450,6 +450,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `entityId` | String | required |  |  |  |
 | `uploadedById` | String | required |  |  |  |
 | `checksumSha256` | String | optional |  |  |  |
+| `clientVisible` | Boolean | required | `false` |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `uploadedBy` | User | required |  | → User, via (uploadedById) → (id) |  |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id) |  |
@@ -1307,6 +1308,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: yes (`deletedAt`)
 - Constraints and indexes:
   - `@@unique([organizationId, invoiceNumber])`
+  - `@@unique([clientId, retainerPeriod], map: "invoices_clientId_retainerPeriod_live_key", where: raw("\"retainerPeriod\" IS NOT NULL AND status <> 'VOID' AND \"deletedAt\" IS NULL"))`
   - `@@index([status, dueDate])`
   - `@@index([status, overdueEscalatedAt, dueDate])`
   - `@@index([clientId, status])`
@@ -1328,7 +1330,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `subtotal` | Float | required | `0` |  |  |
 | `discountAmount` | Float | required | `0` |  |  |
 | `taxRate` | Float | required | `13` |  | HST 13% default for Ontario |
-| `taxType` | String | required | `"HST"` |  | HST \| GST \| PST \| NONE |
+| `taxType` | String | required | `"HST"` |  | HST \| GST \| PST \| TAX (neutral "Tax" for a rate that is not a named tax) \| NONE |
 | `tax` | Float | required | `0` |  |  |
 | `total` | Float | required | `0` |  |  |
 | `notes` | String | optional |  |  |  |
@@ -1362,6 +1364,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `clientId` | String | required |  |  |  |
 | `projectId` | String | optional |  |  |  |
 | `proposalId` | String | unique, optional |  |  |  |
+| `retainerPeriod` | String | optional |  |  |  |
 | `createdById` | String | required |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |

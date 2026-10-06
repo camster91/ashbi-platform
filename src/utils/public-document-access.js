@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { UNPAID_INVOICE_STATUSES } from './invoice-balance.js';
 
 const DEFAULT_ACCESS_DAYS = 30;
 
@@ -15,12 +16,12 @@ export function createPublicAccessWindow(preferredExpiry) {
 }
 
 // Invoices: a link issued on send stays valid while the invoice is open
-// (SENT or OVERDUE) regardless of publicAccessExpiresAt, so payment
+// (SENT, VIEWED or OVERDUE) regardless of publicAccessExpiresAt, so payment
 // reminders sent after the due date always open. Once the invoice is PAID or
 // VOID the link keeps working for this many days (to view the receipt), or
 // until its recorded expiry if that is later.
 export const INVOICE_RECEIPT_GRACE_DAYS = 30;
-export const INVOICE_OPEN_STATUSES = Object.freeze(['SENT', 'OVERDUE']);
+export const INVOICE_OPEN_STATUSES = UNPAID_INVOICE_STATUSES;
 const EXPIRED = { statusCode: 410, error: 'This link has expired' };
 
 export function invoicePublicAccessFailure(invoice, now = new Date()) {

@@ -12,6 +12,7 @@ import {
 import { API_KEY_MAX_EXPIRY_DAYS, API_KEY_SCOPES } from '../auth/api-key-scopes.js';
 import { INVOICE_CURRENCIES } from '../utils/money.js';
 import { receiptRelativePath } from '../utils/stored-upload.js';
+import { CONTRACT_TEMPLATE_TYPES } from '../services/contractTemplates.service.js';
 
 // ── Reusable field validators ──────────────────────────────────────────────
 const email = z.string().email().max(255);
@@ -274,11 +275,14 @@ export const createInvoiceSchema = z.object({
   discountAmount: z.number().min(0).optional().default(0),
   notes: z.string().max(2000).optional(),
   internalNotes: z.string().max(2000).optional(),
-  taxType: z.enum(['HST', 'GST', 'PST', 'NONE']).optional(),
+  taxType: z.enum(['HST', 'GST', 'PST', 'TAX', 'NONE']).optional(),
   isRecurring: z.boolean().optional(),
   recurringInterval: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUALLY']).optional(),
   lineItems: z.array(invoiceRouteLineItemSchema).min(1),
-});
+}).refine(
+  (val) => !val.isRecurring || Boolean(val.recurringInterval),
+  { message: 'recurringInterval is required when isRecurring is true', path: ['recurringInterval'] },
+);
 
 // ── Expense schemas ────────────────────────────────────────────────────────
 // The Expenses page sends <input type="date"> values ("YYYY-MM-DD", stored as
@@ -326,7 +330,7 @@ export const updateInvoiceSchema = z.object({
   discountAmount: z.number().min(0).optional(),
   notes: z.string().max(2000).optional(),
   internalNotes: z.string().max(2000).optional(),
-  taxType: z.enum(['HST', 'GST', 'PST', 'NONE']).optional(),
+  taxType: z.enum(['HST', 'GST', 'PST', 'TAX', 'NONE']).optional(),
   projectId: cuidId.nullable().optional(),
   isRecurring: z.boolean().optional(),
   recurringInterval: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUALLY']).nullable().optional(),
@@ -343,7 +347,8 @@ const invoicePaymentMethodSchema = z.preprocess(
 );
 
 export const markInvoicePaidSchema = z.object({
-  amount: z.number().positive().optional(),
+  // 0 is accepted only to close an invoice with nothing owed (a $0 total).
+  amount: z.number().nonnegative().max(10_000_000).optional(),
   method: invoicePaymentMethodSchema.optional(),
   paymentMethod: invoicePaymentMethodSchema.optional(),
   paymentNotes: z.string().max(2000).optional(),
@@ -367,9 +372,26 @@ export const bookingSchema = z.object({
   notes: z.string().max(1000).optional(),
 });
 
+// PATCH /api/attachments/:id/client-visibility: list (or stop listing) a
+// project file in the client portal's Documents.
+export const attachmentClientVisibilitySchema = z.object({
+  clientVisible: z.boolean(),
+}).strict();
+
+// PATCH /api/projects/:id/attachments/client-visibility: share (or stop
+// sharing) many of a project's files in one action. Without attachmentIds it
+// acts on every PROJECT file of the project; the cap bounds one request.
+export const PROJECT_ATTACHMENT_VISIBILITY_MAX = 500;
+export const projectAttachmentsClientVisibilitySchema = z.object({
+  clientVisible: z.boolean(),
+  attachmentIds: z.array(cuidId).min(1).max(PROJECT_ATTACHMENT_VISIBILITY_MAX).optional(),
+}).strict();
+
+// Both public signing routes (POST /api/portal/contract/:signToken/sign and
+// POST /api/contracts/sign/:signToken). A typed signature is the default.
 export const contractSignSchema = z.object({
-  signerName: z.string().min(1).max(200),
-  signatureType: z.enum(['type', 'draw']),
+  signerName: z.string().trim().min(1).max(200),
+  signatureType: z.enum(['type', 'draw']).default('type'),
   signatureImage: z.string().min(1).max(50000).optional(),
   agreement: z.literal(true),
 }).superRefine((value, ctx) => {
@@ -480,7 +502,9 @@ export function validate(schema, data) {
 export const createContractSchema = z.object({
   clientId: cuidId,
   title: z.string().min(1).max(200),
-  templateType: z.enum(['RETAINER', 'PROJECT', 'HOURLY', 'FIXED']).optional(),
+  // Only types with a template (contractTemplates.service.js): RETAINER,
+  // PROJECT and the Mutual NDA.
+  templateType: z.enum(CONTRACT_TEMPLATE_TYPES).optional(),
   content: z.string().max(50000).optional(),
   proposalId: cuidId.optional(),
 });
@@ -532,19 +556,34 @@ export const updateEstimateSchema = z.object({
   .refine(notBothTaxFields, notBothTaxFieldsMessage);
 
 // ── Retainer schemas ───────────────────────────────────────────────────────
+// RetainerPlan.tier is a free-form String column. Onboarding stores the
+// package price ('999' | '1999' | '3999', see onboarding.service.js
+// TIER_HOURS), the Retainers page and the create handler default to 'custom'
+// (a plan priced by its monthly amounts), and earlier API callers could store
+// the named tiers. All of them are accepted so stored plans round-trip.
+export const RETAINER_PACKAGE_TIERS = ['999', '1999', '3999'];
+export const RETAINER_TIER_VALUES = [
+  ...RETAINER_PACKAGE_TIERS,
+  'custom',
+  'BASIC', 'STANDARD', 'PREMIUM', 'ENTERPRISE',
+];
+const retainerTier = z.enum(RETAINER_TIER_VALUES);
+
 export const createRetainerSchema = z.object({
   clientId: cuidId,
-  tier: z.enum(['BASIC', 'STANDARD', 'PREMIUM', 'ENTERPRISE']),
-  hoursPerMonth: z.number().positive(),
+  tier: retainerTier.default('custom'),
+  // RetainerPlan.hoursPerMonth is an Int column.
+  hoursPerMonth: z.number().int().positive(),
   monthlyAmountUsd: z.number().nonnegative().optional(),
   monthlyAmountCad: z.number().nonnegative().optional(),
 });
 
 export const updateRetainerSchema = z.object({
-  tier: z.enum(['BASIC', 'STANDARD', 'PREMIUM', 'ENTERPRISE']).optional(),
-  hoursPerMonth: z.number().positive().optional(),
-  monthlyAmountUsd: z.number().nonnegative().optional(),
-  monthlyAmountCad: z.number().nonnegative().optional(),
+  tier: retainerTier.optional(),
+  hoursPerMonth: z.number().int().positive().optional(),
+  // null clears a monthly amount.
+  monthlyAmountUsd: z.number().nonnegative().nullable().optional(),
+  monthlyAmountCad: z.number().nonnegative().nullable().optional(),
   resetHours: z.boolean().optional(),
 }).refine(val => Object.keys(val).length > 0, { message: 'At least one field must be provided' });
 
@@ -692,11 +731,13 @@ export const aiAskSchema = z.object({
   { message: 'Provide threadId or projectId', path: ['question'] }
 );
 
+// Project page "Draft client update": the handler reads rawNotes and
+// includeRevisionStatus (src/routes/ai.routes.js /draft-update).
 export const aiDraftUpdateSchema = z.object({
   projectId: cuidId,
-  // Custom user-supplied bullet points; cap at 8k chars total
-  notes: aiFreeText.optional(),
-  tone: z.enum(['professional', 'friendly', 'concise']).optional(),
+  // User-supplied talking points; cap at 8k chars total
+  rawNotes: z.string().trim().min(1).max(8000),
+  includeRevisionStatus: z.boolean().optional(),
 });
 
 export const aiChatSchema = z.object({
@@ -1148,28 +1189,43 @@ export const pipelineStageUpdateSchema = z.object({
   probability: z.number().int().min(0).max(100).optional(),
 });
 
+// Field names follow the Prisma PipelineDeal model (title, value, clientId,
+// stageId, ...). clientId is required there, so it is required here too.
+const PIPELINE_DEAL_SOURCES = ['UPWORK', 'REFERRAL', 'WEBSITE', 'COLD_OUTREACH', 'OTHER'];
+
 export const pipelineDealCreateSchema = z.object({
-  name: z.string().min(1).max(200),
-  clientId: cuidId.optional(),
-  projectId: cuidId.optional(),
+  title: z.string().trim().min(1).max(200),
+  clientId: cuidId,
   stageId: cuidId,
-  amount: z.number().nonnegative().max(10_000_000).optional(),
-  expectedCloseDate: z.string().datetime().optional(),
-  notes: z.string().max(10_000).optional(),
+  value: z.number().nonnegative().max(10_000_000).optional(),
+  probability: z.number().int().min(0).max(100).optional(),
+  expectedCloseDate: z.string().datetime().nullable().optional(),
+  notes: z.string().max(10_000).nullable().optional(),
+  contactPerson: z.string().max(200).nullable().optional(),
+  source: z.enum(PIPELINE_DEAL_SOURCES).nullable().optional(),
 });
 
 export const pipelineDealUpdateSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
+  clientId: cuidId.optional(),
   stageId: cuidId.optional(),
-  amount: z.number().nonnegative().max(10_000_000).nullable().optional(),
+  value: z.number().nonnegative().max(10_000_000).optional(),
+  probability: z.number().int().min(0).max(100).optional(),
   expectedCloseDate: z.string().datetime().nullable().optional(),
-  notes: z.string().max(10_000).optional(),
-  status: z.enum(['OPEN', 'WON', 'LOST']).optional(),
+  notes: z.string().max(10_000).nullable().optional(),
+  contactPerson: z.string().max(200).nullable().optional(),
+  source: z.enum(PIPELINE_DEAL_SOURCES).nullable().optional(),
+  lostReason: z.string().max(2_000).nullable().optional(),
 });
 
 // ── Response (AI-drafted reply) ───────────────────────────────────────────
-export const responseCreateSchema = z.object({
+// POST /api/responses/:threadId/drafts — the thread comes from the URL
+// (responseThreadParamsSchema), never from the body.
+export const responseThreadParamsSchema = z.object({
   threadId: cuidId,
+});
+
+export const responseCreateSchema = z.object({
   subject: z.string().min(1).max(500),
   body: z.string().min(1).max(50_000),
   tone: z.string().min(1).max(50).optional(),
@@ -1205,14 +1261,17 @@ export const proposalBuilderEmailSchema = z.object({
   email: z.string().email().max(255),
 });
 
+// Content edits to a DRAFT proposal. Strict: status, subtotal and total are
+// refused (400) rather than silently dropped. Totals are always computed on
+// the server from lineItems and discount; the status changes only through
+// send or the client's answer.
 export const proposalBuilderUpdateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   notes: z.string().max(10_000).optional(),
-  status: z.enum(['DRAFT', 'SENT', 'VIEWED', 'APPROVED', 'DECLINED']).optional(),
-  subtotal: z.number().nonnegative().max(10_000_000).optional(),
-  total: z.number().nonnegative().max(10_000_000).optional(),
   validUntil: z.string().datetime().nullable().optional(),
-});
+  lineItems: z.array(proposalLineItemInput).min(1).max(100).optional(),
+  discount: proposalDiscount.optional(),
+}).strict();
 
 // ── Project context + AI planner + templates ───────────────────────────────
 export const projectContextUpdateSchema = z.object({
@@ -1315,7 +1374,12 @@ export const credentialCreateSchema = credentialFields.refine(
   (value) => Boolean(value.clientId || value.projectId),
   { message: 'A client or project owner is required' },
 );
-export const credentialUpdateSchema = credentialFields.partial().refine(
+// null clears a stored username or URL (the edit form sends null for an
+// emptied field).
+export const credentialUpdateSchema = credentialFields.partial().extend({
+  username: credentialFields.shape.username.unwrap().nullable().optional(),
+  url: credentialFields.shape.url.unwrap().nullable().optional(),
+}).refine(
   (value) => Object.keys(value).length > 0,
   { message: 'At least one credential field is required' },
 );
@@ -1373,13 +1437,21 @@ export const expenseUpdateSchema = z.object({
 });
 
 // ── Gmail drafts / replies ────────────────────────────────────────────────
+// Email header values are one line: a CR or LF would let a value start a
+// header of its own (Bcc:, From:, Content-Type:). The route strips them too.
+const SINGLE_LINE = /^[^\r\n]*$/;
+const singleLineMessage = 'must be a single line (no line breaks)';
+
 export const gmailSendSchema = z.object({
-  to: z.string().email().max(255),
-  subject: z.string().min(1).max(500),
+  to: z.string().email().max(255).regex(SINGLE_LINE, singleLineMessage),
+  subject: z.string().min(1).max(500).regex(SINGLE_LINE, singleLineMessage),
   body: z.string().min(1).max(50_000),
-  threadId: cuidId.optional(),
-  in_reply_to: z.string().max(500).optional(),
-  references: z.string().max(500).optional(),
+  // A hub thread that never came from Gmail has no Gmail thread or message
+  // id: the web client may send null for them, which means "start a new
+  // Gmail thread". Gmail ids are hex strings.
+  threadId: z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/, 'must be a Gmail thread id').nullable().optional(),
+  in_reply_to: z.string().max(500).regex(SINGLE_LINE, singleLineMessage).nullable().optional(),
+  references: z.string().max(500).regex(SINGLE_LINE, singleLineMessage).nullable().optional(),
   hubThreadId: cuidId.optional(),
 });
 
@@ -1683,8 +1755,10 @@ export const landingLeadSchema = z.object({
 });
 
 // ── Invoice Chaser ───────────────────────────────────────────────────────
+// "Generate all" sends {} and drafts reminders for every overdue invoice;
+// "Generate one" names the invoice.
 export const invoiceChaserSchema = z.object({
-  invoiceId: cuidId,
+  invoiceId: cuidId.optional(),
   message: z.string().max(5_000).optional(),
 });
 
@@ -1740,16 +1814,33 @@ export const assignmentRuleBulkSchema = z.object({
 });
 
 // ── Final batch (43 endpoints) ────────────────────────────────────────────
-export const assetCreateSchema = z.object({
-  name: z.string().min(1).max(200),
+// Asset Library (web/src/pages/AssetLibrary.jsx). Asset rows are scoped to the
+// organization through their client, so every asset needs one; the create
+// route checks the client is visible to the caller.
+export const ASSET_TYPES = ['IMAGE', 'DOCUMENT', 'VIDEO', 'BRAND', 'WEBSITE', 'FONT', 'COLOR', 'OTHER'];
+export const ASSET_CATEGORIES = ['logo', 'photo', 'illustration', 'icon', 'template', 'guide', 'other'];
+const assetFields = {
+  name: z.string().trim().min(1).max(200),
   url: z.string().url().max(2048),
-  type: z.enum(['IMAGE', 'VIDEO', 'DOCUMENT', 'FONT', 'COLOR', 'OTHER']).default('IMAGE'),
-  tags: z.array(z.string().max(50)).max(50).optional(),
+  type: z.enum(ASSET_TYPES).default('IMAGE'),
+  category: z.enum(ASSET_CATEGORIES).optional(),
+  description: z.string().trim().max(2_000).optional(),
+  // "category:" tags are reserved: the service stores the category as one
+  // (assetLibrary.service.js encodeAssetTags).
+  tags: z.array(
+    z.string().max(50).refine((tag) => !tag.toLowerCase().startsWith('category:'), { message: 'Tags starting with "category:" are reserved; use the category field' }),
+  ).max(50).optional(),
   // Loose metadata — client-specific fields like dimensions, color tokens
   metadata: z.record(z.string(), z.unknown()).optional(),
+};
+
+export const assetCreateSchema = z.object({
+  ...assetFields,
+  clientId: cuidId,
 });
 
-export const assetUpdateSchema = assetCreateSchema.partial();
+// An asset keeps its client; PATCH cannot move it to another one.
+export const assetUpdateSchema = z.object(assetFields).partial();
 
 export const assetGuidelineCreateSchema = z.object({
   title: z.string().min(1).max(200),
@@ -1790,6 +1881,8 @@ export const emailTriageDraftUpdateSchema = z.object({
 export const gmailDraftReplySchema = z.object({
   // The hub thread to draft a reply for; the route generates the body itself.
   hubThreadId: cuidId,
+  // An approved saved draft on that thread: its text is used instead of AI.
+  responseId: cuidId.optional(),
 });
 
 export const inboxUnmatchedAssignSchema = z.object({
@@ -1816,12 +1909,14 @@ export const mailgunSendSchema = z.object({
   domain: z.string().max(255).optional(),
 });
 
+// Project page "Paste message": the handler reads content, source and
+// projectId (src/routes/message.routes.js). source is interpolated into the AI
+// prompt and the thread subject, so it stays an allowlist.
+export const MESSAGE_PASTE_SOURCES = ['email', 'slack', 'upwork', 'other'];
 export const messagePasteSchema = z.object({
-  bodyText: z.string().min(1).max(100_000),
-  bodyHtml: z.string().max(500_000).optional(),
-  subject: z.string().max(500).optional(),
-  senderEmail: z.string().email().max(255),
-  senderName: z.string().min(1).max(200),
+  content: z.string().trim().min(1).max(100_000),
+  source: z.enum(MESSAGE_PASTE_SOURCES).default('other'),
+  projectId: cuidId.optional(),
 });
 
 const milestoneDueDate = invoiceDateInput({ endOfDay: false });
@@ -1922,8 +2017,11 @@ export const rateCardSchema = z.object({
   // Categories this rate card applies to
   categories: z.array(z.string().max(100)).max(50).optional(),
   isActive: z.boolean().default(true),
-  // Actual RateCard model fields (clientId, rates, isDefault)
-  clientId: cuidId.optional(),
+  // Actual RateCard model fields (clientId, rates, isDefault). A rate card is
+  // scoped to the organization only through its client, so every card needs
+  // one: required on POST, and on PUT (rateCardSchema.partial()) omitted means
+  // unchanged. null is rejected, since a card without a client is unreachable.
+  clientId: cuidId,
   // rates is a JSON array of {serviceName, unit, rate, description}
   rates: z.array(z.object({
     serviceName: z.string().min(1).max(200),
@@ -1934,8 +2032,9 @@ export const rateCardSchema = z.object({
   isDefault: z.boolean().default(false),
 });
 
+// "New revision round" sends {}; notes are optional.
 export const revisionCreateNewSchema = z.object({
-  notes: z.string().min(1).max(5_000),
+  notes: z.string().trim().max(5_000).optional(),
 });
 
 export const revisionUpdateStatusSchema = z.object({
@@ -2065,6 +2164,10 @@ export const retainerGenerateInvoiceSchema = z.object({
   currency: z.enum(['CAD', 'USD']).default('CAD'),
   daysUntilDue: z.number().int().positive().max(180).default(30),
   resetHours: z.boolean().default(false),
+  // Billing month to invoice ("YYYY-MM"); defaults to the current UTC month.
+  // Lets staff bill a month explicitly, e.g. near a month boundary where the
+  // UTC month differs from the local one.
+  period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Expected a month as YYYY-MM').optional(),
 });
 
 // ── Media review (#417, docs/media-review.md) ─────────────────────────────

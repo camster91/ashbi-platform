@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './useAuth';
 import { useQueryClient } from '@tanstack/react-query';
@@ -9,10 +9,17 @@ const SOCKET_URL = window.location.origin;
 let sharedSocket = null;
 let sharedUserId = null;
 let subscriberCount = 0;
+let teardownTimer = null;
 
-function attachSocketHandlers(socket, queryClient, setNotifications) {
+// How long the shared socket outlives its last subscriber. React StrictMode
+// (dev) mounts, unmounts and remounts every component at once, and the shell
+// remounts between some routes; closing the socket in that gap, while it was
+// still handshaking, opened a second connection and logged "WebSocket is
+// closed before the connection is established" on every staff page.
+const TEARDOWN_DELAY_MS = 1000;
+
+function attachSocketHandlers(socket, queryClient) {
   socket.on('notification', (data) => {
-    setNotifications((prev) => [data, ...prev].slice(0, 50));
     switch (data.type) {
       case 'THREAD_ASSIGNED':
         queryClient.invalidateQueries(['inbox']);
@@ -56,57 +63,87 @@ function attachSocketHandlers(socket, queryClient, setNotifications) {
   });
 }
 
+function createSharedSocket(userId, queryClient) {
+  const socket = io(SOCKET_URL, {
+    withCredentials: true,
+    transports: ['websocket', 'polling'],
+  });
+  socket.on('connect', () => {
+    socket.emit('join', userId);
+  });
+  socket.on('disconnect', (reason) => {
+    // The server drops a user's sockets when their identity changes (a
+    // support view starts). Socket.IO does not retry a server-side
+    // disconnect, so reconnect; the handshake decides who may.
+    if (reason === 'io server disconnect' && sharedSocket === socket) socket.connect();
+  });
+  attachSocketHandlers(socket, queryClient);
+  return socket;
+}
+
+/** For tests: forget the shared socket. */
+export function resetSharedSocketForTests() {
+  if (teardownTimer) clearTimeout(teardownTimer);
+  teardownTimer = null;
+  sharedSocket?.disconnect();
+  sharedSocket = null;
+  sharedUserId = null;
+  subscriberCount = 0;
+}
+
 export function useSocket() {
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const queryClient = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
   const [notifications, setNotifications] = useState([]);
-  const socketRef = useRef(null);
+  const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    if (!user) return undefined;
+    // No socket before sign-in, and none on public pages (no user there).
+    if (!userId) return undefined;
 
+    if (teardownTimer) {
+      clearTimeout(teardownTimer);
+      teardownTimer = null;
+    }
     subscriberCount += 1;
 
-    if (!sharedSocket || sharedUserId !== user.id) {
+    if (!sharedSocket || sharedUserId !== userId) {
       sharedSocket?.disconnect();
-      const socket = io(SOCKET_URL, {
-        withCredentials: true,
-        transports: ['websocket', 'polling'],
-      });
-      sharedSocket = socket;
-      sharedUserId = user.id;
-
-      sharedSocket.on('connect', () => {
-        setIsConnected(true);
-        sharedSocket.emit('join', user.id);
-      });
-
-      sharedSocket.on('disconnect', (reason) => {
-        setIsConnected(false);
-        // The server drops a user's sockets when their identity changes (a
-        // support view starts). Socket.IO does not retry a server-side
-        // disconnect, so reconnect; the handshake decides who may.
-        if (reason === 'io server disconnect' && sharedSocket === socket) socket.connect();
-      });
-
-      attachSocketHandlers(sharedSocket, queryClient, setNotifications);
-    } else {
-      setIsConnected(sharedSocket.connected);
+      sharedSocket = createSharedSocket(userId, queryClient);
+      sharedUserId = userId;
     }
 
-    socketRef.current = sharedSocket;
+    const current = sharedSocket;
+    // Each subscriber tracks the connection and the live notifications itself.
+    const handleConnect = () => setIsConnected(true);
+    const handleDisconnect = () => setIsConnected(false);
+    const handleNotification = (data) => setNotifications((prev) => [data, ...prev].slice(0, 50));
+    current.on('connect', handleConnect);
+    current.on('disconnect', handleDisconnect);
+    current.on('notification', handleNotification);
+    setIsConnected(current.connected);
+    setSocket(current);
 
     return () => {
-      subscriberCount -= 1;
-      if (subscriberCount <= 0) {
-        sharedSocket?.disconnect();
-        sharedSocket = null;
-        sharedUserId = null;
-        subscriberCount = 0;
+      current.off('connect', handleConnect);
+      current.off('disconnect', handleDisconnect);
+      current.off('notification', handleNotification);
+      subscriberCount = Math.max(0, subscriberCount - 1);
+      if (subscriberCount === 0) {
+        if (teardownTimer) clearTimeout(teardownTimer);
+        teardownTimer = setTimeout(() => {
+          teardownTimer = null;
+          if (subscriberCount === 0 && sharedSocket === current) {
+            current.disconnect();
+            sharedSocket = null;
+            sharedUserId = null;
+          }
+        }, TEARDOWN_DELAY_MS);
       }
     };
-  }, [user, queryClient]);
+  }, [userId, queryClient]);
 
   const clearNotifications = useCallback(() => {
     setNotifications([]);
@@ -121,7 +158,7 @@ export function useSocket() {
     notifications,
     clearNotifications,
     removeNotification,
-    socket: socketRef.current,
+    socket,
   };
 }
 

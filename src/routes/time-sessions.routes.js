@@ -20,6 +20,16 @@ export default async function timeSessionRoutes(fastify) {
     const { projectId, taskId, description } = request.body;
     const userId = request.user.id;
 
+    // TimeSession.projectId is required; the project must be visible in the
+    // caller's organization (request.prisma is tenant-scoped).
+    const project = await request.prisma.project.findFirst({
+      where: { id: projectId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
     try {
       const session = await startTimer(userId, projectId, taskId, description);
       return reply.status(201).send(session);

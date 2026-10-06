@@ -64,7 +64,12 @@ test('agency sells, contracts, invoices and collects payment end to end', async 
     for (const item of LINE_ITEMS) {
       await expect(clientPage.getByRole('cell', { name: item.description })).toBeVisible();
     }
-    await expect(clientPage.getByText(money(PROPOSAL_TOTAL), { exact: true })).toBeVisible();
+    // The proposal shows the pre-tax subtotal, the HST its invoice adds, and
+    // the total that invoice will bill (any currency symbol in front).
+    const amount = (value: number) => new RegExp(`^\\D*${money(value).replace(/[.,]/g, '\\$&')}$`);
+    await expect(clientPage.getByText(amount(PROPOSAL_TOTAL)).first()).toBeVisible();
+    await expect(clientPage.getByText('HST (13%)', { exact: true })).toBeVisible();
+    await expect(clientPage.getByText(amount(INVOICE_TOTAL)).first()).toBeVisible();
     await clientPage.getByRole('button', { name: 'Approve Proposal' }).click();
     await expect(clientPage.getByRole('heading', { name: 'Proposal Approved' })).toBeVisible();
   });
@@ -104,10 +109,12 @@ test('agency sells, contracts, invoices and collects payment end to end', async 
   const invoice = await test.step('admin invoices the accepted work', async () => {
     await page.goto(`/proposal/${proposal.id}`);
     await page.getByRole('button', { name: 'Create Invoice' }).click();
-    await expect(page).toHaveURL(/\/invoices$/);
+    // Creating the invoice opens it.
+    await expect(page).toHaveURL(/\/invoices\/[^/]+$/);
     const { invoices } = await json(await admin.get(`/api/invoices?clientId=${client.id}`));
     expect(invoices).toHaveLength(1);
     const created = invoices[0];
+    expect(page.url()).toMatch(new RegExp(`/invoices/${created.id}$`));
     expect(created.proposalId).toBe(proposal.id);
     expect(created.status).toBe('DRAFT');
     expect(created.subtotal).toBe(PROPOSAL_TOTAL);
@@ -139,7 +146,9 @@ test('agency sells, contracts, invoices and collects payment end to end', async 
     const dialog = page.getByRole('dialog', { name: 'Record payment' });
     await dialog.getByLabel('Payment method').selectOption('BANK');
     await dialog.getByLabel(/Transaction ID/).fill(`E2E-${suffix}`);
-    await dialog.getByRole('button', { name: 'Mark as paid', exact: true }).click();
+    // The amount defaults to the balance due, so this records the full payment.
+    await expect(dialog.getByLabel('Amount received')).toHaveValue(String(INVOICE_TOTAL));
+    await dialog.getByRole('button', { name: 'Record payment', exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByRole('button', { name: 'Mark as Paid', exact: true })).toBeHidden();
 
@@ -170,10 +179,11 @@ test('agency sells, contracts, invoices and collects payment end to end', async 
     const listed = page.getByText(invoice.invoiceNumber, { exact: true }).filter({ visible: true });
     await page.goto('/invoices');
     await expect(listed).toHaveCount(1);
-    await page.getByRole('button', { name: 'SENT', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'SENT', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    const statusFilters = page.getByRole('group', { name: 'Filter by status' });
+    await statusFilters.getByRole('button', { name: 'Sent', exact: true }).click();
+    await expect(statusFilters.getByRole('button', { name: 'Sent', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(listed).toHaveCount(0);
-    await page.getByRole('button', { name: 'PAID', exact: true }).click();
+    await statusFilters.getByRole('button', { name: 'Paid', exact: true }).click();
     await expect(listed).toHaveCount(1);
   });
 

@@ -174,12 +174,16 @@ export function ToastProvider({ children }) {
 
   const toast = useCallback((type, titleOrOptions, message, duration = 4000) => {
     let title, msg, action;
+    let dedupe = true;
 
     if (typeof titleOrOptions === 'object') {
       title = titleOrOptions.title;
       msg = titleOrOptions.message;
       action = titleOrOptions.action;
       duration = titleOrOptions.duration ?? duration;
+      // An action toast for a new event (e.g. a second bulk change with its
+      // own Undo) passes `dedupe: false` so it is never dropped as a repeat.
+      dedupe = titleOrOptions.dedupe ?? true;
     } else {
       title = titleOrOptions;
       msg = message;
@@ -188,7 +192,7 @@ export function ToastProvider({ children }) {
     const key = `${type}\u0000${title ?? ''}\u0000${msg ?? ''}`;
     const recent = recentToasts.current.get(key);
     const nowMs = Date.now();
-    if (recent && (toastsRef.current.some((t) => t.id === recent.id) || nowMs - recent.at < DEDUPE_WINDOW_MS)) {
+    if (dedupe && recent && (toastsRef.current.some((t) => t.id === recent.id) || nowMs - recent.at < DEDUPE_WINDOW_MS)) {
       return recent.id;
     }
     const id = ++toastId;

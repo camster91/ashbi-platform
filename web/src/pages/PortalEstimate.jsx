@@ -7,17 +7,19 @@ import {
   FileText,
   User,
   Building2,
-  DollarSign,
   Loader2,
   Calendar,
   Clock,
   ShieldCheck,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { PortalBrandFooter } from '../components/PortalBrand';
 import { cn, formatDate } from '../lib/utils';
 import LoadingState from '../components/ui/LoadingState';
 import usePortalLightTheme from '../hooks/usePortalLightTheme';
 import StatusBadge from '../components/ui/StatusBadge';
+import PortalLineItems from '../components/PortalLineItems';
+import { formatMoney } from '../lib/format';
 
 export default function PortalEstimate() {
   usePortalLightTheme();
@@ -78,6 +80,10 @@ export default function PortalEstimate() {
   }, 0);
   const tax = Number(estimate.tax || estimate.taxAmount || 0);
   const total = Number(estimate.total || estimate.amount || (subtotal + tax));
+  const taxRate = estimate.taxRate !== null && estimate.taxRate !== undefined ? Number(estimate.taxRate) : null;
+  // Estimates are in the workspace currency (CAD); one formatter for every
+  // amount so lines and totals read the same ("$1,575.00").
+  const money = (value) => formatMoney(value);
 
   const isApproved = completed === 'approved' || estimate.status === 'APPROVED';
   const isDeclined = completed === 'declined' || estimate.status === 'DECLINED';
@@ -88,7 +94,7 @@ export default function PortalEstimate() {
     <div className="bg-background min-h-screen">
       {/* Header */}
       <header className="bg-primary shadow-sm">
-        <div className="max-w-3xl mx-auto px-6 py-8">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-accent text-xs font-semibold uppercase tracking-widest mb-1">
@@ -109,7 +115,7 @@ export default function PortalEstimate() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         {/* Approval / Decline confirmation banner */}
         {(completed || alreadyResponded) && (
           <div role="status" aria-live="polite" className={cn(
@@ -135,19 +141,16 @@ export default function PortalEstimate() {
         {/* From / To / Details */}
         <div className="bg-card rounded-xl border border-border/40 p-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {/* From */}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">From</p>
-              <div className="flex items-center gap-2">
-                <Building2 className="text-primary w-4 h-4" />
-                <span className="text-primary text-sm font-semibold">
-                  {estimate.agencyName || estimate.fromName || 'Ashbi Design'}
-                </span>
+            {/* From: the sending agency (brand from the public estimate API) */}
+            {estimate.brand?.companyName && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">From</p>
+                <div className="flex items-center gap-2">
+                  <Building2 className="text-primary w-4 h-4" />
+                  <span className="text-primary text-sm font-semibold">{estimate.brand.companyName}</span>
+                </div>
               </div>
-              {estimate.agencyEmail && (
-                <p className="text-xs text-muted-foreground mt-1 ml-6">{estimate.agencyEmail}</p>
-              )}
-            </div>
+            )}
 
             {/* To */}
             <div>
@@ -194,52 +197,31 @@ export default function PortalEstimate() {
           <div className="px-6 py-4 border-b border-border/25">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Line Items</h3>
           </div>
-          <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" tabIndex={0} role="region" aria-label="Estimate line items">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-primary">
-                  <th className="text-accent px-6 py-3 text-xs font-semibold uppercase tracking-wider text-left">Description</th>
-                  <th className="text-accent px-6 py-3 text-xs font-semibold uppercase tracking-wider text-right">Qty</th>
-                  <th className="text-accent px-6 py-3 text-xs font-semibold uppercase tracking-wider text-right">Rate</th>
-                  <th className="text-accent px-6 py-3 text-xs font-semibold uppercase tracking-wider text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/25">
-                {lineItems.map((item, i) => {
-                  const qty = Number(item.quantity || 1);
-                  const rate = Number(item.rate || item.unitPrice || 0);
-                  const amount = Number(item.amount || item.total || qty * rate);
-                  return (
-                    <tr key={i} className="hover:bg-muted/50">
-                      <td className="px-6 py-4 text-sm text-foreground">{item.description}</td>
-                      <td className="px-6 py-4 text-sm text-muted-foreground text-right">{qty}</td>
-                      <td className="px-6 py-4 text-sm text-muted-foreground text-right">${rate.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-foreground text-right">${amount.toFixed(2)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <PortalLineItems
+            label="Estimate line items"
+            formatAmount={money}
+            items={lineItems.map((item) => {
+              const quantity = Number(item.quantity || 1);
+              const rate = Number(item.rate || item.unitPrice || 0);
+              return { description: item.description, quantity, rate, amount: Number(item.amount || item.total || quantity * rate) };
+            })}
+          />
 
           {/* Totals */}
-          <div className="border-t border-border/40 px-6 py-4 space-y-2 bg-muted/50">
+          <div className="border-t border-border/40 px-4 sm:px-6 py-4 space-y-2 bg-muted/50">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
-              <span className="text-foreground">${subtotal.toFixed(2)}</span>
+              <span className="text-foreground">{money(subtotal)}</span>
             </div>
             {tax > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Tax</span>
-                <span className="text-foreground">${tax.toFixed(2)}</span>
+                <span className="text-muted-foreground">{taxRate !== null ? `Tax (${taxRate}%)` : 'Tax'}</span>
+                <span className="text-foreground">{money(tax)}</span>
               </div>
             )}
             <div className="flex items-center justify-between pt-3 border-t border-border/40">
               <span className="text-primary text-sm font-bold">Total</span>
-              <span className="text-primary text-2xl font-bold flex items-center gap-1">
-                <DollarSign className="w-5 h-5" />
-                {total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </span>
+              <span className="text-primary text-2xl font-bold">{money(total)}</span>
             </div>
           </div>
         </div>
@@ -314,7 +296,7 @@ export default function PortalEstimate() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-muted-foreground">Powered by Ashbi Design</p>
+          <PortalBrandFooter brand={estimate?.brand} />
         </div>
       </main>
     </div>

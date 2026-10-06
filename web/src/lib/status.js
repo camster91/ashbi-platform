@@ -43,7 +43,10 @@ export const STATUS_DOMAINS = {
   invoice: {
     DRAFT: { label: 'Draft', color: 'default', icon: FileText },
     SENT: { label: 'Sent', clientLabel: 'Awaiting Payment', color: 'info', icon: Send },
-    VIEWED: { label: 'Viewed', color: 'info', icon: Eye },
+    VIEWED: { label: 'Viewed', clientLabel: 'Awaiting Payment', color: 'info', icon: Eye },
+    // Display-only: a sent invoice with some payments recorded and a balance
+    // left (lib/invoice-status.js); never stored.
+    PARTLY_PAID: { label: 'Partly paid', color: 'warning', icon: CircleDot },
     PAID: { label: 'Paid', color: 'success', icon: CheckCircle2 },
     OVERDUE: { label: 'Overdue', color: 'danger', icon: AlertTriangle },
     VOID: { label: 'Void', color: 'default', icon: Ban },

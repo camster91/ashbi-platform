@@ -42,6 +42,30 @@ const FEATURE_INTRO_STEPS = [
   },
 ];
 
+// "Not now" is remembered per person in this browser, so the welcome tour
+// does not open itself again on the next page load. The small "Getting
+// started" button stays available to resume it.
+export function tourDismissedKey(userId) {
+  return `ashbi:onboarding-tour-dismissed:${userId || 'me'}`;
+}
+
+export function readTourDismissed(userId) {
+  try {
+    return window.localStorage.getItem(tourDismissedKey(userId)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeTourDismissed(userId, dismissed) {
+  try {
+    if (dismissed) window.localStorage.setItem(tourDismissedKey(userId), '1');
+    else window.localStorage.removeItem(tourDismissedKey(userId));
+  } catch {
+    // Storage blocked (private mode): the tour simply may open again.
+  }
+}
+
 function taskStatus(task) {
   if (task.completed) return 'Completed';
   if (task.skipped) return 'Skipped';
@@ -65,13 +89,21 @@ export default function OnboardingTour() {
   });
   const progress = progressQuery.data;
 
+  // Opens by itself only once: for someone who has not seen the welcome yet
+  // and has not said "Not now". A checklist in progress never opens itself;
+  // the "Getting started" button resumes it.
   useEffect(() => {
-    if (progress?.supported && ['eligible', 'in_progress'].includes(progress.state)) {
+    if (progress?.supported && progress.state === 'eligible' && !readTourDismissed(progress.userId)) {
       const timer = window.setTimeout(() => setOpen(true), 700);
       return () => window.clearTimeout(timer);
     }
     return undefined;
-  }, [progress?.supported, progress?.state]);
+  }, [progress?.supported, progress?.state, progress?.userId]);
+
+  const notNow = () => {
+    writeTourDismissed(progress?.userId, true);
+    setOpen(false);
+  };
 
   useEffect(() => {
     if (previousPath.current === location.pathname) return;
@@ -83,6 +115,7 @@ export default function OnboardingTour() {
 
   useEffect(() => {
     const handleRestart = () => {
+      writeTourDismissed(queryClient.getQueryData(QUERY_KEY)?.userId, false);
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       setIntroStep(0);
       setOpen(true);
@@ -131,7 +164,7 @@ export default function OnboardingTour() {
 
       <Modal
         isOpen={open}
-        onClose={() => setOpen(false)}
+        onClose={notNow}
         title={isEligible ? 'Welcome to Ashbi Hub' : 'Your getting-started checklist'}
         size="lg"
       >
@@ -230,7 +263,7 @@ export default function OnboardingTour() {
           {error && <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-            <Button variant="ghost" onClick={() => setOpen(false)}>Not now</Button>
+            <Button variant="ghost" onClick={notNow}>Not now</Button>
             <div className="flex flex-wrap gap-2">
               {isEligible && introStep > 0 && (
                 <Button variant="outline" size="sm" onClick={() => setIntroStep((s) => s - 1)}>

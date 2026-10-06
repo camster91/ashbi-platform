@@ -99,12 +99,15 @@ export default function PortalIntakeForm() {
     <div className="min-h-screen bg-slate-950 py-8 px-4">
       {/* Header */}
       <div className="max-w-2xl mx-auto mb-8 text-center">
-        <div className="flex items-center justify-center gap-2 mb-4">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-amber-400" />
+        {/* The agency's name (brand from the public form API), when known. */}
+        {form.brand?.companyName && (
+          <div className="flex items-center justify-center gap-2 mb-4" data-testid="portal-brand">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-amber-400" aria-hidden="true" />
+            </div>
+            <span className="text-lg font-bold text-white">{form.brand.companyName}</span>
           </div>
-          <span className="text-lg font-bold text-white">Ashbi Design</span>
-        </div>
+        )}
         {form.clientName && (
           <p className="text-sm text-slate-500 mb-2">For {form.clientName}</p>
         )}
@@ -259,7 +262,7 @@ export default function PortalIntakeForm() {
           </button>
         </div>
 
-        <p className="text-center text-slate-600 text-xs mt-4">Powered by Ashbi Design Hub</p>
+        <p className="text-center text-slate-600 text-xs mt-4">Powered by Ashbi Hub</p>
       </form>
     </div>
   );

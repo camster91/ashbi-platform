@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Invoice from Ashbi</title>
+<title>Invoice{{#companyName}} from {{companyName}}{{/companyName}}</title>
 </head>
 <body style="margin:0;padding:0;background-color:{{theme.cream}};font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:{{theme.cream}};">
@@ -14,8 +14,7 @@
         <!-- Header -->
         <tr>
           <td style="background-color:{{theme.indigo}};border-radius:12px 12px 0 0;padding:32px 40px;text-align:center;">
-            <h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:{{theme.white}};letter-spacing:0.5px;">ashbi</h1>
-            <p style="margin:4px 0 0;font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:{{theme.lime}};text-transform:uppercase;letter-spacing:3px;">Design &amp; Development</p>
+            <h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:{{theme.white}};letter-spacing:0.5px;">{{companyName}}</h1>
           </td>
         </tr>
 
@@ -30,7 +29,7 @@
         <tr>
           <td style="background-color:{{theme.white}};padding:40px;">
             <h2 style="margin:0 0 8px;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;color:{{theme.indigo}};">Invoice {{invoiceNumber}}</h2>
-            <p style="margin:0 0 28px;font-size:15px;color:{{theme.text}};line-height:1.6;">Hi {{clientName}}, here's your invoice from Ashbi.</p>
+            <p style="margin:0 0 28px;font-size:15px;color:{{theme.text}};line-height:1.6;">Hi {{clientName}}, here's your invoice{{#companyName}} from {{companyName}}{{/companyName}}.</p>
 
             <!-- Invoice summary card -->
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
@@ -73,8 +72,8 @@
         <!-- Footer -->
         <tr>
           <td style="background-color:{{theme.indigo}};border-radius:0 0 12px 12px;padding:24px 40px;text-align:center;">
-            <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:16px;font-weight:700;color:{{theme.white}};letter-spacing:0.5px;">ashbi</p>
-            <p style="margin:4px 0 16px;font-size:12px;color:{{theme.footerText}};"><a href="https://ashbi.ca" style="color:{{theme.lime}};text-decoration:none;">ashbi.ca</a></p>
+            <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:16px;font-weight:700;color:{{theme.white}};letter-spacing:0.5px;">{{companyName}}</p>
+            <p style="margin:4px 0 16px;font-size:12px;color:{{theme.footerText}};">{{#companyWebsite}}<a href="{{companyWebsite}}" style="color:{{theme.lime}};text-decoration:none;">{{companyWebsiteLabel}}</a>{{/companyWebsite}}</p>
             <p style="margin:0;font-size:11px;color:{{theme.footerTextSoft}};">Sent with care from Ashbi Hub</p>
           </td>
         </tr>

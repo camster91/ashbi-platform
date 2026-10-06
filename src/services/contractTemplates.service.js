@@ -1,11 +1,15 @@
-// Contract templates with placeholder substitution
+// Contract templates with placeholder substitution. {agencyName} is the
+// sending organization's company name (src/services/branding.service.js), so
+// each workspace's contracts name its own agency.
+
+import { escapeHtml } from './branding.service.js';
 
 const templates = {
   RETAINER: {
     title: 'Retainer Agreement',
     content: `<h1>Retainer Service Agreement</h1>
 
-<p>This Retainer Service Agreement ("Agreement") is entered into between <strong>Ashbi Design</strong> ("Agency") and <strong>{clientName}</strong> ("Client").</p>
+<p>This Retainer Service Agreement ("Agreement") is entered into between <strong>{agencyName}</strong> ("Agency") and <strong>{clientName}</strong> ("Client").</p>
 
 <h2>1. Services</h2>
 <p>The Agency agrees to provide ongoing design and development services under a monthly retainer plan.</p>
@@ -34,7 +38,7 @@ const templates = {
 <p>Both parties agree to maintain the confidentiality of all proprietary information shared during the course of this engagement.</p>
 
 <p><strong>Agreed and accepted:</strong></p>
-<p>Agency: Ashbi Design<br/>
+<p>Agency: {agencyName}<br/>
 Client: {clientName}<br/>
 Date: {startDate}</p>`
   },
@@ -43,7 +47,7 @@ Date: {startDate}</p>`
     title: 'Project Agreement',
     content: `<h1>Project Service Agreement</h1>
 
-<p>This Project Service Agreement ("Agreement") is entered into between <strong>Ashbi Design</strong> ("Agency") and <strong>{clientName}</strong> ("Client").</p>
+<p>This Project Service Agreement ("Agreement") is entered into between <strong>{agencyName}</strong> ("Agency") and <strong>{clientName}</strong> ("Client").</p>
 
 <h2>1. Project Details</h2>
 <ul>
@@ -75,7 +79,7 @@ Date: {startDate}</p>`
 <p>If the Client terminates the project, payment for all completed work is due. If the Agency terminates, a pro-rated refund will be issued.</p>
 
 <p><strong>Agreed and accepted:</strong></p>
-<p>Agency: Ashbi Design<br/>
+<p>Agency: {agencyName}<br/>
 Client: {clientName}<br/>
 Date: _______________</p>`
   },
@@ -84,7 +88,7 @@ Date: _______________</p>`
     title: 'Mutual Non-Disclosure Agreement',
     content: `<h1>Mutual Non-Disclosure Agreement</h1>
 
-<p>This Mutual Non-Disclosure Agreement ("Agreement") is entered into between <strong>Ashbi Design</strong> ("Party A") and <strong>{clientName}</strong> ("Party B").</p>
+<p>This Mutual Non-Disclosure Agreement ("Agreement") is entered into between <strong>{agencyName}</strong> ("Party A") and <strong>{clientName}</strong> ("Party B").</p>
 
 <h2>1. Purpose</h2>
 <p>The parties wish to explore a potential business relationship and may need to share confidential information.</p>
@@ -111,24 +115,39 @@ Date: _______________</p>`
 <p>Upon request or termination of discussions, each party will return or destroy all Confidential Information received.</p>
 
 <p><strong>Agreed and accepted:</strong></p>
-<p>Party A: Ashbi Design<br/>
+<p>Party A: {agencyName}<br/>
 Party B: {clientName}<br/>
 Date: _______________</p>`
   }
 };
 
+// The template types a contract can be created from (the create schema's
+// enum and the Contracts page options).
+export const CONTRACT_TEMPLATE_TYPES = Object.freeze(Object.keys(templates));
+
 export function getContractTemplate(templateType) {
   return templates[templateType] || null;
 }
 
-export function renderTemplate(templateType, variables = {}) {
+/**
+ * @param {string} templateType
+ * @param {Record<string, string>} [variables] values substituted as given
+ * @param {{ companyName?: string, contractHeader?: string | null }} [branding]
+ *   the organization's branding (resolveBranding); its name fills
+ *   {agencyName} (HTML-escaped) and a contract header, when set, opens the
+ *   document.
+ */
+export function renderTemplate(templateType, variables = {}, branding = {}) {
   const template = templates[templateType];
   if (!template) return null;
 
-  let content = template.content;
+  const agencyName = escapeHtml(String(branding?.companyName || '').trim() || 'the Agency');
+  let content = template.content.replace(/\{agencyName\}/g, () => agencyName);
   for (const [key, value] of Object.entries(variables)) {
-    content = content.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
+    content = content.replace(new RegExp(`\\{${key}\\}`, 'g'), () => value || '');
   }
+  const header = String(branding?.contractHeader || '').trim();
+  if (header) content = `<p>${escapeHtml(header)}</p>\n\n${content}`;
 
   return {
     title: template.title,

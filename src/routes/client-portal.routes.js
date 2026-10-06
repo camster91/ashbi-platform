@@ -16,7 +16,8 @@ import { clearStaleSessionCookie } from '../auth/request-session.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { recordRejectedUpload, sha256Hex } from '../services/upload-integrity.service.js';
 import { contentDisposition } from '../utils/send-file.js';
-import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
+import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation, isQuarantined } from '../services/media-review.service.js';
+import { scanReviewMedia } from '../services/media-scan.service.js';
 import clientPortalReviewRoutes from './client-portal-review.routes.js';
 import { emitChatEvent, toClientChatPayload } from '../auth/project-room-access.js';
 import {
@@ -37,8 +38,11 @@ import { sendStoredFile } from '../utils/send-file.js';
 import { writeUploadThenPersist } from '../utils/stored-upload.js';
 import { validateBody, validateQuery, chatMessageListQuerySchema, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
 import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
+import { invoiceBalance } from '../utils/invoice-balance.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
 import { insensitiveEquals } from '../utils/insensitive-equals.js';
+import { CLIENT_TASK_COLUMN_STATUSES } from '../shared/client-task-columns.js';
+import { brandedSender, escapeHtml, publicBrand, resolveBranding, resolveBrandingForClient, resolveBrandingForDocument, sanitizeHeader } from '../services/branding.service.js';
 
 // The project document fields the client portal returns (docs list, upload).
 const PORTAL_DOCUMENT_SELECT = Object.freeze({
@@ -48,7 +52,48 @@ const PORTAL_DOCUMENT_SELECT = Object.freeze({
   size: true,
   checksumSha256: true,
   createdAt: true,
-  uploadedBy: { select: { id: true, name: true } },
+  // The uploader's name only, never their account id.
+  uploadedBy: { select: { name: true } },
+});
+
+// The client portal's task board (GET /projects/:id/tasks). The columns live
+// in src/shared so the web app's public project link groups tasks the same
+// way; see client-task-columns.js.
+export { CLIENT_TASK_COLUMN_STATUSES };
+
+const CLIENT_TASK_COLUMN_BY_STATUS = new Map(
+  Object.entries(CLIENT_TASK_COLUMN_STATUSES).flatMap(([column, statuses]) => statuses.map((status) => [status, column])),
+);
+
+/** Group tasks into the portal columns; an unknown legacy status lands in TODO. */
+export function groupClientTaskColumns(tasks) {
+  const columns = Object.fromEntries(Object.keys(CLIENT_TASK_COLUMN_STATUSES).map((column) => [column, []]));
+  for (const task of tasks) columns[CLIENT_TASK_COLUMN_BY_STATUS.get(task.status) ?? 'TODO'].push(task);
+  return columns;
+}
+
+const CLIENT_TASK_SELECT = Object.freeze({
+  id: true,
+  title: true,
+  status: true,
+  priority: true,
+  category: true,
+  dueDate: true,
+  completedAt: true,
+  milestoneId: true,
+  updatedAt: true,
+  assignee: { select: { name: true } },
+});
+
+// Which PROJECT attachments the client portal shows: files staff explicitly
+// shared (`clientVisible`, which client uploads get on creation) and files
+// staff put in front of the client through a shared media review. Internal
+// staff files, including screen recordings, are never listed or downloadable.
+export const CLIENT_VISIBLE_ATTACHMENT_WHERE = Object.freeze({
+  OR: [
+    { clientVisible: true },
+    { reviewSessions: { some: { sharedWithClient: true } } },
+  ],
 });
 
 const CLIENT_VISIBLE_INVOICE_STATUSES = [...INVOICE_OPEN_STATUSES, 'PAID'];
@@ -57,7 +102,8 @@ const PORTAL_BASE = env.hubUrl;
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 
 // ── Mailgun helper (no-op if not configured) ────────────────────────────────
-async function sendMagicLinkEmail(toEmail, toName, magicLink) {
+// Sent in the client's agency's name (its BrandSettings / organization name).
+async function sendMagicLinkEmail(toEmail, toName, magicLink, branding) {
   const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
   const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN;
   if (!MAILGUN_API_KEY || !MAILGUN_DOMAIN) {
@@ -68,13 +114,14 @@ async function sendMagicLinkEmail(toEmail, toName, magicLink) {
   const safeName = String(toName).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
   const safeLink = String(magicLink).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 
+  const companyName = sanitizeHeader(branding?.companyName);
   const body = new URLSearchParams();
-  body.append('from', `Ashbi Design <noreply@${MAILGUN_DOMAIN}>`);
+  body.append('from', brandedSender(branding, MAILGUN_DOMAIN));
   body.append('to', `${toName} <${toEmail}>`);
-  body.append('subject', 'Your Ashbi Design Client Portal Link');
+  body.append('subject', companyName ? `Your ${companyName} Client Portal Link` : 'Your Client Portal Link');
   body.append('html', `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#2e2958;color:#f1f5f9;padding:40px;border-radius:12px;">
-      <h2 style="color:#e6f354;margin-top:0;">Ashbi Design — Client Portal</h2>
+      <h2 style="color:#e6f354;margin-top:0;">${companyName ? `${escapeHtml(companyName)} — ` : ''}Client Portal</h2>
       <p>Hi ${safeName},</p>
       <p>Click the button below to access your portal. This link expires in <strong>1 hour</strong>.</p>
       <a href="${safeLink}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#e6f354;color:#2e2958;border-radius:8px;text-decoration:none;font-weight:600;">
@@ -263,7 +310,8 @@ export default async function clientPortalRoutes(fastify) {
     const token = fastify.jwt.sign(magicLinkClaims(user, contact), { expiresIn: '1h' });
     // Magic link now goes to the verify endpoint which POSTs the token
     const magicLink = `${PORTAL_BASE}/client-portal/verify?token=${token}`;
-    await sendMagicLinkEmail(contact.email, contact.name, magicLink);
+    const branding = await resolveBranding(request.prisma, contact.client.organizationId);
+    await sendMagicLinkEmail(contact.email, contact.name, magicLink, branding);
 
     return { sent: true };
   });
@@ -299,7 +347,7 @@ export default async function clientPortalRoutes(fastify) {
 
     const sessionToken = signUserSession(fastify.jwt, principal.user, { contactId: principal.contact.id });
 
-    reply
+    return reply
       .setCookie('token', sessionToken, {
         path: '/',
         httpOnly: true,
@@ -345,7 +393,9 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(404).send({ error: 'Not found' });
     }
 
-    return { client, contact };
+    // The agency's name and public logo for the portal header.
+    const brand = publicBrand(await resolveBrandingForClient(request.prisma, clientId));
+    return { client, contact, brand };
   });
 
   // ── Projects ─────────────────────────────────────────────────────────────────
@@ -360,8 +410,7 @@ export default async function clientPortalRoutes(fastify) {
         id: true,
         name: true,
         status: true,
-        health: true,
-        aiSummary: true,
+        // Never the internal health rating or AI summary (staff-only).
         description: true,
         startDate: true,
         endDate: true,
@@ -413,8 +462,7 @@ export default async function clientPortalRoutes(fastify) {
         id: true,
         name: true,
         status: true,
-        health: true,
-        aiSummary: true,
+        // Never the internal health rating or AI summary (staff-only).
         description: true,
         startDate: true,
         endDate: true,
@@ -545,34 +593,16 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
+    // Client-safe fields only: no internal description, ordering or the
+    // assignee's account id.
     const tasks = await request.prisma.task.findMany({
       where: { projectId: id, parentId: null },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        status: true,
-        priority: true,
-        category: true,
-        dueDate: true,
-        completedAt: true,
-        position: true,
-        assigneeId: true,
-        assignee: { select: { id: true, name: true } },
-        milestoneId: true,
-        createdAt: true,
-        updatedAt: true
-      },
+      select: CLIENT_TASK_SELECT,
       orderBy: [{ position: 'asc' }, { createdAt: 'asc' }]
     });
 
-    // Group by status for kanban columns
-    const columns = {
-      TODO: tasks.filter(t => ['PENDING', 'UPCOMING', 'IMMEDIATE'].includes(t.status)),
-      IN_PROGRESS: tasks.filter(t => t.status === 'IN_PROGRESS'),
-      DONE: tasks.filter(t => t.status === 'COMPLETED'),
-      BLOCKED: tasks.filter(t => t.status === 'BLOCKED')
-    };
+    // Group by status for kanban columns: every task status has a column.
+    const columns = groupClientTaskColumns(tasks);
 
     return { tasks, columns };
   });
@@ -780,7 +810,13 @@ export default async function clientPortalRoutes(fastify) {
     // Only what the portal shows: never the storage path or file name, the
     // organization or the uploader's account id.
     const documents = await request.prisma.attachment.findMany({
-      where: { entityType: 'PROJECT', entityId: id },
+      where: {
+        entityType: 'PROJECT',
+        entityId: id,
+        ...CLIENT_VISIBLE_ATTACHMENT_WHERE,
+        // Files moved aside by `npm run quarantine:uploads` are never listed.
+        NOT: { path: { startsWith: '/uploads/quarantine/' } },
+      },
       select: PORTAL_DOCUMENT_SELECT,
       orderBy: { createdAt: 'desc' }
     });
@@ -790,12 +826,21 @@ export default async function clientPortalRoutes(fastify) {
 
   fastify.get('/documents/:docId/download', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
-    const doc = await request.prisma.attachment.findUnique({ where: { id: request.params.docId } });
-    if (!doc || doc.entityType !== 'PROJECT' || doc.path.startsWith('/uploads/quarantine/')) {
+    // A file the portal does not list answers 404 like an unknown id.
+    const doc = await request.prisma.attachment.findFirst({
+      where: { id: request.params.docId, entityType: 'PROJECT', ...CLIENT_VISIBLE_ATTACHMENT_WHERE },
+    });
+    if (!doc || isQuarantined(doc)) {
       return reply.status(404).send({ error: 'Document not found' });
     }
     const project = await request.prisma.project.findFirst({ where: { id: doc.entityId, clientId, deletedAt: null } });
     if (!project) return reply.status(404).send({ error: 'Document not found' });
+    // The same media-scan gate as the review file routes (docs/media-review.md
+    // "Scanning seam"): a file shared through a client review must not be
+    // downloadable here when the review route would withhold it.
+    const scan = await scanReviewMedia(doc);
+    if (scan.verdict === 'blocked') return reply.status(403).send({ error: 'This file did not pass the media scan', code: 'MEDIA_BLOCKED' });
+    if (scan.verdict === 'pending') return reply.status(409).send({ error: 'This file is still being scanned', code: 'MEDIA_SCAN_PENDING' });
     try {
       const file = await fs.readFile(path.join(process.cwd(), doc.path));
       return reply
@@ -867,6 +912,8 @@ export default async function clientPortalRoutes(fastify) {
         entityId: id,
         uploadedById: authorUser.id,
         organizationId: project.organizationId,
+        // The client's own upload: listed back to them in the portal.
+        clientVisible: true,
       },
       select: PORTAL_DOCUMENT_SELECT,
     }));
@@ -980,7 +1027,7 @@ export default async function clientPortalRoutes(fastify) {
     }
 
     try {
-      const pdfBuffer = await generateContractPdf(contract);
+      const pdfBuffer = await generateContractPdf(contract, await resolveBrandingForClient(request.prisma, contract.clientId));
       return reply
         .header('Content-Type', 'application/pdf')
         .header('Content-Disposition', `attachment; filename="${contractPdfFilename(contract)}.pdf"`)
@@ -1018,16 +1065,20 @@ export default async function clientPortalRoutes(fastify) {
         viewToken: true,
         publicAccessExpiresAt: true,
         publicAccessRevokedAt: true,
+        // Partial payments: the client owes the balance, not the total.
+        payments: { select: { amount: true } },
       },
       orderBy: { issueDate: 'desc' }
     });
 
-    return invoices.map(({ viewToken, publicAccessExpiresAt, publicAccessRevokedAt, ...invoice }) => {
+    return invoices.map(({ viewToken, publicAccessExpiresAt, publicAccessRevokedAt, payments, ...invoice }) => {
+      const paid = Array.isArray(payments) ? payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) : 0;
       const linkUsable = Boolean(viewToken)
         && !invoicePublicAccessFailure({ ...invoice, viewToken, publicAccessExpiresAt, publicAccessRevokedAt });
       const viewUrl = linkUsable ? `/portal/invoice/${viewToken}` : null;
       return {
         ...invoice,
+        ...invoiceBalance(invoice.total, paid),
         viewUrl,
         payUrl: linkUsable && INVOICE_OPEN_STATUSES.includes(invoice.status) ? viewUrl : null,
       };
@@ -1052,9 +1103,10 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(404).send({ error: 'Invoice not found' });
     }
 
-    const pdfBuffer = await generateInvoicePdf(invoice);
+    const branding = await resolveBrandingForDocument(request.prisma, invoice);
+    const pdfBuffer = await generateInvoicePdf(invoice, { branding });
 
-    reply
+    return reply
       .header('Content-Type', 'application/pdf')
       .header('Content-Disposition', `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`)
       .send(pdfBuffer);

@@ -83,10 +83,58 @@ test('TEAM onboarding excludes admin outcomes and keeps server save failures rec
 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/dashboard');
-  await expect(page.getByRole('dialog', { name: 'Your getting-started checklist' })).toBeVisible({ timeout: 15_000 });
+  // An in-progress checklist waits to be resumed rather than opening by itself.
+  await page.getByRole('button', { name: 'Resume getting started, 0 of 3 tasks resolved' }).click({ timeout: 15_000 });
+  await expect(page.getByRole('dialog', { name: 'Your getting-started checklist' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Complete an assigned task' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Add your first client' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Skip this task' }).first().click();
   await expect(page.getByText('Progress service unavailable', { exact: true })).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Your getting-started checklist' })).toBeVisible();
+});
+
+// #529: a page wrapper held in its final animation state (`animate-fade-in`,
+// fill-mode forwards) is a stacking context. Dialogs used to render inside it,
+// so the fixed Getting started button drew on top of them.
+test('open dialogs sit above the Getting started button', async ({ page }) => {
+  await page.route('**/api/**', async route => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (pathname === '/api/auth/me') return json({ id: 'admin-a', name: 'Admin', email: 'admin@example.com', role: 'ADMIN' });
+    if (pathname === '/api/onboarding/progress' && request.method() === 'GET') {
+      return json({ supported: true, role: 'ADMIN', state: 'in_progress', startedAt: '2026-08-09T12:00:00.000Z', completedCount: 0, totalCount: 3, tasks: adminTasks });
+    }
+    if (pathname === '/api/projects') return json({ projects: [] });
+    if (pathname === '/api/clients') return json({ clients: [], total: 0 });
+    if (pathname.startsWith('/api/notifications')) return json({ notifications: [], total: 0 });
+    if (pathname.includes('/unread')) return json({ count: 0 });
+    return json({});
+  });
+
+  for (const [width, height] of [[1280, 900], [390, 844]]) {
+    await page.setViewportSize({ width, height });
+    await page.goto('/projects');
+    const launcher = page.getByRole('button', { name: /Resume getting started/ });
+    await expect(launcher).toBeVisible({ timeout: 15_000 });
+    const box = await launcher.boundingBox();
+    await page.locator('#main-content').getByRole('button', { name: 'New Project' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Create New Project' });
+    await expect(dialog).toBeVisible();
+
+    // Whatever is on top where the launcher sits must belong to the dialog
+    // layer (the dialog or its backdrop), never the launcher.
+    const onTop = await page.evaluate(([x, y]) => {
+      const element = document.elementFromPoint(x, y);
+      return {
+        launcher: Boolean(element?.closest('button[aria-label^="Resume getting started"]')),
+        dialogLayer: Boolean(element?.closest('.fixed.inset-0.z-50')),
+      };
+    }, [box!.x + box!.width / 2, box!.y + box!.height / 2]);
+    expect(onTop, `at ${width}px`).toEqual({ launcher: false, dialogLayer: true });
+
+    // The dialog's own footer buttons are clickable.
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toBeHidden();
+  }
 });

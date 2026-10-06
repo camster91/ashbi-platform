@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
-  Sparkles,
   CheckCircle,
   Calendar,
   Clock,
@@ -13,8 +12,32 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import PortalBrand, { PortalBrandFooter } from '../components/PortalBrand';
 import { cn } from '../lib/utils';
 import usePortalLightTheme from '../hooks/usePortalLightTheme';
+
+/**
+ * The booking slots are in the server's local time: GET
+ * /portal/booking/availability returns each slot's wall-clock `time` ("HH:MM",
+ * server-local) and its absolute `start` (ISO, UTC). There is no configured
+ * booking timezone to name, but the two together give the server's UTC
+ * offset for that day, so the page can say which time the slots are in.
+ * Returns e.g. "UTC-4", "UTC+5:30" or "UTC", or null when it cannot tell.
+ */
+export function slotUtcOffsetLabel(date, slot) {
+  if (!slot || typeof slot !== 'object' || !slot.start || !slot.time || !date) return null;
+  const [y, m, d] = String(date).split('-').map(Number);
+  const [hh, mm] = String(slot.time).split(':').map(Number);
+  const start = Date.parse(slot.start);
+  if ([y, m, d, hh, mm, start].some((n) => !Number.isFinite(n))) return null;
+  const offsetMinutes = Math.round((Date.UTC(y, m - 1, d, hh, mm) - start) / 60000);
+  if (offsetMinutes === 0) return 'UTC';
+  const sign = offsetMinutes > 0 ? '+' : '-';
+  const abs = Math.abs(offsetMinutes);
+  const hours = Math.floor(abs / 60);
+  const minutes = abs % 60;
+  return `UTC${sign}${hours}${minutes ? `:${String(minutes).padStart(2, '0')}` : ''}`;
+}
 
 function getDateString(date) {
   const y = date.getFullYear();
@@ -61,7 +84,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
   const prevMonth = () => setViewMonth(new Date(year, month - 1, 1));
   const nextMonth = () => setViewMonth(new Date(year, month + 1, 1));
 
-  const monthLabel = viewMonth.toLocaleDateString({ month: 'long', year: 'numeric' });
+  const monthLabel = viewMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
   // Keyboard navigation across the day grid. Arrow keys move focus by ±1 day
   // (left/right) or ±7 days (up/down). Home/End jump to start/end of week.
@@ -146,7 +169,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
         <button
           type="button"
           onClick={prevMonth}
-          aria-label={`Previous month, ${new Date(year, month - 1, 1).toLocaleDateString({ month: 'long', year: 'numeric' })}`}
+          aria-label={`Previous month, ${new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`}
           className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <ChevronLeft className="w-4 h-4" />
@@ -155,7 +178,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
         <button
           type="button"
           onClick={nextMonth}
-          aria-label={`Next month, ${new Date(year, month + 1, 1).toLocaleDateString({ month: 'long', year: 'numeric' })}`}
+          aria-label={`Next month, ${new Date(year, month + 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`}
           className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <ChevronRight className="w-4 h-4" />
@@ -209,11 +232,18 @@ export default function PortalBooking() {
     retry: false,
   });
 
+  const slots = slotsData?.slots || slotsData || [];
+  // The booking organization's name and logo, sent with the availability.
+  const brand = slotsData?.brand;
+  const slotZone = slotUtcOffsetLabel(selectedDate, Array.isArray(slots) ? slots.find((slot) => slot?.start) : null);
+  const zoneText = slotZone ? `our local time (${slotZone})` : 'our local time';
+
   const bookMutation = useMutation({
     mutationFn: (data) => api.createPortalBooking(data),
     onSuccess: (data) => {
       setBooked(true);
-      setBookingDetails(data);
+      // Keep the zone the slots were shown in for the confirmation screen.
+      setBookingDetails({ ...data, zone: zoneText });
     },
   });
 
@@ -225,23 +255,19 @@ export default function PortalBooking() {
       time: selectedSlot,
       name: name.trim(),
       email: email.trim(),
-      topic: topic.trim(),
+      // POST /api/portal/booking reads the topic as `notes` (bookingSchema).
+      notes: topic.trim() || undefined,
     });
   };
 
-  const slots = slotsData?.slots || slotsData || [];
+  const bookedZone = bookingDetails?.zone || zoneText;
 
   if (booked) {
     return (
       <div className="min-h-screen bg-background">
         <header className="bg-card border-b border-border/40 shadow-sm">
           <div className="max-w-3xl mx-auto px-6 py-6">
-            <div className="flex items-center gap-3 mb-1">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-warning" />
-              </div>
-              <span className="text-sm font-medium text-muted-foreground">Ashbi Design</span>
-            </div>
+            <PortalBrand brand={brand} />
             <h1 className="text-2xl font-bold text-foreground mt-3">Book a Call</h1>
           </div>
         </header>
@@ -250,13 +276,13 @@ export default function PortalBooking() {
             <CheckCircle className="w-14 h-14 text-success mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-success mb-2">Booking Confirmed</h2>
             <p className="text-success mb-4">
-              Your call has been scheduled. We will send a confirmation to your email.
+              Your call is booked. This page is your confirmation: no confirmation email is sent, so please note the date and time below.
             </p>
             <div className="inline-flex flex-col items-center gap-2 bg-card rounded-lg border border-success/30 px-6 py-4 mt-2">
               <div className="flex items-center gap-2 text-foreground">
                 <Calendar className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm font-medium">
-                  {new Date(selectedDate + 'T00:00:00').toLocaleDateString({
+                  {new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, {
                     weekday: 'long',
                     month: 'long',
                     day: 'numeric',
@@ -266,12 +292,12 @@ export default function PortalBooking() {
               </div>
               <div className="flex items-center gap-2 text-foreground">
                 <Clock className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm font-medium">{selectedSlot}</span>
+                <span className="text-sm font-medium">{selectedSlot}, {bookedZone}</span>
               </div>
             </div>
           </div>
           <div className="text-center py-6">
-            <p className="text-xs text-muted-foreground">Powered by Ashbi Design</p>
+            <PortalBrandFooter brand={brand} />
           </div>
         </main>
       </div>
@@ -283,12 +309,7 @@ export default function PortalBooking() {
       {/* Header */}
       <header className="bg-card border-b border-border/40 shadow-sm">
         <div className="max-w-3xl mx-auto px-6 py-6">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-warning" />
-            </div>
-            <span className="text-sm font-medium text-muted-foreground">Ashbi Design</span>
-          </div>
+          <PortalBrand brand={brand} />
           <h1 className="text-2xl font-bold text-foreground mt-3">Book a Call</h1>
           <p className="text-muted-foreground mt-1">Schedule a consultation with our team</p>
         </div>
@@ -311,6 +332,9 @@ export default function PortalBooking() {
               <Clock className="w-4 h-4" />
               Available Times
             </h3>
+            <p className="-mt-2 mb-4 text-xs text-muted-foreground">
+              Times are in {zoneText}, not converted to your time zone.
+            </p>
 
             {!selectedDate ? (
               <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
@@ -330,6 +354,9 @@ export default function PortalBooking() {
             ) : (
               <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
                 {slots.map((slot) => {
+                  // slot.time is "HH:MM" in the server's local timezone (no
+                  // booking timezone is configured), shown as-is, not
+                  // converted to the visitor's timezone.
                   const time = typeof slot === 'string' ? slot : slot.time;
                   const available = typeof slot === 'string' ? true : slot.available !== false;
                   return (
@@ -398,6 +425,7 @@ export default function PortalBooking() {
                 id="booking-topic"
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
+                maxLength={1000}
                 placeholder="Brief description of what you need help with (optional)"
                 rows={3}
                 className="w-full px-4 py-2.5 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-warning/20 focus:border-warning resize-none"
@@ -405,10 +433,10 @@ export default function PortalBooking() {
             </div>
 
             {/* Selected summary */}
-            <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-muted/50 border border-border/25 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 rounded-lg bg-muted/50 border border-border/25 text-sm text-muted-foreground">
               <div className="flex items-center gap-1.5">
                 <Calendar className="w-4 h-4 text-muted-foreground" />
-                {new Date(selectedDate + 'T00:00:00').toLocaleDateString({
+                {new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, {
                   weekday: 'short',
                   month: 'short',
                   day: 'numeric',
@@ -416,7 +444,7 @@ export default function PortalBooking() {
               </div>
               <div className="flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-muted-foreground" />
-                {selectedSlot}
+                {selectedSlot}{slotZone ? ` ${slotZone}` : ''}
               </div>
             </div>
 
@@ -448,7 +476,7 @@ export default function PortalBooking() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-muted-foreground">Powered by Ashbi Design</p>
+          <PortalBrandFooter brand={brand} />
         </div>
       </main>
     </div>

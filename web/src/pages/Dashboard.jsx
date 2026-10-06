@@ -26,6 +26,7 @@ import { useSocket } from '../hooks/useSocket';
 import { Card, Skeleton } from '../components/ui';
 import { formatRelativeTime, cn } from '../lib/utils';
 import { formatDate, formatMoney } from '../lib/format';
+import { mrrLabel } from '../lib/retainer-money';
 import TimeTrackerWidget from '../components/widgets/TimeTrackerWidget';
 import UpcomingEventsWidget from '../components/widgets/UpcomingEventsWidget';
 import OutreachFunnelWidget from '../components/widgets/OutreachFunnelWidget';
@@ -159,7 +160,7 @@ export default function Dashboard() {
             iconColor="text-success"
             iconBg="bg-success/10"
             label="MRR"
-            value={formatMoney(stats?.mrr || 0, 'USD', { compact: true })}
+            value={mrrLabel(stats)}
             subtitle={
               <span className="text-xs text-muted-foreground">
                 {stats?.activeRetainerCount > 0
@@ -445,7 +446,7 @@ export default function Dashboard() {
               <AlertTriangle className="w-4 h-4 text-destructive" />
               <h2 className="font-semibold text-foreground">Blocked &amp; At-Risk</h2>
             </div>
-            <Link to="/projects" className="text-xs text-primary hover:underline flex items-center gap-1">
+            <Link to="/projects" className="-my-3 -mr-2 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               View all <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
@@ -626,7 +627,7 @@ export default function Dashboard() {
               <CheckSquare className="w-4 h-4 text-warning" />
               <h2 className="font-semibold text-foreground">My Tasks</h2>
             </div>
-            <Link to="/inbox" className="text-xs text-primary hover:underline flex items-center gap-1">
+            <Link to="/inbox" className="-my-3 -mr-2 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               View all <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
@@ -736,7 +737,7 @@ function ClientHealthCard({ client, navigate }) {
             retainerBadge[client.retainerStatus] || 'bg-muted text-muted-foreground'
           )}>
             {client.retainerStatus.replace('_', ' ')}
-            {client.monthlyAmount > 0 && ` · ${formatMoney(client.monthlyAmount, 'USD')}/mo`}
+            {client.monthlyAmount > 0 && ` · ${formatMoney(client.monthlyAmount, client.monthlyCurrency || 'USD')}/mo`}
           </span>
         )}
 

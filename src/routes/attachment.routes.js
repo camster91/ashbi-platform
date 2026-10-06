@@ -3,7 +3,9 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
-import { fileUpload } from '../validators/schemas.js';
+import { attachmentClientVisibilitySchema, fileUpload, validateBody } from '../validators/schemas.js';
+import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { canChangeAttachmentVisibility } from '../services/attachment-visibility.service.js';
 import { sendStoredFile } from '../utils/send-file.js';
 import { writeUploadThenPersist } from '../utils/stored-upload.js';
 import { recordRejectedUpload, sha256Hex } from '../services/upload-integrity.service.js';
@@ -46,12 +48,21 @@ export default async function attachmentRoutes(fastify) {
     const attachments = await request.prisma.attachment.findMany({
       where: { entityType, entityId },
       include: {
-        uploadedBy: { select: { id: true, name: true } }
+        // The role tells the Files panel which files the client uploaded.
+        uploadedBy: { select: { id: true, name: true, role: true } }
       },
       orderBy: { createdAt: 'desc' }
     });
+    if (entityType !== 'PROJECT' || attachments.length === 0) return attachments;
 
-    return attachments;
+    // A file in a review shared with the client is in the portal's Documents
+    // whatever clientVisible says (CLIENT_VISIBLE_ATTACHMENT_WHERE), so the
+    // Files panel shows it as visible through the review.
+    const viaReview = new Set((await request.prisma.reviewSession.findMany({
+      where: { attachmentId: { in: attachments.map((row) => row.id) }, sharedWithClient: true },
+      select: { attachmentId: true },
+    })).map((row) => row.attachmentId));
+    return attachments.map((row) => ({ ...row, sharedViaReview: viaReview.has(row.id) }));
   });
 
   // Upload attachment
@@ -128,6 +139,42 @@ export default async function attachmentRoutes(fastify) {
     }
 
     return reply.status(201).send(attachment);
+  });
+
+  // Share a project file with the client portal (or stop sharing it). Files
+  // are internal by default (Attachment.clientVisible); only PROJECT files
+  // appear in the portal's Documents. Like delete: the uploader or an admin.
+  fastify.patch('/:id/client-visibility', {
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(attachmentClientVisibilitySchema)],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { clientVisible } = request.body;
+
+    const existing = await request.prisma.attachment.findFirst({
+      where: { id, entityType: 'PROJECT' },
+      select: { id: true, entityId: true, uploadedById: true, clientVisible: true },
+    });
+    if (!existing) {
+      return reply.status(404).send({ error: 'Attachment not found' });
+    }
+    if (!canChangeAttachmentVisibility(request.user, existing)) {
+      return reply.status(403).send({ error: 'Only the uploader or an admin can change who sees this file' });
+    }
+
+    const updated = await request.prisma.attachment.update({
+      where: { id },
+      data: { clientVisible },
+      include: { uploadedBy: { select: { id: true, name: true } } },
+    });
+    if (existing.clientVisible !== clientVisible) {
+      await recordRequestAuditEvent(request.prisma, request, {
+        action: 'attachment.client_visibility_changed',
+        entityId: id,
+        metadata: { projectId: existing.entityId, fromVisible: existing.clientVisible, toVisible: clientVisible },
+      });
+    }
+    return updated;
   });
 
   // Delete attachment

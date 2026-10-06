@@ -24,6 +24,8 @@ Task categories:
 - WAITING_CLIENT: Blocked on client input
 - WAITING_US: Client waiting on us
 
+Assignee roles (never a person's name): dev, design, account_lead (whoever owns the client relationship)
+
 Be specific and actionable in task descriptions.`;
 
   const prompt = `Update the project plan based on new message:
@@ -54,7 +56,7 @@ Respond with JSON:
       {
         "task": "specific task description",
         "reason": "why this is immediate",
-        "suggestedAssignee": "dev|design|cameron",
+        "suggestedAssignee": "dev|design|account_lead",
         "estimatedTime": "time estimate",
         "blockedBy": "null or what's blocking"
       }

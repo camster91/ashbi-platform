@@ -645,7 +645,9 @@ export default async function botRoutes(fastify) {
       data: {
         status: status.toUpperCase(),
         reviewNote: reviewNote || null,
-        reviewedBy: reviewedBy || 'cameron',
+        // The reviewer named in the request; bot calls carry no user, so the
+        // neutral actor is the bot itself (never a person's name).
+        reviewedBy: typeof reviewedBy === 'string' && reviewedBy.trim() ? reviewedBy.trim() : 'bot',
         reviewedAt: new Date(),
       }
     });

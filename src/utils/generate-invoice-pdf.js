@@ -1,6 +1,7 @@
 // Professional Invoice PDF Generator — uses pdfkit
 import PDFDocument from 'pdfkit';
 import { formatMoney } from './money.js';
+import { CENT_TOLERANCE, invoiceBalance } from './invoice-balance.js';
 
 const BRAND_BLUE = '#2563eb';
 const DARK = '#1e293b';
@@ -19,12 +20,21 @@ function fmtDate(d) {
 /**
  * Generate a professional PDF invoice buffer. Amounts use the invoice's own
  * currency ("$1,250.00 USD").
+ * The header and footer carry the invoice's organization's branding
+ * (resolveBranding): company name, website, email, address, tax ID and the
+ * custom invoice footer, each only when set.
  * @param {Object} invoice - Invoice with client, lineItems, payments
- * @param {{ compress?: boolean }} [options] - compress: false keeps text streams readable (tests)
+ * @param {{ compress?: boolean, branding?: object }} [options] - compress: false keeps text streams readable (tests)
  * @returns {Promise<Buffer>}
  */
-export async function generateInvoicePdf(invoice, { compress = true } = {}) {
+export async function generateInvoicePdf(invoice, { compress = true, branding = {} } = {}) {
   const fmt = (n) => formatMoney(n, invoice.currency);
+  const brandText = (key) => String(branding?.[key] || '').trim();
+  const companyName = brandText('companyName');
+  const contactLine = [brandText('website'), brandText('email'), brandText('address')].filter(Boolean).join('  ·  ');
+  const taxLine = brandText('taxId') ? `Tax ID: ${brandText('taxId')}` : '';
+  const footerLine = brandText('invoiceFooter')
+    || [companyName, brandText('address'), taxLine, brandText('website')].filter(Boolean).join('  ·  ');
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'LETTER', margin: 50, compress });
     const chunks = [];
@@ -40,10 +50,14 @@ export async function generateInvoicePdf(invoice, { compress = true } = {}) {
     // ── Header bar ──────────────────────────────────────────────────────────
     doc.rect(LEFT - 50, 0, doc.page.width, 90).fill(DARK);
 
-    doc.font('Helvetica-Bold').fontSize(22).fillColor('#ffffff')
-      .text('ASHBI DESIGN', LEFT, 22);
-    doc.font('Helvetica').fontSize(9).fillColor('rgba(255,255,255,0.7)')
-      .text('ashbi.ca  ·  cameron@ashbi.ca  ·  Toronto, Ontario, Canada', LEFT, 50);
+    if (companyName) {
+      doc.font('Helvetica-Bold').fontSize(22).fillColor('#ffffff')
+        .text(companyName.toUpperCase(), LEFT, 22, { width: pageWidth * 0.6, lineBreak: false, ellipsis: true });
+    }
+    if (contactLine) {
+      doc.font('Helvetica').fontSize(9).fillColor('rgba(255,255,255,0.7)')
+        .text(contactLine, LEFT, 50, { width: pageWidth * 0.6, lineBreak: false, ellipsis: true });
+    }
 
     // "INVOICE" label on right side of header
     doc.font('Helvetica-Bold').fontSize(28).fillColor('#ffffff')
@@ -55,6 +69,7 @@ export async function generateInvoicePdf(invoice, { compress = true } = {}) {
     const statusColors = {
       PAID: GREEN,
       SENT: BRAND_BLUE,
+      VIEWED: BRAND_BLUE,
       DRAFT: MUTED,
       OVERDUE: RED,
       VOID: MUTED,
@@ -173,11 +188,15 @@ export async function generateInvoicePdf(invoice, { compress = true } = {}) {
     if (invoice.discountAmount > 0) {
       totalRows.push([`Discount`, `-${fmt(invoice.discountAmount)}`, false]);
     }
-    totalRows.push([`${invoice.taxType || 'HST'} (${invoice.taxRate || 13}%)`, fmt(invoice.tax), false]);
+    // TAX is the neutral label for a rate that is not a named tax.
+    const taxName = invoice.taxType === 'TAX' ? 'Tax' : (invoice.taxType || 'HST');
+    totalRows.push([`${taxName} (${invoice.taxRate ?? 13}%)`, fmt(invoice.tax), false]);
 
     // Paid amount
-    const totalPaid = (invoice.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
-    const balanceDue = Math.max(0, (invoice.total || 0) - totalPaid);
+    // Shared balance arithmetic (rounded to cents), so float sums of partial
+    // payments never leave a phantom 0.000001 balance.
+    const { amountPaid: totalPaid, balanceDue } = invoiceBalance(invoice.total || 0, (invoice.payments || []).reduce((s, p) => s + (p.amount || 0), 0));
+    const settled = balanceDue < CENT_TOLERANCE;
 
     for (const [label, value, bold] of totalRows) {
       doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10).fillColor(MUTED)
@@ -203,9 +222,9 @@ export async function generateInvoicePdf(invoice, { compress = true } = {}) {
         .text(fmt(totalPaid), totalsX + totalsLabelW, rowY, { width: totalsValueW, align: 'right' });
       rowY += 18;
 
-      doc.font('Helvetica-Bold').fontSize(10).fillColor(balanceDue === 0 ? GREEN : RED)
+      doc.font('Helvetica-Bold').fontSize(10).fillColor(settled ? GREEN : RED)
         .text('Balance Due:', totalsX, rowY, { width: totalsLabelW, align: 'right' });
-      doc.font('Helvetica-Bold').fontSize(10).fillColor(balanceDue === 0 ? GREEN : RED)
+      doc.font('Helvetica-Bold').fontSize(10).fillColor(settled ? GREEN : RED)
         .text(fmt(balanceDue), totalsX + totalsLabelW, rowY, { width: totalsValueW, align: 'right' });
       rowY += 18;
     }
@@ -226,8 +245,10 @@ export async function generateInvoicePdf(invoice, { compress = true } = {}) {
     doc.rect(LEFT - 50, footerY - 10, doc.page.width, 1).fill(BORDER);
     doc.font('Helvetica').fontSize(9).fillColor(MUTED)
       .text('Thank you for your business!', LEFT, footerY, { align: 'center', width: pageWidth });
-    doc.font('Helvetica').fontSize(8).fillColor(MUTED)
-      .text('Ashbi Design  ·  Toronto, Ontario, Canada  ·  HST: 123456789 RT 0001  ·  ashbi.ca', LEFT, footerY + 14, { align: 'center', width: pageWidth });
+    if (footerLine) {
+      doc.font('Helvetica').fontSize(8).fillColor(MUTED)
+        .text(footerLine, LEFT, footerY + 14, { align: 'center', width: pageWidth });
+    }
 
     doc.end();
   });

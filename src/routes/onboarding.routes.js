@@ -33,15 +33,15 @@ const ROLE_TASKS = Object.freeze({
     {
       id: 'complete-task',
       title: 'Complete an assigned task',
-      description: 'Open your assigned work and complete one task.',
-      href: '/tasks',
+      description: 'Open your daily queue and complete one task assigned to you.',
+      href: '/queue',
       permission: 'TEAM',
     },
     {
       id: 'log-time',
       title: 'Log time on project work',
-      description: 'Record time against an authorized project or assigned task.',
-      href: '/time',
+      description: 'Start the timer at the top of the page, or log time from a project. Your hours appear in Timesheets.',
+      href: '/timesheets',
       permission: 'TEAM',
     },
     {
@@ -167,6 +167,8 @@ async function presentProgress(request, progress, { persistCompletion = true } =
         : 'eligible';
   return {
     supported: true,
+    // Lets the web client remember "Not now" per person in the browser.
+    userId: request.user.id,
     role: request.user.role,
     state,
     startedAt: current.startedAt,

@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import useAutosave from '../hooks/useAutosave';
+import useIsSmUp from '../hooks/useIsSmUp';
+import { invoiceTotals, lineTotal } from '../lib/money-totals';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
@@ -16,9 +18,36 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
 import { buildInvoiceUpdatePayload, INVOICE_CURRENCY_OPTIONS } from '../lib/invoice-payloads';
 import { formatInvoiceMoney, formatInvoiceDate, toDateInputValue } from '../lib/format';
+import { invoiceDisplayStatus, isOpenInvoice, recurrenceSummary, taxTypeLabel } from '../lib/invoice-status';
 
 const HST_RATE = 13;
-const INITIAL_PAYMENT_FORM = { paymentMethod: 'BANK', paymentNotes: '', transactionId: '' };
+const INITIAL_PAYMENT_FORM = { paymentMethod: 'BANK', paymentNotes: '', transactionId: '', amount: '' };
+
+// Whether the invoice has nothing left to pay (a $0 total, or fully covered).
+export function nothingOwed(balanceDue) {
+  return Number.isFinite(Number(balanceDue)) && Math.round(Number(balanceDue) * 100) <= 0;
+}
+
+// Why the entered payment amount cannot be submitted, or null. It must be a
+// positive amount no larger than the balance due; with nothing owed, 0
+// closes the invoice as paid.
+export function paymentAmountError(amount, balanceDue) {
+  const value = Number(amount);
+  if (amount === '' || amount === null || amount === undefined || !Number.isFinite(value)) return 'Enter the amount received';
+  // Money is recorded in cents: 12.345 would be silently rounded.
+  if (/\.\d{3,}/.test(String(amount).trim())) return 'Use dollars and cents only (at most 2 decimal places)';
+  if (nothingOwed(balanceDue)) return Math.round(value * 100) === 0 ? null : 'Nothing is owed on this invoice. Enter 0 to mark it paid.';
+  if (value <= 0) return 'The amount must be greater than zero';
+  if (Number.isFinite(Number(balanceDue)) && Math.round(value * 100) > Math.round(Number(balanceDue) * 100)) return 'The amount is more than the balance due';
+  return null;
+}
+
+// The mark-paid body always carries the amount explicitly (rounded to cents),
+// so what is recorded is exactly what the dialog showed.
+export function buildPaymentPayload(form) {
+  const { amount, ...rest } = form;
+  return { ...rest, amount: Math.round(Number(amount) * 100) / 100 };
+}
 
 // Values must match the API's mark-paid enum; CHEQUE is canonical and legacy
 // rows may still hold CHECK.
@@ -61,6 +90,17 @@ export default function InvoiceDetail() {
   const [showPdf, setShowPdf] = useState(false);
   const [showVoidConfirm, setShowVoidConfirm] = useState(false);
   const pdfRef = useRef(null);
+  const paymentAmountRef = useRef(null);
+  // The edit form renders one set of line-item inputs for the layout in use.
+  const isSmUp = useIsSmUp();
+
+  // The payment dialog opens on the amount (what staff check or change),
+  // not on its close button.
+  useEffect(() => {
+    if (!showMarkPaid) return;
+    paymentAmountRef.current?.focus();
+    paymentAmountRef.current?.select?.();
+  }, [showMarkPaid]);
 
   const {
     data: invoice,
@@ -107,25 +147,31 @@ export default function InvoiceDetail() {
 
   const sendMutation = useMutation({
     mutationFn: () => api.sendInvoice(id),
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      toast.success('Invoice sent', 'Client will receive an email with payment link');
+      // Say what really happened: the email only goes out when delivery is
+      // configured and accepted.
+      if (result?.emailSent === false) {
+        toast.warning('Invoice marked as sent, but no email went out', 'Copy the client link below and share it yourself.', 8000);
+      } else {
+        toast.success('Invoice sent', 'The client was emailed a link to view and pay it.');
+      }
     },
     onError: () => toast.error('Failed to send invoice'),
   });
 
   const markPaidMutation = useMutation({
-    mutationFn: (data) => api.markInvoicePaid(id, data),
-    onSuccess: () => {
+    mutationFn: (data) => api.markInvoicePaid(id, buildPaymentPayload(data)),
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
       queryClient.invalidateQueries({ queryKey: ['invoice-payments', id] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setShowMarkPaid(false);
       setPayForm(INITIAL_PAYMENT_FORM);
-      toast.success('Invoice marked as paid');
+      toast.success(result?.status === 'PAID' ? 'Invoice marked as paid' : 'Payment recorded');
     },
-    onError: () => toast.error('Failed to mark as paid'),
+    onError: () => toast.error('Failed to record payment'),
   });
 
   const deleteMutation = useMutation({
@@ -164,6 +210,7 @@ export default function InvoiceDetail() {
 
   const openMarkPaid = () => {
     markPaidMutation.reset();
+    setPayForm((form) => ({ ...form, amount: String(invoice?.balanceDue ?? invoice?.total ?? '') }));
     setShowMarkPaid(true);
   };
 
@@ -242,10 +289,15 @@ export default function InvoiceDetail() {
     );
   }
 
-  const displayStatus = invoice.isOverdue ? 'OVERDUE' : invoice.status;
+  const displayStatus = invoiceDisplayStatus(invoice);
+  const repeats = recurrenceSummary(invoice);
   const isDraft = invoice.status === 'DRAFT';
-  const isSent = invoice.status === 'SENT' || invoice.isOverdue;
+  // Sent, viewed by the client, or overdue: payable and resendable.
+  const isSent = isOpenInvoice(invoice) || invoice.isOverdue;
   const isPaid = invoice.status === 'PAID';
+  // An invoice with recorded payments cannot be voided (the API answers 409).
+  const hasPayments = invoice.amountPaid > 0;
+  const amountError = paymentAmountError(payForm.amount, invoice.balanceDue ?? invoice.total);
   // Clients pay from the public invoice page, which creates or refreshes a
   // Stripe Checkout session on demand; stored Checkout URLs expire in 24h.
   const clientInvoiceUrl = invoice.viewToken && (isSent || isPaid)
@@ -253,13 +305,13 @@ export default function InvoiceDetail() {
     : null;
 
   // Edit form calculations
-  const editSubtotal = editForm
-    ? editForm.lineItems.reduce((s, li) => s + (parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), 0)
-    : 0;
+  // The API's arithmetic (lib/money-totals.js), so the preview is what is billed.
   const editDiscount = editForm ? parseFloat(editForm.discountAmount) || 0 : 0;
-  const editDiscounted = Math.max(0, editSubtotal - editDiscount);
-  const editTax = parseFloat(((editDiscounted * parseFloat(editForm?.taxRate || HST_RATE)) / 100).toFixed(2));
-  const editTotal = parseFloat((editDiscounted + editTax).toFixed(2));
+  const { subtotal: editSubtotal, tax: editTax, total: editTotal } = invoiceTotals(
+    (editForm?.lineItems || []).map((li) => ({ total: lineTotal(parseFloat(li.quantity) || 1, parseFloat(li.unitPrice) || 0) })),
+    parseFloat(editForm?.taxRate || HST_RATE),
+    editDiscount,
+  );
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -277,14 +329,19 @@ export default function InvoiceDetail() {
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold font-mono">{invoice.invoiceNumber}</h1>
               <StatusBadge domain="invoice" status={displayStatus} className="px-2.5 py-1 font-semibold" />
-              {invoice.isRecurring && (
-                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary">
-                  <RefreshCw className="w-3 h-3 inline mr-1" />
-                  {invoice.recurringInterval}
-                </span>
-              )}
             </div>
             {invoice.title && <p className="text-muted-foreground mt-0.5">{invoice.title}</p>}
+            {!isPaid && invoice.amountPaid > 0 && (
+              <p className="text-sm text-muted-foreground mt-0.5">
+                <span className="font-semibold text-foreground">{fmt(invoice.balanceDue, invoice.currency)}</span> left to pay of {fmt(invoice.total, invoice.currency)}
+              </p>
+            )}
+            {repeats && (
+              <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1">
+                <RefreshCw className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                {repeats}
+              </p>
+            )}
           </div>
         </div>
 
@@ -358,7 +415,7 @@ export default function InvoiceDetail() {
               <ExternalLink className="w-4 h-4" />
             </button>
           )}
-          {isAdmin && !isPaid && (
+          {isAdmin && !isPaid && !hasPayments && (
             <button
               onClick={() => { deleteMutation.reset(); setShowVoidConfirm(true); }}
               className="p-1.5 text-muted-foreground hover:text-destructive rounded" title="Void invoice">
@@ -391,7 +448,7 @@ export default function InvoiceDetail() {
           <Button variant="outline" size="sm" leftIcon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
             Print
           </Button>
-          {isAdmin && !isPaid && (
+          {isAdmin && !isPaid && !hasPayments && (
             <Button variant="ghost" size="sm" leftIcon={<Trash2 className="w-4 h-4" />} onClick={() => { deleteMutation.reset(); setShowVoidConfirm(true); }} className="text-destructive">
               Void
             </Button>
@@ -454,7 +511,8 @@ export default function InvoiceDetail() {
               <label className="block text-sm font-medium mb-2">Line Items</label>
 
               {/* Desktop Layout */}
-              <div className="hidden sm:block space-y-1.5">
+              {isSmUp ? (
+              <div className="space-y-1.5">
                 <div className="grid grid-cols-12 gap-2 mb-1 text-xs text-muted-foreground font-medium px-1">
                   <span className="col-span-1">Type</span>
                   <span className="col-span-4">Description</span>
@@ -511,8 +569,9 @@ export default function InvoiceDetail() {
                 ))}
               </div>
 
-              {/* Mobile Layout */}
-              <div className="sm:hidden space-y-2">
+              ) : (
+              /* Mobile Layout */
+              <div className="space-y-2">
                 {editForm.lineItems.map((li, idx) => (
                   <div key={idx} className="p-3 border border-border rounded-lg bg-muted/30">
                     <div className="flex items-start justify-between gap-2 mb-2">
@@ -577,6 +636,7 @@ export default function InvoiceDetail() {
                   </div>
                 ))}
               </div>
+              )}
               <button type="button"
                 onClick={() => setEditForm(f => ({ ...f, lineItems: [...f.lineItems, { description: '', itemType: 'LABOR', quantity: 1, unitPrice: 0 }] }))}
                 className="text-sm text-primary hover:underline mt-2">
@@ -594,6 +654,7 @@ export default function InvoiceDetail() {
                   <option value="HST">HST</option>
                   <option value="GST">GST</option>
                   <option value="PST">PST</option>
+                  <option value="TAX">Tax</option>
                   <option value="NONE">None</option>
                 </select>
               </div>
@@ -631,7 +692,7 @@ export default function InvoiceDetail() {
             <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
               <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(editSubtotal, editForm.currency)}</span></div>
               {editDiscount > 0 && <div className="flex justify-between text-success"><span>Discount</span><span>-{fmt(editDiscount, editForm.currency)}</span></div>}
-              <div className="flex justify-between text-muted-foreground"><span>{editForm.taxType} ({editForm.taxRate}%)</span><span>{fmt(editTax, editForm.currency)}</span></div>
+              <div className="flex justify-between text-muted-foreground"><span>{taxTypeLabel(editForm.taxType)} ({editForm.taxRate}%)</span><span>{fmt(editTax, editForm.currency)}</span></div>
               <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>{fmt(editTotal, editForm.currency)}</span></div>
             </div>
 
@@ -729,11 +790,21 @@ export default function InvoiceDetail() {
                       </div>
                     )}
                     <div className="flex justify-between text-muted-foreground">
-                      <span>{invoice.taxType} ({invoice.taxRate}%)</span><span>{fmt(invoice.tax, invoice.currency)}</span>
+                      <span>{taxTypeLabel(invoice.taxType)} ({invoice.taxRate}%)</span><span>{fmt(invoice.tax, invoice.currency)}</span>
                     </div>
                     <div className="flex justify-between font-bold text-lg border-t border-border pt-2 mt-2">
                       <span>Total</span><span>{fmt(invoice.total, invoice.currency)}</span>
                     </div>
+                    {!isPaid && invoice.amountPaid > 0 && (
+                      <>
+                        <div className="flex justify-between text-success text-sm">
+                          <span>Paid so far</span><span>-{fmt(invoice.amountPaid, invoice.currency)}</span>
+                        </div>
+                        <div className="flex justify-between font-semibold">
+                          <span>Balance due</span><span>{fmt(invoice.balanceDue, invoice.currency)}</span>
+                        </div>
+                      </>
+                    )}
                     {isPaid && (
                       <div className="flex justify-between text-success text-sm">
                         <span className="flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" />Paid</span>
@@ -848,10 +919,40 @@ export default function InvoiceDetail() {
         size="sm"
         showCloseButton={!markPaidMutation.isPending}
       >
-        <form onSubmit={(event) => { event.preventDefault(); markPaidMutation.mutate(payForm); }} className="space-y-4">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (paymentAmountError(payForm.amount, invoice.balanceDue ?? invoice.total)) return;
+            markPaidMutation.mutate(payForm);
+          }}
+          className="space-y-4"
+        >
           <div>
             <p className="text-sm text-muted-foreground">Invoice: <span className="font-medium text-foreground">{invoice.invoiceNumber}</span></p>
-            <p className="text-sm text-muted-foreground">Amount: <span className="font-semibold text-foreground">{fmt(invoice.total, invoice.currency)}</span></p>
+            <p className="text-sm text-muted-foreground">Balance due: <span className="font-semibold text-foreground">{fmt(invoice.balanceDue ?? invoice.total, invoice.currency)}</span></p>
+          </div>
+          <div>
+            <label htmlFor="invoice-payment-amount" className="block text-sm font-medium mb-1">Amount received</label>
+            <input
+              ref={paymentAmountRef}
+              id="invoice-payment-amount"
+              type="number"
+              inputMode="decimal"
+              min={nothingOwed(invoice.balanceDue) ? '0' : '0.01'}
+              step="0.01"
+              max={invoice.balanceDue ?? invoice.total}
+              value={payForm.amount}
+              onChange={(event) => setPayForm((form) => ({ ...form, amount: event.target.value }))}
+              disabled={markPaidMutation.isPending}
+              aria-invalid={Boolean(amountError)}
+              aria-describedby="invoice-payment-amount-hint"
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-base"
+            />
+            <p id="invoice-payment-amount-hint" className={`mt-1 text-xs ${amountError ? 'text-destructive' : 'text-muted-foreground'}`}>
+              {amountError || (nothingOwed(invoice.balanceDue)
+                ? 'Nothing is owed. Recording this marks the invoice paid.'
+                : 'Less than the balance records a partial payment; the invoice stays open.')}
+            </p>
           </div>
           <div>
             <label htmlFor="invoice-payment-method" className="block text-sm font-medium mb-1">Payment method</label>
@@ -901,10 +1002,10 @@ export default function InvoiceDetail() {
             <Button
               type="submit"
               loading={markPaidMutation.isPending}
-              disabled={markPaidMutation.isPending}
+              disabled={markPaidMutation.isPending || Boolean(amountError)}
               leftIcon={<CheckCircle className="w-4 h-4" />}
             >
-              {markPaidMutation.isPending ? 'Marking as paid…' : 'Mark as paid'}
+              {markPaidMutation.isPending ? 'Marking as paid…' : 'Record payment'}
             </Button>
           </ModalFooter>
         </form>

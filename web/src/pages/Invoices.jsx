@@ -3,9 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Plus, Send, DollarSign, Clock, CheckCircle, AlertTriangle, CreditCard,
-  FileText, Search, Download, Trash2, Eye,
+  FileText, Search, Download, Trash2, Eye, Repeat,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import useClients from '../hooks/useClients';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import {
@@ -17,6 +18,18 @@ import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { buildInvoiceCreatePayload, INVOICE_CURRENCY_OPTIONS } from '../lib/invoice-payloads';
 import { formatInvoiceMoney, formatInvoiceDate } from '../lib/format';
+import { statusLabel } from '../lib/status';
+import { invoiceBalanceDue, invoiceDisplayStatus, isOpenInvoice, recurrenceSummary, taxTypeLabel } from '../lib/invoice-status';
+import useIsSmUp from '../hooks/useIsSmUp';
+import { invoiceTotals, lineTotal } from '../lib/money-totals';
+
+const STATUS_FILTERS = ['', 'DRAFT', 'SENT', 'PAID', 'OVERDUE', 'VOID'];
+// The money line for an open invoice with payments: what is left to pay.
+function balanceNote(invoice) {
+  const status = invoiceDisplayStatus(invoice);
+  if (!['PARTLY_PAID', 'OVERDUE'].includes(status) || !(invoice.amountPaid > 0)) return null;
+  return `${fmt(invoiceBalanceDue(invoice), invoice.currency)} left to pay`;
+}
 
 const HST_RATE = 13;
 
@@ -84,10 +97,7 @@ export default function Invoices() {
     }),
   });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
-  });
+  const { data: clients } = useClients();
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -114,9 +124,15 @@ export default function Invoices() {
 
   const sendMutation = useMutation({
     mutationFn: (id) => api.sendInvoice(id),
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      toast.success('Invoice sent', 'Client will receive an email');
+      // Say what really happened: the invoice is sent either way, but the
+      // email only goes out when delivery is configured and accepted.
+      if (result?.emailSent === false) {
+        toast.warning('Invoice marked as sent, but no email went out', 'Open the invoice and copy the client link to share it yourself.', 8000);
+      } else {
+        toast.success('Invoice sent', 'The client was emailed a link to view and pay it.');
+      }
     },
     onError: (err) => toast.error('Failed to send invoice', err.message),
   });
@@ -202,22 +218,22 @@ export default function Invoices() {
   };
 
   // Calculated totals for create form
-  const formSubtotal = form.lineItems.reduce(
-    (sum, li) => sum + (parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), 0
-  );
+  // The API's arithmetic (lib/money-totals.js), so the preview is what is billed.
   const formDiscount = parseFloat(form.discountAmount) || 0;
-  const formDiscounted = Math.max(0, formSubtotal - formDiscount);
-  const formTax = parseFloat(((formDiscounted * parseFloat(form.taxRate)) / 100).toFixed(2));
-  const formTotal = parseFloat((formDiscounted + formTax).toFixed(2));
+  const { subtotal: formSubtotal, tax: formTax, total: formTotal } = invoiceTotals(
+    form.lineItems.map((li) => ({ total: lineTotal(parseFloat(li.quantity) || 1, parseFloat(li.unitPrice) || 0) })),
+    parseFloat(form.taxRate) || 0,
+    formDiscount,
+  );
 
   const invoices = invoiceData.invoices || [];
   const stats = invoiceData.stats || {};
 
-  // Sort: overdue first, then sent, then draft, then paid, then void
-  const PRIORITY = { OVERDUE: 0, SENT: 1, DRAFT: 2, PAID: 3, VOID: 4 };
+  // Sort: overdue first, then partly paid, sent and viewed, then draft, then paid, then void
+  const PRIORITY = { OVERDUE: 0, PARTLY_PAID: 1, SENT: 1, VIEWED: 1, DRAFT: 2, PAID: 3, VOID: 4 };
   const sortedInvoices = [...invoices].sort((a, b) => {
-    const aS = a.isOverdue ? 'OVERDUE' : a.status;
-    const bS = b.isOverdue ? 'OVERDUE' : b.status;
+    const aS = invoiceDisplayStatus(a);
+    const bS = invoiceDisplayStatus(b);
     return (PRIORITY[aS] ?? 5) - (PRIORITY[bS] ?? 5);
   });
 
@@ -262,24 +278,28 @@ export default function Invoices() {
           {/* Filters */}
           <div className="flex gap-2 flex-wrap items-center">
             <div className="relative flex-1 min-w-48">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <label htmlFor="invoice-search" className="sr-only">Search invoices</label>
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
               <input
-                type="text"
+                id="invoice-search"
+                type="search"
                 placeholder="Search invoices..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-background"
               />
             </div>
-            <div className="flex gap-1">
-              {['', 'DRAFT', 'SENT', 'PAID', 'OVERDUE', 'VOID'].map((s) => (
+            {/* Chips wrap onto a second line on narrow screens instead of
+                pushing the page sideways. */}
+            <div className="flex flex-wrap gap-1 max-w-full" role="group" aria-label="Filter by status">
+              {STATUS_FILTERS.map((s) => (
                 <button key={s} type="button" aria-pressed={filterStatus === s} onClick={() => setFilterStatus(s)}
-                  className={`px-3 py-1.5 text-xs rounded-lg transition-colors font-medium ${
+                  className={`min-h-11 px-3 py-1.5 text-xs rounded-lg transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     filterStatus === s
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:bg-muted/80'
                   }`}>
-                  {s || 'All'}
+                  {s ? statusLabel('invoice', s) : 'All'}
                 </button>
               ))}
             </div>
@@ -360,7 +380,9 @@ export default function Invoices() {
 
 // ─── Invoice Row ─────────────────────────────────────────────────────────────
 function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, sendLoading }) {
-  const displayStatus = invoice.isOverdue ? 'OVERDUE' : invoice.status;
+  const displayStatus = invoiceDisplayStatus(invoice);
+  const leftToPay = balanceNote(invoice);
+  const repeats = recurrenceSummary(invoice);
 
   return (
     <Card className={`p-4 hover:shadow-sm transition-shadow cursor-pointer ${invoice.isOverdue ? 'border-destructive/30' : ''}`}>
@@ -368,7 +390,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
       <div className="sm:hidden" onClick={onView}>
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Link
                 to={`/invoices/${invoice.id}`}
                 onClick={(e) => e.stopPropagation()}
@@ -380,9 +402,16 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
             </div>
             <p className="text-sm text-muted-foreground truncate">{invoice.client?.name}</p>
           </div>
-          <span className="text-lg font-semibold">{fmt(invoice.total, invoice.currency)}</span>
+          <span className="text-lg font-semibold text-right">{fmt(invoice.total, invoice.currency)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {leftToPay && <span className="font-medium text-warning">{leftToPay}</span>}
+          {repeats && (
+            <span className="flex items-center gap-1">
+              <Repeat className="w-3 h-3" aria-hidden="true" />
+              {repeats}
+            </span>
+          )}
           {invoice.dueDate && (
             <span className={`flex items-center gap-1 ${invoice.isOverdue ? 'text-destructive' : ''}`}>
               <Clock className="w-3 h-3" />
@@ -403,10 +432,10 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
           {invoice.status === 'DRAFT' && isAdmin && (
             <Button size="sm" variant="outline" onClick={onSend} loading={sendLoading} leftIcon={<Send className="w-3 h-3" />}>Send</Button>
           )}
-          {(invoice.status === 'SENT' || invoice.isOverdue) && (
+          {(isOpenInvoice(invoice) || invoice.isOverdue) && (
             <Button size="sm" variant="outline" onClick={onMarkPaid} leftIcon={<DollarSign className="w-3 h-3" />}>Mark Paid</Button>
           )}
-          {isAdmin && invoice.status !== 'PAID' && (
+          {isAdmin && invoice.status !== 'PAID' && !(invoice.amountPaid > 0) && (
             <Button size="sm" variant="ghost" onClick={onDelete} leftIcon={<Trash2 className="w-3 h-3" />} className="text-destructive hover:text-destructive/80">Void</Button>
           )}
         </div>
@@ -429,6 +458,13 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
           </div>
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
             <span className="font-semibold text-foreground text-sm">{fmt(invoice.total, invoice.currency)}</span>
+            {leftToPay && <span className="font-medium text-warning">{leftToPay}</span>}
+            {repeats && (
+              <span className="flex items-center gap-1">
+                <Repeat className="w-3 h-3" aria-hidden="true" />
+                {repeats}
+              </span>
+            )}
             {invoice.dueDate && (
               <span className={`flex items-center gap-1 ${invoice.isOverdue ? 'text-destructive' : ''}`}>
                 <Clock className="w-3 h-3" />
@@ -457,13 +493,13 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
               Send
             </Button>
           )}
-          {(invoice.status === 'SENT' || invoice.isOverdue) && (
+          {(isOpenInvoice(invoice) || invoice.isOverdue) && (
             <Button size="sm" variant="outline" leftIcon={<DollarSign className="w-3 h-3" />}
               onClick={(e) => { e.stopPropagation(); onMarkPaid(); }}>
               Mark Paid
             </Button>
           )}
-          {invoice.viewToken && (invoice.status === 'SENT' || invoice.isOverdue) && (
+          {invoice.viewToken && (isOpenInvoice(invoice) || invoice.isOverdue) && (
             <a href={`/portal/invoice/${invoice.viewToken}`} target="_blank" rel="noopener noreferrer"
               className="p-1.5 text-muted-foreground hover:text-foreground rounded"
               onClick={(e) => e.stopPropagation()} title="Client pay page">
@@ -474,7 +510,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
             className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title="View" aria-label="View invoice">
             <Eye className="w-4 h-4" />
           </button>
-          {isAdmin && invoice.status !== 'PAID' && (
+          {isAdmin && invoice.status !== 'PAID' && !(invoice.amountPaid > 0) && (
             <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }}
               className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-destructive rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title="Void invoice" aria-label="Void invoice">
               <Trash2 className="w-4 h-4" />
@@ -494,6 +530,8 @@ function InvoiceCreateForm({
   onApplyTemplate, onSubmit, onCancel, loading, error, draftState
 }) {
   const clientProjects = projects.filter(p => p.clientId === form.clientId);
+  // One set of line-item inputs for the current layout (see useIsSmUp).
+  const isSmUp = useIsSmUp();
 
   return (
     <Card className="p-4 sm:p-6">
@@ -511,8 +549,9 @@ function InvoiceCreateForm({
         {/* Client / Project / Title */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Client *</label>
+            <label htmlFor="invoice-client" className="block text-sm font-medium mb-1">Client *</label>
             <select
+              id="invoice-client"
               value={form.clientId}
               onChange={(e) => onFormChange(f => ({ ...f, clientId: e.target.value, projectId: '' }))}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -522,8 +561,9 @@ function InvoiceCreateForm({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Project (optional)</label>
+            <label htmlFor="invoice-project" className="block text-sm font-medium mb-1">Project (optional)</label>
             <select
+              id="invoice-project"
               value={form.projectId}
               onChange={(e) => onFormChange(f => ({ ...f, projectId: e.target.value }))}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -533,8 +573,9 @@ function InvoiceCreateForm({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Invoice Title (optional)</label>
+            <label htmlFor="invoice-title" className="block text-sm font-medium mb-1">Invoice Title (optional)</label>
             <input
+              id="invoice-title"
               type="text"
               value={form.title}
               onChange={(e) => onFormChange(f => ({ ...f, title: e.target.value }))}
@@ -561,9 +602,9 @@ function InvoiceCreateForm({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Tax</label>
+            <label htmlFor="invoice-tax-type" className="block text-sm font-medium mb-1">Tax</label>
             <div className="flex gap-2">
-              <select value={form.taxType}
+              <select id="invoice-tax-type" value={form.taxType}
                 onChange={(e) => onFormChange(f => ({ ...f, taxType: e.target.value,
                   taxRate: e.target.value === 'HST' ? 13 : e.target.value === 'GST' ? 5 : e.target.value === 'NONE' ? 0 : f.taxRate
                 }))}
@@ -571,9 +612,11 @@ function InvoiceCreateForm({
                 <option value="HST">HST</option>
                 <option value="GST">GST</option>
                 <option value="PST">PST</option>
+                <option value="TAX">Tax</option>
                 <option value="NONE">None</option>
               </select>
               <input type="number" value={form.taxRate} min="0" max="30" step="0.5"
+                aria-label="Tax rate (%)"
                 onChange={(e) => onFormChange(f => ({ ...f, taxRate: e.target.value }))}
                 className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm"
                 placeholder="Rate %" />
@@ -584,7 +627,7 @@ function InvoiceCreateForm({
         {/* Line Items */}
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-            <label className="text-sm font-medium">Line Items</label>
+            <h3 id="invoice-line-items-heading" className="text-sm font-medium">Line Items</h3>
             {templates.length > 0 && (
               <div className="flex gap-1 flex-wrap">
                 {templates.slice(0, 4).map(t => (
@@ -613,8 +656,10 @@ function InvoiceCreateForm({
             {form.lineItems.map((li, idx) => (
               <div key={idx}>
                 {/* Desktop Layout */}
-                <div className="hidden sm:grid grid-cols-12 gap-2 items-center">
+                {isSmUp ? (
+                <div className="grid grid-cols-12 gap-2 items-center">
                   <select value={li.itemType}
+                    aria-label={`Line item ${idx + 1} type`}
                     onChange={(e) => onLineItemUpdate(idx, 'itemType', e.target.value)}
                     className="col-span-1 px-1 py-1.5 rounded border border-border bg-background text-xs">
                     <option value="LABOR">Labor</option>
@@ -626,12 +671,15 @@ function InvoiceCreateForm({
                   <input type="text" value={li.description}
                     onChange={(e) => onLineItemUpdate(idx, 'description', e.target.value)}
                     placeholder="Description"
+                    aria-label={`Line item ${idx + 1} description`}
                     className="col-span-4 px-2 py-1.5 rounded border border-border bg-background text-sm"
                     required />
                   <input type="number" value={li.quantity} min="0" step="0.5"
+                    aria-label={`Line item ${idx + 1} quantity`}
                     onChange={(e) => onLineItemUpdate(idx, 'quantity', e.target.value)}
                     className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-center" />
                   <input type="number" value={li.unitPrice} min="0" step="0.01"
+                    aria-label={`Line item ${idx + 1} unit price`}
                     onChange={(e) => onLineItemUpdate(idx, 'unitPrice', e.target.value)}
                     className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-right" />
                   <span className="col-span-2 text-sm text-right font-medium">
@@ -643,17 +691,19 @@ function InvoiceCreateForm({
                     ×
                   </button>
                 </div>
-
-                {/* Mobile Layout - Stacked Card */}
-                <div className="sm:hidden p-3 border border-border rounded-lg bg-muted/30">
+                ) : (
+                /* Mobile Layout - Stacked Card */
+                <div className="p-3 border border-border rounded-lg bg-muted/30">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex-1">
                       <input type="text" value={li.description}
                         onChange={(e) => onLineItemUpdate(idx, 'description', e.target.value)}
                         placeholder="Description"
+                        aria-label={`Line item ${idx + 1} description`}
                         className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm mb-2"
                         required />
                       <select value={li.itemType}
+                        aria-label={`Line item ${idx + 1} type`}
                         onChange={(e) => onLineItemUpdate(idx, 'itemType', e.target.value)}
                         className="w-full px-2 py-1.5 rounded border border-border bg-background text-xs">
                         <option value="LABOR">Labor</option>
@@ -671,25 +721,26 @@ function InvoiceCreateForm({
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-xs text-muted-foreground mb-0.5">Qty</label>
-                      <input type="number" value={li.quantity} min="0" step="0.5"
+                      <label htmlFor={`invoice-line-${idx}-qty`} className="block text-xs text-muted-foreground mb-0.5">Qty</label>
+                      <input id={`invoice-line-${idx}-qty`} type="number" value={li.quantity} min="0" step="0.5"
                         onChange={(e) => onLineItemUpdate(idx, 'quantity', e.target.value)}
                         className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm text-center" />
                     </div>
                     <div>
-                      <label className="block text-xs text-muted-foreground mb-0.5">Unit Price</label>
-                      <input type="number" value={li.unitPrice} min="0" step="0.01"
+                      <label htmlFor={`invoice-line-${idx}-price`} className="block text-xs text-muted-foreground mb-0.5">Unit Price</label>
+                      <input id={`invoice-line-${idx}-price`} type="number" value={li.unitPrice} min="0" step="0.01"
                         onChange={(e) => onLineItemUpdate(idx, 'unitPrice', e.target.value)}
                         className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
                     </div>
                     <div>
-                      <label className="block text-xs text-muted-foreground mb-0.5">Total</label>
+                      <span className="block text-xs text-muted-foreground mb-0.5">Total</span>
                       <div className="px-2 py-1.5 text-sm font-medium">
                         {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), form.currency)}
                       </div>
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             ))}
           </div>
@@ -704,14 +755,14 @@ function InvoiceCreateForm({
         {/* Discount */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Discount ({form.currency || 'CAD'})</label>
-            <input type="number" value={form.discountAmount} min="0" step="0.01"
+            <label htmlFor="invoice-discount" className="block text-sm font-medium mb-1">Discount ({form.currency || 'CAD'})</label>
+            <input id="invoice-discount" type="number" value={form.discountAmount} min="0" step="0.01"
               onChange={(e) => onFormChange(f => ({ ...f, discountAmount: e.target.value }))}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Notes</label>
-            <input type="text" value={form.notes}
+            <label htmlFor="invoice-notes" className="block text-sm font-medium mb-1">Notes</label>
+            <input id="invoice-notes" type="text" value={form.notes}
               onChange={(e) => onFormChange(f => ({ ...f, notes: e.target.value }))}
               placeholder="Payment terms, references..."
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
@@ -728,6 +779,7 @@ function InvoiceCreateForm({
           </label>
           {form.isRecurring && (
             <select value={form.recurringInterval}
+              aria-label="Recurring interval"
               onChange={(e) => onFormChange(f => ({ ...f, recurringInterval: e.target.value }))}
               className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
               <option value="MONTHLY">Monthly</option>
@@ -750,7 +802,7 @@ function InvoiceCreateForm({
             </div>
           )}
           <div className="flex justify-between">
-            <span className="text-muted-foreground">{form.taxType} ({form.taxRate}%)</span>
+            <span className="text-muted-foreground">{taxTypeLabel(form.taxType)} ({form.taxRate}%)</span>
             <span>{fmt(formTax, form.currency)}</span>
           </div>
           <div className="flex justify-between font-semibold text-base border-t border-border pt-2 mt-2">
@@ -773,7 +825,7 @@ function InvoiceCreateForm({
 
 // ─── Collections Dashboard ────────────────────────────────────────────────────
 function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
-  const overdue = invoices.filter(i => i.isOverdue || i.status === 'OVERDUE' || (i.status === 'SENT' && i.dueDate && new Date(i.dueDate) < new Date()));
+  const overdue = invoices.filter(i => i.isOverdue || i.status === 'OVERDUE' || (['SENT', 'VIEWED'].includes(i.status) && i.dueDate && new Date(i.dueDate) < new Date()));
 
   return (
     <div className="space-y-6">
@@ -799,9 +851,9 @@ function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
           <div className="space-y-2">
             {overdue.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(inv => (
               <Card key={inv.id} className="p-4 border-destructive/30">
-                <div className="flex items-center gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-sm font-semibold">{inv.invoiceNumber}</span>
                       <span className="text-muted-foreground">·</span>
                       <span className="text-sm">{inv.client?.name}</span>
@@ -810,7 +862,7 @@ function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
                       {getDaysOverdue(inv.dueDate)} days overdue · Due {formatDate(inv.dueDate)}
                     </div>
                   </div>
-                  <span className="text-lg font-semibold">{fmt(inv.total, inv.currency)}</span>
+                  <span className="text-lg font-semibold">{fmt(invoiceBalanceDue(inv), inv.currency)}</span>
                   <Button size="sm" onClick={() => onMarkPaid(inv.id)}
                     leftIcon={<DollarSign className="w-3 h-3" />}>
                     Mark Paid
@@ -877,13 +929,17 @@ function formatDate(date) {
   return formatInvoiceDate(date);
 }
 
-function exportToCSV(invoices) {
-  const headers = ['Invoice #', 'Client', 'Title', 'Status', 'Issue Date', 'Due Date', 'Currency', 'Subtotal', 'Tax', 'Total', 'Paid At'];
-  const rows = invoices.map(inv => [
+// Status stays the stored code (DRAFT, SENT, OVERDUE…) for spreadsheets and
+// imports; "Status label" is the wording the page shows (e.g. Partly paid).
+export const INVOICE_CSV_HEADERS = ['Invoice #', 'Client', 'Title', 'Status', 'Status label', 'Issue Date', 'Due Date', 'Currency', 'Subtotal', 'Tax', 'Total', 'Paid At'];
+
+export function invoiceCsvRows(invoices) {
+  return invoices.map(inv => [
     inv.invoiceNumber,
     inv.client?.name || '',
     inv.title || '',
     inv.isOverdue ? 'OVERDUE' : inv.status,
+    statusLabel('invoice', invoiceDisplayStatus(inv)),
     inv.issueDate ? formatDate(inv.issueDate) : '',
     inv.dueDate ? formatDate(inv.dueDate) : '',
     inv.currency || 'CAD',
@@ -892,8 +948,10 @@ function exportToCSV(invoices) {
     inv.total?.toFixed(2),
     inv.paidAt ? formatDate(inv.paidAt) : '',
   ]);
+}
 
-  const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+function exportToCSV(invoices) {
+  const csv = [INVOICE_CSV_HEADERS, ...invoiceCsvRows(invoices)].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

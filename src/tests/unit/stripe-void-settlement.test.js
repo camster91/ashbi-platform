@@ -8,6 +8,7 @@ import invoiceRoutes from '../../routes/invoice.routes.js';
 import { expireCheckoutSession, handleCheckoutFailure, recordCompletedCheckout, StripeCheckoutRejectedError } from '../../services/stripe.service.js';
 import { createFakeInvoiceDb, buildInvoiceApp } from '../helpers/fake-invoice-db.js';
 import { outboxStore } from '../helpers/domain-event-fake.js';
+import { applyInvoiceData, statusMatches } from '../helpers/fake-invoice-row.js';
 
 function checkoutEvent() {
   return {
@@ -26,12 +27,14 @@ function settlementHarness(status) {
     invoice: {
       findUnique: async () => ({ ...state.invoice }),
       updateMany: async ({ where, data }) => {
-        if (!where.status.in.includes(state.invoice.status)) return { count: 0 };
-        Object.assign(state.invoice, data);
+        if (!statusMatches(state.invoice.status, where.status)) return { count: 0 };
+        applyInvoiceData(state.invoice, data);
         return { count: 1 };
       },
+      update: async ({ data }) => ({ ...applyInvoiceData(state.invoice, data) }),
     },
     invoicePayment: {
+      aggregate: async () => ({ _sum: { amount: null } }),
       findUnique: async () => null,
       create: async ({ data }) => { state.payments.push(data); return { id: 'pay-1', ...data }; },
     },
@@ -65,7 +68,7 @@ test('a completed checkout never settles a VOID invoice', async () => {
 test('a completed checkout settles an OVERDUE invoice', async () => {
   const { state, prisma } = settlementHarness('OVERDUE');
   const result = await recordCompletedCheckout(prisma, checkoutEvent());
-  assert.deepEqual(result, { duplicate: false, invoiceId: 'invoice-1' });
+  assert.deepEqual(result, { duplicate: false, invoiceId: 'invoice-1', fullyPaid: true });
   assert.equal(state.invoice.status, 'PAID');
   assert.equal(state.payments.length, 1);
   assert.deepEqual(state.events.map((event) => event.type), ['invoice.paid']);

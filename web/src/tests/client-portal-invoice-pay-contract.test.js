@@ -7,8 +7,8 @@ const source = clientPortalSource();
 // always opens the public invoice page (which starts a fresh Stripe Checkout
 // session) instead of a stored Checkout URL that expires within 24 hours.
 describe('client portal invoice pay contract', () => {
-  it('only offers Pay for sent or overdue invoices with a server-issued pay link', () => {
-    expect(source).toContain("['SENT', 'OVERDUE'].includes(inv.status?.toUpperCase()) && Boolean(inv.payUrl)");
+  it('only offers Pay for sent, viewed or overdue invoices with a server-issued pay link', () => {
+    expect(source).toContain('UNPAID_INVOICE_STATUSES.includes(inv.status?.toUpperCase()) && Boolean(inv.payUrl)');
     expect(source).not.toMatch(/canPay[^\n]*DRAFT/);
     expect(source).toContain('href={inv.payUrl}');
   });

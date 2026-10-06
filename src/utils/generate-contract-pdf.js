@@ -8,10 +8,14 @@ export function contractPdfFilename(contract) {
 
 /**
  * @param {object} contract Contract row with `client.name` included.
+ * @param {{ companyName?: string, website?: string | null }} [branding] the
+ *   contract's organization's branding (resolveBranding); without it the PDF
+ *   carries no agency name.
+ * @param {{ compress?: boolean }} [options] compress: false keeps text streams readable (tests)
  * @returns {Promise<Buffer>}
  */
-export async function generateContractPdf(contract) {
-  const doc = new PDFDocument({ size: 'A4', margins: { top: 60, bottom: 60, left: 60, right: 60 }, bufferPages: true });
+export async function generateContractPdf(contract, branding = {}, { compress = true } = {}) {
+  const doc = new PDFDocument({ size: 'A4', margins: { top: 60, bottom: 60, left: 60, right: 60 }, bufferPages: true, compress });
   const chunks = [];
 
   doc.on('data', (chunk) => chunks.push(chunk));
@@ -39,12 +43,22 @@ export async function generateContractPdf(contract) {
   const textColor = '#1a1a1a';
   const mutedColor = '#666666';
 
+  const companyName = String(branding?.companyName || '').trim();
+  const website = String(branding?.website || '').trim();
+
   // ---- Header bar ----
   doc.rect(0, 0, doc.page.width, 50).fill(primaryColor);
-  doc.fillColor(accentColor).fontSize(18).font('Helvetica-Bold')
-    .text('ASHBI HUB', 60, 15, { align: 'left' });
-  doc.fillColor('#ffffff').fontSize(10).font('Helvetica')
-    .text('hub.ashbi.ca', doc.page.width - 160, 20, { align: 'right', width: 100 });
+  if (companyName) {
+    doc.fillColor(accentColor).fontSize(18).font('Helvetica-Bold')
+      .text(companyName.toUpperCase(), 60, 15, { align: 'left', width: doc.page.width - 240, lineBreak: false, ellipsis: true });
+  }
+  if (website) {
+    doc.fillColor('#ffffff').fontSize(10).font('Helvetica')
+      .text(website, doc.page.width - 260, 20, { align: 'right', width: 200, lineBreak: false, ellipsis: true });
+  }
+  // The title starts below the header bar whatever the header held.
+  doc.x = 60;
+  doc.y = 32;
 
   // ---- Contract title ----
   doc.moveDown(2);
@@ -93,7 +107,7 @@ export async function generateContractPdf(contract) {
     const bottomY = doc.page.height - 40;
     doc.moveTo(60, bottomY - 5).lineTo(doc.page.width - 60, bottomY - 5).strokeColor('#eeeeee').lineWidth(0.5).stroke();
     doc.fillColor('#aaaaaa').fontSize(8).font('Helvetica')
-      .text(`Ashbi Hub  |  hub.ashbi.ca  |  Page ${i + 1} of ${range.count}`, 60, bottomY, { align: 'center', width: doc.page.width - 120 });
+      .text([companyName, website, `Page ${i + 1} of ${range.count}`].filter(Boolean).join('  |  '), 60, bottomY, { align: 'center', width: doc.page.width - 120 });
     doc.restore();
   }
 

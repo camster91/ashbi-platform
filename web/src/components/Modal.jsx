@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useCallback, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -17,6 +18,7 @@ export default function Modal({
   size = 'md',
   showCloseButton = true,
   ariaLabel,
+  ariaDescribedBy,
 }) {
   const modalRef = useRef(null);
   const previousActiveElement = useRef(null);
@@ -108,7 +110,11 @@ export default function Modal({
     full: 'max-w-[90vw]',
   };
 
-  return (
+  // Rendered into document.body: a page wrapper that is a stacking context
+  // (an opacity or transform animation held with fill-mode forwards, such as
+  // `animate-fade-in`) would otherwise trap the dialog below fixed page
+  // chrome like the Getting started button (#529).
+  return createPortal(
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
       <div
@@ -125,6 +131,7 @@ export default function Modal({
           aria-modal="true"
           aria-labelledby={title ? titleId : undefined}
           aria-label={title ? undefined : (ariaLabel || 'Dialog')}
+          aria-describedby={ariaDescribedBy}
           tabIndex={-1}
           className={cn(
             'relative w-full rounded-lg border border-border bg-card text-card-foreground shadow-xl',
@@ -134,7 +141,7 @@ export default function Modal({
         >
           {/* Header */}
           {(title || showCloseButton) && (
-            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5 sm:px-6">
               {title && (
                 <h2 id={titleId} className="text-lg font-semibold">
                   {title}
@@ -142,9 +149,10 @@ export default function Modal({
               )}
               {showCloseButton && (
                 <button
+                  type="button"
                   onClick={onClose}
                   aria-label="Close modal"
-                  className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="-mr-2 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -156,7 +164,8 @@ export default function Modal({
           <div className="px-4 py-4 sm:px-6">{children}</div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

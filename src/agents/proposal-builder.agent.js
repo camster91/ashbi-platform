@@ -4,9 +4,36 @@
  */
 
 import { createDraftWithAttachment } from './gmail-draft.agent.js';
+import { replySignature } from '../routes/gmail.routes.js';
 import prisma from '../config/db.js';
 import logger from '../utils/logger.js';
 import PDFDocument from 'pdfkit';
+import { computeProposalLineItems, proposalTotals } from '../utils/proposal-totals.js';
+import { senderDescription } from '../utils/organization-name.js';
+import env from '../config/env.js';
+import { brandedPdfFilename, escapeHtml } from '../services/branding.service.js';
+
+/**
+ * The brand a proposal is written in: the organization's branding
+ * (resolveBranding), or just its name when that is all the caller has.
+ * @param {object | null | undefined} branding
+ * @param {string} [organizationName]
+ */
+function proposalBrand(branding, organizationName = '') {
+  const companyName = String(branding?.companyName || organizationName || '').trim();
+  return { ...(branding || {}), companyName };
+}
+
+/** The proposal footer line: the custom proposal footer, or the agency's contact details. */
+function proposalFooterLine(brand) {
+  const custom = String(brand?.proposalFooter || '').trim();
+  if (custom) return escapeHtml(custom);
+  return [brand?.companyName, brand?.address, brand?.email, brand?.website]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join(' &nbsp;|&nbsp; ');
+}
 
 // Pricing tiers (hardcoded for now, can be updated via UI)
 const PRICING_TIERS = {
@@ -26,21 +53,23 @@ const PRICING_TIERS = {
   }
 };
 
-// Proposal templates
+// Proposal templates. The ids (ashbi-*) are stored keys and stay as they are.
 const PROPOSAL_TEMPLATES = [
-  { id: 'ashbi-branding', name: 'Ashbi Branding', description: 'Full branding proposal with logo, identity, and brand guidelines' },
-  { id: 'ashbi-packaging', name: 'Ashbi Packaging', description: 'Product packaging design proposal with print specifications' },
-  { id: 'ashbi-shopify', name: 'Ashbi Shopify', description: 'E-commerce store setup proposal with theme customization' },
+  { id: 'ashbi-branding', name: 'Branding', description: 'Full branding proposal with logo, identity, and brand guidelines' },
+  { id: 'ashbi-packaging', name: 'Packaging', description: 'Product packaging design proposal with print specifications' },
+  { id: 'ashbi-shopify', name: 'Shopify', description: 'E-commerce store setup proposal with theme customization' },
   { id: 'generic', name: 'Generic', description: 'General-purpose proposal template' }
 ];
 
-// Proposal statuses
+// Proposal statuses, as stored on Proposal.status. The client's answer is
+// APPROVED or DECLINED (the stats below still report them as accepted and
+// rejected).
 const PROPOSAL_STATUS = {
   DRAFT: 'DRAFT',
   SENT: 'SENT',
   VIEWED: 'VIEWED',
-  ACCEPTED: 'ACCEPTED',
-  REJECTED: 'REJECTED'
+  APPROVED: 'APPROVED',
+  DECLINED: 'DECLINED'
 };
 
 // AI Client import — try ESM import, fall back gracefully
@@ -77,9 +106,15 @@ function getRecommendedTiers(projectType, budget) {
 }
 
 /**
- * Build the proposal HTML document with Ashbi branding
+ * Build the proposal HTML document in the sending organization's branding.
+ * @param {object} proposalData
+ * @param {object} leadData
+ * @param {{ companyName?: string, proposalFooter?: string | null, address?: string | null, email?: string | null, website?: string | null }} [branding]
  */
-function buildProposalHtml(proposalData, leadData) {
+function buildProposalHtml(proposalData, leadData, branding = {}) {
+  const brand = proposalBrand(branding);
+  const companyName = escapeHtml(brand.companyName);
+  const footerLine = proposalFooterLine(brand);
   const today = new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
   const validUntil = new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -127,7 +162,7 @@ function buildProposalHtml(proposalData, leadData) {
 <body>
   <div class="container">
     <div class="header">
-      <div class="logo">ASHBI</div>
+      ${companyName ? `<div class="logo">${companyName}</div>` : ''}
       <h1 class="proposal-title">${proposalData.title || 'Project Proposal'}</h1>
       <div class="proposal-meta">
         Prepared for ${leadData.name}${leadData.company ? `, ${leadData.company}` : ''} &nbsp;|&nbsp; ${today}
@@ -143,7 +178,7 @@ function buildProposalHtml(proposalData, leadData) {
 
     <div class="section">
       <h2>Executive Summary</h2>
-      <p>${proposalData.executiveSummary || proposalData.summary || 'Thank you for considering Ashbi for your project. We look forward to delivering exceptional results.'}</p>
+      <p>${proposalData.executiveSummary || proposalData.summary || `Thank you for considering ${companyName || 'us'} for your project. We look forward to delivering exceptional results.`}</p>
     </div>
 
     <div class="section">
@@ -235,9 +270,9 @@ function buildProposalHtml(proposalData, leadData) {
     </div>
 
     <div class="footer">
-      <p>Ashbi &nbsp;|&nbsp; Toronto, ON &nbsp;|&nbsp; hello@ashbi.design</p>
+      ${footerLine ? `<p>${footerLine}</p>` : ''}
       <p>Proposal ID: ${proposalData.id || 'DRAFT'} &nbsp;|&nbsp; Valid until ${validUntil}</p>
-      ${proposalData.trackingId ? `<img src="https://api.ashbi.design/track/${proposalData.trackingId}" class="tracking-pixel" alt="">` : ''}
+      ${proposalData.trackingId ? `<img src="${escapeHtml(`${env.appUrl}/track/${encodeURIComponent(proposalData.trackingId)}`)}" class="tracking-pixel" alt="">` : ''}
     </div>
   </div>
 </body>
@@ -246,15 +281,20 @@ function buildProposalHtml(proposalData, leadData) {
 
 /**
  * Generate a full proposal from lead data using AI
+ * @param {object} leadData
+ * @param {{ sender?: { name?: string } | null, organizationName?: string, branding?: object | null }} [writer]
+ *   who the proposal is from; branding (resolveBranding) names the agency in
+ *   the document, falling back to organizationName
  */
-async function generateProposal(leadData) {
+async function generateProposal(leadData, { sender = null, organizationName = '', branding = null } = {}) {
+  const brand = proposalBrand(branding, organizationName);
   const { name, company, email, projectType, budget, timeline, notes } = leadData;
   const budgetNum = parseFloat(budget) || 0;
   const recommendedTiers = getRecommendedTiers(projectType, budgetNum);
 
-  const systemPrompt = `You are a proposal writer for Ashbi Design, a Toronto-based CPG/DTC creative agency. 
-You create professional, direct proposals with no fluff. Ashbi specializes in branding, packaging design, and Shopify/WooCommerce web development.
-Brand voice: confident, professional, no salesy language. Focus on value and outcomes.`;
+  const systemPrompt = `You are a proposal writer for a creative agency, writing on behalf of ${senderDescription(sender, brand.companyName)}.
+You create professional, direct proposals with no fluff for branding, packaging design, and web development work.
+Brand voice: confident, professional, no salesy language. Focus on value and outcomes. Do not invent facts about the agency that you were not given.`;
 
   const userPrompt = `Generate a proposal for a potential client.
 
@@ -311,7 +351,7 @@ Return JSON with these exact fields:
     }
   }
 
-  const html = buildProposalHtml(proposalData, leadData);
+  const html = buildProposalHtml(proposalData, leadData, brand);
 
   return {
     ...proposalData,
@@ -359,8 +399,6 @@ async function generatePdf(proposalHtml) {
         if (trimmed === trimmed.toUpperCase() && trimmed.length < 50 && trimmed.length > 3) {
           doc.fontSize(14).font('Helvetica-Bold');
           y += 5;
-        } else if (trimmed.startsWith('ASHBI')) {
-          doc.fontSize(24).font('Helvetica-Bold');
         } else {
           doc.fontSize(11).font('Helvetica');
         }
@@ -399,12 +437,15 @@ async function generatePdf(proposalHtml) {
 /**
  * Create a Gmail draft with the proposal PDF attached
  */
-async function createProposalDraft(proposal, leadEmail) {
+async function createProposalDraft(proposal, leadEmail, { sender = null, organizationName = '', branding = null } = {}) {
+  const brand = proposalBrand(branding, organizationName);
   try {
     const pdfBuffer = await generatePdf(proposal.html);
 
     const subject = proposal.title || `Proposal for ${proposal.leadData?.name}`;
     const firstName = (proposal.leadData?.name || 'there').split(' ')[0];
+    // Signed by the person sending it and their workspace, never one agency.
+    const signature = replySignature(sender, brand.companyName);
 
     const emailBody = `Hi ${firstName},
 
@@ -414,12 +455,10 @@ I've outlined our approach, timeline, and investment details in the attached doc
 
 Looking forward to potentially working together.
 
-Best,
-Cameron
-Ashbi Design`;
+Best,${signature ? `\n${signature}` : ''}`;
 
     // Create draft with PDF attachment via gmail-draft agent
-    const attachmentName = `Ashbi_Proposal_${proposal.id || Date.now()}.pdf`;
+    const attachmentName = brandedPdfFilename(brand.companyName, 'Proposal', proposal.id || Date.now());
     const draftResult = await createDraftWithAttachment(leadEmail, subject, emailBody, pdfBuffer, attachmentName);
 
     return {
@@ -459,8 +498,14 @@ async function saveProposal(proposalData) {
       terms,
       html,
       leadData,
-      status = PROPOSAL_STATUS.DRAFT
     } = proposalData;
+
+    // The selected tier is stored as the proposal's line item, so the totals
+    // are derived from line items like every other proposal.
+    const lineItems = selectedTier?.price
+      ? computeProposalLineItems([{ description: selectedTier.name || 'Selected package', quantity: 1, unitPrice: Number(selectedTier.price) || 0 }])
+      : [];
+    const { subtotal, total } = proposalTotals(lineItems, 0);
 
     const proposal = await prisma.proposal.create({
       data: {
@@ -473,14 +518,15 @@ async function saveProposal(proposalData) {
           terms,
           html: html?.substring(0, 10000)
         }),
-        subtotal: selectedTier?.price || 0,
+        subtotal,
         discount: 0,
-        total: selectedTier?.price || 0,
+        total,
         validUntil: new Date(Date.now() + 30 * 86400000),
-        status,
+        // Always a draft: a proposal only leaves DRAFT through send.
+        status: PROPOSAL_STATUS.DRAFT,
         clientId: leadData?.clientId || null,
         createdById: leadData?.userId || null,
-        ...(leadData && !leadData.clientId ? {} : {})
+        ...(lineItems.length > 0 ? { lineItems: { create: lineItems } } : {}),
       },
       include: {
         client: { select: { id: true, name: true } },
@@ -505,32 +551,80 @@ async function saveProposal(proposalData) {
   }
 }
 
+/** An error the proposal-builder routes answer with its statusCode. */
+export class ProposalBuilderError extends Error {
+  constructor(message, statusCode, code) {
+    super(message);
+    this.name = 'ProposalBuilderError';
+    this.statusCode = statusCode;
+    this.code = code;
+  }
+}
+
+const PROPOSAL_INCLUDE = {
+  client: { select: { id: true, name: true } },
+  createdBy: { select: { id: true, name: true } },
+  lineItems: true,
+};
+
 /**
- * Update proposal content
+ * Update a DRAFT proposal's content. Status and money are never taken from
+ * the caller: the status only changes through send (here) or the client's
+ * answer on the portal, and subtotal/total are derived from the line items.
+ * The edit is a compare-and-set on status DRAFT, so a proposal that was sent
+ * (or answered) meanwhile is refused with 409 instead of being rewritten.
  */
 async function updateProposal(proposalId, updateData) {
-  try {
-    const proposal = await prisma.proposal.update({
-      where: { id: proposalId },
-      data: {
-        ...(updateData.title && { title: updateData.title }),
-        ...(updateData.notes && { notes: updateData.notes }),
-        ...(updateData.status && { status: updateData.status }),
-        ...(updateData.subtotal !== undefined && { subtotal: updateData.subtotal }),
-        ...(updateData.total !== undefined && { total: updateData.total }),
-        ...(updateData.validUntil && { validUntil: new Date(updateData.validUntil) })
-      },
-      include: {
-        client: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, name: true } }
-      }
-    });
+  const data = {};
+  if (updateData.title) data.title = updateData.title;
+  if (updateData.notes) data.notes = updateData.notes;
+  if (updateData.validUntil !== undefined) data.validUntil = updateData.validUntil ? new Date(updateData.validUntil) : null;
+  if (updateData.discount !== undefined) data.discount = updateData.discount;
+  const computedLineItems = updateData.lineItems ? computeProposalLineItems(updateData.lineItems) : null;
 
-    return proposal;
-  } catch (error) {
-    console.error('Error updating proposal:', error);
-    throw error;
-  }
+  return prisma.$transaction(async (tx) => {
+    // Claim first: the compare-and-set takes the row lock, so a concurrent
+    // send or approval either committed before it (count 0) or waits for
+    // this edit, and the line items read below are the ones this edit owns.
+    const claimed = await tx.proposal.updateMany({
+      where: { id: proposalId, status: PROPOSAL_STATUS.DRAFT },
+      data: { ...data, updatedAt: new Date() },
+    });
+    if (claimed.count !== 1) {
+      const exists = await tx.proposal.findUnique({ where: { id: proposalId }, select: { id: true } });
+      if (!exists) throw new ProposalBuilderError('Proposal not found', 404, 'NOT_FOUND');
+      throw new ProposalBuilderError('Only DRAFT proposals can be updated', 409, 'PROPOSAL_NOT_DRAFT');
+    }
+
+    if (computedLineItems) {
+      await tx.proposalLineItem.deleteMany({ where: { proposalId } });
+      if (computedLineItems.length > 0) {
+        await tx.proposalLineItem.createMany({ data: computedLineItems.map(item => ({ ...item, proposalId })) });
+      }
+    }
+    if (computedLineItems || data.discount !== undefined) {
+      const stored = await tx.proposal.findUnique({ where: { id: proposalId }, include: { lineItems: true } });
+      const totals = proposalTotals(stored.lineItems || [], stored.discount ?? 0);
+      await tx.proposal.update({ where: { id: proposalId }, data: { subtotal: totals.subtotal, total: totals.total } });
+    }
+    return tx.proposal.findUnique({ where: { id: proposalId }, include: PROPOSAL_INCLUDE });
+  });
+}
+
+/**
+ * Record that a proposal was sent: DRAFT -> SENT, compare-and-set. A proposal
+ * that is already SENT or VIEWED stays as it is (re-sending the email is
+ * allowed); an answered proposal is never moved back.
+ */
+async function markProposalSent(proposalId) {
+  const claimed = await prisma.proposal.updateMany({
+    where: { id: proposalId, status: PROPOSAL_STATUS.DRAFT },
+    data: { status: PROPOSAL_STATUS.SENT, sentAt: new Date() },
+  });
+  if (claimed.count === 1) return PROPOSAL_STATUS.SENT;
+  const current = await prisma.proposal.findUnique({ where: { id: proposalId }, select: { status: true } });
+  if (!current) throw new ProposalBuilderError('Proposal not found', 404, 'NOT_FOUND');
+  return current.status;
 }
 
 /**
@@ -589,8 +683,8 @@ async function getProposalStats() {
       prisma.proposal.count(),
       prisma.proposal.count({ where: { status: PROPOSAL_STATUS.SENT } }),
       prisma.proposal.count({ where: { status: PROPOSAL_STATUS.VIEWED } }),
-      prisma.proposal.count({ where: { status: PROPOSAL_STATUS.ACCEPTED } }),
-      prisma.proposal.count({ where: { status: PROPOSAL_STATUS.REJECTED } }),
+      prisma.proposal.count({ where: { status: PROPOSAL_STATUS.APPROVED } }),
+      prisma.proposal.count({ where: { status: PROPOSAL_STATUS.DECLINED } }),
       prisma.proposal.count({ where: { status: PROPOSAL_STATUS.DRAFT } })
     ]);
 
@@ -607,51 +701,18 @@ async function getProposalStats() {
   }
 }
 
-/**
- * Mark proposal as accepted — triggers contract generation
- */
-async function acceptProposal(proposalId) {
-  try {
-    const proposal = await prisma.proposal.update({
-      where: { id: proposalId },
-      data: {
-        status: PROPOSAL_STATUS.ACCEPTED,
-        approvedAt: new Date()
-      },
-      include: {
-        client: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, name: true } }
-      }
-    });
-
-    return {
-      proposal: {
-        id: proposal.id,
-        title: proposal.title,
-        status: proposal.status,
-        total: proposal.total,
-        client: proposal.client,
-        acceptedAt: proposal.approvedAt
-      },
-      message: 'Proposal accepted. Ready for contract generation.'
-    };
-  } catch (error) {
-    console.error('Error accepting proposal:', error);
-    throw error;
-  }
-}
-
 export {
+  buildProposalHtml,
   generateProposal,
   generatePdf,
   createProposalDraft,
   getProposalTemplates,
   saveProposal,
   updateProposal,
+  markProposalSent,
   trackProposalView,
   getProposal,
   getProposalStats,
-  acceptProposal,
   PRICING_TIERS,
   PROPOSAL_STATUS,
   PROPOSAL_TEMPLATES

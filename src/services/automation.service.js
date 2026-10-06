@@ -8,15 +8,28 @@ import FormData from 'form-data';
 import crypto from 'crypto';
 import { resolveTenantOrganizationIds, runTenantJob } from '../jobs/tenant-iteration.js';
 import { sendInvoiceOverdueEmail } from './email.service.js';
-import { formatMoney } from '../utils/money.js';
+import { defaultInvoiceCurrency, formatMoney } from '../utils/money.js';
+import { proposalTaxSummary } from '../utils/proposal-totals.js';
+import { invoiceBalance, SENT_INVOICE_STATUSES, UNPAID_INVOICE_STATUSES } from '../utils/invoice-balance.js';
 import { invoicePublicAccessFailure } from '../utils/public-document-access.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
 import { emitNotification } from './notification.service.js';
 import { getRealtimeEmitter } from '../realtime/emitter.js';
+import { wonStageFor } from './dealPipeline.service.js';
+import env from '../config/env.js';
+import { brandedSender, escapeHtml, resolveBranding, resolveBrandingForDocument, systemSender } from './branding.service.js';
 
 // ==================== EMAIL HELPER ====================
 
-async function sendEmail(to, subject, html) {
+/**
+ * Sent in the organization's name (its company name at the configured
+ * no-reply address); without an organization, in the product's name.
+ * @param {string} to
+ * @param {string} subject
+ * @param {string} html
+ * @param {{ organizationId?: string | null, branding?: object | null }} [sender]
+ */
+async function sendEmail(to, subject, html, { organizationId = null, branding = null } = {}) {
   if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return false;
   if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) {
     console.log(`[Automation] Email not configured — would send to ${to}: ${subject}`);
@@ -30,8 +43,11 @@ async function sendEmail(to, subject, html) {
       key: process.env.MAILGUN_API_KEY
     });
 
+    const brand = branding || (organizationId ? await resolveBranding(prisma, organizationId) : null);
     await client.messages.create(process.env.MAILGUN_DOMAIN, {
-      from: `Ashbi Design <noreply@${process.env.MAILGUN_DOMAIN}>`,
+      from: brand?.companyName
+        ? brandedSender(brand, process.env.MAILGUN_DOMAIN)
+        : systemSender(process.env.MAILGUN_DOMAIN),
       to,
       subject,
       html
@@ -127,6 +143,41 @@ async function getClientEmail(clientId) {
 
 // ==================== TRIGGER: PROPOSAL APPROVED ====================
 
+/**
+ * The draft contract made from an approved proposal. Its money matches what
+ * the client approved and what the proposal's invoice bills: the pre-tax
+ * subtotal (less any discount), the tax line and the total with tax
+ * (proposalTaxSummary). Proposals carry no currency; they are invoiced in
+ * the workspace default.
+ */
+export function proposalContractContent(proposal) {
+  const currency = defaultInvoiceCurrency();
+  const money = (value) => formatMoney(value, currency);
+  const { taxRate, taxType, tax, totalWithTax } = proposalTaxSummary(proposal);
+  const taxName = taxType === 'HST' || taxType === 'GST' || taxType === 'PST' ? taxType : 'Tax';
+  const discount = Number(proposal.discount) || 0;
+  const rows = [
+    `<p>Subtotal: ${money(proposal.subtotal)}</p>`,
+    ...(discount > 0 ? [`<p>Discount: -${money(discount)}</p>`] : []),
+    ...(tax > 0 ? [`<p>${taxName} (${taxRate}%): ${money(tax)}</p>`] : []),
+    `<p><strong>Total: ${money(totalWithTax)}</strong></p>`,
+  ];
+  return `
+      <h1>${proposal.title}</h1>
+      <h2>Scope of Work</h2>
+      <p>This contract covers the following deliverables as outlined in the approved proposal:</p>
+      <ul>
+        ${(proposal.lineItems || []).map(li =>
+          `<li><strong>${li.description}</strong> — ${li.quantity} x ${money(li.unitPrice)} = ${money(li.total)}</li>`
+        ).join('\n')}
+      </ul>
+      <h2>Total</h2>
+      ${rows.join('\n      ')}
+      <h2>Terms</h2>
+      <p>By signing below, the client agrees to the scope and pricing outlined above.</p>
+    `.trim();
+}
+
 export async function onProposalApproved(proposalId) {
   console.log(`[Automation] Proposal approved: ${proposalId}`);
 
@@ -146,20 +197,7 @@ export async function onProposalApproved(proposalId) {
     }
 
     // Action 1: Auto-create contract from proposal
-    const contractContent = `
-      <h1>${proposal.title}</h1>
-      <h2>Scope of Work</h2>
-      <p>This contract covers the following deliverables as outlined in the approved proposal:</p>
-      <ul>
-        ${proposal.lineItems.map(li =>
-          `<li><strong>${li.description}</strong> — ${li.quantity} x $${li.unitPrice.toFixed(2)} = $${li.total.toFixed(2)}</li>`
-        ).join('\n')}
-      </ul>
-      <h2>Total</h2>
-      <p><strong>$${proposal.total.toFixed(2)}</strong></p>
-      <h2>Terms</h2>
-      <p>By signing below, the client agrees to the scope and pricing outlined above.</p>
-    `.trim();
+    const contractContent = proposalContractContent(proposal);
 
     const contract = await prisma.contract.create({
       data: {
@@ -178,20 +216,18 @@ export async function onProposalApproved(proposalId) {
 
     // Action 2: Auto-create pipeline deal from approved proposal
     try {
-      // Find the first pipeline stage (usually "New" or similar)
-      const defaultStage = await prisma.pipelineStage.findFirst({
-        where: { organizationId: proposal.client.organizationId },
-        orderBy: { order: 'asc' },
-        select: { id: true }
-      });
+      // An approved proposal is a won deal: it goes in the organization's
+      // won stage (probability 100, else the last stage), after seeding the
+      // default stages for an organization that never opened the pipeline.
+      const wonStage = await wonStageFor(prisma, proposal.client.organizationId);
 
-      if (defaultStage) {
+      if (wonStage) {
         const deal = await prisma.pipelineDeal.create({
           data: {
             title: proposal.title,
             value: proposal.total,
             clientId: proposal.clientId,
-            stageId: defaultStage.id,
+            stageId: wonStage.id,
             probability: 100, // Won
             expectedCloseDate: new Date(),
             notes: `Auto-created from approved proposal ${proposalId}`
@@ -283,10 +319,12 @@ export async function onContractSigned(contractId) {
     // Action 2: Send welcome email to client
     const contact = await getClientEmail(contract.clientId);
     if (contact) {
-      const hubUrl = process.env.HUB_URL || 'https://hub.ashbi.ca';
+      const hubUrl = process.env.HUB_URL || env.hubUrl;
+      const branding = await resolveBranding(prisma, contract.client.organizationId);
+      const companyName = String(branding.companyName || '').trim();
       await sendEmail(
         contact.email,
-        `Welcome! Your project "${project.name}" is underway - Ashbi Design`,
+        `Welcome! Your project "${project.name}" is underway${companyName ? ` - ${companyName}` : ''}`,
         `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #1a1a2e;">Welcome aboard, ${contact.name || contract.client.name}!</h2>
@@ -302,10 +340,11 @@ export async function onContractSigned(contractId) {
             </p>
             <p style="color: #666; font-size: 14px; margin-top: 32px;">
               If you have any questions, just reply to this email.<br/>
-              — The Ashbi Design Team
+              — The ${companyName ? `${escapeHtml(companyName)} ` : ''}Team
             </p>
           </div>
-        `
+        `,
+        { branding },
       );
     }
 
@@ -340,10 +379,11 @@ export async function onContractSigned(contractId) {
 const OVERDUE_ESCALATION_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OVERDUE_PAGE_SIZE = 200;
-const OPEN_INVOICE_STATUSES = ['SENT', 'OVERDUE'];
+// SENT, VIEWED and OVERDUE: a viewed invoice is chased like a sent one.
+const OPEN_INVOICE_STATUSES = [...UNPAID_INVOICE_STATUSES];
 
 function hubUrl() {
-  return process.env.APP_URL || process.env.HUB_URL || 'https://hub.ashbi.ca';
+  return process.env.APP_URL || process.env.HUB_URL || env.appUrl;
 }
 
 // Best-effort side effect: log and continue so one failing step (activity
@@ -395,8 +435,9 @@ async function claimOverdueStage(db, invoice, stage, now) {
 
 async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
   // Compare-and-set: never overwrite a payment or void that just landed.
-  if (invoice.status === 'SENT') {
-    const moved = await db.invoice.updateMany({ where: { id: invoice.id, status: 'SENT' }, data: { status: 'OVERDUE' } });
+  // SENT or VIEWED (treated as SENT) past due becomes OVERDUE.
+  if (SENT_INVOICE_STATUSES.includes(invoice.status)) {
+    const moved = await db.invoice.updateMany({ where: { id: invoice.id, status: invoice.status }, data: { status: 'OVERDUE' } });
     if (moved.count !== 1) return { reminded: false, skipped: 'changed' };
   }
   const { stage, daysOverdue } = overdueReminderStage(invoice, now);
@@ -405,6 +446,10 @@ async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
   const release = await claimOverdueStage(db, invoice, stage, now);
   if (!release) return { reminded: false, skipped: 'claimed_or_changed' };
 
+  const { balanceDue } = invoiceBalance(
+    invoice.total,
+    (invoice.payments || []).reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0),
+  );
   const contact = await getClientEmail(invoice.clientId);
   // The pay link is the public invoice page, which creates or refreshes a
   // Checkout session on demand; only link it while the link is valid.
@@ -413,11 +458,13 @@ async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
   if (contact?.email && linkUsable) {
     let delivery;
     try {
+      const branding = await resolveBrandingForDocument(db, invoice);
       delivery = await sendOverdueEmail({
+        branding,
         to: contact.email,
         clientName: contact.name || invoice.client?.name,
         invoiceNumber: invoice.invoiceNumber,
-        total: invoice.total,
+        total: balanceDue,
         currency: invoice.currency,
         daysOverdue,
         viewUrl: `${hubUrl()}/portal/invoice/${invoice.viewToken}`,
@@ -436,7 +483,7 @@ async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
   // Without a contact or a usable link the stage stays claimed (staff are
   // notified below) rather than being retried on every run.
 
-  const amount = formatMoney(invoice.total, invoice.currency);
+  const amount = formatMoney(balanceDue, invoice.currency);
   const organizationId = invoice.organizationId || null;
   if (stage === 'ESCALATION') {
     await bestEffort('Client payment-status flag', invoice.id, () => db.client.update({
@@ -487,6 +534,8 @@ export async function checkOverdueInvoices(db = prisma, { now = new Date(), send
       },
       include: {
         client: { select: { id: true, name: true } },
+        // Reminders ask for what is still owed after partial payments.
+        payments: { select: { amount: true } },
       },
       orderBy: { id: 'asc' },
       take: pageSize,
@@ -604,7 +653,7 @@ async function executeAction(action, triggerData, workflow) {
 
   switch (type) {
     case 'SEND_EMAIL':
-      return executeSendEmail(config, triggerData);
+      return executeSendEmail(config, triggerData, workflow);
     case 'CREATE_TASK':
       return executeCreateTask(config, triggerData, workflow);
     case 'SEND_TELEGRAM':
@@ -620,7 +669,7 @@ async function executeAction(action, triggerData, workflow) {
   }
 }
 
-async function executeSendEmail(config, triggerData) {
+async function executeSendEmail(config, triggerData, workflow) {
   const { to, subject, body } = config;
 
   // Resolve template variables
@@ -634,7 +683,7 @@ async function executeSendEmail(config, triggerData) {
 
   // If email is configured, send it
   if (process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN) {
-    return sendEmail(resolvedTo, resolvedSubject, resolvedBody);
+    return sendEmail(resolvedTo, resolvedSubject, resolvedBody, { organizationId: triggerData?.organizationId || workflow?.organizationId || null });
   }
 
   // Otherwise just log
@@ -899,7 +948,7 @@ async function executeWorkflowAction(action, context, runId) {
         const subject = interpolateTemplate(config.subject || '', context);
         const body = interpolateTemplate(config.body || '', context);
         const html = config.html ? interpolateTemplate(config.html, context) : `<p>${body}</p>`;
-        const sent = await sendEmail(to, subject, html);
+        const sent = await sendEmail(to, subject, html, { organizationId: context?.organizationId || null });
         result.status = sent ? 'SUCCESS' : 'FAILED';
         result.message = sent ? `Email sent to ${to}` : `Failed to send email to ${to}`;
         break;

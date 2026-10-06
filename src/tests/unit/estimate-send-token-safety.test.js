@@ -78,6 +78,11 @@ test('sending an estimate without email delivery succeeds and never logs its vie
 
   assert.equal(response.statusCode, 200, response.body);
   assert.equal(response.json().status, 'SENT');
+  // The response says no email went out, and why, so the page never claims
+  // the client was emailed.
+  assert.equal(response.json().emailSent, false);
+  assert.equal(response.json().emailStatus, 'NO_CLIENT_EMAIL');
+  assert.ok(response.json().clientLink.endsWith(`/portal/estimate/${response.json().viewToken}`));
   // Staff recover the client link from the authenticated response, not from
   // logs. Sending rotates the draft's placeholder into a 256-bit link token.
   const { viewToken, publicAccessExpiresAt } = response.json();
@@ -108,7 +113,34 @@ test('sending an estimate emails the client its amount and portal link', async (
   assert.match(sent[0].message.subject, /\$1[,.\u00a0\u202f]?200/);
   assert.ok(!sent[0].message.html.includes(`/portal/estimate/${VIEW_TOKEN}`), 'the draft placeholder token is never emailed');
   assert.ok(sent[0].message.html.includes(`/portal/estimate/${response.json().viewToken}`));
+  assert.equal(response.json().emailSent, true);
+  assert.equal(response.json().emailStatus, 'SENT');
   assertNoTokenInLogs(lines);
+});
+
+test('a failed estimate email is reported as not sent', async (t) => {
+  const originalClient = Mailgun.prototype.client;
+  Mailgun.prototype.client = () => ({
+    messages: { create: async () => { throw new Error('mailgun down'); } },
+  });
+  t.after(() => { Mailgun.prototype.client = originalClient; });
+  const app = await buildApp(t, draftEstimate('client@example.test'));
+  captureConsole(t);
+
+  const response = await app.inject({ method: 'POST', url: '/estimate-a/send' });
+
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(response.json().status, 'SENT', 'the estimate is sent and its link works');
+  assert.equal(response.json().emailSent, false);
+  assert.equal(response.json().emailStatus, 'FAILED');
+});
+
+test('estimateEmailSkipReason names why no email will be attempted', async () => {
+  const { estimateEmailSkipReason } = await import('../../routes/estimate.routes.js');
+  assert.equal(estimateEmailSkipReason({ mailConfigured: true, clientEmail: null }), 'NO_CLIENT_EMAIL');
+  assert.equal(estimateEmailSkipReason({ mailConfigured: true, clientEmail: '  ' }), 'NO_CLIENT_EMAIL');
+  assert.equal(estimateEmailSkipReason({ mailConfigured: false, clientEmail: 'a@b.test' }), 'EMAIL_NOT_CONFIGURED');
+  assert.equal(estimateEmailSkipReason({ mailConfigured: true, clientEmail: 'a@b.test' }), null);
 });
 
 test('a delivery-status write failure after a successful send still returns success', async (t) => {

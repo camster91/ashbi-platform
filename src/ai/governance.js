@@ -11,7 +11,9 @@
 //                    one AiUsageRecord (success or failure)
 //        disabled -> AiControlError AI_CONNECTION_DISABLED (never falls back)
 //        revoked  -> treated as no connection
-//   5. otherwise                                  -> platform provider, unchanged
+//   5. otherwise                                  -> platform provider; when it
+//      has no key, nothing answers at its address, or it refuses the
+//      deployment's credentials                    -> AiUnavailableError (AI_UNAVAILABLE)
 //
 // A BYOK failure never falls back to the platform provider and is never
 // retried: the caller gets a typed error.
@@ -35,7 +37,9 @@ import { createSafeFetch } from '../security/safe-fetch.js';
 import { getPlatformProvider } from './providers/platform.js';
 import OpenAICompatibleProvider, { JSON_ONLY_INSTRUCTION, parseJsonReply } from './providers/openai-compatible.js';
 import { estimateCostCents } from './pricing.js';
-import { AiBudgetExceededError, AiControlError, AiDisabledError, AiProviderError } from './errors.js';
+import {
+  AiBudgetExceededError, AiControlError, AiDisabledError, AiProviderError, AiUnavailableError, isPlatformSetupFailure,
+} from './errors.js';
 
 // Proposals for owner approval (docs/ai-byok.md):
 /** How long kill switches and connections are cached per process. */
@@ -359,7 +363,18 @@ export function createAiGovernance(deps = {}) {
         result = await platformCall(providerOptions);
       } else {
         const provider = platformProvider();
-        result = json ? await provider.chatJSON(providerOptions) : await provider.chat(providerOptions);
+        // No key for the deployment's provider, and no workspace connection:
+        // say AI is not set up instead of failing inside the provider.
+        if (typeof provider.isConfigured === 'function' && !provider.isConfigured()) throw new AiUnavailableError();
+        try {
+          result = json ? await provider.chatJSON(providerOptions) : await provider.chat(providerOptions);
+        } catch (err) {
+          if (isPlatformSetupFailure(err)) {
+            logger.warn({ organizationId, errorName: err?.name, errorCode: err?.code ?? err?.cause?.code }, 'Platform AI provider is not reachable or refused its credentials');
+            throw new AiUnavailableError();
+          }
+          throw err;
+        }
       }
       if (afterCall) await afterCall({ route: hookRoute, organizationId, feature: callContext.feature });
       return result;

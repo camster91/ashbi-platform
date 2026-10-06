@@ -11,6 +11,7 @@ function matches(row, where = {}) {
     const actual = row[key];
     if (expected && typeof expected === 'object' && !(expected instanceof Date)) {
       if ('in' in expected) return expected.in.includes(actual);
+      if ('notIn' in expected) return !expected.notIn.includes(actual);
       if ('not' in expected) return actual !== expected.not;
       if ('lt' in expected) return actual != null && new Date(actual) < new Date(expected.lt);
       if ('gte' in expected) return actual != null && new Date(actual) >= new Date(expected.gte);
@@ -35,7 +36,8 @@ export function createFakeInvoiceDb({ clients = [], invoices = [], organizationI
   const withRelations = (invoice) => {
     if (!invoice) return null;
     const client = state.clients.find((c) => c.id === invoice.clientId) || null;
-    return { ...invoice, client, lineItems: invoice.lineItems || [], payments: invoice.payments || [] };
+    const payments = [...(invoice.payments || []), ...state.payments.filter((p) => p.invoiceId === invoice.id)];
+    return { ...invoice, client, lineItems: invoice.lineItems || [], payments };
   };
 
   const db = {
@@ -104,7 +106,21 @@ export function createFakeInvoiceDb({ clients = [], invoices = [], organizationI
     },
     invoicePayment: {
       create: async ({ data }) => { state.payments.push(data); return { id: `payment-${state.payments.length}`, ...data }; },
-      findMany: async () => state.payments,
+      findMany: async ({ where, select } = {}) => {
+        const withInvoice = state.payments.map((p) => ({ ...p, invoice: state.invoices.find((i) => i.id === p.invoiceId) }));
+        const statuses = where?.invoice?.status?.in;
+        const rows = statuses ? withInvoice.filter((p) => p.invoice && statuses.includes(p.invoice.status)) : withInvoice;
+        return select?.invoice ? rows : rows.map(({ invoice: _invoice, ...p }) => p);
+      },
+      aggregate: async ({ where }) => ({
+        _sum: { amount: state.payments.filter((p) => p.invoiceId === where.invoiceId).reduce((sum, p) => sum + p.amount, 0) || null },
+      }),
+      groupBy: async ({ where }) => {
+        const ids = where?.invoiceId?.in || [];
+        return ids
+          .map((invoiceId) => ({ invoiceId, _sum: { amount: state.payments.filter((p) => p.invoiceId === invoiceId).reduce((sum, p) => sum + p.amount, 0) } }))
+          .filter((row) => row._sum.amount > 0);
+      },
     },
     auditEvent: {
       create: async ({ data }) => { state.audit.push(data); return data; },

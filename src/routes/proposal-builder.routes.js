@@ -10,10 +10,11 @@ import {
   getProposalTemplates,
   saveProposal,
   updateProposal,
+  markProposalSent,
   trackProposalView,
   getProposal,
   getProposalStats,
-  acceptProposal,
+  ProposalBuilderError,
   PRICING_TIERS,
   PROPOSAL_STATUS
 } from '../agents/proposal-builder.agent.js';
@@ -23,7 +24,23 @@ import {
   proposalBuilderEmailSchema,
   proposalBuilderUpdateSchema,
 } from '../validators/schemas.js';
+import { brandedPdfFilename, escapeHtml, resolveBranding } from '../services/branding.service.js';
 
+/** The signed-in organization's branding for the proposal it builds. */
+function requestBranding(request) {
+  return resolveBranding(request.prisma, request.user?.organizationId);
+}
+
+
+// ProposalBuilderError codes and the fixed message each answers with.
+const BUILDER_ERROR_MESSAGES = {
+  NOT_FOUND: 'Proposal not found',
+  PROPOSAL_NOT_DRAFT: 'Only DRAFT proposals can be updated',
+};
+
+function builderErrorBody(error) {
+  return { error: BUILDER_ERROR_MESSAGES[error.code] ?? 'Proposal could not be changed', code: error.code };
+}
 
 export default async function proposalBuilderRoutes(fastify) {
 
@@ -50,7 +67,7 @@ export default async function proposalBuilderRoutes(fastify) {
         budget,
         timeline,
         notes
-      });
+      }, { sender: request.user, branding: await requestBranding(request) });
 
       // Save as draft if clientId provided
       let savedProposal = null;
@@ -105,6 +122,10 @@ export default async function proposalBuilderRoutes(fastify) {
       if (!proposal) {
         return reply.status(404).send({ error: 'Proposal not found' });
       }
+      // An answered proposal is never sent again (or moved back to SENT).
+      if (![PROPOSAL_STATUS.DRAFT, PROPOSAL_STATUS.SENT, PROPOSAL_STATUS.VIEWED].includes(proposal.status)) {
+        return reply.status(409).send({ error: 'Proposal has already been answered', code: 'PROPOSAL_ANSWERED' });
+      }
 
       // Get email from proposal or use override
       const recipientEmail = email || proposal.client?.email;
@@ -149,13 +170,16 @@ export default async function proposalBuilderRoutes(fastify) {
       // Create Gmail draft with PDF
       let draftResult = null;
       try {
-        draftResult = await createProposalDraft(proposalData, recipientEmail);
+        draftResult = await createProposalDraft(proposalData, recipientEmail, {
+          sender: request.user,
+          branding: await requestBranding(request),
+        });
       } catch (draftErr) {
         console.warn('Gmail draft creation failed:', draftErr.message);
       }
 
-      // Update proposal status to SENT
-      await updateProposal(proposalId, { status: PROPOSAL_STATUS.SENT });
+      // DRAFT -> SENT (compare-and-set); a SENT or VIEWED proposal keeps its status.
+      const status = await markProposalSent(proposalId);
 
       return {
         success: true,
@@ -171,10 +195,16 @@ export default async function proposalBuilderRoutes(fastify) {
         } : null,
         proposal: {
           id: proposal.id,
-          status: PROPOSAL_STATUS.SENT
+          status
         }
       };
     } catch (error) {
+      if (error instanceof ProposalBuilderError) {
+        return reply.status(error.statusCode).send(builderErrorBody(error));
+      }
+      if (error?.message?.includes('not found')) {
+        return reply.status(404).send({ error: 'Proposal not found' });
+      }
       console.error('Error sending proposal:', error);
       return reply.status(500).send({ error: 'Failed to send proposal' });
     }
@@ -266,7 +296,9 @@ export default async function proposalBuilderRoutes(fastify) {
 
   /**
    * PUT /:id
-   * Update proposal content
+   * Update a DRAFT proposal's content. Status and totals are not accepted:
+   * totals are derived from the line items on the server, and the status
+   * changes only through send or the client's answer.
    */
   fastify.put('/:id', {
     onRequest: [fastify.authenticate],
@@ -274,10 +306,10 @@ export default async function proposalBuilderRoutes(fastify) {
   }, async (request, reply) => {
     try {
       const proposalId = request.params.id;
-      const { title, notes, status, subtotal, total, validUntil } = request.body || {};
+      const { title, notes, validUntil, lineItems, discount } = request.body || {};
 
       const proposal = await updateProposal(proposalId, {
-        title, notes, status, subtotal, total, validUntil
+        title, notes, validUntil, lineItems, discount
       });
 
       return {
@@ -287,12 +319,17 @@ export default async function proposalBuilderRoutes(fastify) {
           title: proposal.title,
           status: proposal.status,
           subtotal: proposal.subtotal,
+          discount: proposal.discount,
           total: proposal.total,
           validUntil: proposal.validUntil,
-          updatedAt: new Date().toISOString()
+          lineItems: proposal.lineItems,
+          updatedAt: proposal.updatedAt
         }
       };
     } catch (error) {
+      if (error instanceof ProposalBuilderError) {
+        return reply.status(error.statusCode).send(builderErrorBody(error));
+      }
       console.error('Error updating proposal:', error);
       return reply.status(500).send({ error: 'Failed to update proposal' });
     }
@@ -314,27 +351,10 @@ export default async function proposalBuilderRoutes(fastify) {
     }
   });
 
-  /**
-   * POST /:id/accept
-   * Mark proposal as accepted (triggers contract generation)
-   */
-  fastify.post('/:id/accept', {
-    onRequest: [fastify.authenticate]
-  }, async (request, reply) => {
-    try {
-      const proposalId = request.params.id;
-      const result = await acceptProposal(proposalId);
-
-      return {
-        success: true,
-        proposal: result.proposal,
-        message: result.message
-      };
-    } catch (error) {
-      console.error('Error accepting proposal:', error);
-      return reply.status(500).send({ error: 'Failed to accept proposal' });
-    }
-  });
+  // There is deliberately no staff "accept" route. A proposal is approved
+  // only by the client, through the portal or public link (portal.routes.js,
+  // proposal.routes.js), which compare-and-set from SENT/VIEWED, write the
+  // proposal.approved audit and outbox events and run onProposalApproved.
 
   /**
    * GET /templates
@@ -405,6 +425,7 @@ export default async function proposalBuilderRoutes(fastify) {
         proposalHtml = proposal.notes || "";
       }
 
+      const branding = await requestBranding(request);
       // If no HTML stored, generate it from the proposal data
       if (!proposalHtml) {
         const leadData = {
@@ -422,11 +443,11 @@ export default async function proposalBuilderRoutes(fastify) {
           })) || []
         };
         // Use basic HTML since we don't have AI generation here
-        proposalHtml = buildFallbackProposalHtml(proposalData, leadData);
+        proposalHtml = buildFallbackProposalHtml(proposalData, leadData, branding);
       }
 
       const pdfBuffer = await generatePdf(proposalHtml);
-      const filename = `Ashbi_Proposal_${proposal.id}.pdf`;
+      const filename = brandedPdfFilename(branding.companyName, 'Proposal', proposal.id);
 
       return reply
         .header("Content-Type", "application/pdf")
@@ -439,8 +460,17 @@ export default async function proposalBuilderRoutes(fastify) {
   });
 }
 
-// Helper to build basic proposal HTML when AI is not available
-function buildFallbackProposalHtml(proposalData, leadData) {
+// Helper to build basic proposal HTML when AI is not available, in the
+// organization's branding (resolveBranding).
+export function buildFallbackProposalHtml(proposalData, leadData, branding = {}) {
+  const companyName = escapeHtml(String(branding?.companyName || '').trim());
+  const footerLine = String(branding?.proposalFooter || '').trim()
+    ? escapeHtml(String(branding.proposalFooter).trim())
+    : [branding?.companyName, branding?.address, branding?.email, branding?.website]
+      .map((part) => String(part || '').trim())
+      .filter(Boolean)
+      .map(escapeHtml)
+      .join(' | ');
   const today = new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
   const validUntil = new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -469,7 +499,7 @@ function buildFallbackProposalHtml(proposalData, leadData) {
 <body>
   <div class="container">
     <div class="header">
-      <div class="logo">ASHBI</div>
+      ${companyName ? `<div class="logo">${companyName}</div>` : ''}
       <h1 class="proposal-title">${proposalData.title || 'Project Proposal'}</h1>
       <div>Prepared for ${leadData.name}${leadData.company ? `, ${leadData.company}` : ''} | ${today}</div>
     </div>
@@ -493,7 +523,7 @@ function buildFallbackProposalHtml(proposalData, leadData) {
       </div>
     </div>
     <div class="footer">
-      <p>Ashbi | Toronto, ON | hello@ashbi.design</p>
+      ${footerLine ? `<p>${footerLine}</p>` : ''}
       <p>Valid until ${validUntil}</p>
     </div>
   </div>

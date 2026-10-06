@@ -96,13 +96,13 @@ export default function Inbox() {
           <h1 className="text-2xl font-heading font-bold text-foreground">Inbox</h1>
           <p className="text-muted-foreground">Manage and respond to client requests</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => triageMutation.mutate()}
             disabled={triageMutation.isPending}
             className={cn(
-              'flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+              'min-h-11 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               triageMutation.isPending
                 ? 'bg-primary/20 text-primary cursor-wait'
                 : 'bg-primary text-primary-foreground hover:bg-primary/90'

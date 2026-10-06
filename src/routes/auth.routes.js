@@ -16,6 +16,7 @@ import { accountThrottle } from '../auth/credential-throttle.js';
 import { isMfaEnrollmentRequired } from '../auth/mfa-enforcement.js';
 import { resolveRequestSession } from '../auth/request-session.js';
 import { AccountWithoutOrganizationError } from '../auth/providers/local.provider.js';
+import { brandedSender, escapeHtml, resolveBranding, systemSender } from '../services/branding.service.js';
 import {
   IMPERSONATION_COOKIE,
   clearImpersonationCookieOptions,
@@ -149,7 +150,65 @@ class InvitationAlreadyUsedError extends Error {
   }
 }
 
-export default async function authRoutes(fastify) {
+/**
+ * Send the reset link through Mailgun. Throws when mail is not configured or
+ * the provider refuses the message (the caller logs it).
+ * @param {{ to: string, resetLink: string }} message
+ */
+async function sendPasswordResetEmailViaMailgun({ to, resetLink }) {
+  if (!env.mailgunApiKey || !env.mailgunDomain) {
+    throw new Error('Mailgun is not configured; password reset email not sent');
+  }
+  const mg = new Mailgun(FormData);
+  const client = mg.client({ username: 'api', key: env.mailgunApiKey });
+  await client.messages.create(env.mailgunDomain, {
+    // No organization is known before the reset: the product's name.
+    from: systemSender(env.mailgunDomain),
+    to,
+    subject: 'Reset Your Password — Ashbi Hub',
+    html: `
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:40px;border-radius:12px;">
+        <h2 style="color:#c9a84c;margin-top:0;">Password Reset Request</h2>
+        <p>We received a request to reset your password. Click the button below to create a new password.</p>
+        <a href="${resetLink}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#c9a84c;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Reset Password</a>
+        <p style="font-size:14px;color:#94a3b8;">Or copy this link: <code style="color:#e2e8f0;word-break:break-all;">${resetLink}</code></p>
+        <p style="font-size:12px;color:#94a3b8;">This link will expire in 24 hours. If you didn't request this, you can safely ignore this email.</p>
+      </div>
+    `
+  });
+}
+
+/**
+ * Store a fresh reset token (hashed, 24 hours) for `user` and mail the link
+ * to the address on the account, never the address as typed in the request.
+ * Authentication action links are credentials: never log the link or token.
+ * @param {any} db
+ * @param {{ id: string, email: string }} user
+ * @param {(message: { to: string, resetLink: string }) => Promise<unknown>} send
+ */
+async function issuePasswordReset(db, user, send) {
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await db.user.update({
+    where: { id: user.id },
+    data: { resetToken: resetTokenHash, resetTokenExpiresAt: expiresAt },
+  });
+  await send({ to: user.email, resetLink: `${env.hubUrl}/reset-password?token=${resetToken}` });
+  logger.info({ userId: user.id }, '[auth] Password reset email sent');
+}
+
+/**
+ * @param {any} fastify
+ * @param {{
+ *   sendPasswordResetEmail?: (message: { to: string, resetLink: string }) => Promise<unknown>,
+ *   onPasswordResetSettled?: (work: Promise<void>) => void,
+ * }} [options] test seams: the mail sender, and a callback handed the
+ *   background reset work so a test can await it.
+ */
+export default async function authRoutes(fastify, options = {}) {
+  const sendPasswordResetEmail = options.sendPasswordResetEmail ?? sendPasswordResetEmailViaMailgun;
+  const onPasswordResetSettled = options.onPasswordResetSettled;
   const authRateLimit = {
     config: {
       rateLimit: {
@@ -190,7 +249,7 @@ export default async function authRoutes(fastify) {
       // goes straight to setup.
       const mfaEnrollmentRequired = await isMfaEnrollmentRequired(request.prisma, user.id);
 
-      reply
+      return reply
         .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
         .send({ user: { ...user, mfaEnrollmentRequired } });
     } catch (err) {
@@ -227,7 +286,7 @@ export default async function authRoutes(fastify) {
     } catch {
       // Logout is idempotent: always clear the browser cookie.
     }
-    reply
+    return reply
       // Cookie-clear options must match the cookie-set options used in /login
       // (name+path+secure+sameSite). If they diverge, the browser keeps the
       // session cookie and the user appears to remain signed in.
@@ -550,7 +609,7 @@ export default async function authRoutes(fastify) {
 
     const jwtToken = signUserSession(fastify.jwt, user, { contactId: contact.id });
 
-    reply
+    return reply
       .setCookie('token', jwtToken, sessionCookieOptions({ includeMaxAge: true }))
       .send({
         user: {
@@ -602,7 +661,7 @@ export default async function authRoutes(fastify) {
 
     const token = signUserSession(fastify.jwt, user);
 
-    reply
+    return reply
       .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
       .send({
         user: {
@@ -614,86 +673,41 @@ export default async function authRoutes(fastify) {
       });
   });
 
-  // Forgot password
+  // Forgot password. The response is the same `{ success: true }` whether or
+  // not an account exists and whether or not the email could be sent, and it
+  // is returned right after the account lookup on both paths: issuing the
+  // token and the mail delivery run after the response (setImmediate), so
+  // neither a missing account nor a mail failure is visible in the reply or
+  // its timing. Inactive accounts are treated as missing.
+  // Failures are logged server-side only.
   fastify.post('/forgot-password', {
     ...authRateLimit,
     preHandler: [validateBody(forgotPasswordSchema)],
-  }, async (request, reply) => {
+  }, async (request) => {
+    const { email } = request.body;
+    // The raw client: the work below outlives the request.
+    const db = request.prisma;
+    let user = null;
     try {
-      const { email } = request.body;
-
       // Any case variant: older accounts may be stored in mixed case.
-      const user = await request.prisma.user.findFirst({
-        where: { email: insensitiveEquals(email.trim()) },
+      user = await db.user.findFirst({
+        where: { email: insensitiveEquals(email.trim()), isActive: true },
         orderBy: { createdAt: 'asc' },
+        select: { id: true, email: true },
       });
-
-      // Always return success (don't leak if email exists)
-      if (!user) {
-        return { success: true };
-      }
-
-      // Generate reset token (valid for 24 hours)
-      const resetToken = crypto.randomBytes(32).toString('hex');
-      const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-      await request.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          resetToken: resetTokenHash,
-          resetTokenExpiresAt: expiresAt
-        }
-      });
-
-      // Send reset email via Mailgun
-      const resetLink = `${env.hubUrl}/reset-password?token=${resetToken}`;
-
-      if (env.mailgunApiKey && env.mailgunDomain) {
-        try {
-          const mg = new Mailgun(FormData);
-          const client = mg.client({
-            username: 'api',
-            key: env.mailgunApiKey
-          });
-
-          await client.messages.create(env.mailgunDomain, {
-            from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
-            to: email,
-            subject: 'Reset Your Password — Ashbi Hub',
-            html: `
-              <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:40px;border-radius:12px;">
-                <h2 style="color:#c9a84c;margin-top:0;">Password Reset Request</h2>
-                <p>We received a request to reset your password. Click the button below to create a new password.</p>
-                <a href="${resetLink}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#c9a84c;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Reset Password</a>
-                <p style="font-size:14px;color:#94a3b8;">Or copy this link: <code style="color:#e2e8f0;word-break:break-all;">${resetLink}</code></p>
-                <p style="font-size:12px;color:#94a3b8;">This link will expire in 24 hours. If you didn't request this, you can safely ignore this email.</p>
-              </div>
-            `
-          });
-          logger.info({ email }, '[auth] Password reset email sent');
-        } catch (mailErr) {
-          logger.error({ err: mailErr }, '[auth] Failed to send reset email');
-          // In production, surface the error so the user knows email delivery failed
-          if (env.isDeployed) {
-            return reply.status(503).send({ error: 'Failed to send reset email. Please try again or contact support.' });
-          }
-        }
-      } else {
-        logger.warn('[auth] Mailgun not configured — password reset email not sent');
-        if (env.isDeployed) {
-          return reply.status(503).send({ error: 'Email service not configured. Please contact support to reset your password.' });
-        } else {
-          // Authentication action links are credentials. Never write them to logs;
-          // Local testing must use an approved sandbox email provider.
-        }
-      }
-
-      return { success: true };
     } catch (err) {
-      logger.error({ err }, 'Forgot password error');
-      return reply.status(500).send({ error: 'Failed to process password reset request' });
+      logger.error({ err }, '[auth] Forgot password lookup failed');
     }
+    if (user) {
+      // All token work (random bytes, hashing, the write and the send) starts
+      // after the reply, so both paths do the same synchronous work.
+      const resetUser = user;
+      const work = new Promise((resolve) => { setImmediate(resolve); })
+        .then(() => issuePasswordReset(db, resetUser, sendPasswordResetEmail))
+        .catch((err) => logger.error({ err, userId: resetUser.id }, '[auth] Password reset could not be issued or sent'));
+      onPasswordResetSettled?.(work);
+    }
+    return { success: true };
   });
 
   // Reset password with token
@@ -717,16 +731,26 @@ export default async function authRoutes(fastify) {
         return reply.status(400).send({ error: 'Invalid or expired reset token' });
       }
 
-      // Update password and clear reset token
-      await request.prisma.user.update({
-        where: { id: user.id },
+      // Consume the token atomically: the update applies only while this
+      // exact token is still stored and unexpired, so two concurrent requests
+      // with the same link cannot both set a password.
+      const passwordHash = await hashPassword(newPassword);
+      const consumed = await request.prisma.user.updateMany({
+        where: {
+          id: user.id,
+          resetToken: resetTokenHash,
+          resetTokenExpiresAt: { gt: new Date() },
+        },
         data: {
-          password: await hashPassword(newPassword),
+          password: passwordHash,
           sessionVersion: { increment: 1 },
           resetToken: null,
           resetTokenExpiresAt: null
         }
       });
+      if (consumed.count !== 1) {
+        return reply.status(400).send({ error: 'Invalid or expired reset token' });
+      }
 
       await recordAuditEvent(request.prisma, {
         organizationId: user.organizationId,
@@ -817,14 +841,17 @@ export default async function authRoutes(fastify) {
           key: env.mailgunApiKey
         });
 
+        // Sent in the inviting agency's name (resolveBranding).
+        const branding = await resolveBranding(request.prisma, request.user.organizationId);
+        const companyName = String(branding.companyName || '').trim();
         await mgClient.messages.create(env.mailgunDomain, {
-          from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
+          from: brandedSender(branding, env.mailgunDomain),
           to: email,
-          subject: 'You have been invited to Ashbi Hub',
+          subject: companyName ? `${companyName} invited you to their client portal` : 'You have been invited to Ashbi Hub',
           html: `
             <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:40px;border-radius:12px;">
               <h2 style="color:#c9a84c;margin-top:0;">You've been invited</h2>
-              <p>You have been invited to join Ashbi Hub. Click the button below to access your client portal.</p>
+              <p>You have been invited to join ${companyName ? `the ${escapeHtml(companyName)} client portal` : 'Ashbi Hub'}. Click the button below to access your client portal.</p>
               <a href="${inviteLink}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#c9a84c;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Access Client Portal</a>
               <p style="font-size:14px;color:#94a3b8;">Or copy this link: <code style="color:#e2e8f0;word-break:break-all;">${inviteLink}</code></p>
               <p style="font-size:12px;color:#94a3b8;">This link will expire in 7 days.</p>

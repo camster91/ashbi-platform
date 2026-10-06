@@ -23,6 +23,8 @@ const ACTOR_TYPE_SET = new Set(AUDIT_ACTOR_TYPES);
 export const AUDIT_EVENT_CATALOG = Object.freeze({
   'invoice.sent': { entityType: 'invoice', metadata: ['fromStatus', 'toStatus', 'deliveryAccepted', 'paymentLinkAttached', 'total', 'currency', 'bulk'] },
   'invoice.paid': { entityType: 'invoice', metadata: ['fromStatus', 'toStatus', 'method', 'bulk', 'total', 'currency', 'stripeEventId'] },
+  'invoice.voided': { entityType: 'invoice', metadata: ['fromStatus', 'toStatus', 'total', 'currency', 'bulk'] },
+  'payment.refused': { entityType: 'invoice', metadata: ['code', 'amount', 'currency', 'stripeEventId', 'transactionId'] },
   'payment.recorded': { entityType: 'invoice_payment', metadata: ['invoiceId', 'amount', 'method', 'source', 'bulk', 'currency', 'stripeEventId'] },
   'proposal.approved': { entityType: 'proposal', metadata: ['fromStatus', 'toStatus', 'total', 'via'] },
   'contract.signed': { entityType: 'contract', metadata: ['fromStatus', 'toStatus', 'signingMethod', 'documentHash', 'via'] },
@@ -48,6 +50,8 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'client_portal.revision_responded': { entityType: 'revision_round', metadata: ['projectId', 'clientId', 'contactId', 'response', 'roundNumber', 'activityId'] },
   'client_portal.feedback_submitted': { entityType: 'project', metadata: ['clientId', 'contactId', 'activityId', 'messageLength'] },
   // A file the upload policy refused (docs/media-review.md "Upload checksums").
+  // A staff member shared a project file with the client portal, or stopped sharing it.
+  'attachment.client_visibility_changed': { entityType: 'attachment', metadata: ['projectId', 'fromVisible', 'toVisible', 'bulk'] },
   'upload.rejected': { entityType: 'attachment', metadata: ['surface', 'reason', 'mimeType', 'size', 'extension', 'projectId'] },
   'ai.connection_connected': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'baseUrlHost', 'defaultModel', 'allowedModelCount', 'monthlyBudgetCents', 'replacedStatus'] },
   'ai.connection_validated': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'baseUrlHost', 'result', 'errorType', 'fromStatus', 'toStatus'] },

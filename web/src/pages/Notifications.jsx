@@ -1,30 +1,35 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bell, Check, CheckCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Bell, Check, CheckCheck, ChevronRight } from 'lucide-react';
 import { api } from '../lib/api';
+import { invalidateNotifications, PAGE_NOTIFICATIONS_LIMIT, pageNotificationsKey } from '../lib/notificationKeys';
 import { EmptyState, ListPageSkeleton } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
+import { getNotificationLink } from '../components/NotificationsDropdown';
 
 export default function Notifications() {
   const queryClient = useQueryClient();
 
   const { data: notifications = [], isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => api.getNotifications().then((r) => r?.notifications ?? []),
+    queryKey: pageNotificationsKey,
+    queryFn: () => api.getNotifications({ limit: PAGE_NOTIFICATIONS_LIMIT }).then((r) => r?.notifications ?? []),
   });
 
   const markReadMutation = useMutation({
     mutationFn: (id) => api.markNotificationRead(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    // Refresh the page list, the header dropdown and the unread badge.
+    onSuccess: () => invalidateNotifications(queryClient),
   });
 
   const markAllReadMutation = useMutation({
     mutationFn: () => api.markAllNotificationsRead(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    // Refresh the page list, the header dropdown and the unread badge.
+    onSuccess: () => invalidateNotifications(queryClient),
   });
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
             <Bell className="w-6 h-6 text-primary" />
@@ -74,39 +79,63 @@ export default function Notifications() {
         />
       ) : (
         <div className="space-y-2">
-          {notifications.map(notification => (
-            <div
-              key={notification.id}
-              className={`p-4 rounded-lg border transition-colors ${
-                notification.read
-                  ? 'bg-card border-border'
-                  : 'bg-primary/5 border-primary/20'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm ${notification.read ? 'text-muted-foreground' : 'text-foreground font-medium'}`}>
-                    {notification.message || notification.content}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {new Date(notification.createdAt).toLocaleString()}
-                  </p>
-                </div>
-                {!notification.read && (
-                  <button
-                    type="button"
-                    onClick={() => markReadMutation.mutate(notification.id)}
-                    disabled={markReadMutation.isPending}
-                    aria-label="Mark notification as read"
-                    className="min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-foreground rounded transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    title="Mark as read"
-                  >
-                    <Check className="w-4 h-4" />
-                  </button>
+          {notifications.map(notification => {
+            const link = getNotificationLink(notification);
+            const body = notification.message || notification.content;
+            const title = notification.title || body;
+            const details = (
+              <>
+                <p className={`text-sm ${notification.read ? 'text-muted-foreground' : 'text-foreground font-medium'}`}>
+                  {title}
+                </p>
+                {notification.title && body && body !== notification.title && (
+                  <p className="text-sm text-muted-foreground mt-0.5">{body}</p>
                 )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  {new Date(notification.createdAt).toLocaleString()}
+                </p>
+              </>
+            );
+            return (
+              <div
+                key={notification.id}
+                className={`rounded-lg border transition-colors ${
+                  notification.read
+                    ? 'bg-card border-border'
+                    : 'bg-primary/5 border-primary/20'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-1">
+                  {link ? (
+                    // Opening a notification also marks it read, matching the
+                    // header dropdown.
+                    <Link
+                      to={link}
+                      onClick={() => { if (!notification.read) markReadMutation.mutate(notification.id); }}
+                      className="group flex min-h-11 min-w-0 flex-1 items-start gap-2 rounded-lg p-4 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    >
+                      <span className="min-w-0 flex-1">{details}</span>
+                      <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground" aria-hidden="true" />
+                    </Link>
+                  ) : (
+                    <div className="min-w-0 flex-1 p-4">{details}</div>
+                  )}
+                  {!notification.read && (
+                    <button
+                      type="button"
+                      onClick={() => markReadMutation.mutate(notification.id)}
+                      disabled={markReadMutation.isPending}
+                      aria-label="Mark notification as read"
+                      className="m-2 min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-foreground rounded transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      title="Mark as read"
+                    >
+                      <Check className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

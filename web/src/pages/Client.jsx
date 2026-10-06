@@ -21,14 +21,20 @@ import QueryErrorState from '../components/QueryErrorState';
 import { useAuth } from '../hooks/useAuth';
 import { formatRelativeTime, getHealthColor, getProjectStatusColor, getProjectStatusLabel, cn } from '../lib/utils';
 import { formatDate, formatMoney } from '../lib/format';
+import { StatusBadge } from '../components/ui';
+import { invoiceBalanceDue, invoiceDisplayStatus } from '../lib/invoice-status';
 
-const invoiceStatusConfig = {
-  DRAFT: { color: 'bg-muted text-muted-foreground' },
-  SENT: { color: 'bg-info/10 text-info' },
-  PAID: { color: 'bg-success/10 text-success' },
-  OVERDUE: { color: 'bg-destructive/10 text-destructive' },
-  VOID: { color: 'bg-muted text-muted-foreground' },
-};
+// "$830.00" for one currency, "$830.00 · US$120.00" when the amounts are in
+// several (different currencies are never added together).
+function moneyByCurrency(byCurrency, amount, currency) {
+  const entries = Object.entries(byCurrency || {}).filter(([, value]) => value > 0);
+  if (entries.length > 0) return entries.map(([code, value]) => formatMoney(value, code)).join(' · ');
+  return formatMoney(amount, currency || undefined);
+}
+
+function hasMoney(byCurrency, amount) {
+  return Object.values(byCurrency || {}).some((value) => value > 0) || Number(amount) > 0;
+}
 
 export default function Client() {
   const { id } = useParams();
@@ -87,26 +93,26 @@ export default function Client() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Link to="/clients" aria-label="Back to clients" className="p-2 hover:bg-muted rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <div className="flex-1">
-          <h1 className="text-2xl font-heading font-bold text-foreground">{client.name}</h1>
-          <div className="flex items-center gap-3 mt-1">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-heading font-bold text-foreground break-words">{client.name}</h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 min-w-0">
             {client.domain && (
               <span className="text-sm text-muted-foreground">{client.domain}</span>
             )}
             {primaryContact && (
-              <span className="text-sm text-muted-foreground flex items-center gap-1">
-                <Mail className="w-3.5 h-3.5" /> {primaryContact.email}
+              <span className="text-sm text-muted-foreground flex items-center gap-1 min-w-0 break-all">
+                <Mail className="w-3.5 h-3.5 shrink-0" /> {primaryContact.email}
               </span>
             )}
           </div>
         </div>
         <span
           className={cn(
-            'px-3 py-1.5 text-sm font-medium rounded-lg',
+            'shrink-0 px-3 py-1.5 text-sm font-medium rounded-lg',
             client.status === 'ACTIVE'
               ? 'bg-success/10 text-success'
               : client.status === 'PAUSED'
@@ -137,18 +143,18 @@ export default function Client() {
           </button>
         )}
 
-        <div className="ml-auto flex items-center gap-4 text-sm">
-          {isAdmin && client.totalRevenue > 0 && (
+        <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          {isAdmin && hasMoney(client.revenueByCurrency, client.totalRevenue) && (
             <div className="flex items-center gap-1.5 text-success">
               <DollarSign className="w-4 h-4" />
-              <span className="font-medium">{formatMoney(client.totalRevenue)}</span>
+              <span className="font-medium">{moneyByCurrency(client.revenueByCurrency, client.totalRevenue, client.revenueCurrency)}</span>
               <span className="text-muted-foreground">total revenue</span>
             </div>
           )}
-          {isAdmin && client.outstandingBalance > 0 && (
+          {isAdmin && hasMoney(client.outstandingByCurrency, client.outstandingBalance) && (
             <div className="flex items-center gap-1.5 text-warning">
               <AlertTriangle className="w-4 h-4" />
-              <span className="font-medium">{formatMoney(client.outstandingBalance)}</span>
+              <span className="font-medium">{moneyByCurrency(client.outstandingByCurrency, client.outstandingBalance, client.outstandingCurrency)}</span>
               <span className="text-muted-foreground">outstanding</span>
             </div>
           )}
@@ -222,16 +228,19 @@ export default function Client() {
               </div>
               <ul className="divide-y divide-border">
                 {client.invoices.slice(0, 10).map((invoice) => {
-                  const displayStatus = invoice.isOverdue ? 'OVERDUE' : invoice.status;
-                  const config = invoiceStatusConfig[displayStatus] || invoiceStatusConfig.DRAFT;
+                  const displayStatus = invoiceDisplayStatus(invoice);
+                  const owing = ['PARTLY_PAID', 'OVERDUE'].includes(displayStatus) && invoice.amountPaid > 0;
                   return (
-                    <li key={invoice.id} className="flex items-center justify-between px-4 py-3">
-                      <div>
+                    <li key={invoice.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                      <div className="min-w-0">
                         <span className="text-sm font-mono font-medium text-foreground">
                           {invoice.invoiceNumber}
                         </span>
-                        <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-xs text-muted-foreground">
                           <span className="font-medium text-foreground">{formatMoney(invoice.total, invoice.currency)}</span>
+                          {owing && (
+                            <span>{formatMoney(invoiceBalanceDue(invoice), invoice.currency)} left to pay</span>
+                          )}
                           {invoice.dueDate && (
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3" />
@@ -240,12 +249,7 @@ export default function Client() {
                           )}
                         </div>
                       </div>
-                      <span className={cn(
-                        'px-2 py-0.5 text-xs font-medium rounded-full',
-                        config.color
-                      )}>
-                        {displayStatus}
-                      </span>
+                      <StatusBadge domain="invoice" status={displayStatus} className="shrink-0" />
                     </li>
                   );
                 })}
