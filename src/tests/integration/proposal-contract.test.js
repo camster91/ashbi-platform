@@ -10,12 +10,9 @@ import requestPrisma, { prisma, rawPrisma } from '../../config/db.js';
 import proposalRoutes from '../../routes/proposal.routes.js';
 import contractRoutes from '../../routes/contract.routes.js';
 import portalRoutes from '../../routes/portal.routes.js';
-import { shouldSkipHeavyTests } from '../_test-skip.js';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../../utils/request-context.js';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
-
-const skip = shouldSkipHeavyTests();
 
 let fastify;
 let authToken;
@@ -27,7 +24,6 @@ let createdContractId;
 let testOrganizationId;
 
 before(async () => {
-  if (skip) return;
   fastify = Fastify({ logger: false });
   await fastify.register(cookie);
   await fastify.register(jwt, { secret: 'test-secret', cookie: { cookieName: 'token', signed: false } });
@@ -94,7 +90,6 @@ before(async () => {
 });
 
 after(async () => {
-  if (skip) return;
   try {
     await rawPrisma.contract.deleteMany({ where: { clientId: testClientId } });
     await rawPrisma.proposalVersion.deleteMany({ where: { proposal: { clientId: testClientId } } });
@@ -105,6 +100,8 @@ after(async () => {
     await rawPrisma.activity.deleteMany({ where: { userId: testUserId } });
     await rawPrisma.notification.deleteMany({ where: { userId: testUserId } });
     await rawPrisma.contact.deleteMany({ where: { clientId: testClientId } });
+    // Approval automation opens a won pipeline deal for the client.
+    await rawPrisma.pipelineDeal.deleteMany({ where: { clientId: testClientId } });
     await rawPrisma.client.delete({ where: { id: testClientId } }).catch(() => null);
     await rawPrisma.user.delete({ where: { id: testUserId } }).catch(() => null);
     // Approvals and signatures now write audit events for this fixture org.
@@ -123,7 +120,7 @@ function authHeaders() {
 
 // ── Proposals ──────────────────────────────────────────────────────────────
 
-describe('Proposal CRUD', { skip }, () => {
+describe('Proposal CRUD', () => {
 
   test('POST /api/proposals — create proposal with line items', async () => {
     const res = await fastify.inject({
@@ -252,12 +249,20 @@ describe('Proposal CRUD', { skip }, () => {
     const body = JSON.parse(res.body);
     assert.equal(body.status, 'APPROVED');
     assert.ok(body.approvedAt);
-    for (let attempt = 0; attempt < 20 && !createdContractId; attempt += 1) {
+    // Approval runs its automation in the background: a draft contract, a won
+    // pipeline deal, an admin notification and, last, an activity entry.
+    // Wait for that last write so teardown never races it (#532).
+    let automationDone = false;
+    for (let attempt = 0; attempt < 200 && !automationDone; attempt += 1) {
       const contract = await rawPrisma.contract.findUnique({ where: { proposalId: createdProposalId } });
       createdContractId = contract?.id;
-      if (!createdContractId) await new Promise(resolve => setTimeout(resolve, 25));
+      automationDone = Boolean(createdContractId) && await rawPrisma.activity.count({
+        where: { entityType: 'CONTRACT', entityId: createdContractId, type: 'AUTOMATION_RAN' },
+      }) > 0;
+      if (!automationDone) await new Promise(resolve => setTimeout(resolve, 25));
     }
     assert.ok(createdContractId, 'Approval automation should create a draft contract');
+    assert.ok(automationDone, 'Approval automation should finish');
     const events = await rawPrisma.domainEvent.findMany({ where: { aggregateType: 'proposal', aggregateId: createdProposalId } });
     assert.deepEqual(events.map((event) => [event.type, event.organizationId, event.payload.via]), [['proposal.approved', testOrganizationId, 'portal_link']]);
     console.log(`  ✓ Approved proposal`);
@@ -267,7 +272,7 @@ describe('Proposal CRUD', { skip }, () => {
 
 // ── Contracts ──────────────────────────────────────────────────────────────
 
-describe('Contract CRUD', { skip }, () => {
+describe('Contract CRUD', () => {
 
   test('proposal approval creates a draft contract exactly once', async () => {
     const body = await rawPrisma.contract.findUnique({ where: { id: createdContractId } });

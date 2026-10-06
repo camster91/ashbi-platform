@@ -1,20 +1,15 @@
 /**
  * Project Routes Unit Tests
  *
- * Imports project.routes.js which transitively loads ai/client.js and
- * jobs/queue.js — those have module-eval side effects (Anthropic SDK init,
- * BullMQ queue init) that hang in CI without API keys. Skip unless
- * ASHBI_RUN_HEAVY_TESTS=1.
+ * Runs against a mock database. NODE_ENV=test mocks the queues, so this runs
+ * in the required integration gate.
  */
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import projectRoutes from '../../routes/project.routes.js';
-import { shouldSkipHeavyTests } from '../_test-skip.js';
 
-const skip = shouldSkipHeavyTests();
-
-describe('Project Routes (Unit)', { skip }, () => {
+describe('Project Routes (Unit)', () => {
   let fastify;
   let mockPrisma;
 
@@ -27,6 +22,10 @@ describe('Project Routes (Unit)', { skip }, () => {
     });
 
     mockPrisma = {
+      // POST / checks the client exists in this workspace before creating.
+      client: {
+        findFirst: async ({ where }) => (where.id === 'client-1' ? { id: 'client-1' } : null)
+      },
       project: {
         findMany: async () => [],
         count: async () => 0,
@@ -89,6 +88,20 @@ describe('Project Routes (Unit)', { skip }, () => {
     assert.equal(res.statusCode, 201);
     const body = JSON.parse(res.body);
     assert.equal(body.name, 'New Project');
+  });
+
+  test('POST / refuses a client outside the workspace', async () => {
+    let created = false;
+    mockPrisma.project.create = async () => { created = true; };
+    const res = await fastify.inject({
+      method: 'POST',
+      url: '/',
+      payload: { name: 'New Project', clientId: 'client-elsewhere' }
+    });
+
+    assert.equal(res.statusCode, 404);
+    assert.equal(JSON.parse(res.body).error, 'Client not found');
+    assert.equal(created, false);
   });
 
   test('GET /:id/budget should calculate budget usage', async () => {
