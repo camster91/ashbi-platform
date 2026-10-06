@@ -39,7 +39,7 @@ Ashbi Design runs its client work across many separate tools (task boards, wikis
 
 ## Getting started
 
-Prerequisites: Node.js 22 (see `.nvmrc`), PostgreSQL 16 with pgvector, and Redis 7 or newer.
+Prerequisites: Node.js 22 (see `.nvmrc`), PostgreSQL 16 with pgvector, and Redis 7+.
 
 ```bash
 # Use the pinned Node version (if you use nvm)
@@ -110,6 +110,10 @@ docs/           design and reference documentation
 ```
 
 The backend's composition and domain boundaries are described in [docs/backend-application-boundaries.md](docs/backend-application-boundaries.md).
+
+## Production
+
+Production has one controller: the immutable direct-VPS procedure in [docs/deployment-and-rollback.md](docs/deployment-and-rollback.md). GitHub Actions and Coolify do not promote production. Every release uses the reviewed revision, archive checksum, immutable image ID, migration/status preflight, dependency-aware API/worker readiness, retained rollback containers, trusted HTTPS verification, and the encrypted backup policy in [docs/backup-and-restore.md](docs/backup-and-restore.md).
 
 ## Reference docs
 
