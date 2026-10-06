@@ -247,7 +247,7 @@ export default async function authRoutes(fastify, options = {}) {
       // goes straight to setup.
       const mfaEnrollmentRequired = await isMfaEnrollmentRequired(request.prisma, user.id);
 
-      reply
+      return reply
         .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
         .send({ user: { ...user, mfaEnrollmentRequired } });
     } catch (err) {
@@ -284,7 +284,7 @@ export default async function authRoutes(fastify, options = {}) {
     } catch {
       // Logout is idempotent: always clear the browser cookie.
     }
-    reply
+    return reply
       // Cookie-clear options must match the cookie-set options used in /login
       // (name+path+secure+sameSite). If they diverge, the browser keeps the
       // session cookie and the user appears to remain signed in.
@@ -607,7 +607,7 @@ export default async function authRoutes(fastify, options = {}) {
 
     const jwtToken = signUserSession(fastify.jwt, user, { contactId: contact.id });
 
-    reply
+    return reply
       .setCookie('token', jwtToken, sessionCookieOptions({ includeMaxAge: true }))
       .send({
         user: {
@@ -659,7 +659,7 @@ export default async function authRoutes(fastify, options = {}) {
 
     const token = signUserSession(fastify.jwt, user);
 
-    reply
+    return reply
       .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
       .send({
         user: {

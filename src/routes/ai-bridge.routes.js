@@ -163,7 +163,7 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
   // Workflow actions are governed AI tools (src/ai/tools, docs/ai-tool-registry.md):
   // prepare creates a pending action, confirm is the requester's approval.
   fastify.post('/v1/actions/prepare', { onRequest: [fastify.authenticateWithApiKey], preHandler: [requireActionsScope, validateBody(aiBridgeActionPrepareSchema)] }, async (request, reply) => {
-    if (!requireActionRole(request, reply)) return;
+    if (!requireActionRole(request, reply)) return reply;
     const { action, input, idempotencyKey } = request.body ?? {};
     if (!AI_BRIDGE_ACTION_TOOLS.includes(action) || typeof idempotencyKey !== 'string' || !IDEMPOTENCY_KEY_FORMAT.test(idempotencyKey)) {
       return reply.status(400).send({ error: { message: 'Invalid action request', type: 'invalid_request_error' } });
@@ -178,7 +178,7 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
   });
 
   fastify.post('/v1/actions/:actionId/confirm', { onRequest: [fastify.authenticateWithApiKey], preHandler: [requireActionsScope, validateBody(aiBridgeActionConfirmSchema)] }, async (request, reply) => {
-    if (!requireActionRole(request, reply)) return;
+    if (!requireActionRole(request, reply)) return reply;
     if (request.body?.confirm !== true) return reply.status(400).send({ error: { message: 'Set confirm to true to execute this action', type: 'confirmation_required' } });
     try {
       // The API key's owner confirms their own action: the bridge contract.
