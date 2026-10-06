@@ -1,7 +1,8 @@
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle, Clock, AlertTriangle, Sparkles } from 'lucide-react';
+import { CheckCircle, Clock, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/api';
+import PortalBrand, { PortalBrandFooter } from '../components/PortalBrand';
 import { cn, formatDate } from '../lib/utils';
 import LoadingState from '../components/ui/LoadingState';
 import usePortalLightTheme from '../hooks/usePortalLightTheme';
@@ -99,12 +100,7 @@ export default function Portal() {
       {/* Header */}
       <header className="bg-card border-b border-border/40 shadow-sm">
         <div className="max-w-4xl mx-auto px-6 py-6">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="text-sm font-medium text-muted-foreground">Ashbi Design</span>
-          </div>
+          <PortalBrand brand={project?.brand} iconClassName="w-5 h-5 text-primary-foreground" />
           <h1 className="text-2xl font-bold text-foreground mt-3">{project.name}</h1>
           {project.clientName && (
             <p className="text-muted-foreground mt-1">{project.clientName}</p>
@@ -263,9 +259,7 @@ export default function Portal() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-muted-foreground">
-            Powered by Ashbi Design
-          </p>
+          <PortalBrandFooter brand={project?.brand} />
         </div>
       </main>
     </div>

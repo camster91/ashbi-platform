@@ -83,8 +83,8 @@ function LoginScreen() {
     <div className="flex min-h-screen items-center justify-center bg-primary p-4">
       <Card padding="none" className="w-full max-w-[380px] px-8 py-10 text-center">
         <div className="mb-3 flex justify-center">{Icons.logo}</div>
-        <h1 className="m-0 text-2xl font-bold text-foreground">Ashbi Design</h1>
-        <CardDescription className="mt-1 font-medium">Client Portal</CardDescription>
+        <h1 className="m-0 text-2xl font-bold text-foreground">Client Portal</h1>
+        <CardDescription className="mt-1 font-medium">Sign in with your email</CardDescription>
 
         {sent ? (
           <div className="py-4">
@@ -604,6 +604,9 @@ function PortalDashboard({ token }) {
     { id: 'chat', label: 'Chat', icon: Icons.chat },
   ];
 
+  // The agency's name from GET /api/client-portal/me (its brand settings).
+  const brandName = typeof me?.brand?.companyName === 'string' ? me.brand.companyName.trim() : '';
+
   // If a project is selected, show project detail
   const showProjectDetail = activeTab === 'projects' && selectedProject;
 
@@ -614,7 +617,7 @@ function PortalDashboard({ token }) {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             {Icons.logo}
-            <span className="text-lg font-bold text-primary-foreground">Ashbi</span>
+            {brandName && <span className="text-lg font-bold text-primary-foreground">{brandName}</span>}
           </div>
           <span className="text-xs text-primary-foreground/30">|</span>
           <span className="text-sm text-primary-foreground/70">{clientName}</span>
@@ -681,7 +684,7 @@ function PortalDashboard({ token }) {
 
       {/* Footer */}
       <footer className="px-4 py-8 text-center text-xs text-muted-foreground">
-        &copy; {new Date().getFullYear()} Ashbi Design &mdash; ashbi.ca
+        {brandName && <>&copy; {new Date().getFullYear()} {brandName}</>}
       </footer>
     </div>
   );

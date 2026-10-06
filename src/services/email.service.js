@@ -6,6 +6,7 @@
 import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import env from '../config/env.js';
 import { mailgunTrackingFields } from './mailgun-delivery.service.js';
 import { formatMoney } from '../utils/money.js';
 import { renderEmailTheme } from '../emails/theme.js';
@@ -15,7 +16,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = path.join(__dirname, '..', 'emails');
 
 const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
-const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'ashbi.ca';
+// The configured sending domain (env.js holds the deployment default).
+const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || env.mailgunDomain;
 const MAILGUN_API_URL = `https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages`;
 
 // Mail with no organization behind it is sent in the product's name.
