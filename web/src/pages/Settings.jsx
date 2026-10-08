@@ -933,7 +933,7 @@ export default function Settings() {
 
       {/* API Keys */}
       <Section icon={Key} title="API Keys" description="Connect LLMs and integrations to workspace tools through HTTP or MCP">
-        <p className="text-sm text-gray-500 mb-4">Discover tools at <code>/api/agent/tools</code>. MCP endpoint: <code>/api/mcp</code>. Use a scoped API key as a Bearer token. Writes return a preview and require a separate confirmation.</p>
+        <p className="text-sm text-muted-foreground mb-4">Discover tools at <code>/api/agent/tools</code>. MCP endpoint: <code>/api/mcp</code>. Use a scoped API key as a Bearer token. Writes return a preview and require a separate confirmation.</p>
         <ApiKeysSection />
       </Section>
 
