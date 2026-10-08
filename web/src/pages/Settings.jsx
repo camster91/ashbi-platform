@@ -946,7 +946,7 @@ export default function Settings() {
       {embeddedAiEnabled && isAdmin && <AIModelSection />}
 
       {/* Organization BYOK AI provider, budget and kill switch (#413) — admin only */}
-      {isAdmin && (
+      {embeddedAiEnabled && isAdmin && (
         <Section icon={KeyRound} title="AI provider (bring your own key)" description="Use your own AI provider account, cap monthly spend, or turn AI off for this workspace">
           <Suspense fallback={null}><AiByokSettings /></Suspense>
         </Section>

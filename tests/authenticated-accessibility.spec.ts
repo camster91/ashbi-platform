@@ -97,6 +97,8 @@ test.describe('Authenticated accessibility', () => {
       await expect(page.getByRole('heading', { name: 'API Keys', exact: true })).toBeVisible();
       await expect(page.getByText('/api/mcp', { exact: true })).toBeVisible();
       await expect(question).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: 'AI provider (bring your own key)', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: 'Action approvals', exact: true })).toHaveCount(0);
       await expectNoAxeViolations(page, 'settings workspace API and MCP instructions');
       return;
     }
