@@ -83,8 +83,8 @@ export const translations = {
     brand: {
       name: 'Ashbi Hub',
       tagline: 'Your clients and projects, one workspace',
-      description: 'Run client work in one place: inbox, projects, proposals, invoices and team time, with AI help where it saves you effort.',
-      feature1: 'AI help for triage, updates and proposals',
+      description: 'Run client work in one place: inbox, projects, proposals, invoices and team time.',
+      feature1: 'Clear tasks, updates and next steps',
       feature2: 'Clients, projects and billing together',
       feature3: 'Automated follow-ups and reporting',
       copyright: '© 2026 Ashbi Hub. All rights reserved.',
@@ -172,8 +172,8 @@ export const translations = {
     brand: {
       name: 'Ashbi Hub',
       tagline: 'Tus clientes y proyectos, un solo espacio',
-      description: 'Gestiona el trabajo con clientes en un solo lugar: bandeja de entrada, proyectos, propuestas, facturas y tiempo del equipo, con ayuda de IA donde te ahorra esfuerzo.',
-      feature1: 'Ayuda de IA para clasificar, informar y proponer',
+      description: 'Gestiona el trabajo con clientes en un solo lugar: bandeja de entrada, proyectos, propuestas, facturas y tiempo del equipo.',
+      feature1: 'Tareas, novedades y próximos pasos claros',
       feature2: 'Clientes, proyectos y facturación juntos',
       feature3: 'Seguimientos automáticos e informes',
       copyright: '© 2026 Ashbi Hub. Todos los derechos reservados.',
