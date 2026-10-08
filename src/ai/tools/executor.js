@@ -29,7 +29,6 @@ import crypto from 'node:crypto';
 import defaultLogger from '../../utils/logger.js';
 import { actorTypeForRole, recordAuditEvent } from '../../services/audit-event.service.js';
 import { LOG_REDACT_PATHS } from '../../utils/log-redaction.js';
-import { aiGovernance } from '../governance.js';
 import { isAiControlError } from '../errors.js';
 import { APPROVAL_CLASSES, APPROVAL_TTL_MS, ToolError, toolRegistry } from './registry.js';
 
@@ -153,7 +152,10 @@ function serializedSize(value) {
  */
 export function createToolExecutor(options = {}) {
   const registry = options.registry ?? toolRegistry;
-  const governance = options.governance ?? aiGovernance;
+  const governance = options.governance ?? { assertAllowed: async organizationId => {
+    const { aiGovernance } = await import('../governance.js');
+    return aiGovernance.assertAllowed(organizationId);
+  } };
   const logger = options.logger ?? defaultLogger;
   const audit = options.audit ?? ((prisma, event) => recordAuditEvent(prisma, event, { logger }));
   const now = options.now ?? (() => new Date());
@@ -486,10 +488,10 @@ export function createToolExecutor(options = {}) {
    * an ADMIN may reject any in the organization.
    * @param {{ prisma: any, user: any, requestId?: string | null, ip?: string | null }} ctx
    * @param {string} actionId
-   * @param {{ reason?: string, reauthenticated?: boolean }} [rejection]
+   * @param {{ reason?: string, reauthenticated?: boolean, ownerOnly?: boolean, method?: 'session_step_up' | 'api_key_confirm' }} [rejection]
    */
-  async function reject(ctx, actionId, { reason = 'other', reauthenticated = false } = {}) {
-    const scope = ownerWhere(ctx);
+  async function reject(ctx, actionId, { reason = 'other', reauthenticated = false, ownerOnly = false, method = 'session_step_up' } = {}) {
+    const scope = ownerWhere(ctx, { ownerOnly });
     const initial = await load(ctx, actionId, scope);
     if (initial.status !== PENDING_STATUS) {
       throw new ToolError('ACTION_UNAVAILABLE', `Action is ${String(initial.status).toLowerCase()}`, { statusCode: 409 });
@@ -501,7 +503,7 @@ export function createToolExecutor(options = {}) {
       data: {
         status: 'REJECTED', rejectedAt, approverId: ctx.user.id,
         approvalEvidence: {
-          method: 'session_step_up', decision: 'rejected', reason: safeReason, approverRole: ctx.user.role,
+          method, decision: 'rejected', reason: safeReason, approverRole: ctx.user.role,
           requesterApproved: ctx.user.id === initial.userId, reauthenticated: Boolean(reauthenticated),
           rejectedAt: rejectedAt.toISOString(), requestId: ctx.requestId ?? null,
         },

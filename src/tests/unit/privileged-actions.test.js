@@ -427,7 +427,7 @@ describe('API key scopes and expiry', () => {
     const list = await app.inject({ method: 'GET', url: '/api/api-keys', cookies });
     assert.equal(list.statusCode, 200);
     assert.equal(list.json().keys[0].noExpiry, true);
-    assert.deepEqual(list.json().availableScopes, ['ai_bridge:read', 'ai_bridge:actions']);
+    assert.deepEqual(list.json().availableScopes, ['workspace:read', 'workspace:actions', 'ai_bridge:read', 'ai_bridge:actions']);
   });
 
   async function keyFor(t, { scopes = ['ai_bridge:read'], expiresInDays } = {}) {

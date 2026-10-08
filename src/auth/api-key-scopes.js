@@ -11,6 +11,8 @@
 // GET /api/ai-bridge/capabilities needs only a valid key (any scope).
 
 export const API_KEY_SCOPE_DESCRIPTIONS = Object.freeze({
+  'workspace:read': 'Read workspace projects, clients and tasks through HTTP or MCP. No model provider required.',
+  'workspace:actions': 'Prepare, explicitly confirm or reject workspace tasks and calendar events.',
   'ai_bridge:read': 'Ask the AI bridge about this workspace (read-only chat).',
   'ai_bridge:actions': 'Prepare and confirm workflow actions (tasks, calendar events, Slack messages).',
 });

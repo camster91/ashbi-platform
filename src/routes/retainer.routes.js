@@ -160,16 +160,29 @@ export default async function retainerRoutes(fastify) {
       return reply.status(400).send({ error: 'hours must be a positive number' });
     }
 
-    const plan = await fastify.prisma.retainerPlan.findUnique({ where: { clientId } });
+    const plan = await request.prisma.retainerPlan.findUnique({ where: { clientId } });
     if (!plan) {
       return reply.status(404).send({ error: 'No retainer plan found for this client' });
     }
 
-    // Log time entry if we have a project and a user
+    // A tenant can have several clients: organization scoping alone does not
+    // prove that this project belongs to the retainer's client.
     if (projectId) {
-      const admin = await fastify.prisma.user.findFirst({ where: { role: 'ADMIN' } });
-      if (admin) {
-        await fastify.prisma.timeEntry.create({
+      const project = await request.prisma.project.findFirst({
+        where: { id: projectId, clientId }, select: { id: true },
+      });
+      if (!project) return reply.status(404).send({ error: 'Project not found for this client' });
+    }
+    const admin = projectId
+      ? await request.prisma.user.findFirst({ where: { role: 'ADMIN' } })
+      : null;
+    if (projectId && !admin) {
+      return reply.status(409).send({ error: 'No administrator is available to record this time entry' });
+    }
+
+    const updated = await request.prisma.$transaction(async (tx) => {
+      if (projectId) {
+        await tx.timeEntry.create({
           data: {
             description: description || 'Retainer hours logged',
             duration: Math.round(hours * 60),
@@ -179,11 +192,10 @@ export default async function retainerRoutes(fastify) {
           }
         });
       }
-    }
-
-    const updated = await fastify.prisma.retainerPlan.update({
-      where: { clientId },
-      data: { hoursUsed: { increment: hours } }
+      return tx.retainerPlan.update({
+        where: { clientId },
+        data: { hoursUsed: { increment: hours } }
+      });
     });
 
     return {

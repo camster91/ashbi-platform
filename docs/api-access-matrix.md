@@ -52,7 +52,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | admin + recent-auth | 14 |
 | admin + recent-auth (access change) | 1 |
 | admin + staff | 6 |
-| api-key | 1 |
+| api-key | 6 |
 | api-key + scope ai_bridge:actions | 2 |
 | api-key + scope ai_bridge:read | 1 |
 | bot-secret | 40 |
@@ -61,7 +61,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | recent-auth + staff | 4 |
 | staff | 365 |
 | staff (inline) | 1 |
-| **total** | 553 |
+| **total** | 558 |
 
 ## Routes by prefix
 
@@ -70,6 +70,13 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
 | OPTIONS | `*` | public | scoped | infrastructure: CORS preflight handled by @fastify/cors. |
+
+### /api/agent
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/agent/tools` | api-key | scoped |  |
+| POST | `/api/agent/tools/:name` | api-key | scoped |  |
 
 ### /api/ai
 
@@ -590,6 +597,14 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
 | POST | `/api/mailgun-hitl/hitl-reply` | public | exempt | signed webhook: Mailgun HMAC signature, 15-minute timestamp window and single-use token verified in the handler; the reply address must carry the notification's HMAC token and the reply must reference the sent Message-Id, and it is applied only when its single From address is the notified staff user or an active admin of that org, Mailgun reports an SPF/DKIM pass aligned with the From domain, and an approval is still pending. |
+
+### /api/mcp
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| DELETE | `/api/mcp` | api-key | scoped |  |
+| GET | `/api/mcp` | api-key | scoped |  |
+| POST | `/api/mcp` | api-key | scoped |  |
 
 ### /api/messages
 

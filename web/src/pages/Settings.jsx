@@ -1,3 +1,4 @@
+import { embeddedAiEnabled } from '../lib/features';
 import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -32,8 +33,9 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import TwoFactorSettings from '../components/TwoFactorSettings';
 import OrganizationMfaPolicy from '../components/OrganizationMfaPolicy';
 import ActivityLog from '../components/ActivityLog';
-import AiByokSettings from '../components/AiByokSettings';
-import AiApprovals from '../components/AiApprovals';
+import { lazy, Suspense } from 'react';
+const AiByokSettings = lazy(() => import('../components/AiByokSettings'));
+const AiApprovals = lazy(() => import('../components/AiApprovals'));
 
 function Section({ icon: Icon, title, description, children }) {
   // Expose each settings card as a named accessible region so screen-reader
@@ -365,8 +367,10 @@ function AIModelSection() {
 // Mirrors API_KEY_SCOPES in src/auth/api-key-scopes.js (the server rejects
 // anything else). Labels are for the settings UI only.
 const API_KEY_SCOPE_OPTIONS = [
-  { value: 'ai_bridge:read', label: 'Read workspace (AI chat)', description: 'Ask the AI bridge about projects, tasks, clients and retainers.' },
-  { value: 'ai_bridge:actions', label: 'Workflow actions', description: 'Prepare and confirm tasks, calendar events and Slack messages.' },
+  { value: 'workspace:read', label: 'Read workspace', description: 'Projects, clients and tasks through API or MCP. No AI provider needed.' },
+  { value: 'workspace:actions', label: 'Workspace actions', description: 'Prepare and separately confirm tasks and calendar events.' },
+  { value: 'ai_bridge:read', label: 'Embedded AI chat (legacy)', description: 'Ask the AI bridge about projects, tasks, clients and retainers.' },
+  { value: 'ai_bridge:actions', label: 'AI bridge actions (legacy)', description: 'Prepare and confirm tasks, calendar events and Slack messages.' },
 ];
 const API_KEY_SCOPE_LABELS = Object.fromEntries(API_KEY_SCOPE_OPTIONS.map((option) => [option.value, option.label]));
 const API_KEY_EXPIRY_OPTIONS = [30, 90, 180, 365];
@@ -374,7 +378,7 @@ const API_KEY_EXPIRY_OPTIONS = [30, 90, 180, 365];
 export function ApiKeysSection() {
   const queryClient = useQueryClient();
   const [newKeyName, setNewKeyName] = useState('');
-  const [newKeyScopes, setNewKeyScopes] = useState(['ai_bridge:read']);
+  const [newKeyScopes, setNewKeyScopes] = useState(['workspace:read']);
   const [newKeyExpiryDays, setNewKeyExpiryDays] = useState(90);
   const [createdKey, setCreatedKey] = useState(null);
   const [keyToRevoke, setKeyToRevoke] = useState(null);
@@ -395,7 +399,7 @@ export function ApiKeysSection() {
     onSuccess: (data) => {
       setCreatedKey(data.key);
       setNewKeyName('');
-      setNewKeyScopes(['ai_bridge:read']);
+      setNewKeyScopes(['workspace:read']);
       setNewKeyExpiryDays(90);
       queryClient.invalidateQueries({ queryKey: ['api-keys'] });
     },
@@ -928,7 +932,8 @@ export default function Settings() {
       </Section>
 
       {/* API Keys */}
-      <Section icon={Key} title="API Keys" description="Manage API keys for external integrations like OpenClaw">
+      <Section icon={Key} title="API Keys" description="Connect LLMs and integrations to workspace tools through HTTP or MCP">
+        <p className="text-sm text-muted-foreground mb-4">Discover tools at <code>/api/agent/tools</code>. MCP endpoint: <code>/api/mcp</code>. Use a scoped API key as a Bearer token. Writes return a preview and require a separate confirmation.</p>
         <ApiKeysSection />
       </Section>
 
@@ -938,19 +943,19 @@ export default function Settings() {
       {isAdmin && <Section icon={Link2} title="Slack workspace" description="Install Slack and explicitly map project channels"><SlackIntegrationPreferences /></Section>}
 
       {/* AI Model Picker — admin only */}
-      {isAdmin && <AIModelSection />}
+      {embeddedAiEnabled && isAdmin && <AIModelSection />}
 
       {/* Organization BYOK AI provider, budget and kill switch (#413) — admin only */}
-      {isAdmin && (
+      {embeddedAiEnabled && isAdmin && (
         <Section icon={KeyRound} title="AI provider (bring your own key)" description="Use your own AI provider account, cap monthly spend, or turn AI off for this workspace">
-          <AiByokSettings />
+          <Suspense fallback={null}><AiByokSettings /></Suspense>
         </Section>
       )}
 
       {/* AI approvals and receipts (#413 slice 2): admins see the workspace, team members their own */}
-      {(isAdmin || user?.role === 'TEAM') && (
-        <Section icon={ClipboardCheck} title="AI approvals" description="Approve or reject actions an AI prepared, and review what was done">
-          <AiApprovals />
+      {embeddedAiEnabled && (isAdmin || user?.role === 'TEAM') && (
+        <Section icon={ClipboardCheck} title="Action approvals" description="Review proposed actions and their execution receipts">
+          <Suspense fallback={null}><AiApprovals /></Suspense>
         </Section>
       )}
 
@@ -967,7 +972,7 @@ export default function Settings() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
               { label: 'Brand Settings', href: '/admin/brand', desc: 'Logo, colors, company info' },
-              { label: 'AI Context', href: '/admin/settings/ai-context', desc: 'Custom AI instructions' },
+              ...(embeddedAiEnabled ? [{ label: 'AI Context', href: '/admin/settings/ai-context', desc: 'Custom AI instructions' }] : []),
               { label: 'Command Center', href: '/admin/command-center', desc: 'VPS & GitHub integrations' },
               { label: 'Automations', href: '/automations', desc: 'Workflow automation log' },
               { label: 'Credentials', href: '/credentials', desc: 'Stored API keys & passwords' },

@@ -1,4 +1,5 @@
 import integrationRoutes from '../../routes/integration.routes.js';
+import workspaceApiRoutes from '../../routes/workspace-api.routes.js';
 import commandCenterRoutes from '../../routes/integrations.command-center.routes.js';
 import mailgunHitlRoutes from '../../routes/mailgun-hitl.routes.js';
 import mailgunRoutes from '../../routes/mailgun.routes.js';
@@ -18,6 +19,7 @@ import googleCalendarRoutes from '../../routes/google-calendar.routes.js';
  * @param {import('fastify').FastifyInstance} fastify
  */
 export async function registerIntegrationRoutes(fastify) {
+  await fastify.register(workspaceApiRoutes, { prefix: '/api' });
   await fastify.register(integrationRoutes, { prefix: '/api/integrations' });
   await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });
   await fastify.register(mailgunHitlRoutes, { prefix: '/api/mailgun-hitl' });

@@ -13,6 +13,7 @@ const RAW_MESSAGE = /\b(?:message|detail|error|reason)\s*:\s*(?:err|error|e)\.me
 
 // file -> [allowed occurrences, why the message is caller-safe]
 const ALLOWED = {
+  'workspace-api.routes.js': [1, 'only registry ToolError instances carry fixed caller-safe messages; unknown errors are rethrown'],
   'ai-bridge.routes.js': [9, 'ToolError / AI control errors carry fixed, caller-safe messages'],
   'ai-tool.routes.js': [1, 'only ToolError instances reach the reply (anything else is rethrown)'],
   'ai-connection.routes.js': [1, 'AI connection validation errors with fixed messages (400)'],
