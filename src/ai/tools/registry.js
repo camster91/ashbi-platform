@@ -13,7 +13,6 @@
 // rejected at registration unless its name is on EXTERNAL_TOOL_ALLOWLIST.
 
 import { z } from 'zod';
-import { computeMonthToDateUsage } from '../governance.js';
 
 export const TOOL_CLASSES = Object.freeze(['read', 'draft', 'prepare', 'execute']);
 /** Classes that never run without a pending action and a human approval. */
@@ -385,6 +384,7 @@ export const BUILTIN_TOOLS = Object.freeze([
     resolveScope: noRecords,
     timeoutMs: 5_000,
     run: async ({ prisma, user }) => {
+      const { computeMonthToDateUsage } = await import('../governance.js');
       const usage = await computeMonthToDateUsage(prisma, user.organizationId);
       return {
         since: usage.since,

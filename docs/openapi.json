@@ -720,12 +720,14 @@
           "scopes": {
             "items": {
               "enum": [
+                "workspace:read",
+                "workspace:actions",
                 "ai_bridge:read",
                 "ai_bridge:actions"
               ],
               "type": "string"
             },
-            "maxItems": 2,
+            "maxItems": 4,
             "minItems": 1,
             "type": "array"
           }
@@ -6757,6 +6759,104 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/agent/tools": {
+      "get": {
+        "operationId": "get_api_agent_tools",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "apiKeyBearer": []
+          }
+        ],
+        "summary": "GET /api/agent/tools",
+        "tags": [
+          "agent"
+        ],
+        "x-access": "api-key",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/agent/tools/{name}": {
+      "post": {
+        "operationId": "post_api_agent_tools_name",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "apiKeyBearer": []
+          }
+        ],
+        "summary": "POST /api/agent/tools/:name",
+        "tags": [
+          "agent"
+        ],
+        "x-access": "api-key",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/ai-bridge/capabilities": {
       "get": {
         "operationId": "get_api_ai_bridge_capabilities",
@@ -20955,6 +21055,110 @@
         "x-tenancy": "exempt"
       }
     },
+    "/api/mcp": {
+      "delete": {
+        "operationId": "delete_api_mcp",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "apiKeyBearer": []
+          }
+        ],
+        "summary": "DELETE /api/mcp",
+        "tags": [
+          "mcp"
+        ],
+        "x-access": "api-key",
+        "x-tenancy": "scoped"
+      },
+      "get": {
+        "operationId": "get_api_mcp",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "apiKeyBearer": []
+          }
+        ],
+        "summary": "GET /api/mcp",
+        "tags": [
+          "mcp"
+        ],
+        "x-access": "api-key",
+        "x-tenancy": "scoped"
+      },
+      "post": {
+        "operationId": "post_api_mcp",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "apiKeyBearer": []
+          }
+        ],
+        "summary": "POST /api/mcp",
+        "tags": [
+          "mcp"
+        ],
+        "x-access": "api-key",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/messages/paste": {
       "post": {
         "operationId": "post_api_messages_paste",
@@ -33115,6 +33319,9 @@
   ],
   "tags": [
     {
+      "name": "agent"
+    },
+    {
       "name": "ai"
     },
     {
@@ -33242,6 +33449,9 @@
     },
     {
       "name": "mailgun-hitl"
+    },
+    {
+      "name": "mcp"
     },
     {
       "name": "messages"

@@ -2,6 +2,10 @@
 
 An all-in-one operations platform for a small creative agency: clients, projects, tasks, time, finance documents, team chat, media review and a client portal in one self-hosted app.
 
+LLM integrations use the provider-free [workspace HTTP API and MCP tools](docs/workspace-api-mcp.md).
+Embedded assistance is optional and hidden by default. A generated
+[GPT Actions schema](docs/workspace-actions.openapi.json) is available for API-key clients.
+
 ![Ashbi Hub dashboard (sanitized test data)](tests/visual/__screenshots__/screens.spec.ts/dashboard-light-1440-chromium-linux.png)
 
 ## Why

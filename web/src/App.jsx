@@ -1,3 +1,4 @@
+import { embeddedAiEnabled } from './lib/features';
 import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth, AuthProvider } from './hooks/useAuth';
@@ -263,13 +264,13 @@ function AppRoutes() {
                   <Route path="/rate-cards" element={<AdminRoute><RateCards /></AdminRoute>} />
                                                       <Route path="/credentials" element={<AdminRoute><Credentials /></AdminRoute>} />
                   <Route path="/chat" element={<Chat />} />
-                  <Route path="/admin/settings/ai-context" element={<AdminRoute><AiContextSettings /></AdminRoute>} />
+                  <Route path="/admin/settings/ai-context" element={<AdminRoute>{embeddedAiEnabled ? <AiContextSettings /> : <Navigate to="/settings" replace />}</AdminRoute>} />
                   <Route path="/admin/command-center" element={<AdminRoute><CommandCenter /></AdminRoute>} />
                   <Route path="/admin/brand" element={<AdminRoute><BrandSettings /></AdminRoute>} />
                                     <Route path="/trash" element={<AdminRoute><Trash /></AdminRoute>} />
                                     <Route path="/automations" element={<AdminRoute><Automations /></AdminRoute>} />
                   <Route path="/docs" element={<Docs />} />
-                  <Route path="/project-planner" element={<ProjectPlanner />} />
+                  <Route path="/project-planner" element={embeddedAiEnabled ? <ProjectPlanner /> : <Navigate to="/projects" replace />} />
                   <Route path="/project-templates" element={<ProjectTemplates />} />
                                                       <Route path="/retainers" element={<AdminRoute><Retainers /></AdminRoute>} />
                   <Route path="/invoice-chaser" element={<AdminRoute><InvoiceChaser /></AdminRoute>} />
@@ -277,7 +278,7 @@ function AppRoutes() {
                                                                                           <Route path="/notifications" element={<Notifications />} />
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />
-                  <Route path="/semantic-search" element={<SemanticSearch />} />
+                  <Route path="/semantic-search" element={embeddedAiEnabled ? <SemanticSearch /> : <Navigate to="/projects" replace />} />
                   <Route path="*" element={<NotFound />} />
                   </Routes>
                   </Suspense>

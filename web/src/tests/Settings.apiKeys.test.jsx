@@ -34,8 +34,8 @@ describe('Settings → API keys', () => {
 
     expect(await screen.findByText('Legacy bot')).toBeInTheDocument();
     expect(screen.getAllByText('No expiry')).toHaveLength(1);
-    expect(screen.getByText(/Scopes: Read workspace \(AI chat\), Workflow actions/)).toBeInTheDocument();
-    expect(screen.getByText(/Scopes: Read workspace \(AI chat\)$/)).toBeInTheDocument();
+    expect(screen.getByText('Scopes: Embedded AI chat (legacy), AI bridge actions (legacy)')).toBeInTheDocument();
+    expect(screen.getByText(/Scopes: Embedded AI chat \(legacy\)$/)).toBeInTheDocument();
   });
 
   it('creates a key with the chosen scopes and expiry', async () => {
@@ -44,12 +44,12 @@ describe('Settings → API keys', () => {
     renderSection();
 
     fireEvent.change(screen.getByLabelText(/api key name/i), { target: { value: 'Zapier' } });
-    fireEvent.click(screen.getByLabelText(/workflow actions/i));
+    fireEvent.click(screen.getByLabelText(/^workspace actions/i));
     fireEvent.change(screen.getByLabelText(/expires after/i), { target: { value: '30' } });
     fireEvent.click(screen.getByRole('button', { name: /create key/i }));
 
     await waitFor(() => expect(api.createApiKey).toHaveBeenCalledWith({
-      name: 'Zapier', scopes: ['ai_bridge:read', 'ai_bridge:actions'], expiresInDays: 30,
+      name: 'Zapier', scopes: ['workspace:read', 'workspace:actions'], expiresInDays: 30,
     }));
     expect(await screen.findByText('ashbi_raw')).toBeInTheDocument();
   });
@@ -59,7 +59,7 @@ describe('Settings → API keys', () => {
     renderSection();
 
     fireEvent.change(screen.getByLabelText(/api key name/i), { target: { value: 'Zapier' } });
-    fireEvent.click(screen.getByLabelText(/read workspace/i));
+    fireEvent.click(screen.getByLabelText(/^read workspace/i));
 
     expect(screen.getByText(/choose at least one scope/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create key/i })).toBeDisabled();

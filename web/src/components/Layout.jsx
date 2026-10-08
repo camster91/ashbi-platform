@@ -1,4 +1,6 @@
-import GlobalAIChat from './GlobalAIChat';
+import { lazy, Suspense } from 'react';
+import { embeddedAiEnabled } from '../lib/features';
+const GlobalAIChat = lazy(() => import('./GlobalAIChat'));
 import QuickAdd from './QuickAdd';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -210,9 +212,9 @@ export default function Layout({ children }) {
   // Tools — staff workflows that were route-registered but easy to miss
   const toolsNav = [
     { name: 'Assets', href: '/assets', icon: Image },
-    { name: 'Project Planner', href: '/project-planner', icon: LayoutTemplate },
+    ...(embeddedAiEnabled ? [{ name: 'Project Planner', href: '/project-planner', icon: LayoutTemplate }] : []),
     { name: 'Templates', href: '/project-templates', icon: Folders },
-    { name: 'Semantic Search', href: '/semantic-search', icon: Search },
+    ...(embeddedAiEnabled ? [{ name: 'Semantic Search', href: '/semantic-search', icon: Search }] : []),
   ];
 
   // Admin — collapsible section, only visible to admins
@@ -624,7 +626,7 @@ export default function Layout({ children }) {
             final opacity with fill-mode forwards): an element with an opacity
             animation is a stacking context, which trapped every page's modals
             under the sticky header and the mobile bottom nav. */}
-        <div id="main-content" className="flex-1 p-4 lg:p-6 pb-[calc(8.5rem+env(safe-area-inset-bottom))] lg:pb-6 animate-in fade-in duration-300 motion-reduce:animate-none overflow-auto" tabIndex={-1}>
+        <div id="main-content" className={cn("flex-1 p-4 lg:p-6 lg:pb-6 animate-in fade-in duration-300 motion-reduce:animate-none overflow-auto", embeddedAiEnabled ? "pb-[calc(8.5rem+env(safe-area-inset-bottom))]" : "pb-[calc(5rem+env(safe-area-inset-bottom))]")} tabIndex={-1}>
           {children}
         </div>
       </main>
@@ -842,7 +844,7 @@ export default function Layout({ children }) {
 
       {/* Global AI Chat Widget — its button steps aside while the mobile
           More menu or navigation drawer is open. */}
-      <GlobalAIChat hideButton={moreMenuOpen || sidebarOpen} />
+      {embeddedAiEnabled && <Suspense fallback={null}><GlobalAIChat hideButton={moreMenuOpen || sidebarOpen} /></Suspense>}
 
       {/* Quick Add — Cmd+K command palette */}
       <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
