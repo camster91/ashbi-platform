@@ -6,6 +6,7 @@ import { mockAuthenticatedApi, mockClientPortalApi, unmockedRequests } from './f
 // scans cover the main staff screens and the CLIENT portal against hermetic,
 // realistic API fixtures so they run inside the required browser job without
 // a backend.
+const embeddedAiEnabled = process.env.VITE_EMBEDDED_AI_ENABLED === 'true';
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 // Colour contrast must be measured on the settled page. Entry animations
@@ -88,10 +89,17 @@ test.describe('Authenticated accessibility', () => {
     await expectNoAxeViolations(page, 'project draft-update dialog');
   });
 
-  test('settings "Ask the assistant" answer has no automatically detectable WCAG A/AA violations', async ({ page }) => {
+  test('settings workspace integrations and opted-in assistant have no automatically detectable WCAG A/AA violations', async ({ page }) => {
     await mockAuthenticatedApi(page);
     await page.goto('/settings');
     const question = page.getByLabel('Question for the assistant');
+    if (!embeddedAiEnabled) {
+      await expect(page.getByRole('heading', { name: 'API Keys', exact: true })).toBeVisible();
+      await expect(page.getByText('/api/mcp', { exact: true })).toBeVisible();
+      await expect(question).toHaveCount(0);
+      await expectNoAxeViolations(page, 'settings workspace API and MCP instructions');
+      return;
+    }
     await expect(question).toBeVisible();
     await question.fill('How is the website project going?');
     await page.getByRole('button', { name: 'Ask', exact: true }).click();

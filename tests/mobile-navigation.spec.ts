@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+const embeddedAiEnabled = process.env.VITE_EMBEDDED_AI_ENABLED === 'true';
+
 async function signInAsAdmin(page) {
   await page.route('**/api/**', route => {
     const pathname = new URL(route.request().url()).pathname;
@@ -25,11 +27,17 @@ test('the More menu stays within a phone viewport and every item is reachable', 
   }
 });
 
-test('the AI chat drawer opens fully on screen above its button', async ({ page, isMobile }) => {
+test('embedded AI is absent by default and its opted-in drawer stays on screen', async ({ page, isMobile }) => {
   await signInAsAdmin(page);
   await page.setViewportSize(isMobile ? { width: 375, height: 667 } : { width: 1280, height: 800 });
   await page.goto('/dashboard');
   const button = page.getByRole('button', { name: 'Open AI Chat' });
+  if (!embeddedAiEnabled) {
+    await expect(page.getByRole('button', { name: 'Open quick create menu' })).toBeVisible();
+    await expect(button).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Ask Ash' })).toHaveCount(0);
+    return;
+  }
   await button.click();
   const drawer = page.getByRole('dialog', { name: 'Ask Ash' });
   await expect(drawer).toBeVisible();
