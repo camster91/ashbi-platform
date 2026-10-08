@@ -1,6 +1,7 @@
 // Bot API routes - external bot integration with ultra-fast caching
 
 import env from '../config/env.js';
+import { prisma as basePrisma } from '../config/db.js';
 import { onboardClient } from '../services/onboarding.service.js';
 import { generateWeeklyReport } from '../services/weeklyReport.service.js';
 import { weeklyDigestQueue } from '../jobs/queue.js';
@@ -47,7 +48,9 @@ export default async function botRoutes(fastify) {
   // Scope all authenticated bot traffic to a single service org when configured.
   fastify.addHook('preHandler', async (request) => {
     if (!BOT_ORG_ID || !hasBotSecret(request)) return;
-    const scoped = createScopedPrisma(fastify.prisma, BOT_ORG_ID);
+    // fastify.prisma resolves through request context; wrapping and publishing
+    // it would make the scoped client resolve into itself. Scope the base client.
+    const scoped = createScopedPrisma(basePrisma, BOT_ORG_ID);
     request.prisma = scoped;
     request.organizationId = BOT_ORG_ID;
     enterRequestContext({ prisma: scoped, organizationId: BOT_ORG_ID });
@@ -549,12 +552,21 @@ export default async function botRoutes(fastify) {
     if (!type || !title || !content || !createdBy) {
       return reply.status(400).send({ error: 'type, title, content, and createdBy are required' });
     }
-    const approval = await fastify.prisma.approval.create({
+    // Approval ownership follows project -> client -> organization.
+    if (typeof projectId !== 'string' || !projectId.trim()) {
+      return reply.status(400).send({ error: 'projectId is required for an approval' });
+    }
+    const project = await request.prisma.project.findUnique({
+      where: { id: projectId }, select: { id: true },
+    });
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    const approval = await request.prisma.approval.create({
       data: {
         type: type.toUpperCase(),
         title,
         clientName: clientName || null,
-        projectId: projectId || null,
+        projectId: project.id,
         content: typeof content === 'string' ? content : JSON.stringify(content),
         metadata: metadata ? (typeof metadata === 'string' ? metadata : JSON.stringify(metadata)) : null,
         createdBy,
