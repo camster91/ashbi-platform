@@ -659,7 +659,14 @@ export default async function authRoutes(fastify, options = {}) {
       return reply.status(401).send({ error: 'Account is inactive' });
     }
 
-    const token = signUserSession(fastify.jwt, user);
+    // Password sign-in must carry the same verified user/contact pair as
+    // invitation signup. Without the contact claim the portal rejects the
+    // otherwise valid session immediately after a successful login.
+    const contact = await request.prisma.contact.findFirst({
+      where: { clientId: user.clientId, email: insensitiveEquals(user.email) },
+      select: { id: true },
+    });
+    const token = signUserSession(fastify.jwt, user, contact ? { contactId: contact.id } : {});
 
     return reply
       .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))

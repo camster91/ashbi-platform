@@ -25,8 +25,10 @@ const interactiveCardClass = 'block w-full border-border text-left';
 const staticStatClass = 'hover:translate-y-0 hover:shadow-none';
 
 // ── Login Screen ─────────────────────────────────────────────────────────────
-function LoginScreen() {
+export function LoginScreen({ onSignedIn = () => window.location.assign('/client-portal') }) {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [passwordMode, setPasswordMode] = useState(false);
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -36,6 +38,15 @@ function LoginScreen() {
     setLoading(true);
     setError('');
     try {
+      if (passwordMode) {
+        const res = await fetch(`${API}/api/auth/client/login`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        if (!res.ok) throw new Error('Invalid email or password. Please try again.');
+        onSignedIn();
+        return;
+      }
       const res = await fetch(`${API}/api/client-portal/request-access`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -72,6 +83,7 @@ function LoginScreen() {
         setError('Something went wrong — please try again.');
       }
     } catch (fetchErr) {
+      if (passwordMode) { setError(fetchErr.message || 'Sign-in failed. Please try again.'); return; }
       console.error('[client-portal] network error', fetchErr);
       setError('Network error — please check your connection and try again.');
     } finally {
@@ -98,7 +110,7 @@ function LoginScreen() {
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <p className="mb-6 text-center text-sm text-muted-foreground">
-              Enter your email to receive a secure login link.
+              {passwordMode ? 'Use the password you created when accepting your invitation.' : 'Enter your email to receive a secure login link.'}
             </p>
             <label htmlFor="client-portal-email" className={labelClass}>Email address</label>
             <Input
@@ -112,9 +124,18 @@ function LoginScreen() {
               aria-describedby={error ? 'client-portal-login-error' : undefined}
               className={portalFieldClass}
             />
+            {passwordMode && <>
+              <label htmlFor="client-portal-password" className={labelClass}>Password</label>
+              <Input id="client-portal-password" type="password" autoComplete="current-password" required
+                value={password} onChange={event => setPassword(event.target.value)} className={portalFieldClass} />
+            </>}
             {error && <p id="client-portal-login-error" role="alert" className="text-sm text-destructive">{error}</p>}
             <Button type="submit" disabled={loading} className={cn('w-full', busyLabelButtonClass)} slowAfterMs={false}>
-              {loading ? 'Sending...' : 'Send Login Link'}
+              {loading ? (passwordMode ? 'Signing in…' : 'Sending...') : (passwordMode ? 'Sign In' : 'Send Login Link')}
+            </Button>
+            <Button type="button" variant="link" disabled={loading}
+              onClick={() => { setPasswordMode(!passwordMode); setPassword(''); setError(''); }}>
+              {passwordMode ? 'Use an email login link' : 'Sign in with a password'}
             </Button>
             <SlowNotice active={loading} {...slowWrite} />
           </form>

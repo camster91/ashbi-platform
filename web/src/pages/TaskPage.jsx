@@ -200,7 +200,7 @@ function PageHeader({ task, onUpdate, isEditing }) {
 }
 
 // Properties panel
-function PropertiesPanel({ task, onUpdate }) {
+function PropertiesPanel({ task, onUpdate, isSaving, saveError }) {
   const [isEditing, setIsEditing] = useState(false);
 
   const properties = [
@@ -209,7 +209,7 @@ function PropertiesPanel({ task, onUpdate }) {
       label: 'Status', 
       icon: CheckCircle2,
       value: task?.status,
-      options: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED']
+      options: ['PENDING', 'UPCOMING', 'IMMEDIATE', 'IN_PROGRESS', 'BLOCKED', 'WAITING_US', 'WAITING_CLIENT', 'COMPLETED']
     },
     { 
       key: 'assignee', 
@@ -265,6 +265,8 @@ function PropertiesPanel({ task, onUpdate }) {
           {isEditing ? 'Done' : 'Edit'}
         </button>
       </div>
+      {isSaving && <p role="status" className="text-sm text-muted-foreground">Saving task properties…</p>}
+      {saveError && <p role="alert" className="text-sm text-destructive">Task properties could not be saved. Try again.</p>}
       
       <div className="space-y-2">
         {properties.map((prop) => (
@@ -277,12 +279,22 @@ function PropertiesPanel({ task, onUpdate }) {
               {prop.label}
             </div>
             <div className="flex-1">
-              {prop.key === 'status' && (
+              {isEditing && prop.options ? (
+                <select
+                  aria-label={`Task ${prop.label.toLowerCase()}`}
+                  value={prop.value || ''}
+                  disabled={isSaving}
+                  onChange={(event) => onUpdate({ [prop.key]: event.target.value })}
+                  className="min-h-11 rounded border border-border bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {prop.options.map(value => <option key={value} value={value}>{value.replace(/_/g, ' ')}</option>)}
+                </select>
+              ) : prop.key === 'status' && (
                 <Badge className={getStatusColor(prop.value)}>
                   {prop.value?.replace(/_/g, ' ')}
                 </Badge>
               )}
-              {prop.key === 'priority' && (
+              {!isEditing && prop.key === 'priority' && (
                 <span className={cn('text-sm font-medium', getPriorityColor(prop.value))}>
                   {prop.value}
                 </span>
@@ -301,8 +313,12 @@ function PropertiesPanel({ task, onUpdate }) {
                   )}
                 </div>
               )}
-              {prop.key === 'dueDate' && (
-                <span className="text-sm">{prop.value}</span>
+              {prop.key === 'dueDate' && (isEditing ? (
+                <input type="date" aria-label="Task due date" disabled={isSaving}
+                  value={task?.dueDate?.slice(0, 10) || ''}
+                  onChange={(event) => onUpdate({ dueDate: event.target.value ? `${event.target.value}T00:00:00.000Z` : null })}
+                  className="min-h-11 rounded border border-border bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring" />
+              ) : <span className="text-sm">{prop.value}</span>
               )}
               {prop.key === 'project' && (
                 <Link 
@@ -531,6 +547,11 @@ export default function TaskPage() {
     }
   });
 
+  const propertyMutation = useMutation({
+    mutationFn: (updates) => api.updateTask(id, updates),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['task', id] }),
+  });
+
   const handleUpdate = (updates) => {
     updateMutation.mutate(updates);
   };
@@ -600,7 +621,7 @@ export default function TaskPage() {
       <PageHeader task={task} onUpdate={handleUpdate} />
 
       {/* Properties */}
-      <PropertiesPanel task={task} onUpdate={handleUpdate} />
+      <PropertiesPanel task={task} onUpdate={propertyMutation.mutate} isSaving={propertyMutation.isPending} saveError={propertyMutation.isError} />
 
       {/* Content editor */}
       <div className="min-h-[300px]">

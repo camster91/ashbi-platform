@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
+import { embeddedAiEnabled } from '../../lib/features';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Sparkles,
   StickyNote,
   Mail,
   Clock,
@@ -61,7 +61,7 @@ export default function ProjectContextCard({ projectId }) {
     <div className="bg-card rounded-lg shadow-sm border border-border">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <h3 className="font-semibold flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-accent" />
+          <StickyNote className="w-4 h-4 text-accent" />
           Project Context
         </h3>
         <div className="flex items-center gap-3">
@@ -74,7 +74,7 @@ export default function ProjectContextCard({ projectId }) {
 
       <div className="p-4 space-y-4">
         {/* AI Summary */}
-        {context?.aiSummary ? (
+        {embeddedAiEnabled && (context?.aiSummary ? (
           <div>
             <div className="flex items-center gap-2 mb-1">
               <h4 className="text-xs font-semibold text-muted-foreground uppercase">AI Summary</h4>
@@ -93,7 +93,7 @@ export default function ProjectContextCard({ projectId }) {
           <div className="text-sm text-muted-foreground italic">
             No AI context summary yet. The email agent will generate one as communications are logged.
           </div>
-        )}
+        ))}
 
         {/* Human Notes */}
         <div>

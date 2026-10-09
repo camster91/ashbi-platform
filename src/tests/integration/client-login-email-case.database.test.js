@@ -37,6 +37,9 @@ test('client login and signup match a legacy mixed-case account in any case', {
     for (const typed of [storedEmail, storedEmail.toLowerCase(), storedEmail.toUpperCase()]) {
       const login = await app.inject({ method: 'POST', url: '/api/auth/client/login', payload: { email: typed, password } });
       assert.equal(login.statusCode, 200, `${typed}: ${login.body}`);
+      const cookie = login.cookies.find(value => value.name === 'token');
+      const portal = await app.inject({ method: 'GET', url: '/api/client-portal/me', headers: { cookie: `token=${cookie.value}` } });
+      assert.equal(portal.statusCode, 200, `password sign-in must open the portal: ${portal.body}`);
     }
 
     // A new invitation for the same person in another case is not a second account.

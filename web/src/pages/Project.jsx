@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { embeddedAiEnabled } from '../lib/features';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -283,7 +284,7 @@ export default function Project() {
             {shareCopied ? <Check className="w-4 h-4 text-success" aria-hidden="true" /> : <Share2 className="w-4 h-4" aria-hidden="true" />}
             {shareCopied ? 'Copied!' : 'Share'}
           </button>
-          <button
+          {embeddedAiEnabled && <button
             type="button"
             aria-label="Draft project update"
             onClick={() => setShowDraftModal(true)}
@@ -291,24 +292,23 @@ export default function Project() {
           >
             <FileText className="w-4 h-4" aria-hidden="true" />
             Draft Update
-          </button>
+          </button>}
           <ProjectActionsMenu
             actions={[
               { label: 'Apply template', icon: LayoutTemplate, onSelect: () => setShowTemplateModal(true) },
-              { label: 'Paste message', icon: ClipboardPaste, onSelect: () => setShowPasteModal(true) },
-              {
+              ...(embeddedAiEnabled ? [{ label: 'Paste message', icon: ClipboardPaste, onSelect: () => setShowPasteModal(true) }, {
                 label: refreshMutation.isPending ? 'Refreshing plan…' : 'Refresh plan',
                 icon: RefreshCw,
                 onSelect: () => refreshMutation.mutate(),
                 disabled: refreshMutation.isPending,
-              },
+              }] : []),
             ]}
           />
         </div>
       </div>
 
       {/* AI Summary */}
-      {project.aiSummary && (
+      {embeddedAiEnabled && project.aiSummary && (
         <div className="bg-info/5 border border-info/30 rounded-lg p-4">
           <h3 className="font-medium flex items-center gap-2 mb-2">
             <Sparkles className="w-4 h-4 text-accent" />
