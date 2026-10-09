@@ -1,6 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockAuthenticatedApi, mockClientPortalApi, unmockedRequests } from './fixtures/authenticated-api';
 
+const embeddedAiEnabled = process.env.VITE_EMBEDDED_AI_ENABLED === 'true';
+
 // Issue #305: keyboard-only journeys through the signed-in app and the CLIENT
 // portal. Every step is driven with Tab / Shift+Tab / Enter / Escape and typed
 // text — never pointer clicks — and checks that the focused control shows a
@@ -130,22 +132,27 @@ test('staff user signs in, navigates, uses dialogs and creates a note with the k
 
   // Open a modal, type in it, check the focus trap, close with Escape.
   const draftUpdate = page.getByRole('button', { name: 'Draft project update' });
-  await tabTo(page, draftUpdate);
-  await expectVisibleFocus(draftUpdate);
-  await page.keyboard.press('Enter');
-  const dialog = page.getByRole('dialog', { name: 'Draft client update' });
-  await expect(dialog).toBeVisible();
-  await expect.poll(() => dialog.evaluate(element => element.contains(document.activeElement))).toBe(true);
-  const notes = dialog.getByLabel('Raw notes / talking points');
-  await tabTo(page, notes);
-  await page.keyboard.type('Homepage approved');
-  // Typing re-renders the page; focus must stay in the field being edited.
-  await expect(notes).toBeFocused();
-  await expect(notes).toHaveValue('Homepage approved');
-  await expectFocusTrapped(page, dialog);
-  await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden();
-  await expect(draftUpdate).toBeFocused();
+  if (embeddedAiEnabled) {
+    await tabTo(page, draftUpdate);
+    await expectVisibleFocus(draftUpdate);
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog', { name: 'Draft client update' });
+    await expect(dialog).toBeVisible();
+    await expect.poll(() => dialog.evaluate(element => element.contains(document.activeElement))).toBe(true);
+    const notes = dialog.getByLabel('Raw notes / talking points');
+    await tabTo(page, notes);
+    await page.keyboard.type('Homepage approved');
+    // Typing re-renders the page; focus must stay in the field being edited.
+    await expect(notes).toBeFocused();
+    await expect(notes).toHaveValue('Homepage approved');
+    await expectFocusTrapped(page, dialog);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(draftUpdate).toBeFocused();
+  
+  } else {
+    await expect(draftUpdate).toHaveCount(0);
+  }
 
   // Create a project note.
   const newNote = page.getByRole('button', { name: 'Create new note' });

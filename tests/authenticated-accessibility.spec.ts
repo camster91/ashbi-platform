@@ -84,6 +84,11 @@ test.describe('Authenticated accessibility', () => {
     await expect(page.getByRole('form', { name: 'New note' })).toBeVisible();
     await expectNoAxeViolations(page, 'project page with the new-note form open');
 
+    if (!embeddedAiEnabled) {
+      await expect(page.getByRole('button', { name: 'Draft project update' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Refresh plan' })).toHaveCount(0);
+      return;
+    }
     await page.getByRole('button', { name: 'Draft project update' }).click();
     await expect(page.getByRole('dialog', { name: 'Draft client update' })).toBeVisible();
     await expectNoAxeViolations(page, 'project draft-update dialog');
