@@ -93,6 +93,22 @@ describe('TaskPage content autosave', () => {
     expect(updateTaskContent).toHaveBeenCalledWith('task-1', { title: 'Logo concepts round 3' });
   });
 
+  it('shows the stored due-date calendar day for a viewer in Toronto', async () => {
+    const NativeDateTimeFormat = Intl.DateTimeFormat;
+    const viewerFormat = vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(function viewerDateFormat(locale, options) {
+      return new NativeDateTimeFormat(locale, { timeZone: 'America/Toronto', ...options });
+    });
+    task.dueDate = '2026-10-10T00:00:00.000Z';
+    try {
+      renderTask();
+      expect(await screen.findByText('Oct 10, 2026')).toBeInTheDocument();
+      expect(screen.queryByText('Oct 9, 2026')).not.toBeInTheDocument();
+    } finally {
+      delete task.dueDate;
+      viewerFormat.mockRestore();
+    }
+  });
+
   it('edits task properties through the task API without overwriting document content', async () => {
     renderTask();
     fireEvent.click(await screen.findByRole('button', { name: 'Edit task properties' }));
