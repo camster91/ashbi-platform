@@ -20,12 +20,14 @@ const task = {
 };
 
 const updateTaskContent = vi.fn(async () => ({ id: 'task-1' }));
+const updateTask = vi.fn(async () => ({ id: 'task-1' }));
 
 vi.mock('../lib/api', () => ({
   api: {
     getTaskPage: vi.fn(async () => task),
     getTaskBreadcrumbs: vi.fn(async () => []),
     updateTaskContent: (...args) => updateTaskContent(...args),
+    updateTask: (...args) => updateTask(...args),
     createSubpage: vi.fn(),
     addTaskComment: vi.fn(),
     searchMentions: vi.fn(async () => ({ users: [], tasks: [] })),
@@ -50,7 +52,7 @@ function renderTask() {
 }
 
 describe('TaskPage content autosave', () => {
-  beforeEach(() => updateTaskContent.mockClear());
+  beforeEach(() => { updateTaskContent.mockClear(); updateTask.mockClear(); });
   afterEach(() => vi.useRealTimers());
 
   it('shows stored blocks and does not autosave when the page opens', async () => {
@@ -89,5 +91,14 @@ describe('TaskPage content autosave', () => {
     fireEvent.blur(title);
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
     expect(updateTaskContent).toHaveBeenCalledWith('task-1', { title: 'Logo concepts round 3' });
+  });
+
+  it('edits task properties through the task API without overwriting document content', async () => {
+    renderTask();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit task properties' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Task status' }), { target: { value: 'COMPLETED' } });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
+    expect(updateTask).toHaveBeenCalledWith('task-1', { status: 'COMPLETED' });
+    expect(updateTaskContent).not.toHaveBeenCalled();
   });
 });

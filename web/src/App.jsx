@@ -263,7 +263,7 @@ function AppRoutes() {
                   <Route path="/timesheets" element={<Timesheets />} />
                   <Route path="/rate-cards" element={<AdminRoute><RateCards /></AdminRoute>} />
                                                       <Route path="/credentials" element={<AdminRoute><Credentials /></AdminRoute>} />
-                  <Route path="/chat" element={<Chat />} />
+                  <Route path="/chat" element={embeddedAiEnabled ? <Chat /> : <Navigate to="/settings#settings-section-api-keys" replace />} />
                   <Route path="/admin/settings/ai-context" element={<AdminRoute>{embeddedAiEnabled ? <AiContextSettings /> : <Navigate to="/settings" replace />}</AdminRoute>} />
                   <Route path="/admin/command-center" element={<AdminRoute><CommandCenter /></AdminRoute>} />
                   <Route path="/admin/brand" element={<AdminRoute><BrandSettings /></AdminRoute>} />

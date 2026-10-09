@@ -170,7 +170,7 @@ describe('client invitation signup', () => {
   });
 
   it('client login matches a mixed-case invited address to the stored lower-case account', async (t) => {
-    const { app } = await buildApp(t, { invitation: invite() });
+    const { app, db } = await buildApp(t, { invitation: invite() });
     assert.equal((await signup(app, { email: 'Olivia@Northwind.Example' })).statusCode, 200);
     const res = await app.inject({
       method: 'POST',
@@ -179,6 +179,10 @@ describe('client invitation signup', () => {
     });
     assert.equal(res.statusCode, 200, res.body);
     assert.equal(res.json().user.email, 'olivia@northwind.example');
+    const claims = app.jwt.verify(decodeURIComponent(res.cookies.find(cookie => cookie.name === 'token').value));
+    assert.equal(claims.typ, 'client_session');
+    assert.equal(claims.contactId, db.contacts[0].id, 'returning clients retain the portal contact claim');
+    assert.equal(claims.clientId, 'client-1');
   });
 
   it('client login still finds an older account stored in mixed case', async (t) => {

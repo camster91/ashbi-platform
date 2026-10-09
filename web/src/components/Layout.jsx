@@ -191,7 +191,7 @@ export default function Layout({ children }) {
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true },
     { name: 'Daily Queue', href: '/queue', icon: ListTodo },
     { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
-    { name: 'Chat', href: '/chat', icon: MessageSquare },
+    ...(embeddedAiEnabled ? [{ name: 'Chat', href: '/chat', icon: MessageSquare }] : []),
     { name: 'Projects', href: '/projects', icon: FolderOpen, id: 'projects-link' },
     { name: 'Clients', href: '/clients', icon: Users, id: 'clients-link' },
     { name: 'Invoices', href: '/invoices', icon: Receipt },
