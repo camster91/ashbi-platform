@@ -228,7 +228,7 @@ function PropertiesPanel({ task, onUpdate, isSaving, saveError }) {
       key: 'dueDate', 
       label: 'Due date', 
       icon: Calendar,
-      value: task?.dueDate ? formatDate(task.dueDate) : 'No date'
+      value: task?.dueDate ? formatDate(task.dueDate, { dateOnly: true }) : 'No date'
     },
     { 
       key: 'project', 

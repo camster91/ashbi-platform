@@ -580,7 +580,7 @@ export default function Dashboard() {
                       )}
                     </div>
                     <span className="text-xs text-destructive font-medium ml-2">
-                      {formatDate(task.dueDate)}
+                      {formatDate(task.dueDate, { dateOnly: true })}
                     </span>
                   </div>
                 </li>
@@ -650,7 +650,7 @@ export default function Dashboard() {
                       new Date(task.dueDate) < new Date() ? 'text-destructive' : 'text-muted-foreground'
                     )}>
                       <Clock className="w-3 h-3" />
-                      {formatDate(task.dueDate)}
+                      {formatDate(task.dueDate, { dateOnly: true })}
                     </span>
                   )}
                 </Link>
