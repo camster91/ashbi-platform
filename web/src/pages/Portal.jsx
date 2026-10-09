@@ -216,7 +216,7 @@ export default function Portal() {
                                 : <Clock className="mt-0.5 w-4 h-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
                             <span className="min-w-0 flex-1 break-words text-sm text-foreground">{task.title}</span>
                             {task.dueDate && (
-                              <span className="shrink-0 text-xs text-muted-foreground">Due {formatDate(task.dueDate)}</span>
+                              <span className="shrink-0 text-xs text-muted-foreground">Due {formatDate(task.dueDate, { dateOnly: true })}</span>
                             )}
                           </li>
                         ))}

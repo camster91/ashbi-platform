@@ -228,7 +228,7 @@ export default function TaskKanban() {
                     </div>
                     {task.dueDate && (
                       <p className="text-xs text-muted-foreground mt-1.5">
-                        Due {formatDate(task.dueDate)}
+                        Due {formatDate(task.dueDate, { dateOnly: true })}
                       </p>
                     )}
                     <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
