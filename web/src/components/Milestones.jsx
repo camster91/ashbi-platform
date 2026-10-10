@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import Modal from './Modal';
@@ -251,6 +251,7 @@ export default function Milestones({ projectId }) {
 }
 
 function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDeleting = false }) {
+  const fieldId = useId();
   const [formData, setFormData] = useState({
     name: milestone?.name || '',
     description: milestone?.description || '',
@@ -274,8 +275,9 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Name</label>
+          <label htmlFor={`${fieldId}-name`} className="block text-sm font-medium text-foreground mb-1">Name</label>
           <input
+            id={`${fieldId}-name`}
             type="text"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -285,8 +287,9 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Description</label>
+          <label htmlFor={`${fieldId}-description`} className="block text-sm font-medium text-foreground mb-1">Description</label>
           <textarea
+            id={`${fieldId}-description`}
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             className="w-full border rounded-lg px-3 py-2"
@@ -296,8 +299,9 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Due Date</label>
+            <label htmlFor={`${fieldId}-date`} className="block text-sm font-medium text-foreground mb-1">Due Date</label>
             <input
+              id={`${fieldId}-date`}
               type="date"
               value={formData.dueDate}
               onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
@@ -306,8 +310,9 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Color</label>
+            <label htmlFor={`${fieldId}-color`} className="block text-sm font-medium text-foreground mb-1">Color</label>
             <input
+              id={`${fieldId}-color`}
               type="color"
               value={formData.color}
               onChange={(e) => setFormData({ ...formData, color: e.target.value })}
@@ -318,8 +323,9 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
 
         {milestone && (
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Status</label>
+            <label htmlFor={`${fieldId}-status`} className="block text-sm font-medium text-foreground mb-1">Status</label>
             <select
+              id={`${fieldId}-status`}
               value={formData.status}
               onChange={(e) => setFormData({ ...formData, status: e.target.value })}
               className="w-full border rounded-lg px-3 py-2"

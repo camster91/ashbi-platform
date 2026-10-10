@@ -53,6 +53,20 @@ export function enterRequestContext(ctx) {
 }
 
 /**
+ * Realtime handshakes/packets are not Fastify requests. An upgraded or reused
+ * connection can inherit an earlier HTTP request's AsyncLocalStorage scope.
+ * Start their explicit session/room authorization in an independent context;
+ * never let that unrelated tenant affect identity lookup. HTTP scoping is
+ * restored when this callback returns and remains unchanged for HTTP routes.
+ * @template T
+ * @param {() => T} callback
+ * @returns {T}
+ */
+export function withoutHttpRequestContext(callback) {
+  return requestStorage.run({ prisma: basePrisma, organizationId: null }, callback);
+}
+
+/**
  * Returns the per-request scoped prisma client, or the raw client if called
  * outside a request context (e.g. cron jobs).
  */

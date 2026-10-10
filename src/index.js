@@ -71,7 +71,7 @@ import {
   isStrictHealthQuery,
   publicHealthView,
 } from './services/runtime-health.service.js';
-import { getRequestPrisma } from './utils/request-context.js';
+import { getRequestPrisma, withoutHttpRequestContext } from './utils/request-context.js';
 
 /**
  * Construct the complete API application without binding a network port.
@@ -394,7 +394,7 @@ fastify.addHook('onClose', async () => {
 // refused before verification, and an admin with an open view is refused
 // after the session is verified. A staff member whose organization requires
 // two-factor authentication is refused until they enroll.
-io.use(createSocketAuthMiddleware({
+const socketAuth = createSocketAuthMiddleware({
   verifyToken: (token) => fastify.jwt.verify(token),
   parseCookie: (header) => fastify.parseCookie(header),
   prisma,
@@ -405,7 +405,8 @@ io.use(createSocketAuthMiddleware({
     if (await isMfaEnrollmentRequired(prisma, decoded.id)) return 'Two-factor authentication setup is required';
     return null;
   },
-}));
+});
+io.use((socket, next) => withoutHttpRequestContext(() => socketAuth(socket, next)));
 
 // Socket.IO connection handling. Without this, the client-emitted `join` /
 // `join-project` events were never handled, so room-scoped notifications
@@ -430,7 +431,9 @@ io.on('connection', (socket) => {
     ]).then(([open, mustEnroll]) => !open && !mustEnroll, () => false)
     : Promise.resolve(true);
   socket.use((_packet, next) => {
-    cleared.then((ok) => (ok ? next() : next(new Error('Realtime is paused during a support view'))));
+    cleared.then((ok) => withoutHttpRequestContext(() => (
+      ok ? next() : next(new Error('Realtime is paused during a support view'))
+    )));
   });
   cleared.then((ok) => {
     if (!ok) { socket.disconnect(true); return; }

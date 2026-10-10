@@ -59,6 +59,11 @@ describe('project dialog journeys', () => {
     const trigger = await screen.findByRole('button', { name: /add milestone/i });
     await user.click(trigger);
     expect(screen.getByRole('dialog', { name: 'Create Milestone' })).toBeVisible();
+    const dialog = screen.getByRole('dialog', { name: 'Create Milestone' });
+    expect(within(dialog).getByRole('textbox', { name: 'Name', exact: true })).toBeRequired();
+    expect(within(dialog).getByRole('textbox', { name: 'Description', exact: true })).toBeVisible();
+    expect(within(dialog).getByLabelText('Due Date')).toBeRequired();
+    expect(within(dialog).getByLabelText('Color')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
@@ -90,6 +95,7 @@ describe('project dialog journeys', () => {
     milestoneCard.focus();
     await user.keyboard(' ');
     expect(screen.getByRole('dialog', { name: 'Edit Milestone' })).toBeVisible();
+    expect(within(screen.getByRole('dialog', { name: 'Edit Milestone' })).getByRole('combobox', { name: 'Status', exact: true })).toHaveValue('PENDING');
     expect(milestoneCard).toHaveAttribute('aria-pressed', 'true');
   });
 
