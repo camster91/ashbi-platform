@@ -67,7 +67,7 @@ describe('portal and shell muted text contrast (#317)', () => {
   it.each(LIGHT_PORTAL_PAGES)('%s pins the light token set', (file) => {
     const source = readFileSync(resolve(process.cwd(), file), 'utf8');
     expect(source).toContain("import usePortalLightTheme from '../hooks/usePortalLightTheme';");
-    expect(source).toMatch(/export default function \w+\([^)]*\) \{\n {2}usePortalLightTheme\(\);/);
+    expect(source).toMatch(/export default function \w+\([^)]*\) \{\r?\n {2}usePortalLightTheme\(\);/);
   });
 
   it.each([

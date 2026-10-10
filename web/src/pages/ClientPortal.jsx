@@ -634,25 +634,26 @@ function PortalDashboard({ token }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="cp-header sticky top-0 z-20 flex items-center justify-between bg-primary px-6 py-4">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
+      <div className="sticky top-0 z-20">
+      <header className="cp-header flex flex-wrap items-center justify-between gap-3 bg-primary px-4 py-4 sm:px-6">
+        <div className="flex min-w-0 flex-1 basis-full items-center gap-3 sm:basis-auto">
+          <div className="flex min-w-0 items-center gap-2">
             {Icons.logo}
-            {brandName && <span className="text-lg font-bold text-primary-foreground">{brandName}</span>}
+            {brandName && <span className="min-w-0 break-words text-lg font-bold text-primary-foreground">{brandName}</span>}
           </div>
           <span className="text-xs text-primary-foreground/30">|</span>
-          <span className="text-sm text-primary-foreground/70">{clientName}</span>
+          <span className="min-w-0 break-words text-sm text-primary-foreground/70">{clientName}</span>
         </div>
-        <div className="flex items-center gap-4">
-          {contactName && <span className="text-sm text-primary-foreground/50">Hi, {contactName}</span>}
-          <Button type="button" aria-label="Log out of client portal" onClick={handleLogout} variant="ghost" size="sm" leftIcon={Icons.logout} className="border border-primary-foreground/20 text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground">
+        <div className="flex max-w-full items-center gap-3">
+          {contactName && <span className="min-w-0 break-words text-sm text-primary-foreground/50">Hi, {contactName}</span>}
+          <Button type="button" aria-label="Log out of client portal" onClick={handleLogout} variant="ghost" size="sm" leftIcon={Icons.logout} className="shrink-0 border border-primary-foreground/20 text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground">
             Logout
           </Button>
         </div>
       </header>
 
       {/* Tab navigation */}
-      <div className="sticky top-14 z-10 border-b-2 border-border bg-card px-6">
+      <div className="border-b-2 border-border bg-card px-6">
         <div role="tablist" aria-label="Portal sections" className="mx-auto flex max-w-[960px] gap-1 overflow-x-auto">
           {tabs.map(tab => (
             <button
@@ -667,6 +668,7 @@ function PortalDashboard({ token }) {
             </button>
           ))}
         </div>
+      </div>
       </div>
 
       {/* Content */}

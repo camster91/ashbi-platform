@@ -14,7 +14,7 @@ const TAB_OPTIONS = [
   { id: 'client', label: 'Client', icon: Users },
 ];
 
-export default function QuickAdd({ open, onClose }) {
+export default function QuickAdd({ open, onClose, initialTab = 'project' }) {
   const [activeTab, setActiveTab] = useState('project');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -49,7 +49,7 @@ export default function QuickAdd({ open, onClose }) {
 
   useEffect(() => {
     if (!open) return;
-    setActiveTab('project');
+    setActiveTab(initialTab);
     setName('');
     setEmail('');
     setClientId('');
@@ -57,7 +57,7 @@ export default function QuickAdd({ open, onClose }) {
     setError('');
     setDone(false);
     setSaving(false);
-  }, [open]);
+  }, [open, initialTab]);
 
   useEffect(() => () => {
     if (successTimer.current) clearTimeout(successTimer.current);

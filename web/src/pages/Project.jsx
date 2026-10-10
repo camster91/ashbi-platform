@@ -284,6 +284,12 @@ export default function Project() {
             {shareCopied ? <Check className="w-4 h-4 text-success" aria-hidden="true" /> : <Share2 className="w-4 h-4" aria-hidden="true" />}
             {shareCopied ? 'Copied!' : 'Share'}
           </button>
+          <Link
+            to={`/project/${project.id}/kanban`}
+            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Task board
+          </Link>
           {embeddedAiEnabled && <button
             type="button"
             aria-label="Draft project update"

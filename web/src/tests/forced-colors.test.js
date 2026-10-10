@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 // Forced-colours contract (#317). Windows contrast themes drop box-shadows and
 // background fills, which removes Tailwind focus rings, button fills and
 // tinted badges; index.css restores each cue with CSS system colours.
-const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8').replace(/\r\n/g, '\n');
 const start = css.indexOf('@media (forced-colors: active)');
 const block = start >= 0 ? css.slice(start, css.indexOf('\n}\n', start)) : '';
 const doc = readFileSync(resolve(process.cwd(), '../docs/ui-primitives.md'), 'utf8');

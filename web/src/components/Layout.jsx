@@ -89,6 +89,7 @@ export default function Layout({ children }) {
   const [installDismissed, setInstallDismissed] = useState(false);
   const [notificationPromptDismissed, setNotificationPromptDismissed] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddTab, setQuickAddTab] = useState('project');
 
   const { showModal, closeModal } = useKeyboardShortcuts(navigate);
 
@@ -547,7 +548,7 @@ export default function Layout({ children }) {
           {/* Right side actions */}
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             <LiveTimer socket={socket} />
-            <QuickCreateMenu navigate={navigate} isAdmin={isAdmin} />
+            <QuickCreateMenu navigate={navigate} isAdmin={isAdmin} onCreateTask={() => { setQuickAddTab('task'); setQuickAddOpen(true); }} />
             <button
               type="button"
               onClick={toggleTheme}
@@ -847,7 +848,7 @@ export default function Layout({ children }) {
       {embeddedAiEnabled && <Suspense fallback={null}><GlobalAIChat hideButton={moreMenuOpen || sidebarOpen} /></Suspense>}
 
       {/* Quick Add — Cmd+K command palette */}
-      <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
+      <QuickAdd open={quickAddOpen} initialTab={quickAddTab} onClose={() => { setQuickAddOpen(false); setQuickAddTab('project'); }} />
 
       {/* Keyboard Shortcuts Modal */}
       {showModal && <ShortcutsModal onClose={closeModal} />}
@@ -892,11 +893,12 @@ function ShortcutsModal({ onClose }) {
   );
 }
 
-function QuickCreateMenu({ navigate, isAdmin }) {
+function QuickCreateMenu({ navigate, isAdmin, onCreateTask }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
 
   const actions = [
+    { label: 'New Task', icon: Plus, onSelect: onCreateTask },
     { label: 'New Project', icon: FolderOpen, href: '/projects?create=true' },
     { label: 'New Client', icon: Users, href: '/clients?create=true' },
     { label: 'New Invoice', icon: Receipt, href: '/invoices?create=true', adminOnly: true },
@@ -951,12 +953,12 @@ function QuickCreateMenu({ navigate, isAdmin }) {
           className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-xl shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
           role="menu"
         >
-          {actions.map(({ label, icon: Icon, href }) => (
+          {actions.map(({ label, icon: Icon, href, onSelect }) => (
              <button
                key={label}
                type="button"
                aria-label={label}
-               onClick={() => { navigate(href); setOpen(false); }}
+               onClick={() => { if (onSelect) onSelect(); else navigate(href); setOpen(false); }}
                className="w-full min-h-11 flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               role="menuitem"
             >
