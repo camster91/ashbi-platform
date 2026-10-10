@@ -39,7 +39,8 @@ describe('authentication session contract', () => {
   it('checks the database session version for both HTTP and Socket.IO', () => {
     assert.ok((server.match(/resolveRequestSession\(request, prisma\)/g) || []).length >= 3);
     assert.match(requestSession, /isCurrentUserSession\(prisma, request\.user\)/);
-    assert.match(server, /io\.use\(createSocketAuthMiddleware\(/);
+    assert.match(server, /const socketAuth = createSocketAuthMiddleware\(/);
+    assert.match(server, /io\.use\(\(socket, next\) => withoutHttpRequestContext\(\(\) => socketAuth\(socket, next\)\)\)/);
     assert.match(socketAuth, /isCurrentUserSession\(prisma, decoded\)/);
   });
 
