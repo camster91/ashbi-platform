@@ -634,7 +634,8 @@ function PortalDashboard({ token }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="cp-header sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 bg-primary px-4 py-4 sm:px-6">
+      <div className="sticky top-0 z-20">
+      <header className="cp-header flex flex-wrap items-center justify-between gap-3 bg-primary px-4 py-4 sm:px-6">
         <div className="flex min-w-0 flex-1 basis-full items-center gap-3 sm:basis-auto">
           <div className="flex min-w-0 items-center gap-2">
             {Icons.logo}
@@ -652,7 +653,7 @@ function PortalDashboard({ token }) {
       </header>
 
       {/* Tab navigation */}
-      <div className="sticky top-14 z-10 border-b-2 border-border bg-card px-6">
+      <div className="border-b-2 border-border bg-card px-6">
         <div role="tablist" aria-label="Portal sections" className="mx-auto flex max-w-[960px] gap-1 overflow-x-auto">
           {tabs.map(tab => (
             <button
@@ -667,6 +668,7 @@ function PortalDashboard({ token }) {
             </button>
           ))}
         </div>
+      </div>
       </div>
 
       {/* Content */}

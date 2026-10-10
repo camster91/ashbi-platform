@@ -22,5 +22,9 @@ for (const width of [320, 375, 430]) {
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
     await logout.focus();
     await expect(logout).toBeFocused();
+    await page.evaluate(() => window.scrollTo(0, 160));
+    const header = await page.locator('.cp-header').boundingBox();
+    const tabs = await page.getByRole('tablist', { name: 'Portal sections' }).boundingBox();
+    expect(tabs!.y).toBeGreaterThanOrEqual(header!.y + header!.height);
   });
 }
