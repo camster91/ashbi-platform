@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import useClients, { CLIENT_OPTIONS_LIMIT, clientOptionsKey, normalizeClients } from '../hooks/useClients';
 import { api } from '../lib/api';
@@ -83,7 +83,7 @@ describe('client list cache contract', () => {
   it('fetches clients only through useClients or the Clients page list', () => {
     const allowed = new Set(['useClients.js', 'Clients.jsx', 'api.js']);
     const offenders = sources(SOURCE_ROOT)
-      .filter((path) => !allowed.has(path.split('/').pop()))
+      .filter((path) => !allowed.has(basename(path)))
       .filter((path) => readFileSync(path, 'utf8').includes('api.getClients('));
     expect(offenders).toEqual([]);
   });
