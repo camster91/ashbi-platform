@@ -54,7 +54,8 @@ describe('notification consent policy', () => {
   });
 
   it('clears browser registrations on logout and session expiry', () => {
-    expect(auth).toContain('clearBrowserPushSubscription({ removeFromServer: true })');
+    expect(auth).toContain('await api.logout();');
+    expect(auth).toContain('clearBrowserPushSubscription({ signal })');
     expect(auth).toContain('await clearBrowserPushSubscription();');
   });
 

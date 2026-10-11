@@ -5,12 +5,12 @@ const PURGE_MESSAGE = Object.freeze({ type: 'PURGE_PRIVATE_CACHES' });
  * Remove private caches left by older service workers and notify every worker
  * lifecycle state so logout/account changes cannot expose a prior session.
  */
-export async function purgePrivateCaches() {
+export async function purgePrivateCaches({ signal } = {}) {
   const work = [];
 
   if ('caches' in globalThis) {
     work.push(
-      caches.keys().then((keys) => Promise.all(
+      caches.keys().then((keys) => signal?.aborted ? undefined : Promise.all(
         keys
           .filter((key) => key.startsWith(LEGACY_API_CACHE_PREFIX))
           .map((key) => caches.delete(key))
@@ -22,6 +22,7 @@ export async function purgePrivateCaches() {
     navigator.serviceWorker.controller?.postMessage(PURGE_MESSAGE);
     work.push(
       navigator.serviceWorker.getRegistrations().then((registrations) => {
+        if (signal?.aborted) return;
         const workers = new Set();
         for (const registration of registrations) {
           if (registration.active) workers.add(registration.active);

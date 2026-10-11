@@ -10,12 +10,13 @@ const AuthContext = createContext(null);
 
 async function boundedBrowserCleanup(operation) {
   let timer;
+  const controller = new AbortController();
   try {
     await Promise.race([
-      Promise.resolve().then(operation).catch(() => {}),
+      Promise.resolve().then(() => operation(controller.signal)).catch(() => {}),
       new Promise(resolve => { timer = setTimeout(resolve, 3000); }),
     ]);
-  } finally { clearTimeout(timer); }
+  } finally { controller.abort(); clearTimeout(timer); }
 }
 
 export function safeReturnPath(value) {
@@ -266,8 +267,8 @@ export function AuthProvider({ children }) {
     } catch {
       // Even if logout API call fails, clear local state
     }
-    await boundedBrowserCleanup(() => Promise.allSettled([
-      clearBrowserPushSubscription(), purgePrivateCaches(),
+    await boundedBrowserCleanup(signal => Promise.allSettled([
+      clearBrowserPushSubscription({ signal }), purgePrivateCaches({ signal }),
     ]));
     if (mountedRef.current) {
       setUser(null);
