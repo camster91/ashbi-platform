@@ -39,7 +39,7 @@ export default function ConnectChatGPT() {
         {preview && <>
           <p>Signed in as <strong className="break-all">{preview.accountEmail}</strong></p>
           <p>ChatGPT will be able to read projects, clients and tasks in your Ashbi workspace. It cannot create, change, send or delete records through this connection.</p>
-          <p className="text-sm text-muted-foreground">Access lasts up to 30 days. Revoke “ChatGPT (read-only MCP)” at any time in Settings → API Keys. Changing your password or account access also ends this connection.</p>
+          <p className="text-sm text-muted-foreground">Access lasts up to 30 days. Revoke “ChatGPT (read-only MCP)” at any time in Settings → API Keys. Signing out of Ashbi, changing your password or changing account access also ends this connection.</p>
           <div className="flex flex-wrap gap-3">
             <Button onClick={() => respond(true)} loading={pending} disabled={pending}>Allow read-only access</Button>
             <Button variant="secondary" onClick={() => respond(false)} disabled={pending}>Cancel connection</Button>

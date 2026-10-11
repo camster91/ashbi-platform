@@ -17,6 +17,7 @@ it('shows the account, read-only boundaries and revocation instructions before c
   expect(api.getMcpConsent).toHaveBeenCalledWith('request-ticket');
   expect(screen.getByText(/cannot create, change, send or delete/)).toBeInTheDocument();
   expect(screen.getByText(/Revoke/)).toHaveTextContent('30 days');
+  expect(screen.getByText(/Revoke/)).toHaveTextContent('Signing out of Ashbi');
   expect(api.respondMcpConsent).not.toHaveBeenCalled();
 });
 

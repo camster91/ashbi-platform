@@ -13,7 +13,7 @@ in both authorization and token exchanges.
 Consent grants only `workspace:read`. Access tokens last one hour; rotating
 refresh tokens expire with their original 30-day grant. Token hashes and expiry
 are stored in existing API-key rows and Redis. Revoking the named connection in
-Settings, changing account/session access, changing tenants or failing current
+Settings, signing out of Ashbi, changing account/session access, changing tenants or failing current
 MFA requirements prevents further use. OAuth tokens are rejected by the generic
 API-key authenticator and accepted only at `/api/mcp`.
 
@@ -22,7 +22,9 @@ API-key authenticator and accepted only at `/api/mcp`.
 1. Complete security review and all required CI gates on the exact revision.
 2. Exercise the protocol against real Redis/PostgreSQL in the QA stack, including
    refresh races, revocation and tenant isolation. Local fake-store tests alone
-   do not establish these runtime guarantees.
+   do not establish these runtime guarantees. The dedicated real-store test
+   passed on fresh VPS PostgreSQL/Redis containers at revision 845fbac; retain
+   required CI evidence on the final reviewed revision as well.
 3. Configure `MCP_OAUTH_ENABLED=true` on an approved QA target with an HTTPS
    `HUB_URL` origin. Redis must support GETDEL (6.2+). Restart using the committed
    deployment controller and verify discovery, sign-in, MFA and consent routing.
