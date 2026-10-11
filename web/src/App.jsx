@@ -87,6 +87,7 @@ const BrandSettings = lazy(() => import('./pages/BrandSettings'));
 const Retainers = lazy(() => import('./pages/Retainers'));
 const InvoiceChaser = lazy(() => import('./pages/InvoiceChaser'));
 const Settings = lazy(() => import('./pages/Settings'));
+const ConnectChatGPT = lazy(() => import('./pages/ConnectChatGPT'));
 // Marketing Suite
 const Notifications = lazy(() => import('./pages/Notifications'));
 // Advanced Features
@@ -221,6 +222,7 @@ function AppRoutes() {
           <Route path="/client/login" element={<ClientPortal />} />
           <Route path="/client/dashboard" element={<ClientPortal />} />
           <Route path="/" element={<RootRedirect />} />
+          <Route path="/connect-chatgpt" element={<PrivateRoute><MfaEnrollmentGate><QueryRoute><ConnectChatGPT /></QueryRoute></MfaEnrollmentGate></PrivateRoute>} />
           {/* Organization MFA requirement: outside Layout, whose requests the API refuses until setup. */}
           <Route path={MFA_ENROLLMENT_PATH} element={<PrivateRoute><QueryRoute><MfaEnrollmentRequired /></QueryRoute></PrivateRoute>} />
       <Route

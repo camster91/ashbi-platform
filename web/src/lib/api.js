@@ -1232,6 +1232,9 @@ export const api = {
 
   // API Keys
   getApiKeys: () => request('/api-keys'),
+  getMcpOAuthStatus: () => request('/mcp-oauth/status'),
+  getMcpConsent: (state) => request(`/mcp-oauth/consent?${new URLSearchParams({ state })}`),
+  respondMcpConsent: (data) => request('/mcp-oauth/consent', { method: 'POST', body: data }),
   createApiKey: (data) => request('/api-keys', { method: 'POST', body: data }),
   deleteApiKey: (id) => request(`/api-keys/${id}`, { method: 'DELETE' }),
 

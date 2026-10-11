@@ -21159,6 +21159,42 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/mcp-oauth/status": {
+      "get": {
+        "operationId": "get_api_mcp_oauth_status",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/mcp-oauth/status",
+        "tags": [
+          "mcp-oauth"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/messages/paste": {
       "post": {
         "operationId": "post_api_messages_paste",
@@ -33452,6 +33488,9 @@
     },
     {
       "name": "mcp"
+    },
+    {
+      "name": "mcp-oauth"
     },
     {
       "name": "messages"

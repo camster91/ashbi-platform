@@ -384,6 +384,7 @@ export function ApiKeysSection() {
   const [createdKey, setCreatedKey] = useState(null);
   const [keyToRevoke, setKeyToRevoke] = useState(null);
   const [copyFeedback, setCopyFeedback] = useState(null);
+  const { data: oauthStatus } = useQuery({ queryKey: ['mcp-oauth-status'], queryFn: () => api.getMcpOAuthStatus(), retry: false });
 
   const {
     data: keysData = { keys: [] },
@@ -427,7 +428,7 @@ export function ApiKeysSection() {
 
   return (
     <div className="space-y-4">
-      <WorkspaceConnectionGuide />
+      <WorkspaceConnectionGuide oauthEnabled={oauthStatus?.enabled === true} />
       {createMutation.error && (
         <p role="alert" className="text-sm text-destructive">
           {createMutation.error.message || 'The API key could not be created. Try again.'}

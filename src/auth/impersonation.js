@@ -167,6 +167,7 @@ export const IMPERSONATION_BLOCKED_PREFIXES = Object.freeze([
   '/api/audit-events', // an admin reads the log as themselves
   '/api/push', // device (push subscription) management
   '/api/google-calendar/oauth', // binds an external account to the viewed person
+  '/api/mcp-oauth/consent', // grants an external assistant access as the viewed person
   '/api/slack/oauth', // installs an integration
 ]);
 
