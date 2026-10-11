@@ -294,6 +294,7 @@ const DOMAIN_REGISTRARS = [
     file: 'integrations/register-routes.js',
     exportName: 'registerIntegrationRoutes',
     routes: [
+      ['mcp-oauth', ''],
       ['workspace-api', '/api'],
       ['integration', '/api/integrations'],
       ['integrations.command-center', '/api/command-center'],
@@ -375,7 +376,7 @@ test('every domain-registered route module has exactly one owner', () => {
   // media review staff and share-link APIs (#417), the domain event
   // outbox admin API (#412), and support impersonation / break-glass
   // recovery (#416), and the daily operator queue (#461).
-  assert.equal(owners.size, 77); // Includes deterministic workspace API/MCP.
+  assert.equal(owners.size, 78); // Includes workspace API/MCP and its scoped OAuth server.
 });
 
 test('route modules stay encapsulated so cross-domain registration order cannot leak hooks', () => {

@@ -36,6 +36,7 @@ export function sdkHandler(handler, issuer) {
 
 export default async function mcpOAuthRoutes(fastify, { provider } = {}) {
   fastify.get('/api/mcp-oauth/status', { onRequest: [fastify.authenticate] }, async () => ({ enabled: Boolean(provider) }));
+  registerConsentRoutes(fastify, provider);
   if (!provider) return;
   const { issuer, resource } = provider;
   const publicRoute = { config: { public: true }, bodyLimit: 16384 };
@@ -62,17 +63,25 @@ export default async function mcpOAuthRoutes(fastify, { provider } = {}) {
     sdkHandler(tokenHandler({ provider, rateLimit: false }), issuer));
   fastify.post('/oauth/revoke', { ...publicRoute, onRequest: [noStore], config: { public: true, rateLimit: { max: 30, timeWindow: '1 minute' } } },
     sdkHandler(revocationHandler({ provider, rateLimit: false }), issuer));
+}
+
+function registerConsentRoutes(fastify, provider) {
+  const issuer = provider?.issuer;
+  const noStore = async (_request, reply) => { reply.header('Cache-Control', 'no-store'); };
+  const requireProvider = async (_request, reply) => {
+    if (!provider) return reply.code(404).send({ error: 'MCP_OAUTH_DISABLED', message: 'ChatGPT OAuth is not enabled on this deployment' });
+  };
 
   async function consentError(operation, reply) {
     try { return await operation(); }
     catch (error) {
       if (!(error instanceof OAuthError)) throw error;
-      return reply.code(400).send({ error: error.errorCode, message: error.message });
+      return reply.code(400).send({ error: error.errorCode, message: 'Connection request expired or changed; start again from ChatGPT' });
     }
   }
-  fastify.get('/api/mcp-oauth/consent', { onRequest: [fastify.authenticate, noStore], config: { sideEffectingGet: true } }, async (request, reply) =>
+  fastify.get('/api/mcp-oauth/consent', { onRequest: [fastify.authenticate, noStore, requireProvider], config: { sideEffectingGet: true } }, async (request, reply) =>
     consentError(() => provider.preview(request.query.state, request.user), reply));
-  fastify.post('/api/mcp-oauth/consent', { onRequest: [fastify.authenticate, noStore], preHandler: [requireRecentAuth],
+  fastify.post('/api/mcp-oauth/consent', { onRequest: [fastify.authenticate, noStore, requireProvider], preHandler: [requireRecentAuth],
     schema: { body: { type: 'object', additionalProperties: false, required: ['state', 'nonce', 'approved'], properties: {
       state: { type: 'string', maxLength: 128 }, nonce: { type: 'string', maxLength: 128 }, approved: { type: 'boolean' },
     } } } }, async (request, reply) => {

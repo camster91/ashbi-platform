@@ -209,3 +209,19 @@ test('SDK authorization and token exchange run through Fastify with exact discov
     await f.provider.verifyAccessToken(tokenResponse.json().access_token);
   } finally { await app.close(); }
 });
+
+test('disabled OAuth keeps guarded UI routes while exposing no authorization server', async () => {
+  const app = Fastify();
+  app.decorate('authenticate', async () => {});
+  await app.register(mcpOAuthRoutes);
+  try {
+    assert.deepEqual((await app.inject('/api/mcp-oauth/status')).json(), { enabled: false });
+    for (const method of ['GET', 'POST']) {
+      const response = await app.inject({ method, url: '/api/mcp-oauth/consent' });
+      assert.equal(response.statusCode, 404);
+      assert.equal(response.json().error, 'MCP_OAUTH_DISABLED');
+      assert.equal(response.headers['cache-control'], 'no-store');
+    }
+    assert.equal((await app.inject('/.well-known/oauth-authorization-server')).statusCode, 404);
+  } finally { await app.close(); }
+});

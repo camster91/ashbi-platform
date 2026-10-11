@@ -21159,6 +21159,109 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/mcp-oauth/consent": {
+      "get": {
+        "operationId": "get_api_mcp_oauth_consent",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/mcp-oauth/consent",
+        "tags": [
+          "mcp-oauth"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
+      "post": {
+        "operationId": "post_api_mcp_oauth_consent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "approved": {
+                    "type": "boolean"
+                  },
+                  "nonce": {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "state": {
+                    "maxLength": 128,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "state",
+                  "nonce",
+                  "approved"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/mcp-oauth/consent",
+        "tags": [
+          "mcp-oauth"
+        ],
+        "x-access": "recent-auth + staff",
+        "x-requires-recent-auth": true,
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/mcp-oauth/status": {
       "get": {
         "operationId": "get_api_mcp_oauth_status",

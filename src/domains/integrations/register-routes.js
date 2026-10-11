@@ -33,8 +33,8 @@ export async function registerIntegrationRoutes(fastify) {
     fastify.addHook('onClose', () => redis.quit());
     oauthProvider = createMcpOAuthProvider({ prisma, redis, issuer: env.hubUrl });
   }
-  await fastify.register(mcpOAuthRoutes, { provider: oauthProvider });
-  await fastify.register(workspaceApiRoutes, { prefix: '/api', oauthProvider });
+  await fastify.register(mcpOAuthRoutes, { prefix: '', ...(oauthProvider ? { provider: oauthProvider } : {}) });
+  await fastify.register(workspaceApiRoutes, { prefix: '/api', ...(oauthProvider ? { oauthProvider } : {}) });
   await fastify.register(integrationRoutes, { prefix: '/api/integrations' });
   await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });
   await fastify.register(mailgunHitlRoutes, { prefix: '/api/mailgun-hitl' });
