@@ -24,6 +24,9 @@ vi.mock('../lib/private-cache', () => ({
   purgePrivateCaches: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../hooks/usePushNotifications', () => ({ clearBrowserPushSubscription: vi.fn().mockResolvedValue(true) }));
+import { clearBrowserPushSubscription } from '../hooks/usePushNotifications';
+
 // Import the mocked api after vi.mock
 import { api } from '../lib/api';
 import { purgePrivateCaches } from '../lib/private-cache';
@@ -147,6 +150,25 @@ describe('useAuth', () => {
   });
 
   describe('logout', () => {
+    it('revokes the server session and signs out even if browser cleanup never resolves', async () => {
+      api.me.mockResolvedValue({ id: '1', email: 'qa@example.invalid', role: 'ADMIN' });
+      api.logout.mockResolvedValue({});
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      clearBrowserPushSubscription.mockImplementationOnce(() => new Promise(() => {}));
+      purgePrivateCaches.mockImplementationOnce(() => new Promise(() => {}));
+      vi.useFakeTimers();
+      try {
+        await act(async () => {
+          const completed = result.current.logout();
+          await vi.advanceTimersByTimeAsync(3001);
+          await completed;
+        });
+        expect(api.logout).toHaveBeenCalledOnce();
+        expect(api.logout.mock.invocationCallOrder[0]).toBeLessThan(clearBrowserPushSubscription.mock.invocationCallOrder[0]);
+        expect(result.current.user).toBeNull();
+      } finally { vi.useRealTimers(); }
+    });
     it('calls api.logout and clears user', async () => {
       const mockUser = { id: '1', email: 'test@example.com', role: 'ADMIN' };
       api.me.mockResolvedValue(mockUser);
