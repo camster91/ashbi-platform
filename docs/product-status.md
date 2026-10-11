@@ -4,6 +4,8 @@ This is the repository's authoritative status map as of 2026-08-13. A feature is
 
 The active agency-replacement acceptance map is [replacement-readiness-matrix.md](replacement-readiness-matrix.md).
 
+October 11 consolidation scope: [one shared workspace for Ashbi Design and freelance work](master-app-consolidation.md), including Notion, Fluent Boards and Bonsai feature/data mappings. The new source-inventory CLI is read-only preparation; no source migration or feature-parity completion is implied.
+
 ## Current supported milestone
 
 The supported milestone is a controlled Ashbi agency-operations deployment: authenticated staff/client workflows, project and task management, finance document preparation, collaboration/docs, and client portal on `hub.ashbi.ca`. It is not yet proven as a general-market replacement for ClickUp, Notion, Slack, or Bonsai. The current roadmap and replacement-readiness waves are tracked in [#393](https://github.com/camster91/ashbi-platform/issues/393), which supersedes the earlier milestone decision in #277; the backlog and release plan [#290](https://github.com/camster91/ashbi-platform/issues/290) and [#291](https://github.com/camster91/ashbi-platform/issues/291) are being reconciled against it.
