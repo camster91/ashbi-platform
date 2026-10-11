@@ -64,4 +64,20 @@ describe('Settings → API keys', () => {
     expect(screen.getByText(/choose at least one scope/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create key/i })).toBeDisabled();
   });
+
+  it('keeps a newly created secret visible when clipboard access fails', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('Denied')) } });
+    api.getApiKeys.mockResolvedValue({ keys: [] });
+    api.createApiKey.mockResolvedValue({ id: 'k3', key: 'ashbi_raw' });
+    renderSection();
+    fireEvent.change(screen.getByLabelText(/api key name/i), { target: { value: 'Reader' } });
+    fireEvent.click(screen.getByRole('button', { name: /create key/i }));
+    await screen.findByText('ashbi_raw');
+    fireEvent.click(screen.getByRole('button', { name: 'Copy API key' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('copy it manually before dismissing');
+    expect(screen.getByText('ashbi_raw')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /I've copied it/ }));
+    expect(screen.queryByText('ashbi_raw')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });

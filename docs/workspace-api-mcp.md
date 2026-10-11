@@ -121,6 +121,12 @@ by these local tests.
 
 ## ChatGPT through GPT Actions
 
+Settings → API Keys includes a connection guide with copyable, host-specific
+MCP and discovery URLs. Download Actions schema exports the canonical contract
+with the current app origin as its server URL, without any API key. Configure
+authentication separately in your GPT. Download from the production app when
+connecting to production; a localhost download targets localhost.
+
 `docs/workspace-actions.openapi.json` exposes one named operation per tool for
 GPT Actions, which supports Bearer API-key authentication. Replace its example
 server URL with your deployed HTTPS host and configure the key in the GPT's
@@ -131,6 +137,7 @@ Regenerate the schema with `node scripts/generate-workspace-actions.mjs` after
 catalog changes; `--check` detects drift. This schema is separate from native MCP.
 
 Authentication references:
+- https://help.openai.com/en/articles/9442513-configuring-actions-in-gpts
 - https://developers.openai.com/plugins/build/auth
 - https://help.openai.com/en/articles/9442513-gpt-actions-domain-settings-chatgpt-enterprise
 
