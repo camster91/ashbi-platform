@@ -44,16 +44,21 @@ test('MCP OAuth real stores: single-use exchange, refresh race, revocation and t
     const token = exchanged.find(result => result.status === 'fulfilled').value;
     assert.equal(await db.apiKey.count({ where: { userId: user.id } }), 1);
     assert.equal((await provider.verifyAccessToken(token.access_token)).extra.user.organizationId, orgIds[0]);
-    const refreshed = await Promise.allSettled([0, 1].map(() => provider.exchangeRefreshToken(client, token.refresh_token, ['workspace:read'], resource)));
-    assert.equal(refreshed.filter(result => result.status === 'fulfilled').length, 1);
-    const rotated = refreshed.find(result => result.status === 'fulfilled').value;
+    const rotated = await provider.exchangeRefreshToken(client, token.refresh_token, ['workspace:read'], resource);
+    assert.equal((await provider.verifyAccessToken(rotated.access_token)).extra.user.organizationId, orgIds[0]);
     await assert.rejects(provider.verifyAccessToken(token.access_token));
     await db.user.update({ where: { id: user.id }, data: { organizationId: orgIds[1] } });
     await assert.rejects(provider.verifyAccessToken(rotated.access_token));
     await db.user.update({ where: { id: user.id }, data: { organizationId: orgIds[0] } });
+    assert.equal((await provider.verifyAccessToken(rotated.access_token)).extra.user.organizationId, orgIds[0]);
     await provider.revokeToken(client, { token: rotated.refresh_token });
     await assert.rejects(provider.verifyAccessToken(rotated.access_token));
     await assert.rejects(provider.exchangeRefreshToken(client, rotated.refresh_token, ['workspace:read'], resource));
+    const raceToken = await provider.exchangeAuthorizationCode(client, await code(), verifier, CHATGPT_REDIRECT, resource);
+    const refreshed = await Promise.allSettled([0, 1].map(() => provider.exchangeRefreshToken(client, raceToken.refresh_token, ['workspace:read'], resource)));
+    assert.equal(refreshed.filter(result => result.status === 'fulfilled').length, 1);
+    await assert.rejects(provider.exchangeRefreshToken(client, raceToken.refresh_token, ['workspace:read'], resource));
+    await assert.rejects(provider.verifyAccessToken(refreshed.find(result => result.status === 'fulfilled').value.access_token));
   } finally {
     if (tracked.size) await redis.del(...tracked);
     if (user) {
