@@ -3,6 +3,7 @@ import { InvalidClientError, InvalidGrantError, InvalidScopeError, InvalidReques
 import { mustEnrollMfa } from './mfa-enforcement.js';
 import { safeEqual } from '../utils/crypto.js';
 import { recordAuditEvent } from '../services/audit-event.service.js';
+import { scopesForAudit } from './api-key-scopes.js';
 
 export const CHATGPT_CLIENT_ID = 'https://chatgpt.com/oauth/client.json';
 export const CHATGPT_REDIRECT = 'https://chatgpt.com/connector_platform_oauth_redirect';
@@ -134,7 +135,7 @@ export function createMcpOAuthProvider({ prisma, redis, issuer, fetchImpl = fetc
         clientId: client.client_id, resource, scopes: data.scopes, expiresAt: now() + GRANT_SECONDS * 1000 };
       await save(`grant:${key.id}`, grant, GRANT_SECONDS);
       await audit(prisma, { action: 'api_key.created', organizationId: grant.organizationId, actorType: 'USER', actorUserId: grant.userId,
-        entityId: key.id, metadata: { ownerUserId: grant.userId, expires: true, expiresAt: key.expiresAt, scopes: grant.scopes } });
+        entityId: key.id, metadata: { ownerUserId: grant.userId, expires: true, expiresAt: key.expiresAt, scopes: scopesForAudit(grant.scopes) } });
       return { access_token: accessToken, token_type: 'Bearer', expires_in: ACCESS_SECONDS, scope: grant.scopes.join(' '), refresh_token: await refreshFor(grant) };
     },
     async exchangeRefreshToken(client, token, scopes, requestedResource) {

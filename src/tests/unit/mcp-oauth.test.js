@@ -99,6 +99,7 @@ test('authorization code rejects wrong PKCE, client and callback; correct exchan
   assert.equal(f.keys[0].name, 'ChatGPT (read-only MCP)');
   assert.notEqual(f.keys[0].key, token.access_token);
   assert.equal(f.audits[0].actorUserId, f.user.id);
+  assert.equal(f.audits[0].metadata.scopes, 'workspace:read');
   assert.equal(JSON.stringify(f.audits).includes(token.access_token), false);
   await assert.rejects(f.exchange(code));
 });
