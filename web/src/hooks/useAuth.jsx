@@ -8,6 +8,16 @@ import { clearBrowserPushSubscription } from './usePushNotifications';
 
 const AuthContext = createContext(null);
 
+async function boundedBrowserCleanup(operation) {
+  let timer;
+  try {
+    await Promise.race([
+      Promise.resolve().then(operation).catch(() => {}),
+      new Promise(resolve => { timer = setTimeout(resolve, 3000); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
 export function safeReturnPath(value) {
   if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/dashboard';
   if (value.startsWith('/login') || value.startsWith('/forgot-password') || value.startsWith('/reset-password')) {
@@ -249,13 +259,16 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     cancelPendingAuthCheck();
-    await clearBrowserPushSubscription({ removeFromServer: true });
     try {
+      // Revoke the session before touching browser APIs that can stall. The
+      // logout endpoint also removes this account's server push registrations.
       await api.logout();
     } catch {
       // Even if logout API call fails, clear local state
     }
-    await purgePrivateCaches();
+    await boundedBrowserCleanup(() => Promise.allSettled([
+      clearBrowserPushSubscription(), purgePrivateCaches(),
+    ]));
     if (mountedRef.current) {
       setUser(null);
       setAuthState({ status: 'unauthenticated', reason: 'signed_out', message: '' });
