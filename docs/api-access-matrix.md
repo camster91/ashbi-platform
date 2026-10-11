@@ -58,10 +58,10 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | bot-secret | 40 |
 | client-portal | 27 |
 | public | 51 |
-| recent-auth + staff | 4 |
-| staff | 365 |
+| recent-auth + staff | 5 |
+| staff | 367 |
 | staff (inline) | 1 |
-| **total** | 558 |
+| **total** | 561 |
 
 ## Routes by prefix
 
@@ -605,6 +605,14 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | DELETE | `/api/mcp` | api-key | scoped |  |
 | GET | `/api/mcp` | api-key | scoped |  |
 | POST | `/api/mcp` | api-key | scoped |  |
+
+### /api/mcp-oauth
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/mcp-oauth/consent` | staff | scoped |  |
+| POST | `/api/mcp-oauth/consent` | recent-auth + staff | scoped |  |
+| GET | `/api/mcp-oauth/status` | staff | scoped |  |
 
 ### /api/messages
 

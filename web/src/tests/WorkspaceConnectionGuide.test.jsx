@@ -45,6 +45,6 @@ describe('Workspace connection setup', () => {
     expect(create).toHaveBeenCalledOnce();
     expect(click).toHaveBeenCalledOnce();
     expect(revoke).toHaveBeenCalledWith('blob:actions');
-    expect(screen.getByText(/OAuth, which Ashbi does not support yet/)).toBeInTheDocument();
+    expect(screen.getByText(/OAuth, which is not enabled/)).toBeInTheDocument();
   });
 });

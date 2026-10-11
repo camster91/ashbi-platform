@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/api', () => ({
-  api: { getApiKeys: vi.fn(), createApiKey: vi.fn(), deleteApiKey: vi.fn() },
+  api: { getApiKeys: vi.fn(), getMcpOAuthStatus: vi.fn().mockResolvedValue({ enabled: false }), createApiKey: vi.fn(), deleteApiKey: vi.fn() },
 }));
 
 const { api } = await import('../lib/api');

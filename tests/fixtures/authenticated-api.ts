@@ -367,6 +367,7 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
     if (path === '/proposals' && method === 'GET') return json(route, [proposal]);
 
     // Settings.
+    if (path === '/mcp-oauth/status' && method === 'GET') return json(route, { enabled: false });
     if (path === '/google-calendar/connection') return json(route, { connection: null });
     if (path === '/slack') return json(route, { installations: [] });
     if (path === '/api-keys') return json(route, { keys: [{ id: 'key-a', name: 'Zapier', createdAt: LAST_WEEK, lastUsedAt: YESTERDAY, expiresAt: null }] });

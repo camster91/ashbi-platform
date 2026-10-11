@@ -154,7 +154,9 @@ export function createApiKeyAuthenticator({ prisma }) {
       rawKey = authHeader.slice(7);
     }
 
-    if (typeof rawKey !== 'string' || !rawKey.startsWith(PREFIX)) {
+    // OAuth access tokens are audience-bound to /api/mcp and must never be
+    // accepted by a generic API-key route, even though they share storage.
+    if (typeof rawKey !== 'string' || !rawKey.startsWith(PREFIX) || rawKey.startsWith('ashbi_mcp_')) {
       return reply.status(401).send({ error: 'API key required' });
     }
 

@@ -87,6 +87,7 @@ export async function collectRouteInventory({ jwtSecret = 'test-only-jwt-secret'
       [app.authenticateWithApiKey, 'api-key'],
     ]);
     const namedGuards = new Map([
+      ['mcpAuth', 'api-key'], // OAuth tokens or existing API keys, both owner/tenant scoped
       ['clientAuth', 'client-portal'],
       ['requireBotAuth', 'bot-secret'],
       // Additional checks, not authentication by themselves (the access
