@@ -9,6 +9,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY web/ ./
 # Dependency-free modules the SPA shares with the API (web alias @shared).
 COPY src/shared/ /app/src/shared/
+COPY docs/workspace-actions.openapi.json /app/docs/workspace-actions.openapi.json
 COPY scripts/check-frontend-budgets.mjs /app/scripts/check-frontend-budgets.mjs
 RUN npm run build
 

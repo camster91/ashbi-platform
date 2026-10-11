@@ -33,6 +33,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import TwoFactorSettings from '../components/TwoFactorSettings';
 import OrganizationMfaPolicy from '../components/OrganizationMfaPolicy';
 import ActivityLog from '../components/ActivityLog';
+import WorkspaceConnectionGuide from '../components/WorkspaceConnectionGuide';
 import { lazy, Suspense } from 'react';
 const AiByokSettings = lazy(() => import('../components/AiByokSettings'));
 const AiApprovals = lazy(() => import('../components/AiApprovals'));
@@ -382,6 +383,7 @@ export function ApiKeysSection() {
   const [newKeyExpiryDays, setNewKeyExpiryDays] = useState(90);
   const [createdKey, setCreatedKey] = useState(null);
   const [keyToRevoke, setKeyToRevoke] = useState(null);
+  const [copyFeedback, setCopyFeedback] = useState(null);
 
   const {
     data: keysData = { keys: [] },
@@ -398,6 +400,7 @@ export function ApiKeysSection() {
     mutationFn: (name) => api.createApiKey({ name, scopes: newKeyScopes, expiresInDays: newKeyExpiryDays }),
     onSuccess: (data) => {
       setCreatedKey(data.key);
+      setCopyFeedback(null);
       setNewKeyName('');
       setNewKeyScopes(['workspace:read']);
       setNewKeyExpiryDays(90);
@@ -413,25 +416,31 @@ export function ApiKeysSection() {
     },
   });
 
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback({ error: false, message: 'API key copied.' });
+    } catch {
+      setCopyFeedback({ error: true, message: 'Copy failed. Select the key and copy it manually before dismissing it.' });
+    }
   };
 
   return (
     <div className="space-y-4">
+      <WorkspaceConnectionGuide />
       {createMutation.error && (
         <p role="alert" className="text-sm text-destructive">
           {createMutation.error.message || 'The API key could not be created. Try again.'}
         </p>
       )}
       {/* Create new key */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <input
           value={newKeyName}
           onChange={(e) => setNewKeyName(e.target.value)}
           placeholder="Key name, e.g. OpenClaw Bot"
           aria-label="API key name"
-          className="flex-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="min-w-0 flex-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20"
           onKeyDown={(e) => {
             if (e.key === 'Enter' && newKeyName.trim() && newKeyScopes.length > 0) {
               createMutation.mutate(newKeyName.trim());
@@ -502,12 +511,14 @@ export function ApiKeysSection() {
               onClick={() => copyToClipboard(createdKey)}
               className="p-1.5 text-muted-foreground hover:text-foreground"
               title="Copy to clipboard"
+              aria-label="Copy API key"
             >
               <Copy className="w-4 h-4" />
             </button>
           </div>
+          {copyFeedback && <p role={copyFeedback.error ? 'alert' : 'status'} className="text-sm mt-2">{copyFeedback.message}</p>}
           <button
-            onClick={() => setCreatedKey(null)}
+            onClick={() => { setCreatedKey(null); setCopyFeedback(null); }}
             className="text-xs text-muted-foreground hover:text-foreground mt-2"
           >
             I've copied it — dismiss
