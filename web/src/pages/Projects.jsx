@@ -1,5 +1,5 @@
-import { useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Clock, User, Tag, CalendarDays } from 'lucide-react';
 import { api } from '../lib/api';
@@ -8,6 +8,7 @@ import QueryErrorState from '../components/QueryErrorState';
 import { getHealthColor, getProjectStatusColor, getProjectStatusLabel, cn } from '../lib/utils';
 import CreateProjectModal from '../components/CreateProjectModal';
 import { formatDate } from '../lib/format';
+import { PORTFOLIO_OPTIONS, PORTFOLIO_VALUES } from '@shared/portfolio.js';
 
 // Kanban column definitions. Project status vocabularies still differ between
 // the DB model and the API (#405), so every value either maps to a column here
@@ -67,12 +68,13 @@ export function groupProjectsByColumn(projects) {
   return columns;
 }
 
-function ProjectCard({ project }) {
+function ProjectCard({ project, onPortfolioChange, saving }) {
   const totalTasks = (project._count?.tasks || 0);
   const completedTasks = project.completedTaskCount || 0;
   const progressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   return (
+    <div>
     <Link
       to={`/project/${project.id}`}
       className="block bg-card rounded-lg border border-border p-3 hover:border-primary/30 hover:shadow-sm transition-all group"
@@ -149,10 +151,24 @@ function ProjectCard({ project }) {
         </div>
       )}
     </Link>
+    <label className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+      <span className="sr-only">Portfolio for {project.name}</span>
+      <select
+        aria-label={`Portfolio for ${project.name}`}
+        value={project.portfolio || ''}
+        disabled={saving}
+        onChange={(event) => onPortfolioChange(project.id, event.target.value || null)}
+        className="min-h-11 w-full rounded border border-border bg-card px-2 focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <option value="">Unclassified</option>
+        {PORTFOLIO_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+      </select>
+    </label>
+    </div>
   );
 }
 
-function KanbanColumn({ column, projects, count }) {
+function KanbanColumn({ column, projects, count, onPortfolioChange, savingId }) {
   return (
     <div className="flex flex-col min-w-[280px] max-w-[320px] flex-shrink-0">
       {/* Column header */}
@@ -172,7 +188,7 @@ function KanbanColumn({ column, projects, count }) {
           />
         ) : (
           projects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
+            <ProjectCard key={project.id} project={project} onPortfolioChange={onPortfolioChange} saving={savingId === project.id} />
           ))
         )}
       </div>
@@ -181,7 +197,11 @@ function KanbanColumn({ column, projects, count }) {
 }
 
 export default function Projects() {
+  const queryClient = useQueryClient();
+  const [portfolioError, setPortfolioError] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
+  const requestedPortfolio = searchParams.get('portfolio');
+  const portfolio = [...PORTFOLIO_VALUES, 'UNCLASSIFIED'].includes(requestedPortfolio) ? requestedPortfolio : '';
   const showCreateModal = searchParams.get('create') === 'true';
   const preselectedClientId = searchParams.get('clientId') || '';
 
@@ -200,8 +220,27 @@ export default function Projects() {
   }, [searchParams, setSearchParams]);
 
   const { data: projects = [], isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => api.getProjects().then((r) => r?.projects ?? []),
+    queryKey: ['projects', { portfolio }],
+    queryFn: async () => {
+      const all = [];
+      let response;
+      do {
+        response = await api.getProjects({ limit: 200, offset: all.length, ...(portfolio ? { portfolio } : {}) });
+        const page = response?.projects ?? [];
+        all.push(...page);
+        if (!page.length) break;
+      } while (all.length < (response.total ?? 0));
+      return all;
+    },
+  });
+  const classify = useMutation({
+    mutationFn: ({ id, value }) => api.updateProject(id, { portfolio: value }),
+    onSuccess: () => {
+      setPortfolioError('');
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['project'] });
+    },
+    onError: (err) => setPortfolioError(err.message || 'Portfolio could not be saved. Try again.'),
   });
 
   // Show real API data only. (Previously fell back to hardcoded demo projects
@@ -245,11 +284,27 @@ export default function Projects() {
           New Project
         </button>
       </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <label htmlFor="project-portfolio" className="text-sm font-medium">Work portfolio</label>
+        <select id="project-portfolio" value={portfolio} className="min-h-11 rounded-lg border border-border bg-card px-3 focus-visible:ring-2 focus-visible:ring-ring"
+          onChange={(event) => {
+            const next = new URLSearchParams(searchParams);
+            if (event.target.value) next.set('portfolio', event.target.value); else next.delete('portfolio');
+            setSearchParams(next);
+          }}>
+          <option value="">All work</option>
+          {PORTFOLIO_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+          <option value="UNCLASSIFIED">Unclassified</option>
+        </select>
+        <p className="text-xs text-muted-foreground">Both portfolios are shared with the Ashbi team.</p>
+      </div>
+      {portfolioError && <p role="alert" className="text-sm text-destructive">{portfolioError}</p>}
 
       <CreateProjectModal
         isOpen={showCreateModal}
         onClose={closeCreateModal}
         preselectedClientId={preselectedClientId}
+        preselectedPortfolio={portfolio === 'UNCLASSIFIED' ? '' : portfolio}
       />
 
       {/* Kanban Board */}
@@ -265,6 +320,8 @@ export default function Projects() {
             column={col}
             projects={col.projects}
             count={col.projects.length}
+            onPortfolioChange={(id, value) => classify.mutate({ id, value })}
+            savingId={classify.isPending ? classify.variables?.id : null}
           />
         ))}
       </div>

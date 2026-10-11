@@ -2,6 +2,7 @@
 // Usage: import { schemas } from '../validators/schemas.js';
 
 import { DEFAULT_TASK_PRIORITY, TASK_PRIORITIES } from '../shared/task-priority.js';
+import { PORTFOLIO_VALUES } from '../shared/portfolio.js';
 import { z } from 'zod';
 import {
   ALLOWED_UPLOAD_EXTENSIONS,
@@ -119,7 +120,10 @@ export const TASK_STATUS_VALUES = [
   'PENDING', 'UPCOMING', 'IMMEDIATE', 'IN_PROGRESS', 'BLOCKED', 'WAITING_US', 'WAITING_CLIENT', 'COMPLETED',
   'TODO', 'REVIEW',
 ];
+export const portfolioSchema = z.enum(PORTFOLIO_VALUES);
+export const portfolioFilterSchema = portfolioSchema.or(z.literal('UNCLASSIFIED')).optional();
 export const createProjectSchema = z.object({
+  portfolio: portfolioSchema.nullable().optional(),
   name: z.string().min(1).max(200),
   description: z.string().max(5000).optional(),
   clientId: cuidId,
@@ -133,6 +137,7 @@ export const createProjectSchema = z.object({
 });
 
 export const updateProjectSchema = z.object({
+  portfolio: portfolioSchema.nullable().optional(),
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(5000).optional(),
   status: z.enum(PROJECT_STATUS_VALUES).optional(),

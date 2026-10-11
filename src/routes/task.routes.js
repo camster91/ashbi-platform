@@ -6,6 +6,8 @@ import { validateBody, updateTaskSchema, taskBulkUpdateSchema, taskPageContentUp
 import { z } from 'zod';
 import bus, { EVENTS } from '../utils/events.js';
 import { parseTaskContent } from '../utils/taskContent.js';
+import { portfolioWhere } from '../shared/portfolio.js';
+import { portfolioFilterSchema } from '../validators/schemas.js';
 
 /**
  * Why a task's assignee or dependency reference is unacceptable, or null.
@@ -30,13 +32,18 @@ export default async function taskRoutes(fastify) {
   // List all tasks with filters
   fastify.get('/', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
+    const portfolio = request.query.portfolio;
+    if (!portfolioFilterSchema.safeParse(portfolio).success) {
+      return reply.status(400).send({ error: 'Invalid portfolio filter' });
+    }
     const { status, priority, category, projectId, assigneeId, tags, page: pageParam = '1', limit: limitParam = '50' } = request.query;
 
     const page = parseInt(pageParam);
     const limit = parseInt(limitParam);
 
     const where = {};
+    if (portfolio) where.project = portfolioWhere(portfolio);
     if (status) where.status = status;
     if (priority) where.priority = priority;
     if (category) where.category = category;

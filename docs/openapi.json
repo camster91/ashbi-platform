@@ -2395,6 +2395,20 @@
             "minLength": 1,
             "type": "string"
           },
+          "portfolio": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ASHBI_DESIGN",
+                  "FREELANCE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "startDate": {
             "format": "date-time",
             "type": "string"
@@ -6516,6 +6530,20 @@
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
+          },
+          "portfolio": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ASHBI_DESIGN",
+                  "FREELANCE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "startDate": {
             "anyOf": [
