@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 
-export async function clearBrowserPushSubscription({ removeFromServer = false } = {}) {
+export async function clearBrowserPushSubscription({ removeFromServer = false, signal } = {}) {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return true;
   try {
     // Session expiry and logout must not wait indefinitely for a service worker
     // that is blocked, failed to install, or has not activated yet.
     const reg = await navigator.serviceWorker.getRegistration();
-    if (!reg) return true;
+    if (signal?.aborted || !reg) return true;
     const sub = await reg.pushManager?.getSubscription();
-    if (!sub) return true;
+    if (signal?.aborted || !sub) return true;
     if (removeFromServer) await api.unsubscribePush(sub.endpoint);
+    if (signal?.aborted) return true;
     await sub.unsubscribe();
     return true;
   } catch (error) {

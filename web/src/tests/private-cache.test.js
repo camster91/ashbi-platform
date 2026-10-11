@@ -13,6 +13,19 @@ afterEach(() => {
 });
 
 describe('purgePrivateCaches', () => {
+  it('does not purge a later session when a stalled enumeration resumes after cancellation', async () => {
+    let release;
+    const deleteCache = vi.fn();
+    vi.stubGlobal('caches', { keys: () => new Promise(resolve => { release = resolve; }), delete: deleteCache });
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true,
+      value: { controller: null, getRegistrations: vi.fn().mockResolvedValue([]) } });
+    const controller = new AbortController();
+    const cleanup = purgePrivateCaches({ signal: controller.signal });
+    controller.abort();
+    release(['hub-api-new-session']);
+    await cleanup;
+    expect(deleteCache).not.toHaveBeenCalled();
+  });
   it('deletes only legacy private API caches', async () => {
     const deleteCache = vi.fn().mockResolvedValue(true);
     vi.stubGlobal('caches', {

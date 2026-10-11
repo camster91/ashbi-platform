@@ -43,6 +43,20 @@ function setBrowser({ permission = 'default', subscription = null, online = true
 }
 
 describe('usePushNotifications', () => {
+  it('does not unsubscribe a later session after logout cleanup is aborted', async () => {
+    const unsubscribe = vi.fn();
+    const pushManager = setBrowser();
+    let release;
+    pushManager.getSubscription.mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    const controller = new AbortController();
+    const cleanup = clearBrowserPushSubscription({ signal: controller.signal });
+    await Promise.resolve();
+    controller.abort();
+    release({ endpoint: 'https://push.example/new-session', unsubscribe });
+    await cleanup;
+    expect(unsubscribe).not.toHaveBeenCalled();
+    expect(apiMock.unsubscribePush).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
