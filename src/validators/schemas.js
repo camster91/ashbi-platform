@@ -144,6 +144,8 @@ export const taskFieldValuesSchema = z.object({ revision: z.number().int().min(0
 export const taskViewFiltersSchema = z.object({
   search: z.string().trim().max(200).optional(), stageKey: taskStageKeySchema.optional(),
   status: z.enum(TASK_STATUS_VALUES).optional(), priority: z.enum(TASK_PRIORITIES).optional(),
+  fieldFilters: z.preprocess(value => { if (typeof value !== 'string') return value; try { return JSON.parse(value); } catch { return value; } },
+    z.array(z.object({ key: taskStageKeySchema.refine(key => !['__proto__', 'prototype', 'constructor'].includes(key)), operator: z.enum(['EQ', 'CONTAINS', 'GTE', 'LTE', 'HAS']), value: z.union([z.string().max(2048), z.number().finite(), z.boolean()]) }).strict()).max(10)).optional(),
 }).strict();
 export const projectTaskViewsSchema = z.object({
   revision: z.number().int().min(0),

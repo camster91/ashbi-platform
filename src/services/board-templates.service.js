@@ -1,5 +1,6 @@
 import { projectTaskFieldsSchema, projectTaskStagesSchema, projectTaskViewsSchema } from '../validators/schemas.js';
 import { withStageTransaction } from './task-stages.service.js';
+import { validateTaskFieldFilterDefinitions } from './task-field-filters.service.js';
 
 const fail = (statusCode, message) => { throw Object.assign(new Error(message), { statusCode }); };
 export function validateBoardConfig(config) {
@@ -8,6 +9,7 @@ export function validateBoardConfig(config) {
     || !projectTaskViewsSchema.safeParse({ revision: 0, views: config.views }).success) fail(400, 'Template workflow settings are invalid. Save a new template from the source project.');
   if (config.views.some(view => view.filters.stageKey && !config.stages.some(stage => stage.key === view.filters.stageKey)
     || (view.columns ?? []).some(key => !config.fields.some(field => field.key === key)))) fail(400, 'Clear unavailable stages or columns in the source views before saving a template.');
+  for (const view of config.views) validateTaskFieldFilterDefinitions(config.fields, view.filters.fieldFilters);
   return config;
 }
 export async function saveBoardTemplate(prisma, { projectId, name, description }) {

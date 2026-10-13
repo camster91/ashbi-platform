@@ -15,6 +15,7 @@ import { taskRecurrenceUpdateSchema } from '../validators/schemas.js';
 import { saveTaskRecurrence } from '../services/task-recurrence.service.js';
 import { taskViewFiltersSchema } from '../validators/schemas.js';
 import { taskViewWhere } from '../shared/task-view-filters.js';
+import { validateTaskFieldFilters } from '../services/task-field-filters.service.js';
 
 /**
  * Why a task's assignee or dependency reference is unacceptable, or null.
@@ -68,8 +69,9 @@ export default async function taskRoutes(fastify) {
     const limit = parseInt(limitParam);
 
     const where = {};
-    const extraFilters = taskViewFiltersSchema.safeParse({ search: request.query.search, stageKey: request.query.stageKey });
+    const extraFilters = taskViewFiltersSchema.safeParse({ search: request.query.search, stageKey: request.query.stageKey, fieldFilters: request.query.fieldFilters });
     if (!extraFilters.success) return reply.status(400).send({ error: 'Invalid task filters' });
+    await validateTaskFieldFilters(request.prisma, projectId, extraFilters.data.fieldFilters);
     Object.assign(where, taskViewWhere(extraFilters.data));
     if (portfolio) where.project = portfolioWhere(portfolio);
     if (status) where.status = status;
@@ -80,9 +82,9 @@ export default async function taskRoutes(fastify) {
     // Filter by tags — comma-separated, all must match (stored as JSON array string)
     if (tags) {
       const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
-      where.AND = tagList.map(tag => ({
+      where.AND = [...(where.AND ?? []), ...tagList.map(tag => ({
         tags: { contains: `"${tag}"` }
-      }));
+      }))];
     }
 
     // Team members see only their tasks

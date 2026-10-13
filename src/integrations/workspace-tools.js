@@ -7,18 +7,20 @@ import { portfolioFilterSchema } from '../validators/schemas.js';
 import { taskViewFiltersSchema } from '../validators/schemas.js';
 import { taskViewWhere } from '../shared/task-view-filters.js';
 import { financialPortfolioWhere } from '../shared/financial-portfolio.js';
+import { validateTaskFieldFilters } from '../services/task-field-filters.service.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
   after: z.string().min(1).max(50).optional(),
 }).strict();
 
-function listTool(name, description, model, select, where, inputSchema = pageSchema) {
+function listTool(name, description, model, select, where, inputSchema = pageSchema, preflight = async () => {}) {
   return {
     name, description, class: 'read', roles: ['ADMIN', 'TEAM'], inputSchema,
     resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
     timeoutMs: 5000,
     run: async ({ prisma, user, input }) => {
+      await preflight({ prisma, user, input });
       const rows = await prisma[model].findMany({
         where: { ...where(user, input), ...(input.after ? { id: { gt: input.after } } : {}) },
         select, orderBy: { id: 'asc' }, take: input.limit + 1,
@@ -60,7 +62,8 @@ export const workspaceRegistry = createToolRegistry([
     'task', { id: true, title: true, projectId: true, status: true, stageKey: true, priority: true, dueDate: true, fieldValues: true, fieldValuesRevision: true,
       recurrenceRule: true, recurrenceNextDate: true, recurrenceRevision: true, recurrenceSourceId: true, recurrenceScheduledDate: true },
     (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }, ...taskViewWhere(input) }),
-    pageSchema.extend({ portfolio: portfolioFilterSchema, projectId: z.string().min(1).max(50).optional(), ...taskViewFiltersSchema.shape })),
+    pageSchema.extend({ portfolio: portfolioFilterSchema, projectId: z.string().min(1).max(50).optional(), ...taskViewFiltersSchema.shape }),
+    ({ prisma, user, input }) => validateTaskFieldFilters(prisma, input.projectId, input.fieldFilters, user.organizationId)),
   ...BUILTIN_TOOLS.filter(tool => ['list_my_tasks', 'get_project_summary', 'create_task', 'create_calendar_event'].includes(tool.name)),
 ]);
 
