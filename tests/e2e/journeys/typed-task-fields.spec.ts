@@ -46,6 +46,16 @@ test('typed fields and canonical relations persist through editing, reload and a
     const result = await new AxeBuilder({ page }).include('[aria-label="Custom task fields"]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
     expect(result.violations).toEqual([]);
   }
+  await page.goto(`/project/${project.id}/views`);
+  await page.getByRole('checkbox', { name: 'Estimate', exact: true }).check();
+  await page.getByLabel('Task view name').fill('Estimates');
+  await page.getByRole('button', { name: 'Save as new view' }).click();
+  await expect(page.getByRole('button', { name: 'Delete view' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('columnheader', { name: 'Estimate', exact: true })).toBeVisible();
+  await expect(page.getByRole('table').getByRole('cell', { name: '0', exact: true })).toBeVisible();
+  const view = await json(await admin.get(`/api/projects/${project.id}/task-views`));
+  expect(view.views[0].columns).toEqual([definitions.fields.find((field: any) => field.name === 'Estimate').key]);
   await page.goto(`/project/${project.id}/fields`);
   await page.getByRole('checkbox', { name: 'Archived', exact: true }).first().check();
   await page.getByRole('button', { name: 'Save field definitions' }).click();

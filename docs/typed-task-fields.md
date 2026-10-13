@@ -19,4 +19,6 @@ Migration `20261013210000_typed_task_fields` adds nullable JSON definitions/valu
 
 Tests cover strict schemas and values, unknown/archive handling, metadata-only patches, stale revisions, foreign relation denial, persisted isolation/concurrency and preserved task content. The authenticated CI journey creates all eight field types, edits values/relations, reloads and archives while checking retained data, plus desktop/mobile scoped axe checks. Local disposable database and target acceptance remain pending; this is not full Notion database parity.
 
-Standalone databases, custom-field filters/columns, formulas, rollups, bidirectional/multiple relations, computed fields and client sharing remain follow-up work.
+Saved table views support up to 20 selected typed custom columns. Column selection persists with the saved view and uses the same paginated task rows/permissions. Zero, false and undated/unset values remain distinct; relation columns link to canonical task/project/client records, while person columns indicate a linked team member. Archived columns are labelled unavailable and can be cleared without deleting historical values.
+
+Standalone databases, custom-field filters, formulas, rollups, bidirectional/multiple relations, computed fields and client sharing remain follow-up work.

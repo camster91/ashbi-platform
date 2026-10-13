@@ -7,13 +7,14 @@ import QueryErrorState from './QueryErrorState';
 const control = 'block min-h-11 w-full rounded border border-border bg-card px-3';
 function RelationPicker({ taskId, field, value, relation, onChange }) {
   const [search, setSearch] = useState('');
+  const [chosen, setChosen] = useState(null);
   const query = useQuery({ queryKey: ['taskFieldOptions', taskId, field.key, search], queryFn: () => api.getTaskFieldOptions(taskId, field.key, search) });
   const items = query.data?.items ?? [];
   return <div className="space-y-2">
     <label className="text-sm">Search related {field.target.toLowerCase()}<input className={control} aria-label={`Search ${field.name} relations`} value={search} maxLength={200} onChange={event => setSearch(event.target.value)} /></label>
-    <select className={control} aria-label={field.name} value={value ?? ''} onChange={event => onChange(event.target.value || null)}>
+    <select className={control} aria-label={field.name} value={value ?? ''} onChange={event => { setChosen(items.find(item => item.id === event.target.value) ?? null); onChange(event.target.value || null); }}>
       <option value="">No relation</option>
-      {value && !items.some(item => item.id === value) && <option value={value}>{relation?.name || 'Selected record unavailable — clear or replace'}</option>}
+      {value && !items.some(item => item.id === value) && <option value={value}>{(chosen?.id === value ? chosen.name : relation?.name) || 'Selected record unavailable — clear or replace'}</option>}
       {items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
     </select>
     {query.isError && <p role="alert" className="text-sm text-destructive">Related records could not be loaded. <button type="button" onClick={() => query.refetch()} className="underline min-h-11">Retry</button></p>}
@@ -38,8 +39,10 @@ export default function TaskCustomFields({ taskId }) {
   // silently rebase a stale draft onto somebody else's changes.
   const config = draft?.config ?? query.data;
   const values = draft?.values ?? config?.values ?? {};
+  const changes = Object.fromEntries((config?.fields ?? []).filter(field => !field.archived
+    && JSON.stringify(values[field.key] ?? null) !== JSON.stringify(config.values[field.key] ?? null)).map(field => [field.key, values[field.key] ?? null]));
   const save = useMutation({ mutationFn: () => api.saveTaskFields(taskId, { revision: config.revision, definitionRevision: config.definitionRevision,
-    values: Object.fromEntries(config.fields.filter(field => !field.archived).map(field => [field.key, values[field.key] ?? null])) }),
+    values: changes }),
     onSuccess: async () => { setDraft(null); setError(''); await client.invalidateQueries({ queryKey: ['taskFields', taskId] }); },
     onError: err => setError(err.data?.message || err.message),
   });
@@ -52,7 +55,7 @@ export default function TaskCustomFields({ taskId }) {
       <fieldset disabled={save.isPending} className="space-y-3">
         {!fields.length && <p className="text-sm text-muted-foreground">No active custom fields in this project.</p>}
         {fields.map(field => <div key={field.key}><p className="text-sm font-medium mb-1">{field.name}</p><FieldInput field={field} taskId={taskId} relation={config.relations[field.key]} value={values[field.key]} onChange={value => setDraft({ config, values: { ...values, [field.key]: value } })} /></div>)}
-        {!!fields.length && <button type="submit" disabled={!draft} className="min-h-11 rounded bg-primary text-primary-foreground px-3 disabled:opacity-50">Save custom fields</button>}
+        {!!fields.length && <button type="submit" disabled={!draft || !Object.keys(changes).length} className="min-h-11 rounded bg-primary text-primary-foreground px-3 disabled:opacity-50">Save custom fields</button>}
         <button type="button" className="min-h-11 px-3 underline" onClick={() => { setDraft(null); setError(''); query.refetch(); }}>Reload custom fields</button>
       </fieldset>
       {error && <p role="alert" className="text-destructive">{error}</p>}

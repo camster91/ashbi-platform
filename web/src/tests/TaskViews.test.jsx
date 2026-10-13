@@ -67,4 +67,17 @@ describe('saved task views', () => {
     expect(sortViewTasks(rows, 'DUE_DATE').map(row => row.id)).toEqual(['t2', 't1']);
     expect(sortViewTasks(rows, 'TITLE').map(row => row.id)).toEqual(['t2', 't1']);
   });
+  it('renders typed zero/false values in saved custom columns and preserves the column selection', async () => {
+    config.fields = [{ key: 'budget', name: 'Budget', type: 'NUMBER' }, { key: 'approved', name: 'Approval', type: 'BOOLEAN' }];
+    config.views = [{ key: 'estimates', name: 'Estimates', layout: 'TABLE', sort: 'TITLE', filters: {}, columns: ['budget', 'approved'] }];
+    api.getTasks.mockResolvedValueOnce({ tasks: [{ ...rows[0], fieldValues: { budget: 0, approved: false } }], pagination: { pages: 1 } });
+    setup('/project/p1/views?view=estimates');
+    const table = await screen.findByRole('table');
+    expect(within(table).getByRole('columnheader', { name: 'Budget' })).toBeInTheDocument();
+    expect(within(table).getByRole('cell', { name: '0', exact: true })).toBeInTheDocument();
+    expect(within(table).getByRole('cell', { name: 'No', exact: true })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Budget' })).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Save view changes' }));
+    await waitFor(() => expect(api.saveTaskViews).toHaveBeenCalledWith('p1', expect.objectContaining({ views: [expect.objectContaining({ columns: ['budget', 'approved'] })] })));
+  });
 });

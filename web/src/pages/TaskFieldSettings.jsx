@@ -33,7 +33,7 @@ export default function TaskFieldSettings() {
   const query = useQuery({ queryKey: ['taskFieldDefinitions', projectId], queryFn: () => api.getTaskFieldDefinitions(projectId) });
   const config = draft ?? query.data;
   const save = useMutation({ mutationFn: () => api.saveTaskFieldDefinitions(projectId, { revision: config.revision, fields: config.fields }),
-    onSuccess: saved => { client.setQueryData(['taskFieldDefinitions', projectId], saved); client.invalidateQueries({ queryKey: ['taskFields'] }); setDraft(null); setError(''); },
+    onSuccess: saved => { client.setQueryData(['taskFieldDefinitions', projectId], saved); client.invalidateQueries({ queryKey: ['taskFields'] }); client.invalidateQueries({ queryKey: ['taskViews', projectId] }); setDraft(null); setError(''); },
     onError: err => setError(err.data?.message || err.message),
   });
   if (query.isLoading) return <LoadingState label="Loading task fields" />;

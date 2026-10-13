@@ -10,6 +10,8 @@ The calendar starts at the current UTC month; browse with Previous/Next, This mo
 
 ## API / MCP
 
+Typed-field follow-up: saved views may include `columns` (up to 20 distinct active project field keys). GET metadata includes project field definitions. The table displays selected columns; archived/unavailable columns can be explicitly cleared. Fields and their values keep the same project/workspace boundaries.
+
 - `GET /api/projects/:id/task-views`: staff-only, tenant-scoped metadata `{projectId, projectName, views, revision, stages}`.
 - `PUT /api/projects/:id/task-views`: staff-only, body `{revision, views}`. Up to 20 views; unique keys/names, bounded search/name/key values and known layouts/sorts/filter values. Empty views is supported. A view is `{key, name, layout: "TABLE" | "BOARD" | "CALENDAR", sort: "PRIORITY" | "DUE_DATE" | "TITLE", filters: {status?, priority?, stageKey?, search?}}`.
 - `GET /api/tasks` adds bounded `search` (case-insensitive title/description) and `stageKey` filters alongside existing project/status/priority/portfolio/assignment filters. Filtering precedes pagination/counting.

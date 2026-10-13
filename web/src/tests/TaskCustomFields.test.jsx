@@ -31,7 +31,7 @@ describe('typed task fields', () => {
     await screen.findByRole('option', { name: 'Northwind' });
     fireEvent.change(screen.getByLabelText('Related client'), { target: { value: 'c1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save custom fields' }));
-    await waitFor(() => expect(api.saveTaskFields).toHaveBeenCalledWith('t1', { revision: 2, definitionRevision: 1, values: { budget: 0, approved: false, client: 'c1' } }));
+    await waitFor(() => expect(api.saveTaskFields).toHaveBeenCalledWith('t1', { revision: 2, definitionRevision: 1, values: { client: 'c1' } }));
   });
   it('retains a stale draft after a conflict and supports explicit reload', async () => {
     api.saveTaskFields.mockRejectedValueOnce(Object.assign(new Error('Conflict'), { data: { message: 'Fields changed. Reload before saving.' } }));
@@ -42,6 +42,13 @@ describe('typed task fields', () => {
     expect(screen.getByLabelText('Budget')).toHaveValue(25);
     fireEvent.click(screen.getByRole('button', { name: 'Reload custom fields' }));
     await waitFor(() => expect(screen.getByLabelText('Budget')).toHaveValue(0));
+  });
+  it('edits another field without resubmitting an unavailable historical relation', async () => {
+    config.values.client = 'deleted-client';
+    setup(); await screen.findByLabelText('Budget');
+    fireEvent.change(screen.getByLabelText('Budget'), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save custom fields' }));
+    await waitFor(() => expect(api.saveTaskFields).toHaveBeenCalledWith('t1', { revision: 2, definitionRevision: 1, values: { budget: 5 } }));
   });
   it('adds shared definitions while preserving stored keys/types and archives instead of deleting', async () => {
     setup(true); await screen.findByRole('heading', { name: 'Task fields — Agency' });
