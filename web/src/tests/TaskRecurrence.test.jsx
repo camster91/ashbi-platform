@@ -26,7 +26,7 @@ describe('task recurrence', () => {
     await waitFor(() => expect(api.saveTaskRecurrence).toHaveBeenCalledWith('t1', { revision: 4, rule: null }));
   });
   it('retains input after failure and offers reload', async () => {
-    api.saveTaskRecurrence.mockRejectedValueOnce(new Error('Recurrence changed since you opened it.'));
+    api.saveTaskRecurrence.mockRejectedValueOnce(Object.assign(new Error('Conflict'), { data: { message: 'Recurrence changed since you opened it.' } }));
     setup({ recurrenceRule: rule });
     fireEvent.click(screen.getByRole('button', { name: 'Configure recurrence' }));
     fireEvent.change(screen.getByLabelText('Repeat interval'), { target: { value: '3' } });

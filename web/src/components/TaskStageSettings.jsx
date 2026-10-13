@@ -21,7 +21,7 @@ export default function TaskStageSettings({ project, onClose }) {
       queryClient.invalidateQueries({ queryKey: ['kanban', project.id] });
       onClose();
     },
-    onError: err => setError(err.message || 'Stages could not be saved.'),
+    onError: err => setError(err.data?.message || err.message || 'Stages could not be saved.'),
   });
   function edit(index, changes) {
     setStages(current => current.map((stage, i) => i === index ? { ...stage, ...changes } : stage));

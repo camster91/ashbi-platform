@@ -22,7 +22,7 @@ describe('project task stage settings', () => {
     await waitFor(() => expect(close).toHaveBeenCalled());
   });
   it('keeps unsaved edits after a conflict and offers a deliberate reload', async () => {
-    api.saveTaskStages.mockRejectedValueOnce(new Error('Move tasks out of removed stages before saving.'));
+    api.saveTaskStages.mockRejectedValueOnce(Object.assign(new Error('Conflict'), { data: { message: 'Move tasks out of removed stages before saving.' } }));
     const close = setup();
     fireEvent.click(screen.getByRole('button', { name: 'Remove Review' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save stages' }));

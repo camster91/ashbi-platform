@@ -18,7 +18,7 @@ function RecurrenceEditor({ task, onClose }) {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       onClose();
     },
-    onError: err => setError(err.message || 'Recurrence could not be saved.'),
+    onError: err => setError(err.data?.message || err.message || 'Recurrence could not be saved.'),
   });
   const change = (key, value) => { setRule(current => ({ ...current, [key]: value })); setError(''); };
   return <form aria-label="Recurring task settings" className="space-y-3" onSubmit={event => { event.preventDefault(); mutation.mutate(rule); }}>
