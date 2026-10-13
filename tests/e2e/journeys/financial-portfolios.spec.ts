@@ -9,7 +9,7 @@ test('financial portfolios preserve clients and currency-separated summaries thr
   const freelance = await json(await admin.post('/api/projects', { data: { clientId: client.id, name: `Freelance finance ${suffix}`, portfolio: 'FREELANCE' } }), 201);
   const invoices = [];
   for (const project of [agency, freelance]) {
-    invoices.push(await json(await admin.post('/api/invoices', { data: { clientId: client.id, projectId: project.id, title: `Finance ${suffix}`, currency: 'CAD', taxRate: 0, lineItems: [{ description: 'Synthetic QA work', quantity: 1, unitPrice: 10 }] } }), 201));
+    invoices.push(await json(await admin.post('/api/invoices', { data: { clientId: client.id, projectId: project.id, title: `Finance ${suffix}`, currency: 'CAD', taxRate: 0, lineItems: [{ description: 'Synthetic QA work', quantity: 1, unitPrice: 10 }] } })));
   }
   for (const [currency, amount] of [['CAD', 15], ['USD', 30]] as const) {
     await json(await admin.post('/api/expenses', { data: { clientId: client.id, projectId: freelance.id, description: `${currency} receipt ${suffix}`, currency, amount, category: 'SOFTWARE', date: new Date().toISOString().slice(0, 10) } }), 201);
