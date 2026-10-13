@@ -45,6 +45,9 @@ test('shared portfolios, stages, recurrence and saved task views persist through
 
   await test.step('monthly recurrence saves and reloads, then stops without deleting the task', async () => {
     await page.goto(`/task/${task.id}`);
+    await page.getByRole('button', { name: 'Edit task properties' }).click();
+    await expect(page.getByRole('combobox', { name: 'Task status' })).toHaveValue('REVIEW');
+    await page.getByRole('button', { name: 'Edit task properties' }).click();
     await page.getByRole('button', { name: 'Configure recurrence' }).click();
     await page.getByLabel('Repeat frequency').selectOption('MONTHLY');
     await page.getByLabel('Repeat interval').fill('1');

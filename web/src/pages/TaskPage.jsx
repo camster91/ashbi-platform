@@ -210,7 +210,7 @@ function PropertiesPanel({ task, onUpdate, isSaving, saveError }) {
       label: 'Status', 
       icon: CheckCircle2,
       value: task?.status,
-      options: ['PENDING', 'UPCOMING', 'IMMEDIATE', 'IN_PROGRESS', 'BLOCKED', 'WAITING_US', 'WAITING_CLIENT', 'COMPLETED']
+      options: ['PENDING', 'UPCOMING', 'IMMEDIATE', 'IN_PROGRESS', 'BLOCKED', 'WAITING_US', 'WAITING_CLIENT', 'COMPLETED', 'TODO', 'REVIEW']
     },
     { 
       key: 'assignee', 
