@@ -389,6 +389,8 @@ export const api = {
     request(`/tasks/${projectId}/quick`, { method: 'POST', body: data }),
   updateTask: (id, data) =>
     request(`/tasks/${id}`, { method: 'PUT', body: data }),
+  saveTaskRecurrence: (id, data) =>
+    request(`/tasks/${id}/recurrence`, { method: 'PUT', body: data }),
   completeTask: (id) =>
     request(`/tasks/${id}/complete`, { method: 'POST' }),
 

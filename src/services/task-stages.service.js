@@ -6,11 +6,11 @@ function fail(statusCode, message) {
 
 // Scoped Prisma is retained by the tenant proxy inside interactive transactions.
 // Serializable prevents config deletion from racing a move/create into that stage.
-export async function withStageTransaction(prisma, work) {
+export async function withStageTransaction(prisma, work, conflictMessage = 'Board changed while saving. Reload and try again.') {
   try {
     return await prisma.$transaction(work, { isolationLevel: 'Serializable' });
   } catch (error) {
-    if (error.code === 'P2034') fail(409, 'Board changed while saving. Reload and try again.');
+    if (error.code === 'P2034') fail(409, conflictMessage);
     throw error;
   }
 }

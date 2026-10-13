@@ -109,7 +109,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [SlackInstallation](#model-slackinstallation) | `slack_installations` | yes | no | 15 |
 | [Snippet](#model-snippet) | `snippets` | no | no | 13 |
 | [SupportHourEntry](#model-supporthourentry) | `support_hours` | yes | no | 12 |
-| [Task](#model-task) | `tasks` | no | yes | 39 |
+| [Task](#model-task) | `tasks` | no | yes | 45 |
 | [TaskComment](#model-taskcomment) | `task_comments` | no | no | 9 |
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
 | [Template](#model-template) | `templates` | yes | no | 11 |
@@ -2604,6 +2604,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([assigneeId])`
   - `@@index([projectId, status])`
   - `@@index([milestoneId])`
+  - `@@unique([recurrenceSourceId, recurrenceScheduledDate])`
+  - `@@index([recurrenceNextDate])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2613,6 +2615,12 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `content` | String | optional | `"[]"` |  | JSON: Block-based rich content (Notion-like) |
 | `status` | String | required | `"PENDING"` |  | PENDING, IN_PROGRESS, COMPLETED, BLOCKED |
 | `stageKey` | String | optional |  |  | Project-local workflow stage; independent of lifecycle status |
+| `recurrenceRule` | Json | optional |  |  | {frequency, interval, startDate, timeZone}; source task only |
+| `recurrenceNextDate` | DateTime | optional |  |  |  |
+| `recurrenceLastDate` | DateTime | optional |  |  | Never replay a previously generated date, even after deletion |
+| `recurrenceRevision` | Int | required | `0` |  |  |
+| `recurrenceSourceId` | String | optional |  |  | Historical source identity; occurrences do not repeat |
+| `recurrenceScheduledDate` | DateTime | optional |  |  |  |
 | `priority` | String | required | `"NORMAL"` |  | CRITICAL, HIGH, NORMAL, LOW |
 | `category` | String | required | `"UPCOMING"` |  | IMMEDIATE, THIS_WEEK, UPCOMING, WAITING_CLIENT, WAITING_US |
 | `tags` | String | required | `"[]"` |  | JSON array of tags |

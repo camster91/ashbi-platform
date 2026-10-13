@@ -10,6 +10,8 @@ import { portfolioWhere } from '../shared/portfolio.js';
 import { portfolioFilterSchema } from '../validators/schemas.js';
 import { taskStageKeySchema } from '../validators/schemas.js';
 import { resolveTaskStage, withStageTransaction } from '../services/task-stages.service.js';
+import { taskRecurrenceUpdateSchema } from '../validators/schemas.js';
+import { saveTaskRecurrence } from '../services/task-recurrence.service.js';
 
 /**
  * Why a task's assignee or dependency reference is unacceptable, or null.
@@ -31,6 +33,10 @@ async function taskReferenceProblem(prisma, { assigneeId, dependsOnId }) {
 }
 
 export default async function taskRoutes(fastify) {
+  fastify.put('/:id/recurrence', { onRequest: [fastify.authenticate], preHandler: [validateBody(taskRecurrenceUpdateSchema)] }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    return saveTaskRecurrence(request.prisma, request.params.id, request.body);
+  });
   // List all tasks with filters
   fastify.get('/', {
     onRequest: [fastify.authenticate]

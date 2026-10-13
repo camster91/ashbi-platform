@@ -5518,6 +5518,59 @@
         },
         "type": "object"
       },
+      "TaskRecurrenceUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rule": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "frequency": {
+                    "enum": [
+                      "DAILY",
+                      "WEEKLY",
+                      "MONTHLY"
+                    ],
+                    "type": "string"
+                  },
+                  "interval": {
+                    "maximum": 365,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "startDate": {
+                    "type": "string"
+                  },
+                  "timeZone": {
+                    "maxLength": 100,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "frequency",
+                  "interval",
+                  "startDate",
+                  "timeZone"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "revision",
+          "rule"
+        ],
+        "type": "object"
+      },
       "TaskSubpageCreate": {
         "properties": {
           "content": {
@@ -30981,6 +31034,68 @@
           }
         ],
         "summary": "GET /api/tasks/:id/page",
+        "tags": [
+          "tasks"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/tasks/{id}/recurrence": {
+      "put": {
+        "operationId": "put_api_tasks_id_recurrence",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRecurrenceUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PUT /api/tasks/:id/recurrence",
         "tags": [
           "tasks"
         ],

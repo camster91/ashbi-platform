@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 368 |
+| staff | 369 |
 | staff (inline) | 1 |
-| **total** | 562 |
+| **total** | 563 |
 
 ## Routes by prefix
 
@@ -912,6 +912,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | PUT | `/api/tasks/:id/dependency` | staff | scoped |  |
 | POST | `/api/tasks/:id/move` | staff | scoped |  |
 | GET | `/api/tasks/:id/page` | staff | scoped |  |
+| PUT | `/api/tasks/:id/recurrence` | staff | scoped |  |
 | POST | `/api/tasks/:id/subpage` | staff | scoped |  |
 | POST | `/api/tasks/:projectId/quick` | staff | scoped |  |
 | GET | `/api/tasks/:taskId/comments` | staff | scoped |  |

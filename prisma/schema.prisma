@@ -352,6 +352,12 @@ model Task {
   content     String? @default("[]") // JSON: Block-based rich content (Notion-like)
   status      String  @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, BLOCKED
   stageKey    String? // Project-local workflow stage; independent of lifecycle status
+  recurrenceRule Json? // {frequency, interval, startDate, timeZone}; source task only
+  recurrenceNextDate DateTime? @db.Date
+  recurrenceLastDate DateTime? @db.Date // Never replay a previously generated date, even after deletion
+  recurrenceRevision Int @default(0)
+  recurrenceSourceId String? // Historical source identity; occurrences do not repeat
+  recurrenceScheduledDate DateTime? @db.Date
   priority    String  @default("NORMAL") // CRITICAL, HIGH, NORMAL, LOW
   category    String  @default("UPCOMING") // IMMEDIATE, THIS_WEEK, UPCOMING, WAITING_CLIENT, WAITING_US
   tags        String  @default("[]") // JSON array of tags
@@ -407,6 +413,8 @@ model Task {
   @@index([assigneeId])
   @@index([projectId, status])
   @@index([milestoneId])
+  @@unique([recurrenceSourceId, recurrenceScheduledDate])
+  @@index([recurrenceNextDate])
   @@map("tasks")
 }
 

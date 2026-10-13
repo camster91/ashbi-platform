@@ -3,6 +3,7 @@
 
 import { DEFAULT_TASK_PRIORITY, TASK_PRIORITIES } from '../shared/task-priority.js';
 import { PORTFOLIO_VALUES } from '../shared/portfolio.js';
+import { isCalendarDate as isRecurrenceDate, isTimeZone } from '../shared/task-recurrence.js';
 import { z } from 'zod';
 import {
   ALLOWED_UPLOAD_EXTENSIONS,
@@ -123,6 +124,13 @@ export const TASK_STATUS_VALUES = [
 export const portfolioSchema = z.enum(PORTFOLIO_VALUES);
 export const portfolioFilterSchema = portfolioSchema.or(z.literal('UNCLASSIFIED')).optional();
 export const taskStageKeySchema = z.string().min(1).max(80).regex(/^[a-zA-Z0-9_-]+$/);
+export const taskRecurrenceRuleSchema = z.object({
+  frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY']),
+  interval: z.number().int().min(1).max(365),
+  startDate: z.string().refine(isRecurrenceDate, 'Enter a valid calendar date (2000–2099)'),
+  timeZone: z.string().max(100).refine(isTimeZone, 'Enter a valid IANA timezone'),
+}).strict();
+export const taskRecurrenceUpdateSchema = z.object({ revision: z.number().int().min(0), rule: taskRecurrenceRuleSchema.nullable() }).strict();
 export const projectTaskStagesSchema = z.object({
   revision: z.number().int().min(0),
   stages: z.array(z.object({

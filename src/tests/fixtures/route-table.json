@@ -872,6 +872,7 @@
   "PUT /api/tasks/:id|:projectId|:taskId",
   "PUT /api/tasks/:id|:projectId|:taskId/content",
   "PUT /api/tasks/:id|:projectId|:taskId/dependency",
+  "PUT /api/tasks/:id|:projectId|:taskId/recurrence",
   "PUT /api/team/:id",
   "PUT /api/templates/:id",
   "PUT /api/threads/:id",
