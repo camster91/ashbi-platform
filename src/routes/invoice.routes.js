@@ -16,6 +16,8 @@ import { clampTake } from '../utils/query-limits.js';
 import { firstRecurringDate } from '../jobs/recurring-invoices.js';
 import { proposalTaxRate, taxTypeForRate } from '../utils/proposal-totals.js';
 import { invoiceTotals, lineTotal } from '../utils/money-totals.js';
+import { portfolioFilterSchema } from '../validators/schemas.js';
+import { financialPortfolioWhere } from '../shared/financial-portfolio.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
@@ -125,10 +127,12 @@ export default async function invoiceRoutes(fastify, options = {}) {
   }
 
   // ─── GET / — list invoices ──────────────────────────────────────────────────
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
+  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const portfolio = portfolioFilterSchema.safeParse(request.query?.portfolio);
+    if (!portfolio.success) return reply.status(400).send({ error: 'Invalid portfolio filter' });
     const { clientId, projectId, status, search, sort, order, limit, offset } = request.query;
 
-    const where = {};
+    const where = financialPortfolioWhere(portfolio.data);
     if (clientId) where.clientId = clientId;
     if (projectId) where.projectId = projectId;
     // "SENT" lists every sent-but-unpaid invoice, including any marked
@@ -181,7 +185,7 @@ export default async function invoiceRoutes(fastify, options = {}) {
     return {
       invoices: invoices.map((inv) => flagOverdue({ ...inv, ...invoiceBalance(inv.total, paidByInvoice.get(inv.id) ?? 0) })),
       total,
-      stats: await getStats()
+      stats: await getStats(financialPortfolioWhere(portfolio.data))
     };
   });
 
@@ -193,23 +197,24 @@ export default async function invoiceRoutes(fastify, options = {}) {
   // only filled when every invoice shares one currency (`mixedCurrency`
   // false), otherwise they are null because adding currencies is meaningless.
   // Counts are always totals across currencies.
-  async function getStats() {
+  async function getStats(portfolio = {}) {
     const now = new Date();
     const [byStatus, sentPastDue, openPayments] = await Promise.all([
       fastify.prisma.invoice.groupBy({
         by: ['status', 'currency'],
+        where: portfolio,
         _count: { _all: true },
         _sum: { total: true },
       }),
       fastify.prisma.invoice.groupBy({
         by: ['currency'],
-        where: { status: { in: [...SENT_INVOICE_STATUSES] }, dueDate: { lt: now } },
+        where: { ...portfolio, status: { in: [...SENT_INVOICE_STATUSES] }, dueDate: { lt: now } },
         _count: { _all: true },
         _sum: { total: true },
       }),
       // Partial payments on open invoices: outstanding money is the balance.
       fastify.prisma.invoicePayment.findMany({
-        where: { invoice: { status: { in: [...UNPAID_INVOICE_STATUSES] } } },
+        where: { invoice: { ...portfolio, status: { in: [...UNPAID_INVOICE_STATUSES] } } },
         select: { amount: true, invoice: { select: { status: true, currency: true, dueDate: true } } },
       }),
     ]);
@@ -268,8 +273,10 @@ export default async function invoiceRoutes(fastify, options = {}) {
   }
 
   // ─── GET /stats — collections dashboard ────────────────────────────────────
-  fastify.get('/stats', { onRequest: [fastify.authenticate] }, async () => {
-    return getStats();
+  fastify.get('/stats', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const portfolio = portfolioFilterSchema.safeParse(request.query?.portfolio);
+    if (!portfolio.success) return reply.status(400).send({ error: 'Invalid portfolio filter' });
+    return getStats(financialPortfolioWhere(portfolio.data));
   });
 
   // ─── GET /templates — line item templates ──────────────────────────────────
