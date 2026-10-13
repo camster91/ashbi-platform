@@ -6,6 +6,7 @@ import { portfolioWhere } from '../shared/portfolio.js';
 import { portfolioFilterSchema } from '../validators/schemas.js';
 import { taskViewFiltersSchema } from '../validators/schemas.js';
 import { taskViewWhere } from '../shared/task-view-filters.js';
+import { financialPortfolioWhere } from '../shared/financial-portfolio.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
@@ -29,6 +30,14 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 }
 
 export const workspaceRegistry = createToolRegistry([
+  listTool('list_invoices', 'Page through internal invoice identities and monetary values, preserving each currency. Optionally filter by portfolio.',
+    'invoice', { id: true, invoiceNumber: true, status: true, total: true, currency: true, clientId: true, projectId: true, issueDate: true, dueDate: true },
+    (user, input) => ({ organizationId: user.organizationId, ...financialPortfolioWhere(input.portfolio) }),
+    pageSchema.extend({ portfolio: portfolioFilterSchema })),
+  listTool('list_expenses', 'Page through expenses with their original currency and project/client identities. Optionally filter by portfolio; receipt URLs are omitted.',
+    'expense', { id: true, description: true, amount: true, currency: true, category: true, date: true, clientId: true, projectId: true, billable: true, invoiced: true },
+    (user, input) => ({ organizationId: user.organizationId, ...financialPortfolioWhere(input.portfolio) }),
+    pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_notes', 'Page through internal project documents and notes. Optionally filter by portfolio.',
     'note', { id: true, title: true, content: true, type: true, projectId: true, updatedAt: true },
     (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) } }),

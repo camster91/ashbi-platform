@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
+import PortfolioFilter from '../components/PortfolioFilter';
 import {
   Receipt, Plus, DollarSign, Filter, Search, Trash2, Pencil, Upload,
   X, TrendingUp, Tag, Calendar, Building2, FolderOpen,
@@ -58,6 +60,9 @@ const emptyForm = {
 };
 
 export default function Expenses() {
+  const [params, setParams] = useSearchParams();
+  const portfolio = params.get('portfolio') || '';
+  const [summaryCurrency, setSummaryCurrency] = useState('CAD');
   const queryClient = useQueryClient();
   const toast = useToast();
   const [showForm, setShowForm] = useState(false);
@@ -82,26 +87,29 @@ export default function Expenses() {
 
   // Queries
   const {
-    data: expenseData = { expenses: [], total: 0 },
+    data: expensePages, hasNextPage, fetchNextPage, isFetchingNextPage,
     isLoading,
     isError: expensesError,
     error: expensesRequestError,
     refetch: refetchExpenses,
     isFetching: expensesFetching,
-  } = useQuery({
-    queryKey: ['expenses', filterCategory, filterClient, startDate, endDate, searchQuery],
-    queryFn: () => api.getExpenses({
+  } = useInfiniteQuery({
+    queryKey: ['expenses', filterCategory, filterClient, startDate, endDate, searchQuery, portfolio], initialPageParam: 0,
+    queryFn: ({ pageParam }) => api.getExpenses({
+      limit: 100, offset: pageParam, ...(portfolio && { portfolio }),
       ...(filterCategory ? { category: filterCategory } : {}),
       ...(filterClient ? { clientId: filterClient } : {}),
       ...(startDate ? { startDate } : {}),
       ...(endDate ? { endDate } : {}),
       ...(searchQuery ? { search: searchQuery } : {}),
     }),
+    getNextPageParam: (page, pages) => { const loaded = pages.reduce((sum, item) => sum + item.expenses.length, 0); return page.expenses.length && loaded < page.total ? loaded : undefined; },
   });
+  const expenseData = { expenses: [...new Map((expensePages?.pages.flatMap(page => page.expenses ?? []) ?? []).map(expense => [expense.id, expense])).values()], total: expensePages?.pages[0]?.total ?? 0 };
 
   const { data: summary = {} } = useQuery({
-    queryKey: ['expense-summary'],
-    queryFn: () => api.getExpenseSummary(),
+    queryKey: ['expense-summary', portfolio],
+    queryFn: () => api.getExpenseSummary(portfolio ? { portfolio } : {}),
   });
 
   const { data: clients } = useClients();
@@ -241,7 +249,10 @@ export default function Expenses() {
   }
 
   const expenses = expenseData.expenses || [];
-  const categoryBreakdown = summary.byCategory || {};
+  const currencies = summary.currencies ?? [];
+  const activeCurrency = currencies.includes(summaryCurrency) ? summaryCurrency : currencies[0] || 'CAD';
+  const currencySummary = summary.byCurrency?.[activeCurrency] ?? summary;
+  const categoryBreakdown = currencySummary.byCategory || {};
 
   return (
     <div className="space-y-6">
@@ -258,6 +269,8 @@ export default function Expenses() {
       </div>
 
       {/* Summary Cards */}
+      <PortfolioFilter value={portfolio} disabled={showForm} onChange={value => { const next = new URLSearchParams(params); if (value) next.set('portfolio', value); else next.delete('portfolio'); setParams(next); }} />
+      {currencies.length > 1 && <label className="block text-sm">Summary currency<select aria-label="Expense summary currency" value={activeCurrency} onChange={event => setSummaryCurrency(event.target.value)} className="block min-h-11 rounded border border-border bg-card px-3">{currencies.map(currency => <option key={currency} value={currency}>{currency}</option>)}</select></label>}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-4">
           <div className="flex items-center gap-3">
@@ -266,7 +279,7 @@ export default function Expenses() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">This Month</p>
-              <p className="text-xl font-bold text-foreground">{fmt(summary.totalThisMonth)}</p>
+              <p className="text-xl font-bold text-foreground">{fmt(currencySummary.totalThisMonth, activeCurrency)}</p>
             </div>
           </div>
         </Card>
@@ -277,7 +290,7 @@ export default function Expenses() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">All Time</p>
-              <p className="text-xl font-bold text-foreground">{fmt(summary.allTimeTotal)}</p>
+              <p className="text-xl font-bold text-foreground">{fmt(currencySummary.allTimeTotal, activeCurrency)}</p>
             </div>
           </div>
         </Card>
@@ -317,7 +330,7 @@ export default function Expenses() {
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${CATEGORY_COLORS[cat] || CATEGORY_COLORS.OTHER}`}>
                     {cat}
                   </span>
-                  <span className="text-sm font-medium text-foreground">{fmt(amount)}</span>
+                  <span className="text-sm font-medium text-foreground">{fmt(amount, activeCurrency)}</span>
                 </div>
               ))}
           </div>
@@ -325,6 +338,7 @@ export default function Expenses() {
       )}
 
       {/* Filters */}
+      {hasNextPage && <Button variant="outline" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>{isFetchingNextPage ? 'Loading expenses...' : 'Load more expenses'}</Button>}
       <Card className="p-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-muted-foreground">

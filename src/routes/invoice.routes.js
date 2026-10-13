@@ -164,7 +164,7 @@ export default async function invoiceRoutes(fastify, options = {}) {
           createdBy: { select: { id: true, name: true } },
           _count: { select: { lineItems: true, payments: true } }
         },
-        orderBy: invoiceListOrderBy(sort, order),
+        orderBy: [invoiceListOrderBy(sort, order), { id: 'asc' }],
         ...(limit ? { take: clampTake(limit) } : {}),
         ...(Number.parseInt(offset, 10) > 0 ? { skip: Number.parseInt(offset, 10) } : {}),
       }),

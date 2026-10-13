@@ -6,6 +6,7 @@ import path from 'node:path';
 import invoiceRoutes from '../../routes/invoice.routes.js';
 import expenseRoutes from '../../routes/expense.routes.js';
 import { financialPortfolioWhere } from '../../shared/financial-portfolio.js';
+import { createWorkspaceTools } from '../../integrations/workspace-tools.js';
 
 const reply = { status(code) { this.code = code; return this; }, send(body) { return { status: this.code, ...body }; } };
 async function handlers(registrar, prisma, options = {}) {
@@ -58,4 +59,17 @@ test('expense summaries keep currencies separate and search cannot overwrite the
   assert.equal(result.byCurrency.USD.totalThisMonth, 30);
   assert.deepEqual(calls[1].where.project, { portfolio: 'FREELANCE' });
   assert.deepEqual(calls[2].where.project, { portfolio: 'FREELANCE' });
+});
+test('MCP financial reads retain explicit organization scope and omit payable links and receipt URLs', async () => {
+  const calls = {};
+  const prisma = { invoice: { findMany: async args => { calls.invoice = args; return []; } }, expense: { findMany: async args => { calls.expense = args; return []; } } };
+  const ctx = { user: { id: 'staff', role: 'TEAM', organizationId: 'org-a' }, scopes: ['workspace:read'], prisma };
+  const tools = createWorkspaceTools();
+  await tools.call(ctx, 'list_invoices', { portfolio: 'FREELANCE' });
+  await tools.call(ctx, 'list_expenses', { portfolio: 'UNCLASSIFIED' });
+  assert.deepEqual(calls.invoice.where, { organizationId: 'org-a', project: { portfolio: 'FREELANCE' } });
+  assert.deepEqual(calls.expense.where, { organizationId: 'org-a', ...financialPortfolioWhere('UNCLASSIFIED') });
+  assert.equal(calls.invoice.select.stripePaymentLink, undefined);
+  assert.equal(calls.expense.select.receiptUrl, undefined);
+  assert.equal(calls.invoice.take, 26);
 });

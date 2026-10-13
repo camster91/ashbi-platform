@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Plus, Send, DollarSign, Clock, CheckCircle, AlertTriangle, CreditCard,
@@ -21,6 +21,7 @@ import { formatInvoiceMoney, formatInvoiceDate } from '../lib/format';
 import { statusLabel } from '../lib/status';
 import { invoiceBalanceDue, invoiceDisplayStatus, isOpenInvoice, recurrenceSummary, taxTypeLabel } from '../lib/invoice-status';
 import useIsSmUp from '../hooks/useIsSmUp';
+import PortfolioFilter from '../components/PortfolioFilter';
 import { invoiceTotals, lineTotal } from '../lib/money-totals';
 
 const STATUS_FILTERS = ['', 'DRAFT', 'SENT', 'PAID', 'OVERDUE', 'VOID'];
@@ -58,7 +59,8 @@ export default function Invoices() {
   const isAdmin = user?.role === 'ADMIN';
 
   // Support ?create=true&clientId=... from nav
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const portfolio = searchParams.get('portfolio') || '';
   const initCreate = searchParams.get('create') === 'true';
   const initClientId = searchParams.get('clientId') || '';
 
@@ -89,13 +91,16 @@ export default function Invoices() {
   }, [formDraft.draft]);
 
   // Queries
-  const { data: invoiceData = { invoices: [], stats: {} }, isLoading, isError, error: loadError, refetch, isFetching } = useQuery({
-    queryKey: ['invoices', filterStatus, searchQuery],
-    queryFn: () => api.getInvoices({
+  const { data: invoicePages, hasNextPage, fetchNextPage, isFetchingNextPage, isLoading, isError, error: loadError, refetch, isFetching } = useInfiniteQuery({
+    queryKey: ['invoices', filterStatus, searchQuery, portfolio], initialPageParam: 0,
+    queryFn: ({ pageParam }) => api.getInvoices({
+      limit: 100, offset: pageParam, ...(portfolio && { portfolio }),
       ...(filterStatus ? { status: filterStatus } : {}),
       ...(searchQuery ? { search: searchQuery } : {}),
     }),
+    getNextPageParam: (page, pages) => { const loaded = pages.reduce((sum, item) => sum + item.invoices.length, 0); return page.invoices.length && loaded < page.total ? loaded : undefined; },
   });
+  const invoiceData = { invoices: [...new Map((invoicePages?.pages.flatMap(page => page.invoices ?? []) ?? []).map(invoice => [invoice.id, invoice])).values()], stats: invoicePages?.pages[0]?.stats ?? {} };
 
   const { data: clients } = useClients();
 
@@ -257,6 +262,8 @@ export default function Invoices() {
       </div>
 
       {/* Tabs */}
+      <PortfolioFilter value={portfolio} disabled={showCreate} onChange={value => { const next = new URLSearchParams(searchParams); if (value) next.set('portfolio', value); else next.delete('portfolio'); setSearchParams(next); }} />
+      {hasNextPage && <Button variant="outline" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>{isFetchingNextPage ? 'Loading invoices...' : 'Load more invoices'}</Button>}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabList aria-label="Invoice views">
           <Tab value="list">All Invoices</Tab>

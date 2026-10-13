@@ -85,7 +85,7 @@ export default async function expenseRoutes(fastify, options = {}) {
           client: { select: { id: true, name: true } },
           project: { select: { id: true, name: true } },
         },
-        orderBy: expenseListOrderBy(sort, order),
+        orderBy: [expenseListOrderBy(sort, order), { id: 'asc' }],
         ...(limit ? { take: clampTake(limit) } : {}),
         ...(Number.parseInt(offset, 10) > 0 ? { skip: Number.parseInt(offset, 10) } : {}),
       }),
