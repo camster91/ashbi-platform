@@ -1,0 +1,3 @@
+ALTER TABLE "projects" ADD COLUMN "taskStages" JSONB;
+ALTER TABLE "projects" ADD COLUMN "boardRevision" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "tasks" ADD COLUMN "stageKey" TEXT;

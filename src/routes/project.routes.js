@@ -22,6 +22,8 @@ import { isAiControlError, sendAiError } from '../ai/errors.js';
 import { organizationNameFor } from '../utils/organization-name.js';
 import { portfolioWhere } from '../shared/portfolio.js';
 import { portfolioFilterSchema } from '../validators/schemas.js';
+import { projectTaskStagesSchema } from '../validators/schemas.js';
+import { saveTaskStages } from '../services/task-stages.service.js';
 
 /**
  * Check that a project's client and default owner belong to the caller's
@@ -46,6 +48,13 @@ export async function projectReferenceError(db, { clientId, defaultOwnerId }) {
 }
 
 export default async function projectRoutes(fastify) {
+  fastify.put('/:id/task-stages', {
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(projectTaskStagesSchema)],
+  }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    return saveTaskStages(request.prisma, request.params.id, request.body);
+  });
   // List all projects
   fastify.get('/', {
     onRequest: [fastify.authenticate]

@@ -122,6 +122,20 @@ export const TASK_STATUS_VALUES = [
 ];
 export const portfolioSchema = z.enum(PORTFOLIO_VALUES);
 export const portfolioFilterSchema = portfolioSchema.or(z.literal('UNCLASSIFIED')).optional();
+export const taskStageKeySchema = z.string().min(1).max(80).regex(/^[a-zA-Z0-9_-]+$/);
+export const projectTaskStagesSchema = z.object({
+  revision: z.number().int().min(0),
+  stages: z.array(z.object({
+    key: taskStageKeySchema,
+    name: z.string().trim().min(1).max(80),
+    status: z.enum(TASK_STATUS_VALUES),
+  }).strict()).min(1).max(20),
+}).strict().superRefine(({ stages }, ctx) => {
+  for (const field of ['key', 'name']) {
+    const values = stages.map(stage => stage[field].toLowerCase());
+    if (new Set(values).size !== values.length) ctx.addIssue({ code: 'custom', path: ['stages'], message: `Stage ${field}s must be unique` });
+  }
+});
 export const createProjectSchema = z.object({
   portfolio: portfolioSchema.nullable().optional(),
   name: z.string().min(1).max(200),
@@ -1153,6 +1167,7 @@ export const taskDependencyCreateSchema = z.object({
 });
 
 export const taskCreateQuickSchema = z.object({
+  stageKey: taskStageKeySchema.optional(),
   title: z.string().min(1).max(500),
   assigneeId: cuidId.optional(),
   priority: z.enum(TASK_PRIORITIES).default(DEFAULT_TASK_PRIORITY),

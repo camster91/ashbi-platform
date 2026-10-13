@@ -381,8 +381,10 @@ export const api = {
     request('/tasks/my'),
   getKanbanBoard: (projectId) =>
     request(`/tasks/kanban/${projectId}`),
-  moveTask: (taskId, status) =>
-    request(`/tasks/${taskId}/move`, { method: 'POST', body: { status } }),
+  moveTask: (taskId, status, stageKey) =>
+    request(`/tasks/${taskId}/move`, { method: 'POST', body: { status, ...(stageKey ? { stageKey } : {}) } }),
+  saveTaskStages: (projectId, data) =>
+    request(`/projects/${projectId}/task-stages`, { method: 'PUT', body: data }),
   createQuickTask: (projectId, data) =>
     request(`/tasks/${projectId}/quick`, { method: 'POST', body: data }),
   updateTask: (id, data) =>

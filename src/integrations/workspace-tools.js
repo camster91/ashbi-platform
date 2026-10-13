@@ -28,13 +28,13 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 
 export const workspaceRegistry = createToolRegistry([
   listTool('list_projects', 'Page through workspace projects. Optionally filter by portfolio (ASHBI_DESIGN, FREELANCE, UNCLASSIFIED); omit for all work. Pass nextCursor as after for the next page.',
-    'project', { id: true, name: true, status: true, health: true, portfolio: true },
+    'project', { id: true, name: true, status: true, health: true, portfolio: true, taskStages: true, boardRevision: true },
     (user, input) => ({ organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }),
     pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_clients', 'Page through workspace clients. Returns business identity, never credentials.',
     'client', { id: true, name: true, status: true, domain: true }, user => ({ organizationId: user.organizationId })),
   listTool('list_tasks', 'Page through workspace tasks, including unassigned work.',
-    'task', { id: true, title: true, projectId: true, status: true, priority: true, dueDate: true },
+    'task', { id: true, title: true, projectId: true, status: true, stageKey: true, priority: true, dueDate: true },
     (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) } }),
     pageSchema.extend({ portfolio: portfolioFilterSchema })),
   ...BUILTIN_TOOLS.filter(tool => ['list_my_tasks', 'get_project_summary', 'create_task', 'create_calendar_event'].includes(tool.name)),

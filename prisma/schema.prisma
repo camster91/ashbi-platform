@@ -280,6 +280,8 @@ model Project {
   name           String
   description    String?
   portfolio      String? // ASHBI_DESIGN | FREELANCE; null until explicitly classified
+  taskStages     Json? // Ordered project workflow stages: {key, name, status}
+  boardRevision  Int          @default(0)
   status         String       @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
   health         String       @default("ON_TRACK") // ON_TRACK, NEEDS_ATTENTION, AT_RISK
   healthScore    Int          @default(100)
@@ -349,6 +351,7 @@ model Task {
   description String? // Brief description/summary
   content     String? @default("[]") // JSON: Block-based rich content (Notion-like)
   status      String  @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, BLOCKED
+  stageKey    String? // Project-local workflow stage; independent of lifecycle status
   priority    String  @default("NORMAL") // CRITICAL, HIGH, NORMAL, LOW
   category    String  @default("UPCOMING") // IMMEDIATE, THIS_WEEK, UPCOMING, WAITING_CLIENT, WAITING_US
   tags        String  @default("[]") // JSON array of tags

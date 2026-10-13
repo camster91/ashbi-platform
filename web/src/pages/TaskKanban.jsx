@@ -8,6 +8,7 @@ import QueryErrorState from '../components/QueryErrorState';
 import { formatDate } from '../lib/format';
 import { statusClasses } from '../lib/status';
 import { DEFAULT_TASK_PRIORITY, TASK_PRIORITY_LABELS } from '@shared/task-priority.js';
+import TaskStageSettings from '../components/TaskStageSettings';
 
 // Core columns are always shown. Other stored task statuses (the task status
 // vocabulary is not yet unified, #405) get their own column when any task has
@@ -31,7 +32,20 @@ function titleCase(status) {
   return String(status).toLowerCase().split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
-export function buildKanbanColumns(board = {}) {
+export function buildKanbanColumns(board = {}, stages = []) {
+  if (stages?.length) {
+    const tasks = Object.values(board).filter(Array.isArray).flat();
+    const configured = new Set(stages.map(stage => stage.key));
+    const unassigned = tasks.filter(task => !configured.has(task.stageKey));
+    const legacy = {};
+    for (const task of unassigned) (legacy[task.status || 'PENDING'] ??= []).push(task);
+    return [
+      ...stages.map(stage => ({ key: `stage:${stage.key}`, stageKey: stage.key, status: stage.status,
+        label: stage.name, headerColor: STATUS_META[stage.status]?.headerColor || 'text-muted-foreground border-border',
+        tasks: tasks.filter(task => task.stageKey === stage.key) })),
+      ...buildKanbanColumns(legacy).filter(column => column.tasks.length > 0).map(column => ({ ...column, label: `${column.label} (no stage)` })),
+    ];
+  }
   const present = Object.keys(board).filter((key) => Array.isArray(board[key]) && board[key].length > 0);
   const keys = [...new Set([...CORE_STATUSES, ...present])].sort((a, b) => {
     const ia = STATUS_ORDER.indexOf(a);
@@ -55,21 +69,31 @@ export default function TaskKanban() {
   const [createError, setCreateError] = useState(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [showNewTask, setShowNewTask] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const settingsButtonRef = useRef(null);
+  const closeSettings = () => { setShowSettings(false); settingsButtonRef.current?.focus(); };
 
   const { data: board = {}, isLoading, error, isFetching, refetch } = useQuery({
     queryKey: ['kanban', projectId],
     queryFn: () => api.getKanbanBoard(projectId),
   });
 
-  const { data: project } = useQuery({
+  const { data: project, error: projectError, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => api.getProject(projectId),
   });
 
-  const columns = buildKanbanColumns(board);
+  const columns = buildKanbanColumns(board, project?.taskStages);
+  const targetFor = key => {
+    const column = columns.find(item => item.key === key);
+    return { status: column?.status || key, ...(column?.stageKey ? { stageKey: column.stageKey } : {}) };
+  };
 
   const moveMutation = useMutation({
-    mutationFn: ({ taskId, status }) => api.moveTask(taskId, status),
+    mutationFn: ({ taskId, status }) => {
+      const target = targetFor(status);
+      return target.stageKey ? api.moveTask(taskId, target.status, target.stageKey) : api.moveTask(taskId, target.status);
+    },
     onSuccess: () => {
       setMoveError(null);
       queryClient.invalidateQueries({ queryKey: ['kanban', projectId] });
@@ -78,7 +102,7 @@ export default function TaskKanban() {
   });
 
   const createMutation = useMutation({
-    mutationFn: ({ title, status }) => api.createQuickTask(projectId, { title, status, priority: DEFAULT_TASK_PRIORITY }),
+    mutationFn: ({ title, status }) => api.createQuickTask(projectId, { title, ...targetFor(status), priority: DEFAULT_TASK_PRIORITY }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kanban', projectId] });
       setNewTaskTitle('');
@@ -172,7 +196,10 @@ export default function TaskKanban() {
           </Link>
         )}
         <h1 className="text-2xl font-heading font-bold text-foreground">Kanban Board</h1>
+        {project && <button ref={settingsButtonRef} type="button" onClick={() => setShowSettings(current => !current)} className="mt-2 min-h-11 rounded-lg border border-border px-3" aria-expanded={showSettings}>Configure stages</button>}
       </div>
+      {showSettings && project && <TaskStageSettings project={project} onClose={closeSettings} />}
+      {projectError && <div role="alert" className="text-sm text-destructive">Project stage settings could not be loaded. Tasks are shown by status. <button type="button" className="min-h-11 underline" onClick={() => refetchProject()}>Try again</button></div>}
       {moveError && <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"><span>Task move was not saved. Try again.</span><button type="button" onClick={() => moveMutation.mutate(moveError)} disabled={moveMutation.isPending} className="underline">Try again</button></div>}
 
       <p className="sr-only" aria-live="polite" role="status">{announcement}</p>
@@ -217,6 +244,7 @@ export default function TaskKanban() {
                       <p className="text-sm font-medium text-foreground leading-snug break-words">{task.title}</p>
                     </Link>
                     <div className="mt-2 flex items-center justify-between flex-wrap gap-1">
+                      {project?.taskStages?.length > 0 && <span className="text-xs text-muted-foreground" aria-label={`Task status: ${titleCase(task.status)}`}>{titleCase(task.status)}</span>}
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusClasses('priority', task.priority || DEFAULT_TASK_PRIORITY)}`}>
                         {TASK_PRIORITY_LABELS[task.priority] || task.priority}
                       </span>

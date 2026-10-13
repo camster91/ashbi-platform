@@ -4,7 +4,7 @@ This is the repository's authoritative status map as of 2026-08-13. A feature is
 
 The active agency-replacement acceptance map is [replacement-readiness-matrix.md](replacement-readiness-matrix.md).
 
-October 11 consolidation scope: [one shared workspace for Ashbi Design and freelance work](master-app-consolidation.md), including Notion, Fluent Boards and Bonsai feature completion followed by one-time data input. Reusable importer development is outside this scope. Project portfolio classification/views and task API/MCP filters are implemented locally on the consolidation branch; deployment and authenticated acceptance remain pending. Configurable stages, flexible databases/views and revenue workflow gaps remain open.
+October 11 consolidation scope: [one shared workspace for Ashbi Design and freelance work](master-app-consolidation.md), including Notion, Fluent Boards and Bonsai feature completion followed by one-time data input. Reusable importer development is outside this scope. Project portfolio classification/views and task API/MCP filters are implemented locally on the consolidation branch; deployment and authenticated acceptance remain pending. Configurable project stages are also locally implemented (October 13; [contract and acceptance](project-task-stages.md)); authenticated target acceptance, multiple boards, recurrence, flexible databases/views and revenue workflow gaps remain open.
 
 ## Current supported milestone
 
