@@ -5,6 +5,7 @@ import { PORTFOLIO_OPTIONS } from '@shared/portfolio.js';
 import { api } from '../lib/api';
 import LoadingState from '../components/ui/LoadingState';
 import QueryErrorState from '../components/QueryErrorState';
+import useClients, { useClientSearch } from '../hooks/useClients';
 
 const control = 'block min-h-11 max-w-full rounded border border-border bg-card px-3';
 export default function BoardTemplates() {
@@ -23,7 +24,9 @@ export default function BoardTemplates() {
   const projectQuery = useQuery({ queryKey: ['boardTemplateSource', projectId], queryFn: () => api.getProject(projectId) });
   const templates = useInfiniteQuery({ queryKey: ['boardTemplates', includeArchived], initialPageParam: undefined,
     queryFn: ({ pageParam }) => api.getBoardTemplates(includeArchived, pageParam), getNextPageParam: response => response.nextCursor ?? undefined });
-  const clients = useQuery({ queryKey: ['boardTemplateClients', search], queryFn: () => api.getClients({ search, limit: 25 }) });
+  const initialClients = useClients({ limit: 25 });
+  const searchedClients = useClientSearch(search, { limit: 25 });
+  const clients = search.trim().length >= 2 ? searchedClients : initialClients;
   const handleError = err => setError(err.data?.message || err.message);
   const save = useMutation({ mutationFn: () => api.saveBoardTemplate({ projectId, name: name.trim(), description: description.trim() }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['boardTemplates'] }); setName(''); setDescription(''); setError(''); }, onError: handleError,
@@ -38,7 +41,7 @@ export default function BoardTemplates() {
   if (projectQuery.isError) return <QueryErrorState error={projectQuery.error} message="Source project could not be loaded" onRetry={projectQuery.refetch} />;
   const project = projectQuery.data;
   const clientId = chosenClient || project.clientId;
-  const choices = clients.data?.clients ?? [];
+  const choices = clients.data;
   const templateRows = templates.data?.pages.flatMap(page => page.items) ?? [];
   const busy = save.isPending || archive.isPending || create.isPending;
   return <div className="min-w-0 space-y-5">
@@ -74,7 +77,7 @@ export default function BoardTemplates() {
         {choices.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
       </select></label>
       {clients.isError && <p role="alert">Clients could not be loaded. <button type="button" className="min-h-11 underline" onClick={() => clients.refetch()}>Retry client search</button></p>}
-      <p className="text-xs text-muted-foreground">Search returns up to 25 clients.</p>
+      <p className="text-xs text-muted-foreground">Enter at least two characters to search up to 25 clients.</p>
       <label className="block text-sm">Work portfolio<select aria-label="Template project portfolio" className={control} value={portfolio} onChange={event => setPortfolio(event.target.value)}><option value="">Unclassified</option>{PORTFOLIO_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
       <button disabled={busy || !projectName.trim() || !clientId} className={`${control} bg-primary text-primary-foreground disabled:opacity-50`}>Create project from template</button>
     </form>}
