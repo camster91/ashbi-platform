@@ -10,7 +10,7 @@ October 13 release update: consolidation PR [#566](https://github.com/camster91/
 
 ## Current supported milestone
 
-October 13 next slice: [shared board templates](board-templates.md) are locally implemented with scoped API/MCP reads, empty-project creation for a selected canonical client/portfolio, paging and reversible archive. CI/deployment/target acceptance of that slice are pending. Typed fields/relations/custom columns merged in #571 after all required CI passed, including the mobile-overflow fix. Windows full-suite portability is addressed in #572 with 1,792 local passes and one explicit platform skip; final rebased CI remains pending.
+October 13 next slice: [shared board templates](board-templates.md) are locally implemented with scoped API/MCP reads, empty-project creation for a selected canonical client/portfolio, paging and reversible archive. CI/deployment/target acceptance of that slice are pending. Typed fields/relations/custom columns merged in #571 after all required CI passed, including the mobile-overflow fix. Windows full-suite portability merged in #572 after all required Linux CI passed; the full local backend/AI evaluation suite passed 1,792 tests with one explicit platform skip, resolving #569. Production remains held.
 
 October 13 follow-up: saved table/board/calendar task views and Review/TODO editor support merged in PR #570; both the final PR CI and main CI passed. Production remains held by the owner's instruction. [Typed task fields and canonical relations](typed-task-fields.md) are implemented on a separate feature branch with local tests; CI, merge, deployment and target acceptance of that slice remain pending. Standalone databases, field filters/columns, formulas and rollups remain open.
 
