@@ -124,6 +124,9 @@ export const TASK_STATUS_VALUES = [
 export const portfolioSchema = z.enum(PORTFOLIO_VALUES);
 export const portfolioFilterSchema = portfolioSchema.or(z.literal('UNCLASSIFIED')).optional();
 export const taskStageKeySchema = z.string().min(1).max(80).regex(/^[a-zA-Z0-9_-]+$/);
+export const boardTemplateSaveSchema = z.object({ projectId: z.string().min(1).max(80), name: z.string().trim().min(1).max(80), description: z.string().trim().max(500).optional() }).strict();
+export const boardTemplateArchiveSchema = z.object({ archived: z.boolean() }).strict();
+export const boardTemplateProjectSchema = z.object({ templateId: z.string().min(1).max(80), clientId: z.string().min(1).max(80), name: z.string().trim().min(1).max(200), portfolio: portfolioSchema.nullable().optional() }).strict();
 export const taskFieldDefinitionSchema = z.object({
   key: taskStageKeySchema.refine(value => !['__proto__', 'prototype', 'constructor'].includes(value)), name: z.string().trim().min(1).max(80),
   type: z.enum(['TEXT', 'NUMBER', 'BOOLEAN', 'DATE', 'URL', 'SELECT', 'MULTI_SELECT', 'RELATION']),

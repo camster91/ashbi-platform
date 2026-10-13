@@ -86,7 +86,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Project](#model-project) | `projects` | yes | yes | 60 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
-| [ProjectTemplate](#model-projecttemplate) | `project_templates` | yes | no | 10 |
+| [ProjectTemplate](#model-projecttemplate) | `project_templates` | yes | no | 12 |
 | [PromptVersion](#model-promptversion) | `prompt_versions` | yes | no | 11 |
 | [Proposal](#model-proposal) | `proposals` | no | yes | 43 |
 | [ProposalLineItem](#model-proposallineitem) | `proposal_line_items` | no | no | 7 |
@@ -1980,6 +1980,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `name` | String | required |  |  |  |
 | `description` | String | optional |  |  |  |
 | `projectType` | String | optional |  |  | WEBSITE \| BRANDING \| MARKETING \| CUSTOM |
+| `kind` | String | required | `"PROJECT"` |  | PROJECT \| BOARD \| BOARD_ARCHIVED |
+| `boardConfig` | Json | optional |  |  | Versioned workflow definitions, without task-value snapshots |
 | `tasks` | String | required | `"[]"` |  | JSON array of task definitions |
 | `milestones` | String | required | `"[]"` |  | JSON array of milestone definitions |
 | `createdAt` | DateTime | required | `now()` |  |  |

@@ -372,6 +372,10 @@ export const api = {
   // Project Templates
   getProjectTemplates: () =>
     request('/projects/templates'),
+  getBoardTemplates: (includeArchived = false, after) => request(`/projects/board-templates?${new URLSearchParams({ includeArchived: String(includeArchived), ...(after ? { after } : {}) })}`),
+  saveBoardTemplate: (data) => request('/projects/board-templates', { method: 'POST', body: data }),
+  archiveBoardTemplate: (id, archived) => request(`/projects/board-templates/${id}`, { method: 'PATCH', body: { archived } }),
+  createProjectFromBoardTemplate: (data) => request('/projects/from-board-template', { method: 'POST', body: data }),
   createProjectTemplate: (data) =>
     request('/projects/templates', { method: 'POST', body: data }),
   deleteProjectTemplate: (templateId) =>
