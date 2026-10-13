@@ -21,6 +21,7 @@ import prisma, { prisma as backgroundPrisma } from '../config/db.js';
 import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
 import { runWeeklyDigest } from './weekly-digest.js';
 import { processRecurringInvoicesForAllOrganizations } from './recurring-invoices.js';
+import { processRecurringTasksForAllOrganizations } from './recurring-tasks.js';
 import { purgeExpiredTrashForAllOrganizations } from './trash-purge.js';
 import { purgePendingChatUploads } from './chat-upload-cleanup.js';
 import {
@@ -276,6 +277,8 @@ const scheduledWorker = createWorker(
     switch (job.name) {
       case 'recurring-invoices':
         return processRecurringInvoicesForAllOrganizations();
+      case 'recurring-tasks':
+        return processRecurringTasksForAllOrganizations();
       case 'overdue-invoices':
         return checkOverdueInvoicesForAllOrganizations();
       case 'trash-purge':

@@ -6,6 +6,12 @@ import { validateBody, updateTaskSchema, taskBulkUpdateSchema, taskPageContentUp
 import { z } from 'zod';
 import bus, { EVENTS } from '../utils/events.js';
 import { parseTaskContent } from '../utils/taskContent.js';
+import { portfolioWhere } from '../shared/portfolio.js';
+import { portfolioFilterSchema } from '../validators/schemas.js';
+import { taskStageKeySchema } from '../validators/schemas.js';
+import { resolveTaskStage, withStageTransaction } from '../services/task-stages.service.js';
+import { taskRecurrenceUpdateSchema } from '../validators/schemas.js';
+import { saveTaskRecurrence } from '../services/task-recurrence.service.js';
 
 /**
  * Why a task's assignee or dependency reference is unacceptable, or null.
@@ -27,16 +33,25 @@ async function taskReferenceProblem(prisma, { assigneeId, dependsOnId }) {
 }
 
 export default async function taskRoutes(fastify) {
+  fastify.put('/:id/recurrence', { onRequest: [fastify.authenticate], preHandler: [validateBody(taskRecurrenceUpdateSchema)] }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    return saveTaskRecurrence(request.prisma, request.params.id, request.body);
+  });
   // List all tasks with filters
   fastify.get('/', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
+    const portfolio = request.query.portfolio;
+    if (!portfolioFilterSchema.safeParse(portfolio).success) {
+      return reply.status(400).send({ error: 'Invalid portfolio filter' });
+    }
     const { status, priority, category, projectId, assigneeId, tags, page: pageParam = '1', limit: limitParam = '50' } = request.query;
 
     const page = parseInt(pageParam);
     const limit = parseInt(limitParam);
 
     const where = {};
+    if (portfolio) where.project = portfolioWhere(portfolio);
     if (status) where.status = status;
     if (priority) where.priority = priority;
     if (category) where.category = category;
@@ -654,15 +669,17 @@ export default async function taskRoutes(fastify) {
   }, async (request) => {
     const { projectId } = request.params;
 
-    const tasks = sortByTaskPriority(await request.prisma.task.findMany({
-      where: { projectId },
-      include: {
-        assignee: { select: { id: true, name: true, email: true } }
-      },
-      orderBy: [
-        { dueDate: 'asc' }
-      ]
-    }));
+    const rows = [];
+    let page;
+    do {
+      page = await request.prisma.task.findMany({
+        where: { projectId },
+        include: { assignee: { select: { id: true, name: true, email: true } } },
+        orderBy: [{ dueDate: 'asc' }, { id: 'asc' }], take: 100, skip: rows.length,
+      });
+      rows.push(...page);
+    } while (page.length === 100);
+    const tasks = sortByTaskPriority(rows);
 
     // Group by status. The four core columns are always present; any other
     // stored status (WAITING_CLIENT, UPCOMING, REVIEW, …) gets its own key so
@@ -679,15 +696,28 @@ export default async function taskRoutes(fastify) {
   // Move task between Kanban columns
   fastify.post('/:id/move', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(z.object({ status: z.enum(TASK_STATUS_VALUES) })),
+    preHandler: validateBody(z.object({ status: z.enum(TASK_STATUS_VALUES).optional(), stageKey: taskStageKeySchema.optional() })
+      .refine(input => Boolean(input.status || input.stageKey), { message: 'Provide a status or stageKey' })),
   }, async (request) => {
     const { id } = request.params;
-    const { status } = request.body;
+    const { status, stageKey } = request.body;
+
+    if (stageKey) {
+      return withStageTransaction(request.prisma, async tx => {
+        const current = await tx.task.findFirst({ where: { id }, select: { projectId: true } });
+        if (!current) throw Object.assign(new Error('Task not found'), { statusCode: 404 });
+        const stage = await resolveTaskStage(tx, current.projectId, stageKey);
+        return tx.task.update({ where: { id }, data: {
+          stageKey, status: stage.status, completedAt: stage.status === 'COMPLETED' ? new Date() : null,
+        }, include: { assignee: { select: { id: true, name: true, email: true } }, project: { select: { id: true, name: true } } } });
+      });
+    }
 
     const task = await request.prisma.task.update({
       where: { id },
       data: {
         status,
+        stageKey: null,
         completedAt: status === 'COMPLETED' ? new Date() : null
       },
       include: {
@@ -705,10 +735,20 @@ export default async function taskRoutes(fastify) {
     preHandler: [validateBody(taskCreateQuickSchema)],
   }, async (request, reply) => {
     const { projectId } = request.params;
-    const { title, assigneeId, priority = 'NORMAL', status = 'PENDING' } = request.body;
+    const { title, assigneeId, priority = 'NORMAL', status = 'PENDING', stageKey } = request.body;
 
     const referenceProblem = await taskReferenceProblem(request.prisma, { assigneeId });
     if (referenceProblem) return reply.status(400).send({ error: referenceProblem });
+
+    if (stageKey) {
+      const task = await withStageTransaction(request.prisma, async tx => {
+        const stage = await resolveTaskStage(tx, projectId, stageKey);
+        return tx.task.create({ data: { projectId, title, description: '', status: stage.status, stageKey, priority, assigneeId,
+          startDate: new Date(), completedAt: stage.status === 'COMPLETED' ? new Date() : null },
+        include: { assignee: { select: { id: true, name: true, email: true } } } });
+      });
+      return task;
+    }
 
     const task = await request.prisma.task.create({
       data: {

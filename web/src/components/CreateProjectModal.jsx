@@ -3,14 +3,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Modal, { ModalFooter } from './Modal';
 import { api } from '../lib/api';
 import useClients from '../hooks/useClients';
+import { PORTFOLIO_OPTIONS } from '@shared/portfolio.js';
 
-export default function CreateProjectModal({ isOpen, onClose, preselectedClientId }) {
+export default function CreateProjectModal({ isOpen, onClose, preselectedClientId, preselectedPortfolio = '' }) {
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     clientId: preselectedClientId || '',
     defaultOwnerId: '',
+    portfolio: preselectedPortfolio,
   });
   const [error, setError] = useState('');
 
@@ -34,9 +36,10 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
     setFormData((current) => ({
       ...current,
       clientId: preselectedClientId || '',
+      portfolio: preselectedPortfolio,
     }));
     setError('');
-  }, [isOpen, preselectedClientId]);
+  }, [isOpen, preselectedClientId, preselectedPortfolio]);
 
   useEffect(() => {
     if (!isOpen || !clientsLoaded || !preselectedClientId || preselectedClientIsValid) return;
@@ -50,7 +53,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       queryClient.invalidateQueries({ queryKey: ['client'] });
       onClose();
-      setFormData({ name: '', description: '', clientId: '', defaultOwnerId: '' });
+      setFormData({ name: '', description: '', clientId: '', defaultOwnerId: '', portfolio: '' });
       setError('');
     },
     onError: (err) => {
@@ -71,6 +74,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
     mutation.mutate({
       ...formData,
       defaultOwnerId: formData.defaultOwnerId || null,
+      portfolio: formData.portfolio || null,
     });
   };
 
@@ -100,6 +104,15 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
         )}
 
         <div className="space-y-4">
+          <div>
+            <label htmlFor="create-project-portfolio" className="block text-sm font-medium mb-1">Work portfolio</label>
+            <select id="create-project-portfolio" name="portfolio" value={formData.portfolio} onChange={handleChange}
+              className="min-h-11 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20">
+              <option value="">Unclassified</option>
+              {PORTFOLIO_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-muted-foreground">Shared with the Ashbi team in either portfolio.</p>
+          </div>
           <div>
             <label htmlFor="create-project-name" className="block text-sm font-medium text-foreground mb-1">
               Project Name *

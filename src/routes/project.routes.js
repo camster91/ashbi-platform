@@ -20,6 +20,10 @@ import { setProjectAttachmentsClientVisibility } from '../services/attachment-vi
 import bus, { EVENTS } from '../utils/events.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
 import { organizationNameFor } from '../utils/organization-name.js';
+import { portfolioWhere } from '../shared/portfolio.js';
+import { portfolioFilterSchema } from '../validators/schemas.js';
+import { projectTaskStagesSchema } from '../validators/schemas.js';
+import { saveTaskStages } from '../services/task-stages.service.js';
 
 /**
  * Check that a project's client and default owner belong to the caller's
@@ -44,13 +48,23 @@ export async function projectReferenceError(db, { clientId, defaultOwnerId }) {
 }
 
 export default async function projectRoutes(fastify) {
+  fastify.put('/:id/task-stages', {
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(projectTaskStagesSchema)],
+  }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    return saveTaskStages(request.prisma, request.params.id, request.body);
+  });
   // List all projects
   fastify.get('/', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
-    const { status, clientId, health, limit = '50', offset = '0' } = request.query;
+  }, async (request, reply) => {
+    const { status, clientId, health, portfolio, limit = '50', offset = '0' } = request.query;
+    if (!portfolioFilterSchema.safeParse(portfolio).success) {
+      return reply.status(400).send({ error: 'Invalid portfolio filter' });
+    }
 
-    const where = {};
+    const where = portfolioWhere(portfolio);
     if (status) where.status = status;
     if (clientId) where.clientId = clientId;
     if (health) where.health = health;
@@ -73,7 +87,8 @@ export default async function projectRoutes(fastify) {
         },
         orderBy: [
           { health: 'asc' }, // AT_RISK first
-          { updatedAt: 'desc' }
+          { updatedAt: 'desc' },
+          { id: 'asc' }
         ],
         take,
         skip
@@ -110,7 +125,7 @@ export default async function projectRoutes(fastify) {
     preHandler: [validateBody(createProjectSchema)],
   }, async (request, reply) => {
     const {
-      name, description, clientId, defaultOwnerId,
+      name, description, clientId, defaultOwnerId, portfolio,
       status, health, hourlyBudget, startDate, endDate,
     } = request.body;
 
@@ -119,6 +134,7 @@ export default async function projectRoutes(fastify) {
 
     // null (the create modal's "no default owner") and omitted both store none.
     const data = { name, description, clientId, defaultOwnerId: defaultOwnerId ?? null };
+    if (portfolio !== undefined) data.portfolio = portfolio;
     // Optional fields the schema validates; omitted ones keep the DB defaults.
     if (status) data.status = status;
     if (health) data.health = health;
@@ -182,7 +198,7 @@ export default async function projectRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
     const {
-      name, description, status, defaultOwnerId, clientId,
+      name, description, status, defaultOwnerId, clientId, portfolio,
       budget, hourlyBudget, health, startDate, endDate,
       isRetainer, serviceType, notes
     } = request.body;
@@ -193,6 +209,7 @@ export default async function projectRoutes(fastify) {
     }
 
     const data = {};
+    if (portfolio !== undefined) data.portfolio = portfolio;
     if (name) data.name = name;
     if (description !== undefined) data.description = description;
     if (status) data.status = status;

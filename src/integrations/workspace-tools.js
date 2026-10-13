@@ -2,20 +2,22 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { BUILTIN_TOOLS, createToolRegistry, ToolError } from '../ai/tools/registry.js';
 import { createToolExecutor, redactSecrets } from '../ai/tools/executor.js';
+import { portfolioWhere } from '../shared/portfolio.js';
+import { portfolioFilterSchema } from '../validators/schemas.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
   after: z.string().min(1).max(50).optional(),
 }).strict();
 
-function listTool(name, description, model, select, where) {
+function listTool(name, description, model, select, where, inputSchema = pageSchema) {
   return {
-    name, description, class: 'read', roles: ['ADMIN', 'TEAM'], inputSchema: pageSchema,
+    name, description, class: 'read', roles: ['ADMIN', 'TEAM'], inputSchema,
     resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
     timeoutMs: 5000,
     run: async ({ prisma, user, input }) => {
       const rows = await prisma[model].findMany({
-        where: { ...where(user), ...(input.after ? { id: { gt: input.after } } : {}) },
+        where: { ...where(user, input), ...(input.after ? { id: { gt: input.after } } : {}) },
         select, orderBy: { id: 'asc' }, take: input.limit + 1,
       });
       const items = rows.slice(0, input.limit);
@@ -25,13 +27,17 @@ function listTool(name, description, model, select, where) {
 }
 
 export const workspaceRegistry = createToolRegistry([
-  listTool('list_projects', 'Page through workspace projects. Pass nextCursor as after for the next page.',
-    'project', { id: true, name: true, status: true, health: true }, user => ({ organizationId: user.organizationId })),
+  listTool('list_projects', 'Page through workspace projects. Optionally filter by portfolio (ASHBI_DESIGN, FREELANCE, UNCLASSIFIED); omit for all work. Pass nextCursor as after for the next page.',
+    'project', { id: true, name: true, status: true, health: true, portfolio: true, taskStages: true, boardRevision: true },
+    (user, input) => ({ organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }),
+    pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_clients', 'Page through workspace clients. Returns business identity, never credentials.',
     'client', { id: true, name: true, status: true, domain: true }, user => ({ organizationId: user.organizationId })),
   listTool('list_tasks', 'Page through workspace tasks, including unassigned work.',
-    'task', { id: true, title: true, projectId: true, status: true, priority: true, dueDate: true },
-    user => ({ project: { organizationId: user.organizationId } })),
+    'task', { id: true, title: true, projectId: true, status: true, stageKey: true, priority: true, dueDate: true,
+      recurrenceRule: true, recurrenceNextDate: true, recurrenceRevision: true, recurrenceSourceId: true, recurrenceScheduledDate: true },
+    (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) } }),
+    pageSchema.extend({ portfolio: portfolioFilterSchema })),
   ...BUILTIN_TOOLS.filter(tool => ['list_my_tasks', 'get_project_summary', 'create_task', 'create_calendar_event'].includes(tool.name)),
 ]);
 

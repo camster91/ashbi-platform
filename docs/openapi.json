@@ -2395,6 +2395,20 @@
             "minLength": 1,
             "type": "string"
           },
+          "portfolio": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ASHBI_DESIGN",
+                  "FREELANCE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "startDate": {
             "format": "date-time",
             "type": "string"
@@ -3939,6 +3953,62 @@
         ],
         "type": "object"
       },
+      "ProjectTaskStages": {
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stages": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "pattern": "^[a-zA-Z0-9_-]+$",
+                  "type": "string"
+                },
+                "name": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "PENDING",
+                    "UPCOMING",
+                    "IMMEDIATE",
+                    "IN_PROGRESS",
+                    "BLOCKED",
+                    "WAITING_US",
+                    "WAITING_CLIENT",
+                    "COMPLETED",
+                    "TODO",
+                    "REVIEW"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "name",
+                "status"
+              ],
+              "type": "object"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision",
+          "stages"
+        ],
+        "type": "object"
+      },
       "ProjectTemplateSave": {
         "properties": {
           "description": {
@@ -5333,6 +5403,12 @@
             ],
             "type": "string"
           },
+          "stageKey": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "type": "string"
+          },
           "status": {
             "default": "PENDING",
             "enum": [
@@ -5440,6 +5516,59 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "TaskRecurrenceUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rule": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "frequency": {
+                    "enum": [
+                      "DAILY",
+                      "WEEKLY",
+                      "MONTHLY"
+                    ],
+                    "type": "string"
+                  },
+                  "interval": {
+                    "maximum": 365,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "startDate": {
+                    "type": "string"
+                  },
+                  "timeZone": {
+                    "maxLength": 100,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "frequency",
+                  "interval",
+                  "startDate",
+                  "timeZone"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "revision",
+          "rule"
+        ],
         "type": "object"
       },
       "TaskSubpageCreate": {
@@ -6516,6 +6645,20 @@
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
+          },
+          "portfolio": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ASHBI_DESIGN",
+                  "FREELANCE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "startDate": {
             "anyOf": [
@@ -24385,6 +24528,68 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/projects/{id}/task-stages": {
+      "put": {
+        "operationId": "put_api_projects_id_task_stages",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectTaskStages"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PUT /api/projects/:id/task-stages",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/projects/{id}/tasks": {
       "get": {
         "operationId": "get_api_projects_id_tasks",
@@ -30717,6 +30922,12 @@
             "application/json": {
               "schema": {
                 "properties": {
+                  "stageKey": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "pattern": "^[a-zA-Z0-9_-]+$",
+                    "type": "string"
+                  },
                   "status": {
                     "enum": [
                       "PENDING",
@@ -30733,9 +30944,6 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "status"
-                ],
                 "type": "object"
               }
             }
@@ -30826,6 +31034,68 @@
           }
         ],
         "summary": "GET /api/tasks/:id/page",
+        "tags": [
+          "tasks"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/tasks/{id}/recurrence": {
+      "put": {
+        "operationId": "put_api_tasks_id_recurrence",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRecurrenceUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PUT /api/tasks/:id/recurrence",
         "tags": [
           "tasks"
         ],

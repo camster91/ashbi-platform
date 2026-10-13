@@ -38,12 +38,12 @@ test('scheduler bootstrap uses stable IDs and timezone-aware business schedules'
   await setupRecurringJobs();
   await setupRecurringJobs();
 
-  assert.equal(calls.length, 16);
-  const firstPass = calls.slice(0, 8);
-  const secondPass = calls.slice(8);
+  assert.equal(calls.length, 18);
+  const firstPass = calls.slice(0, 9);
+  const secondPass = calls.slice(9);
   assert.deepEqual(secondPass, firstPass);
   assert.equal(lockedCleanupAttempts, 2);
-  assert.equal(new Set(firstPass.map(({ queue, id }) => `${queue}:${id}`)).size, 8);
+  assert.equal(new Set(firstPass.map(({ queue, id }) => `${queue}:${id}`)).size, 9);
   assert.ok(removedSchedulers.includes('fleet-digest-daily-toronto'), 'retired fleet digest schedule is removed');
 
   const names = firstPass.map(({ template }) => template.name);
@@ -52,6 +52,7 @@ test('scheduler bootstrap uses stable IDs and timezone-aware business schedules'
     'check-all-escalations',
     'generate-weekly-digest',
     'recurring-invoices',
+    'recurring-tasks',
     'overdue-invoices',
     'trash-purge',
     'chat-upload-cleanup',

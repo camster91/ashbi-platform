@@ -14,11 +14,13 @@ const initialBoard = () => ({
 });
 
 let board = initialBoard();
-const moveTask = vi.fn(async (taskId, status) => {
+let project = { id: 'p1', name: 'Northwind Brand Refresh' };
+const createQuickTask = vi.fn(async () => ({}));
+const moveTask = vi.fn(async (taskId, status, stageKey) => {
   const all = Object.values(board).flat();
   const task = all.find((t) => t.id === taskId);
   const next = Object.fromEntries(Object.entries(board).map(([k, list]) => [k, list.filter((t) => t.id !== taskId)]));
-  next[status] = [...(next[status] || []), { ...task, status }];
+  next[status] = [...(next[status] || []), { ...task, status, stageKey }];
   board = next;
   return {};
 });
@@ -26,9 +28,9 @@ const moveTask = vi.fn(async (taskId, status) => {
 vi.mock('../lib/api', () => ({
   api: {
     getKanbanBoard: vi.fn(async () => board),
-    getProject: vi.fn(async () => ({ id: 'p1', name: 'Northwind Brand Refresh' })),
+    getProject: vi.fn(async () => project),
     moveTask: (...args) => moveTask(...args),
-    createQuickTask: vi.fn(),
+    createQuickTask: (...args) => createQuickTask(...args),
   },
 }));
 
@@ -64,10 +66,32 @@ describe('Task kanban board', () => {
   const originalMatchMedia = window.matchMedia;
   beforeEach(() => {
     board = initialBoard();
+    project = { id: 'p1', name: 'Northwind Brand Refresh' };
     moveTask.mockClear();
+    createQuickTask.mockClear();
     setViewportWide(true);
   });
   afterEach(() => { window.matchMedia = originalMatchMedia; });
+
+  it('moves an unstaged task into a named stage using its key and retains keyboard focus', async () => {
+    project.taskStages = [{ key: 'art-review', name: 'Artwork review', status: 'REVIEW' }];
+    renderBoard();
+    await screen.findByRole('heading', { name: 'Artwork review' });
+    fireEvent.change(screen.getByLabelText('Move "Packaging dieline" to column'), { target: { value: 'stage:art-review' } });
+    await waitFor(() => expect(moveTask).toHaveBeenCalledWith('t1', 'REVIEW', 'art-review'));
+    await waitFor(() => expect(document.querySelector('[data-task-id="t1"]')).toHaveAttribute('data-status', 'stage:art-review'));
+    await waitFor(() => expect(document.querySelector('[data-task-id="t1"]')).toHaveFocus());
+  });
+
+  it('creates a task directly in a configured stage', async () => {
+    project.taskStages = [{ key: 'art-review', name: 'Artwork review', status: 'REVIEW' }];
+    renderBoard();
+    const section = (await screen.findByRole('heading', { name: 'Artwork review' })).closest('section');
+    fireEvent.click(within(section).getByRole('button', { name: 'Add task' }));
+    fireEvent.change(within(section).getByPlaceholderText('Task title...'), { target: { value: 'Review artwork' } });
+    fireEvent.click(within(section).getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(createQuickTask).toHaveBeenCalledWith('p1', { title: 'Review artwork', status: 'REVIEW', stageKey: 'art-review', priority: 'NORMAL' }));
+  });
 
   it('shows every task, including statuses outside the four core columns', async () => {
     renderBoard();

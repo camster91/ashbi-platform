@@ -83,7 +83,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
 | [PlatformSetting](#model-platformsetting) | `platform_settings` | no | no | 5 |
-| [Project](#model-project) | `projects` | yes | yes | 53 |
+| [Project](#model-project) | `projects` | yes | yes | 56 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
 | [ProjectTemplate](#model-projecttemplate) | `project_templates` | yes | no | 10 |
@@ -109,7 +109,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [SlackInstallation](#model-slackinstallation) | `slack_installations` | yes | no | 15 |
 | [Snippet](#model-snippet) | `snippets` | no | no | 13 |
 | [SupportHourEntry](#model-supporthourentry) | `support_hours` | yes | no | 12 |
-| [Task](#model-task) | `tasks` | no | yes | 38 |
+| [Task](#model-task) | `tasks` | no | yes | 45 |
 | [TaskComment](#model-taskcomment) | `task_comments` | no | no | 9 |
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
 | [Template](#model-template) | `templates` | yes | no | 11 |
@@ -1850,6 +1850,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([clientId])`
   - `@@index([status])`
   - `@@index([organizationId])`
+  - `@@index([organizationId, portfolio])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1858,6 +1859,9 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id) |  |
 | `name` | String | required |  |  |  |
 | `description` | String | optional |  |  |  |
+| `portfolio` | String | optional |  |  | ASHBI_DESIGN \| FREELANCE; null until explicitly classified |
+| `taskStages` | Json | optional |  |  | Ordered project workflow stages: {key, name, status} |
+| `boardRevision` | Int | required | `0` |  |  |
 | `status` | String | required | `"STARTING_UP"` |  | STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED |
 | `health` | String | required | `"ON_TRACK"` |  | ON_TRACK, NEEDS_ATTENTION, AT_RISK |
 | `healthScore` | Int | required | `100` |  |  |
@@ -2600,6 +2604,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([assigneeId])`
   - `@@index([projectId, status])`
   - `@@index([milestoneId])`
+  - `@@unique([recurrenceSourceId, recurrenceScheduledDate])`
+  - `@@index([recurrenceNextDate])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2608,6 +2614,13 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `description` | String | optional |  |  | Brief description/summary |
 | `content` | String | optional | `"[]"` |  | JSON: Block-based rich content (Notion-like) |
 | `status` | String | required | `"PENDING"` |  | PENDING, IN_PROGRESS, COMPLETED, BLOCKED |
+| `stageKey` | String | optional |  |  | Project-local workflow stage; independent of lifecycle status |
+| `recurrenceRule` | Json | optional |  |  | {frequency, interval, startDate, timeZone}; source task only |
+| `recurrenceNextDate` | DateTime | optional |  |  |  |
+| `recurrenceLastDate` | DateTime | optional |  |  | Never replay a previously generated date, even after deletion |
+| `recurrenceRevision` | Int | required | `0` |  |  |
+| `recurrenceSourceId` | String | optional |  |  | Historical source identity; occurrences do not repeat |
+| `recurrenceScheduledDate` | DateTime | optional |  |  |  |
 | `priority` | String | required | `"NORMAL"` |  | CRITICAL, HIGH, NORMAL, LOW |
 | `category` | String | required | `"UPCOMING"` |  | IMMEDIATE, THIS_WEEK, UPCOMING, WAITING_CLIENT, WAITING_US |
 | `tags` | String | required | `"[]"` |  | JSON array of tags |
