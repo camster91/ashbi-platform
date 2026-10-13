@@ -44,6 +44,15 @@ async function lockedWriteReply(request, reply, id) {
 // reads are capped at 100 rows each).
 const TIMESHEET_PAGE = 100;
 
+async function summaryLabels(delegate, ids) {
+  const labels = new Map();
+  for (let offset = 0; offset < ids.length; offset += TIMESHEET_PAGE) {
+    const rows = await delegate.findMany({ where: { id: { in: ids.slice(offset, offset + TIMESHEET_PAGE) } }, select: { id: true, name: true }, take: TIMESHEET_PAGE });
+    for (const row of rows) labels.set(row.id, row);
+  }
+  return labels;
+}
+
 export default async function timeRoutes(fastify) {
   // Get time entries for a project
   fastify.get('/projects/:projectId/time-entries', {
@@ -308,61 +317,22 @@ export default async function timeRoutes(fastify) {
       if (endDate) where.date.lte = new Date(endDate);
     }
 
-    const entries = [];
-    for (;;) {
-      const page = await request.prisma.timeEntry.findMany({
-        where,
-        include: {
-          project: { select: { id: true, name: true } },
-          user: { select: { id: true, name: true } }
-        },
-        orderBy: [{ id: 'asc' }],
-        skip: entries.length,
-        take: TIMESHEET_PAGE,
-      });
-      entries.push(...page);
-      if (page.length < TIMESHEET_PAGE) break;
-    }
-
-    // Group by project
-    const byProject = entries.reduce((acc, entry) => {
-      const key = entry.projectId;
-      if (!acc[key]) {
-        acc[key] = {
-          project: entry.project,
-          totalMinutes: 0,
-          billableMinutes: 0,
-          entries: 0
-        };
-      }
-      acc[key].totalMinutes += entry.duration;
-      if (entry.billable) acc[key].billableMinutes += entry.duration;
-      acc[key].entries++;
-      return acc;
-    }, {});
-
-    // Group by user (admin only)
-    let byUser = null;
-    if (request.user.role === 'ADMIN') {
-      byUser = entries.reduce((acc, entry) => {
-        const key = entry.userId;
-        if (!acc[key]) {
-          acc[key] = {
-            user: entry.user,
-            totalMinutes: 0,
-            entries: 0
-          };
-        }
-        acc[key].totalMinutes += entry.duration;
-        acc[key].entries++;
-        return acc;
-      }, {});
-    }
-
+    // Aggregate in the database: response memory scales with summary groups,
+    // rather than loading the tenant's entire time history via OFFSET pages.
+    const [projects, billable, users] = await Promise.all([
+      request.prisma.timeEntry.groupBy({ by: ['projectId'], where, _sum: { duration: true }, _count: { _all: true } }),
+      request.prisma.timeEntry.groupBy({ by: ['projectId'], where: { ...where, billable: true }, _sum: { duration: true } }),
+      request.user.role === 'ADMIN' ? request.prisma.timeEntry.groupBy({ by: ['userId'], where, _sum: { duration: true }, _count: { _all: true } }) : Promise.resolve(null),
+    ]);
+    const [projectLabels, userLabels] = await Promise.all([
+      summaryLabels(request.prisma.project, projects.map(row => row.projectId)),
+      summaryLabels(request.prisma.user, users?.map(row => row.userId) ?? []),
+    ]);
+    const billableByProject = new Map(billable.map(row => [row.projectId, row._sum.duration ?? 0]));
     return {
-      byProject: Object.values(byProject),
-      byUser: byUser ? Object.values(byUser) : null,
-      totalMinutes: entries.reduce((sum, e) => sum + e.duration, 0)
+      byProject: projects.map(row => ({ project: projectLabels.get(row.projectId) ?? { id: row.projectId, name: 'Unavailable project' }, totalMinutes: row._sum.duration ?? 0, billableMinutes: billableByProject.get(row.projectId) ?? 0, entries: row._count._all })),
+      byUser: users?.map(row => ({ user: userLabels.get(row.userId) ?? { id: row.userId, name: 'Unavailable teammate' }, totalMinutes: row._sum.duration ?? 0, entries: row._count._all })) ?? null,
+      totalMinutes: projects.reduce((sum, row) => sum + (row._sum.duration ?? 0), 0),
     };
   });
 

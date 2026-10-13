@@ -34,7 +34,7 @@ test('legacy notes stay arrays; invalid filters/pages refuse reads', async () =>
 });
 test('weekly and summary time filters preserve ownership and dates; unclassified stays null', async () => {
   let query;
-  const db = { timeEntry: { findMany: async args => { query = args; return []; } } };
+  const db = { timeEntry: { findMany: async args => { query = args; return []; }, groupBy: async args => { query = args; return []; } } };
   const routes = await handlers(timeRoutes, db);
   const request = { query: { weekStart: '2026-10-12T00:00:00Z', portfolio: 'UNCLASSIFIED' }, user: { id: 'member', role: 'TEAM' }, prisma: db };
   await routes['GET /timesheets/weekly'](request, reply);
@@ -58,15 +58,17 @@ test('MCP notes/time reads explicitly scope tenant, portfolio and team-owned tim
   assert.equal(queries.time.where.userId, undefined);
 });
 
-test('time summary includes later pages in project, user and overall totals', async () => {
-  const rows = Array.from({ length: 101 }, (_, i) => ({ id: String(i), projectId: 'p', userId: 'u', duration: 30, billable: true, project: { id: 'p' }, user: { id: 'u' } }));
+test('time summary aggregates beyond the read cap without loading time history', async () => {
   const calls = [];
-  const db = { timeEntry: { findMany: async args => { calls.push(args); return rows.slice(args.skip, args.skip + args.take); } } };
+  const db = { timeEntry: {
+    findMany: async () => assert.fail('Summary must never load raw time rows'),
+    groupBy: async args => { calls.push(args); return [{ projectId: 'p', userId: 'u', _sum: { duration: 3030 }, _count: { _all: 101 } }]; },
+  }, project: { findMany: async () => [{ id: 'p', name: 'Project' }] }, user: { findMany: async () => [{ id: 'u', name: 'Teammate' }] } };
   const routes = await handlers(timeRoutes, db);
   const result = await routes['GET /time-entries/summary']({ query: { portfolio: 'FREELANCE' }, user: { id: 'admin', role: 'ADMIN' }, prisma: db }, reply);
   assert.equal(result.totalMinutes, 3030);
   assert.equal(result.byProject[0].entries, 101);
   assert.equal(result.byUser[0].totalMinutes, 3030);
-  assert.deepEqual(calls.map(call => call.skip), [0, 100]);
+  assert.equal(calls.length, 3);
   assert.ok(calls.every(call => call.where.project.portfolio === 'FREELANCE'));
 });
