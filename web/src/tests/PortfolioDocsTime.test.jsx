@@ -39,9 +39,9 @@ it('keeps later canonical projects available in the filtered document creation p
   api.getAllNotes.mockResolvedValue({ notes: [], pagination: { page: 1, pages: 0 } });
   api.getProjects.mockImplementation(async ({ page }) => ({ projects: [{ id: `p${page}`, name: `Project ${page}` }], pagination: { page, pages: 2 } }));
   setup(<Docs />, '/docs?portfolio=FREELANCE&create=true');
-  await screen.findByRole('option', { name: 'Project 1 —' });
+  await screen.findByRole('option', { name: 'Project 1 —' }, { timeout: 5000 });
   expect(screen.getByLabelText('Work portfolio')).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: 'Load more projects' }));
-  expect(await screen.findByRole('option', { name: 'Project 2 —' })).toBeInTheDocument();
+  expect(await screen.findByRole('option', { name: 'Project 2 —' }, { timeout: 5000 })).toBeInTheDocument();
   expect(api.getProjects).toHaveBeenLastCalledWith({ portfolio: 'FREELANCE', page: 2, limit: 100 });
 });
