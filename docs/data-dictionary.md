@@ -1981,7 +1981,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `description` | String | optional |  |  |  |
 | `projectType` | String | optional |  |  | WEBSITE \| BRANDING \| MARKETING \| CUSTOM |
 | `kind` | String | required | `"PROJECT"` |  | PROJECT \| BOARD \| BOARD_ARCHIVED |
-| `boardConfig` | Json | optional |  |  | Versioned workflow definitions, never task/customer values |
+| `boardConfig` | Json | optional |  |  | Versioned workflow definitions, without task-value snapshots |
 | `tasks` | String | required | `"[]"` |  | JSON array of task definitions |
 | `milestones` | String | required | `"[]"` |  | JSON array of milestone definitions |
 | `createdAt` | DateTime | required | `now()` |  |  |

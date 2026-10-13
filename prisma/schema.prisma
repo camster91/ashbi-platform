@@ -1754,7 +1754,7 @@ model ProjectTemplate {
   description    String?
   projectType    String? // WEBSITE | BRANDING | MARKETING | CUSTOM
   kind           String @default("PROJECT") // PROJECT | BOARD | BOARD_ARCHIVED
-  boardConfig    Json? // Versioned workflow definitions, never task/customer values
+  boardConfig    Json? // Versioned workflow definitions, without task-value snapshots
   tasks          String       @default("[]") // JSON array of task definitions
   milestones     String       @default("[]") // JSON array of milestone definitions
   createdAt      DateTime     @default(now())
