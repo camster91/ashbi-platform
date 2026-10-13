@@ -85,16 +85,19 @@ export default function Docs() {
   const notes = [...new Map((notePages?.pages.flatMap(page => Array.isArray(page) ? page : page.notes ?? []) ?? []).map(note => [note.id, note])).values()];
 
   const {
-    data: projects = [],
+    data: projectPages,
+    hasNextPage: hasMoreProjects, fetchNextPage: fetchMoreProjects, isFetchingNextPage: fetchingMoreProjects,
     isError: projectsError,
     error: projectsRequestError,
     refetch: refetchProjects,
     isFetching: projectsFetching,
-  } = useQuery({
-    queryKey: ['docs-projects', portfolio],
-    queryFn: () => api.getProjects(portfolio ? { portfolio } : {}).then((response) => Array.isArray(response) ? response : response?.projects ?? []),
+  } = useInfiniteQuery({
+    queryKey: ['docs-projects', portfolio], initialPageParam: 1,
+    queryFn: ({ pageParam }) => api.getProjects({ page: pageParam, limit: 100, ...(portfolio && { portfolio }) }),
+    getNextPageParam: response => response.pagination?.page < response.pagination?.pages ? response.pagination.page + 1 : undefined,
     enabled: showNewNote,
   });
+  const projects = [...new Map((projectPages?.pages.flatMap(page => Array.isArray(page) ? page : page.projects ?? []) ?? []).map(project => [project.id, project])).values()];
 
   const {
     data: templates = [],
@@ -337,6 +340,7 @@ export default function Docs() {
                   <option key={p.id} value={p.id}>{p.name} — {p.client?.name}</option>
                 ))}
               </select>
+              {hasMoreProjects && <button type="button" className="min-h-11 text-primary" disabled={fetchingMoreProjects} onClick={() => fetchMoreProjects()}>{fetchingMoreProjects ? 'Loading projects...' : 'Load more projects'}</button>}
             </div>
             <div>
               <label htmlFor="new-note-template" className="block text-sm font-medium mb-1">Start from template</label>

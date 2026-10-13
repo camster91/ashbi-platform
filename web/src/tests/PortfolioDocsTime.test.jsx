@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 
 vi.mock('../hooks/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'team', role: 'TEAM' } }) }));
-vi.mock('../lib/api', () => ({ api: { getAllNotes: vi.fn(), getWeeklyTimesheet: vi.fn() } }));
+vi.mock('../lib/api', () => ({ api: { getAllNotes: vi.fn(), getWeeklyTimesheet: vi.fn(), getProjects: vi.fn(), getTeam: vi.fn(async () => []), getNoteTemplates: vi.fn(async () => []) } }));
 function setup(component, url) {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[url]}>{component}</MemoryRouter></QueryClientProvider>);
 }
@@ -34,4 +34,14 @@ it('restores the timesheet portfolio from the URL and refetches all work', async
   await waitFor(() => expect(api.getWeeklyTimesheet).toHaveBeenCalledWith(expect.any(String), { portfolio: 'UNCLASSIFIED' }));
   fireEvent.change(screen.getByLabelText('Work portfolio'), { target: { value: '' } });
   await waitFor(() => expect(api.getWeeklyTimesheet).toHaveBeenLastCalledWith(expect.any(String), {}));
+});
+it('keeps later canonical projects available in the filtered document creation picker', async () => {
+  api.getAllNotes.mockResolvedValue({ notes: [], pagination: { page: 1, pages: 0 } });
+  api.getProjects.mockImplementation(async ({ page }) => ({ projects: [{ id: `p${page}`, name: `Project ${page}` }], pagination: { page, pages: 2 } }));
+  setup(<Docs />, '/docs?portfolio=FREELANCE&create=true');
+  await screen.findByRole('option', { name: 'Project 1 —' });
+  expect(screen.getByLabelText('Work portfolio')).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Load more projects' }));
+  expect(await screen.findByRole('option', { name: 'Project 2 —' })).toBeInTheDocument();
+  expect(api.getProjects).toHaveBeenLastCalledWith({ portfolio: 'FREELANCE', page: 2, limit: 100 });
 });
