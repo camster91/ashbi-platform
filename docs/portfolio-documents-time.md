@@ -4,7 +4,7 @@ Documents and weekly timesheets use the same shared-project portfolios as Projec
 
 `GET /api/notes` accepts `portfolio` and opt-in `paginated=true`, with page and limit (maximum 100). Legacy callers still receive an array. Counts and pages apply search, type, project and portfolio together. The Documents page can load later pages and resets pagination on a portfolio change. Filtering is disabled while a document draft is open.
 
-Project time entries, personal time reads, weekly timesheets and both time summary routes accept the optional portfolio. Existing user ownership and approval/invoice locks remain enforced. Project summaries now page through all matching entries, avoiding the tenant read cap that previously understated totals after 100 entries.
+Project time entries, personal time reads, weekly timesheets and both time summary routes accept the optional portfolio. Existing user ownership and approval/invoice locks remain enforced. Project summaries aggregate all matching entries in the database and load only referenced labels in bounded batches, avoiding both the 100-row undercount and loading the whole tenant's time history into request memory.
 
 Read-only MCP tools `list_notes` and `list_time_entries` provide bounded pages with explicit organization and portfolio scope. Team time reads remain restricted to the caller; administrator time reads cover the organization. These tools do not send messages, approve time or create invoices.
 
