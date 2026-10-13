@@ -29,6 +29,10 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 }
 
 export const workspaceRegistry = createToolRegistry([
+  listTool('list_board_templates', 'Page through shared workflow templates. Definitions only; archived templates are omitted unless includeArchived is true.',
+    'projectTemplate', { id: true, name: true, description: true, kind: true, boardConfig: true },
+    (user, input) => ({ organizationId: user.organizationId, kind: { in: input.includeArchived ? ['BOARD', 'BOARD_ARCHIVED'] : ['BOARD'] } }),
+    pageSchema.extend({ includeArchived: z.boolean().default(false) })),
   listTool('list_projects', 'Page through workspace projects. Optionally filter by portfolio (ASHBI_DESIGN, FREELANCE, UNCLASSIFIED); omit for all work. Pass nextCursor as after for the next page.',
     'project', { id: true, name: true, status: true, health: true, portfolio: true, taskStages: true, boardRevision: true, taskViews: true, taskViewsRevision: true, taskFields: true, taskFieldsRevision: true },
     (user, input) => ({ organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }),
