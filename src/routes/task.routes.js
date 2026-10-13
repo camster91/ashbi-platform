@@ -12,6 +12,8 @@ import { taskStageKeySchema } from '../validators/schemas.js';
 import { resolveTaskStage, withStageTransaction } from '../services/task-stages.service.js';
 import { taskRecurrenceUpdateSchema } from '../validators/schemas.js';
 import { saveTaskRecurrence } from '../services/task-recurrence.service.js';
+import { taskViewFiltersSchema } from '../validators/schemas.js';
+import { taskViewWhere } from '../shared/task-view-filters.js';
 
 /**
  * Why a task's assignee or dependency reference is unacceptable, or null.
@@ -51,6 +53,9 @@ export default async function taskRoutes(fastify) {
     const limit = parseInt(limitParam);
 
     const where = {};
+    const extraFilters = taskViewFiltersSchema.safeParse({ search: request.query.search, stageKey: request.query.stageKey });
+    if (!extraFilters.success) return reply.status(400).send({ error: 'Invalid task filters' });
+    Object.assign(where, taskViewWhere(extraFilters.data));
     if (portfolio) where.project = portfolioWhere(portfolio);
     if (status) where.status = status;
     if (priority) where.priority = priority;

@@ -351,6 +351,8 @@ export const api = {
   },
   getProject: (id) =>
     request(`/projects/${id}`),
+  getTaskViews: (id) => request(`/projects/${id}/task-views`),
+  saveTaskViews: (id, data) => request(`/projects/${id}/task-views`, { method: 'PUT', body: data }),
   createProject: (data) =>
     request('/projects', { method: 'POST', body: data }),
   updateProject: (id, data) =>

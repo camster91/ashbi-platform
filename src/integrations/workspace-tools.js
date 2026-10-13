@@ -4,6 +4,8 @@ import { BUILTIN_TOOLS, createToolRegistry, ToolError } from '../ai/tools/regist
 import { createToolExecutor, redactSecrets } from '../ai/tools/executor.js';
 import { portfolioWhere } from '../shared/portfolio.js';
 import { portfolioFilterSchema } from '../validators/schemas.js';
+import { taskViewFiltersSchema } from '../validators/schemas.js';
+import { taskViewWhere } from '../shared/task-view-filters.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
@@ -28,16 +30,16 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 
 export const workspaceRegistry = createToolRegistry([
   listTool('list_projects', 'Page through workspace projects. Optionally filter by portfolio (ASHBI_DESIGN, FREELANCE, UNCLASSIFIED); omit for all work. Pass nextCursor as after for the next page.',
-    'project', { id: true, name: true, status: true, health: true, portfolio: true, taskStages: true, boardRevision: true },
+    'project', { id: true, name: true, status: true, health: true, portfolio: true, taskStages: true, boardRevision: true, taskViews: true, taskViewsRevision: true },
     (user, input) => ({ organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }),
     pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_clients', 'Page through workspace clients. Returns business identity, never credentials.',
     'client', { id: true, name: true, status: true, domain: true }, user => ({ organizationId: user.organizationId })),
-  listTool('list_tasks', 'Page through workspace tasks, including unassigned work.',
+  listTool('list_tasks', 'Page through workspace tasks, including unassigned work. Filter by projectId, status, priority, stageKey or search to reproduce a saved project view.',
     'task', { id: true, title: true, projectId: true, status: true, stageKey: true, priority: true, dueDate: true,
       recurrenceRule: true, recurrenceNextDate: true, recurrenceRevision: true, recurrenceSourceId: true, recurrenceScheduledDate: true },
-    (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) } }),
-    pageSchema.extend({ portfolio: portfolioFilterSchema })),
+    (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }, ...taskViewWhere(input) }),
+    pageSchema.extend({ portfolio: portfolioFilterSchema, projectId: z.string().min(1).max(50).optional(), ...taskViewFiltersSchema.shape })),
   ...BUILTIN_TOOLS.filter(tool => ['list_my_tasks', 'get_project_summary', 'create_task', 'create_calendar_event'].includes(tool.name)),
 ]);
 

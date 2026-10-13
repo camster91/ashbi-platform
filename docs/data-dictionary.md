@@ -83,7 +83,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
 | [PlatformSetting](#model-platformsetting) | `platform_settings` | no | no | 5 |
-| [Project](#model-project) | `projects` | yes | yes | 56 |
+| [Project](#model-project) | `projects` | yes | yes | 58 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
 | [ProjectTemplate](#model-projecttemplate) | `project_templates` | yes | no | 10 |
@@ -1862,6 +1862,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `portfolio` | String | optional |  |  | ASHBI_DESIGN \| FREELANCE; null until explicitly classified |
 | `taskStages` | Json | optional |  |  | Ordered project workflow stages: {key, name, status} |
 | `boardRevision` | Int | required | `0` |  |  |
+| `taskViews` | Json | optional |  |  | Shared saved table/board filters and sorting |
+| `taskViewsRevision` | Int | required | `0` |  |  |
 | `status` | String | required | `"STARTING_UP"` |  | STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED |
 | `health` | String | required | `"ON_TRACK"` |  | ON_TRACK, NEEDS_ATTENTION, AT_RISK |
 | `healthScore` | Int | required | `100` |  |  |

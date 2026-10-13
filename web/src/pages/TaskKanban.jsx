@@ -196,6 +196,7 @@ export default function TaskKanban() {
           </Link>
         )}
         <h1 className="text-2xl font-heading font-bold text-foreground">Kanban Board</h1>
+        <Link to={`/project/${projectId}/views`} className="inline-flex min-h-11 items-center text-sm text-primary">Saved task views</Link>
         {project && <button ref={settingsButtonRef} type="button" onClick={() => setShowSettings(current => !current)} className="mt-2 min-h-11 rounded-lg border border-border px-3" aria-expanded={showSettings}>Configure stages</button>}
       </div>
       {showSettings && project && <TaskStageSettings project={project} onClose={closeSettings} />}

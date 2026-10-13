@@ -61,4 +61,20 @@ test('shared portfolios, named stages and recurrence persist through the real UI
     expect(stopped.recurrenceNextDate).toBeNull();
     expect(stopped.status).toBe('REVIEW');
   });
+
+  await test.step('a filtered saved view survives reload and deletion preserves its records', async () => {
+    await page.goto(`/project/${agency.id}/views`);
+    await page.getByLabel('View status filter').selectOption('REVIEW');
+    await page.getByLabel('Task view name').fill('Client review queue');
+    await page.getByRole('button', { name: 'Save as new view' }).click();
+    await expect(page.getByRole('button', { name: 'Delete view' })).toBeVisible();
+    await page.reload();
+    await expect(page.getByLabel('View status filter')).toHaveValue('REVIEW');
+    await expect(page.getByRole('table').getByRole('link', { name: task.title, exact: true })).toBeVisible();
+    const saved = await json(await admin.get(`/api/projects/${agency.id}/task-views`));
+    expect(saved.views[0].name).toBe('Client review queue');
+    await page.getByRole('button', { name: 'Delete view' }).click();
+    await expect(page.getByLabel('Saved task view')).toHaveValue('');
+    expect((await json(await admin.get(`/api/tasks/${task.id}/page`))).id).toBe(task.id);
+  });
 });

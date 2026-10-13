@@ -282,6 +282,8 @@ model Project {
   portfolio      String? // ASHBI_DESIGN | FREELANCE; null until explicitly classified
   taskStages     Json? // Ordered project workflow stages: {key, name, status}
   boardRevision  Int          @default(0)
+  taskViews      Json? // Shared saved table/board filters and sorting
+  taskViewsRevision Int @default(0)
   status         String       @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
   health         String       @default("ON_TRACK") // ON_TRACK, NEEDS_ATTENTION, AT_RISK
   healthScore    Int          @default(100)

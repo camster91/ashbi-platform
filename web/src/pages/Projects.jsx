@@ -164,6 +164,7 @@ function ProjectCard({ project, onPortfolioChange, saving }) {
         {PORTFOLIO_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
       </select>
     </label>
+    <Link to={`/project/${project.id}/views`} className="inline-flex min-h-11 items-center text-xs text-primary">Task views</Link>
     </div>
   );
 }
