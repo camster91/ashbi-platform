@@ -227,7 +227,7 @@ jobs:
         if: failure()
         run: |
           mkdir -p test-results/stack
-          docker compose -p ashbi-e2e -f tests/e2e/docker-compose.test.yml logs --no-color --tail 200 hub > test-results/stack/hub-diagnostics.log
+          docker compose -p ashbi-e2e -f tests/e2e/docker-compose.test.yml logs --no-color --tail 12000 hub > test-results/stack/hub-diagnostics.log
       - name: Upload E2E output
         if: always()
         uses: actions/upload-artifact@v4
