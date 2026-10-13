@@ -7,6 +7,7 @@ import { formatDate } from '../lib/format';
 import LoadingState from '../components/ui/LoadingState';
 import QueryErrorState from '../components/QueryErrorState';
 import { buildKanbanColumns } from './TaskKanban';
+import TaskViewCalendar from '../components/TaskViewCalendar';
 
 const STATUSES = ['PENDING', 'IN_PROGRESS', 'REVIEW', 'WAITING_CLIENT', 'WAITING_US', 'BLOCKED', 'COMPLETED', 'UPCOMING', 'IMMEDIATE', 'TODO'];
 const text = value => String(value || '').toLowerCase().replaceAll('_', ' ');
@@ -109,7 +110,7 @@ export default function TaskViews() {
       <label className="text-sm">Sort<select aria-label="Task view sort" className={`block ${controlClass}`} value={sort} onChange={event => setSort(event.target.value)}>
         <option value="PRIORITY">Priority</option><option value="DUE_DATE">Due date</option><option value="TITLE">Title</option>
       </select></label>
-      <label className="text-sm">Layout<select aria-label="Task view layout" className={`block ${controlClass}`} value={layout} onChange={event => setLayout(event.target.value)}><option value="TABLE">Table</option><option value="BOARD">Board</option></select></label>
+      <label className="text-sm">Layout<select aria-label="Task view layout" className={`block ${controlClass}`} value={layout} onChange={event => setLayout(event.target.value)}><option value="TABLE">Table</option><option value="BOARD">Board</option><option value="CALENDAR">Calendar</option></select></label>
     </fieldset>
     <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); saveCurrent(true); }}>
       <label className="text-sm">View name<input aria-label="Task view name" value={name} onChange={event => setName(event.target.value)} required maxLength={80} className={`block ${controlClass}`} /></label>
@@ -120,7 +121,7 @@ export default function TaskViews() {
     {saveError && <div role="alert" className="text-sm text-destructive">{saveError} <button type="button" className="min-h-11 underline" onClick={() => configQuery.refetch()}>Reload saved views</button></div>}
     <p className="text-sm text-muted-foreground" role="status">{tasksQuery.isFetching ? 'Loading tasks…' : `${tasks.length} tasks`}</p>
     {tasksQuery.isError ? <QueryErrorState error={tasksQuery.error} message="Tasks could not be loaded" onRetry={tasksQuery.refetch} />
-      : tasksQuery.isLoading ? <LoadingState label="Loading tasks" /> : tasks.length === 0 ? <p>No tasks match these filters.</p>
+      : tasksQuery.isLoading ? <LoadingState label="Loading tasks" /> : layout === 'CALENDAR' ? <TaskViewCalendar tasks={tasks} /> : tasks.length === 0 ? <p>No tasks match these filters.</p>
       : layout === 'BOARD' ? <div className="flex flex-col lg:flex-row gap-4 lg:overflow-x-auto min-w-0 [contain:inline-size]">
         {buildKanbanColumns(board, config.stages).map(column => <section key={column.key} className="rounded border border-border p-3 lg:min-w-64" aria-label={column.label}>
           <h2 className="font-semibold mb-3">{column.label} ({column.tasks.length})</h2>

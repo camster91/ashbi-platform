@@ -45,6 +45,15 @@ describe('saved task views', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Saved views changed');
     expect(screen.getByLabelText('Task view name')).toHaveValue('My queue');
   });
+  it('reloads the saved calendar layout and keeps undated matching tasks visible', async () => {
+    config.views = [{ key: 'calendar', name: 'Due dates', layout: 'CALENDAR', sort: 'DUE_DATE', filters: {} }];
+    setup('/project/p1/views?view=calendar');
+    const calendar = await screen.findByRole('region', { name: 'Task calendar' });
+    await waitFor(() => expect(within(calendar).getByText('Review artwork')).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Calendar month'), { target: { value: '2030-01' } });
+    expect(within(calendar).getByText('Draft brief')).toBeInTheDocument();
+    expect(screen.getByLabelText('Task view layout')).toHaveValue('CALENDAR');
+  });
   it('includes later API pages in the table', async () => {
     api.getTasks.mockResolvedValueOnce({ tasks: [rows[0]], pagination: { pages: 2 } });
     api.getTasks.mockResolvedValueOnce({ tasks: [rows[1]], pagination: { pages: 2 } });

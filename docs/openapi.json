@@ -4069,7 +4069,8 @@
                 "layout": {
                   "enum": [
                     "TABLE",
-                    "BOARD"
+                    "BOARD",
+                    "CALENDAR"
                   ],
                   "type": "string"
                 },

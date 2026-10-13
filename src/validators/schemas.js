@@ -131,7 +131,7 @@ export const taskViewFiltersSchema = z.object({
 export const projectTaskViewsSchema = z.object({
   revision: z.number().int().min(0),
   views: z.array(z.object({ key: taskStageKeySchema, name: z.string().trim().min(1).max(80),
-    layout: z.enum(['TABLE', 'BOARD']), sort: z.enum(['PRIORITY', 'DUE_DATE', 'TITLE']), filters: taskViewFiltersSchema,
+    layout: z.enum(['TABLE', 'BOARD', 'CALENDAR']), sort: z.enum(['PRIORITY', 'DUE_DATE', 'TITLE']), filters: taskViewFiltersSchema,
   }).strict()).max(20),
 }).strict().refine(({ views }) => ['key', 'name'].every(field => new Set(views.map(view => view[field].toLowerCase())).size === views.length),
 { message: 'View keys and names must be unique' });

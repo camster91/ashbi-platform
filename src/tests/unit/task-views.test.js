@@ -14,6 +14,7 @@ function db(project = { id: 'p1', name: 'Project', taskViews: null, taskViewsRev
 }
 test('view metadata rejects unsupported layouts, duplicate keys/names and unbounded searches', () => {
   assert.equal(projectTaskViewsSchema.safeParse({ revision: 0, views: [view] }).success, true);
+  assert.equal(projectTaskViewsSchema.safeParse({ revision: 0, views: [{ ...view, layout: 'CALENDAR' }] }).success, true);
   assert.equal(projectTaskViewsSchema.safeParse({ revision: 0, views: [] }).success, true);
   for (const views of [[view, { ...view, key: 'other', name: 'review queue' }], [{ ...view, layout: 'SCRIPT' }], [{ ...view, filters: { search: 'x'.repeat(201) } }]]) {
     assert.equal(projectTaskViewsSchema.safeParse({ revision: 0, views }).success, false);

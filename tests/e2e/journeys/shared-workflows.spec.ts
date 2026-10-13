@@ -1,8 +1,10 @@
 // Authenticated persistence journey against the disposable full-stack CI environment.
 import { expect, test } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { createClientWithContact, json, loginAdminThroughUi } from './support';
 
-test('shared portfolios, named stages and recurrence persist through the real UI and API', async ({ page }) => {
+test('shared portfolios, stages, recurrence and saved task views persist through the real UI and API', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await loginAdminThroughUi(page);
   const admin = page.request;
   const { client, suffix } = await createClientWithContact(admin, 'Shared workflow QA');
@@ -73,6 +75,27 @@ test('shared portfolios, named stages and recurrence persist through the real UI
     await expect(page.getByRole('table').getByRole('link', { name: task.title, exact: true })).toBeVisible();
     const saved = await json(await admin.get(`/api/projects/${agency.id}/task-views`));
     expect(saved.views[0].name).toBe('Client review queue');
+    await json(await admin.put(`/api/tasks/${task.id}`, { data: { dueDate: '2030-01-31T00:00:00.000Z' } }));
+    await page.getByLabel('Task view layout').selectOption('CALENDAR');
+    await page.getByRole('button', { name: 'Save view changes' }).click();
+    await expect.poll(async () => (await json(await admin.get(`/api/projects/${agency.id}/task-views`))).views[0].layout).toBe('CALENDAR');
+    await page.reload();
+    await expect(page.getByLabel('Task view layout')).toHaveValue('CALENDAR');
+    await page.getByLabel('Calendar month').fill('2030-01');
+    await expect(page.getByRole('region', { name: /Thursday, Jan 31, 2030/ }).getByRole('link', { name: task.title, exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Next month' }).click();
+    await expect(page.getByRole('region', { name: 'Task calendar', exact: true })).toContainText('1 dated tasks in other months');
+    await page.getByRole('button', { name: 'Previous month' }).click();
+    await expect(page.getByRole('region', { name: /Thursday, Jan 31, 2030/ }).getByRole('link', { name: task.title, exact: true })).toBeVisible();
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      const calendar = page.getByRole('region', { name: 'Task calendar', exact: true });
+      await expect(calendar.getByRole('link', { name: task.title, exact: true })).toBeVisible();
+      expect(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth)).toBe(true);
+      const accessibility = await new AxeBuilder({ page }).include('[aria-label="Task calendar"]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+      expect(accessibility.violations).toEqual([]);
+      await test.info().attach(`task-calendar-${width}`, { body: await page.screenshot(), contentType: 'image/png' });
+    }
     await page.getByRole('button', { name: 'Delete view' }).click();
     await expect(page.getByLabel('Saved task view')).toHaveValue('');
     expect((await json(await admin.get(`/api/tasks/${task.id}/page`))).id).toBe(task.id);
