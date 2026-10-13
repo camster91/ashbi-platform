@@ -318,7 +318,7 @@ test('docs/api-access-matrix.md matches the application', async () => {
   const actual = renderAccessMatrix(await getMatrix());
   if (process.env.UPDATE_ACCESS_MATRIX === '1') fs.writeFileSync(DOC_URL, actual);
   const expected = fs.existsSync(DOC_URL) ? fs.readFileSync(DOC_URL, 'utf8') : '';
-  assert.equal(actual, expected, 'docs/api-access-matrix.md is stale; run UPDATE_ACCESS_MATRIX=1 npm test');
+  assert.equal(actual.replaceAll('\r\n', '\n'), expected.replaceAll('\r\n', '\n'), 'docs/api-access-matrix.md is stale; run UPDATE_ACCESS_MATRIX=1 npm test');
 });
 
 test('every signed-in route on the raw Prisma client has a reviewed tenant rule', async () => {

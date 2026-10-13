@@ -32,7 +32,7 @@ async function main() {
 
   if (check) {
     const current = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
-    if (current !== output) {
+    if (current.replaceAll('\r\n', '\n') !== output.replaceAll('\r\n', '\n')) {
       console.error(`${relative} is stale. Run \`npm run docs:openapi\` and commit the result.`);
       return 1;
     }

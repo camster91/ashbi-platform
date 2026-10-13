@@ -320,7 +320,7 @@ if (isCli) {
   const expected = generateDataDictionary();
   if (process.argv.includes('--check')) {
     const actual = fs.existsSync(OUTPUT_PATH) ? fs.readFileSync(OUTPUT_PATH, 'utf8') : '';
-    if (actual !== expected) {
+    if (actual.replaceAll('\r\n', '\n') !== expected.replaceAll('\r\n', '\n')) {
       console.error('docs/data-dictionary.md is out of date with prisma/schema.prisma.');
       console.error('Run `npm run docs:data-dictionary` and commit the result.');
       process.exitCode = 1;
