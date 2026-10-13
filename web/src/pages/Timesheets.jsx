@@ -1,4 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import PortfolioFilter from '../components/PortfolioFilter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle,
@@ -44,6 +46,8 @@ function formatWeekRange(weekStart) {
 }
 
 export default function Timesheets() {
+  const [params, setParams] = useSearchParams();
+  const portfolio = params.get('portfolio') || '';
   const queryClient = useQueryClient();
   const toast = useToast();
   const { user } = useAuth();
@@ -68,8 +72,8 @@ export default function Timesheets() {
     refetch: refetchTimesheets,
     isFetching: timesheetsFetching,
   } = useQuery({
-    queryKey: ['weekly-timesheet', weekStart.toISOString()],
-    queryFn: () => api.getWeeklyTimesheet(weekStart.toISOString()),
+    queryKey: ['weekly-timesheet', weekStart.toISOString(), portfolio],
+    queryFn: () => api.getWeeklyTimesheet(weekStart.toISOString(), portfolio ? { portfolio } : {}),
   });
 
   const approveMutation = useMutation({
@@ -119,6 +123,7 @@ export default function Timesheets() {
 
   return (
     <div className="space-y-6 max-w-7xl">
+      <PortfolioFilter value={portfolio} onChange={value => { const next = new URLSearchParams(params); if (value) next.set('portfolio', value); else next.delete('portfolio'); setParams(next); setExpandedCell(null); }} />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>

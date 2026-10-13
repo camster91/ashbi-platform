@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   BookOpen,
@@ -26,6 +26,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { cn } from '../lib/utils';
 import { Card, Button, EmptyState, ListPageSkeleton } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
+import PortfolioFilter from '../components/PortfolioFilter';
 
 const NOTE_TYPES = [
   { value: '', label: 'All Types', icon: Layers },
@@ -45,7 +46,8 @@ const TYPE_COLORS = {
 export default function Docs() {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const portfolio = searchParams.get('portfolio') || '';
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [expandedId, setExpandedId] = useState(null);
@@ -62,20 +64,25 @@ export default function Docs() {
   }, [searchParams]);
 
   const {
-    data: notes = [],
+    data: notePages,
+    hasNextPage, fetchNextPage, isFetchingNextPage,
     isLoading,
     isError: notesError,
     error: notesRequestError,
     refetch: refetchNotes,
     isFetching: notesFetching,
-  } = useQuery({
-    queryKey: ['all-notes', search, filterType],
-    queryFn: () => api.getAllNotes({
+  } = useInfiniteQuery({
+    queryKey: ['all-notes', search, filterType, portfolio], initialPageParam: 1,
+    queryFn: ({ pageParam }) => api.getAllNotes({
+      paginated: 'true', page: pageParam, limit: 100,
+      ...(portfolio && { portfolio }),
       ...(search && { search }),
       ...(filterType && { type: filterType }),
     }),
+    getNextPageParam: response => response.pagination?.page < response.pagination?.pages ? response.pagination.page + 1 : undefined,
     staleTime: 30000,
   });
+  const notes = [...new Map((notePages?.pages.flatMap(page => Array.isArray(page) ? page : page.notes ?? []) ?? []).map(note => [note.id, note])).values()];
 
   const {
     data: projects = [],
@@ -84,8 +91,8 @@ export default function Docs() {
     refetch: refetchProjects,
     isFetching: projectsFetching,
   } = useQuery({
-    queryKey: ['docs-projects'],
-    queryFn: () => api.getProjects().then((response) => Array.isArray(response) ? response : response?.projects ?? []),
+    queryKey: ['docs-projects', portfolio],
+    queryFn: () => api.getProjects(portfolio ? { portfolio } : {}).then((response) => Array.isArray(response) ? response : response?.projects ?? []),
     enabled: showNewNote,
   });
 
@@ -260,6 +267,7 @@ export default function Docs() {
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
+        <PortfolioFilter value={portfolio} disabled={Boolean(editingId) || showNewNote} onChange={value => { const next = new URLSearchParams(searchParams); if (value) next.set('portfolio', value); else next.delete('portfolio'); setSearchParams(next); }} />
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
@@ -476,6 +484,7 @@ export default function Docs() {
           </div>
         </>
       )}
+      {hasNextPage && <button type="button" disabled={isFetchingNextPage} onClick={() => fetchNextPage()} className="min-h-11 rounded border border-border bg-card px-3">Load more documents</button>}
       <ConfirmDialog
         isOpen={Boolean(noteToDelete)}
         title="Delete note"

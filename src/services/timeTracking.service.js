@@ -175,7 +175,7 @@ export async function createManualEntry(userId, projectId, data) {
 const SUMMARY_ENTRY_LIMIT = 100;
 
 export async function getTimeSummary(userId, filters = {}) {
-  const { projectId, startDate, endDate } = filters;
+  const { projectId, startDate, endDate, portfolio } = filters;
   const range = (startDate || endDate)
     ? { ...(startDate ? { gte: new Date(startDate) } : {}), ...(endDate ? { lte: new Date(endDate) } : {}) }
     : undefined;
@@ -186,6 +186,7 @@ export async function getTimeSummary(userId, filters = {}) {
   // groupBy aggregates over every entry; only the listed entries are limited
   // (reads of soft-deletable models cap at 100).
   const entryWhere = { userId, ...(projectId ? { projectId } : {}), ...(range ? { date: range } : {}) };
+  if (portfolio) entryWhere.project = portfolio === 'UNCLASSIFIED' ? { portfolio: null } : { portfolio };
   const [entryGroups, entryCount, recentEntries] = await Promise.all([
     prisma.timeEntry.groupBy({ by: ['projectId', 'billable'], where: entryWhere, _sum: { duration: true } }),
     prisma.timeEntry.count({ where: entryWhere }),

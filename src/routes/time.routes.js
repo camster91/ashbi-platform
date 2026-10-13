@@ -1,6 +1,8 @@
 // Time Tracking routes
 
 import { validateBody, timeEntryCreateNewSchema, timeEntryUpdateNewSchema, timesheetRejectSchema } from '../validators/schemas.js';
+import { portfolioFilterSchema } from '../validators/schemas.js';
+import { portfolioWhere } from '../shared/portfolio.js';
 
 /**
  * H6: an APPROVED or invoiced time entry is locked against edit and delete,
@@ -46,8 +48,10 @@ export default async function timeRoutes(fastify) {
   // Get time entries for a project
   fastify.get('/projects/:projectId/time-entries', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
     const { projectId } = request.params;
+    const portfolio = portfolioFilterSchema.safeParse(request.query.portfolio);
+    if (!portfolio.success) return reply.status(400).send({ error: 'Invalid portfolio filter' });
     const {
       userId,
       taskId,
@@ -62,6 +66,7 @@ export default async function timeRoutes(fastify) {
     const limit = parseInt(limitParam);
 
     const where = { projectId };
+    if (portfolio.data) where.project = portfolioWhere(portfolio.data);
 
     if (userId) where.userId = userId;
     if (taskId) where.taskId = taskId;
@@ -281,10 +286,13 @@ export default async function timeRoutes(fastify) {
   // Get time summary by project
   fastify.get('/time-entries/summary', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
     const { startDate, endDate } = request.query;
+    const portfolio = portfolioFilterSchema.safeParse(request.query.portfolio);
+    if (!portfolio.success) return reply.status(400).send({ error: 'Invalid portfolio filter' });
 
     const where = {};
+    if (portfolio.data) where.project = portfolioWhere(portfolio.data);
 
     // Only admin can see all, team members see their own
     if (request.user.role !== 'ADMIN') {
@@ -352,8 +360,10 @@ export default async function timeRoutes(fastify) {
   // Get weekly timesheet (aggregated by user + day)
   fastify.get('/timesheets/weekly', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
     const { weekStart } = request.query;
+    const portfolio = portfolioFilterSchema.safeParse(request.query.portfolio);
+    if (!portfolio.success) return reply.status(400).send({ error: 'Invalid portfolio filter' });
     const start = weekStart ? new Date(weekStart) : (() => {
       const d = new Date();
       d.setDate(d.getDate() - d.getDay()); // Sunday
@@ -364,6 +374,7 @@ export default async function timeRoutes(fastify) {
     end.setDate(end.getDate() + 7);
 
     const where = { date: { gte: start, lt: end } };
+    if (portfolio.data) where.project = portfolioWhere(portfolio.data);
     if (request.user.role !== 'ADMIN') where.userId = request.user.id;
 
     // Read the whole week in pages: a single read stops at 100 rows, which

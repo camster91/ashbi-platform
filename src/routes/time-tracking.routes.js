@@ -2,6 +2,7 @@
 // Migrated from ashbi-hub with auth decorators and service layer
 
 import { validateBody, timeSessionStartNewSchema, timeEntryCreateSchema } from '../validators/schemas.js';
+import { portfolioFilterSchema } from '../validators/schemas.js';
 import {
   startTimer,
   stopTimer,
@@ -73,10 +74,12 @@ export default async function timeTrackingRoutes(fastify) {
   // Get time summary
   fastify.get('/summary', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
     const userId = request.user.id;
     const { projectId, startDate, endDate } = request.query;
-    return getTimeSummary(userId, { projectId, startDate, endDate });
+    const portfolio = portfolioFilterSchema.safeParse(request.query.portfolio);
+    if (!portfolio.success) return reply.status(400).send({ error: 'Invalid portfolio filter' });
+    return getTimeSummary(userId, { projectId, startDate, endDate, portfolio: portfolio.data });
   });
 
   // Delete one of the caller's stopped timer sessions (not a TimeEntry;
