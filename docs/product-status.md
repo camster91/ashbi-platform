@@ -10,6 +10,8 @@ October 13 release update: consolidation PR [#566](https://github.com/camster91/
 
 ## Current supported milestone
 
+October 13 follow-up: saved table/board/calendar task views and Review/TODO editor support merged in PR #570; both the final PR CI and main CI passed. Production remains held by the owner's instruction. [Typed task fields and canonical relations](typed-task-fields.md) are implemented on a separate feature branch with local tests; CI, merge, deployment and target acceptance of that slice remain pending. Standalone databases, field filters/columns, formulas and rollups remain open.
+
 The supported milestone is a controlled Ashbi agency-operations deployment: authenticated staff/client workflows, project and task management, finance document preparation, collaboration/docs, and client portal on `hub.ashbi.ca`. It is not yet proven as a general-market replacement for ClickUp, Notion, Slack, or Bonsai. The current roadmap and replacement-readiness waves are tracked in [#393](https://github.com/camster91/ashbi-platform/issues/393), which supersedes the earlier milestone decision in #277; the backlog and release plan [#290](https://github.com/camster91/ashbi-platform/issues/290) and [#291](https://github.com/camster91/ashbi-platform/issues/291) are being reconciled against it.
 
 | Capability | Classification | Authoritative evidence or remaining gate |

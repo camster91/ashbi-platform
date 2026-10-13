@@ -33,6 +33,8 @@ This aims to carry every existing Ashbi workflow forward. A product's entire opt
 
 ## Source-informed feature requirements
 
+October 13 update: saved table/board/calendar views merged in #570 and passed final PR/main CI. Typed project task fields and canonical task/project/client/person relations are now implemented on a follow-up branch ([contract](typed-task-fields.md)); their CI and target acceptance are pending. This closes the initial fixed-field limitation, not standalone database, formula, rollup or bidirectional relation parity.
+
 The connected Notion source was inspected read-only on October 11. Its Projects & Tasks guide was last edited October 8 and still describes Notion as the work tracker, Stripe as payment authority, Google Workspace as file/agreement authority and Bonsai as historical records; older migration notes describe a retired Hub direction. Cameron's newer instruction in this conversation establishes Hub as the new consolidation target. This does not make the old source data obsolete or reactivate historical projects/invoices. No Notion content, status or permission was changed.
 
 The collected Projects, Tasks and CRM schemas inform these concrete feature and later data-input requirements:

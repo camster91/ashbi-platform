@@ -284,6 +284,8 @@ model Project {
   boardRevision  Int          @default(0)
   taskViews      Json? // Shared saved table/board filters and sorting
   taskViewsRevision Int @default(0)
+  taskFields Json? // Typed project task field definitions; archived definitions retained
+  taskFieldsRevision Int @default(0)
   status         String       @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
   health         String       @default("ON_TRACK") // ON_TRACK, NEEDS_ATTENTION, AT_RISK
   healthScore    Int          @default(100)
@@ -369,6 +371,8 @@ model Task {
   icon       String? // Emoji or icon URL
   coverImage String? // Cover image URL
   properties String  @default("{}") // JSON: Custom properties/fields
+  fieldValues Json? // Typed custom values, separate from legacy properties
+  fieldValuesRevision Int @default(0)
 
   // Hierarchy
   parentId String? // For subpages/subtasks

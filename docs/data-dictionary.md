@@ -83,7 +83,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
 | [PlatformSetting](#model-platformsetting) | `platform_settings` | no | no | 5 |
-| [Project](#model-project) | `projects` | yes | yes | 58 |
+| [Project](#model-project) | `projects` | yes | yes | 60 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
 | [ProjectTemplate](#model-projecttemplate) | `project_templates` | yes | no | 10 |
@@ -109,7 +109,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [SlackInstallation](#model-slackinstallation) | `slack_installations` | yes | no | 15 |
 | [Snippet](#model-snippet) | `snippets` | no | no | 13 |
 | [SupportHourEntry](#model-supporthourentry) | `support_hours` | yes | no | 12 |
-| [Task](#model-task) | `tasks` | no | yes | 45 |
+| [Task](#model-task) | `tasks` | no | yes | 47 |
 | [TaskComment](#model-taskcomment) | `task_comments` | no | no | 9 |
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
 | [Template](#model-template) | `templates` | yes | no | 11 |
@@ -1864,6 +1864,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `boardRevision` | Int | required | `0` |  |  |
 | `taskViews` | Json | optional |  |  | Shared saved table/board filters and sorting |
 | `taskViewsRevision` | Int | required | `0` |  |  |
+| `taskFields` | Json | optional |  |  | Typed project task field definitions; archived definitions retained |
+| `taskFieldsRevision` | Int | required | `0` |  |  |
 | `status` | String | required | `"STARTING_UP"` |  | STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED |
 | `health` | String | required | `"ON_TRACK"` |  | ON_TRACK, NEEDS_ATTENTION, AT_RISK |
 | `healthScore` | Int | required | `100` |  |  |
@@ -2630,6 +2632,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `icon` | String | optional |  |  | Emoji or icon URL |
 | `coverImage` | String | optional |  |  | Cover image URL |
 | `properties` | String | required | `"{}"` |  | JSON: Custom properties/fields |
+| `fieldValues` | Json | optional |  |  | Typed custom values, separate from legacy properties |
+| `fieldValuesRevision` | Int | required | `0` |  |  |
 | `parentId` | String | optional |  |  | For subpages/subtasks |
 | `estimatedTime` | String | optional |  |  |  |
 | `startDate` | DateTime | optional |  |  |  |

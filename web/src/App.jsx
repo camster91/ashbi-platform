@@ -64,6 +64,7 @@ const ResponseApprovals = lazy(() => import('./pages/ResponseApprovals'));
 const TaskPage = lazy(() => import('./pages/TaskPage'));
 const TaskKanban = lazy(() => import('./pages/TaskKanban'));
 const TaskViews = lazy(() => import('./pages/TaskViews'));
+const TaskFieldSettings = lazy(() => import('./pages/TaskFieldSettings'));
 const TimeTracking = lazy(() => import('./pages/TimeTracking'));
 const Proposals = lazy(() => import('./pages/Proposals'));
 const ProposalDetail = lazy(() => import('./pages/ProposalDetail'));
@@ -248,6 +249,7 @@ function AppRoutes() {
                   <Route path="/task/:id" element={<TaskPage />} />
                   <Route path="/project/:projectId/kanban" element={<TaskKanban />} />
                   <Route path="/project/:projectId/views" element={<TaskViews />} />
+                  <Route path="/project/:projectId/fields" element={<TaskFieldSettings />} />
                   <Route path="/project/:projectId/time" element={<TimeTracking />} />
                   <Route path="/clients" element={<Clients />} />
                   <Route path="/client/:id" element={<Client />} />

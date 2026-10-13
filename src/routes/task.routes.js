@@ -2,7 +2,8 @@
 
 import { findTasksInPriorityOrder } from '../services/task-priority-order.js';
 import { sortByTaskPriority, taskPriorityRank } from '../shared/task-priority.js';
-import { validateBody, updateTaskSchema, taskBulkUpdateSchema, taskPageContentUpdateSchema, taskSubpageCreateSchema, taskDependencyCreateSchema, taskCreateQuickSchema, TASK_STATUS_VALUES } from '../validators/schemas.js';
+import { validateBody, updateTaskSchema, taskBulkUpdateSchema, taskPageContentUpdateSchema, taskSubpageCreateSchema, taskDependencyCreateSchema, taskCreateQuickSchema, TASK_STATUS_VALUES, taskFieldValuesSchema } from '../validators/schemas.js';
+import { readTaskFields, saveTaskFieldValues, taskFieldOptions } from '../services/task-fields.service.js';
 import { z } from 'zod';
 import bus, { EVENTS } from '../utils/events.js';
 import { parseTaskContent } from '../utils/taskContent.js';
@@ -35,6 +36,20 @@ async function taskReferenceProblem(prisma, { assigneeId, dependsOnId }) {
 }
 
 export default async function taskRoutes(fastify) {
+  fastify.get('/:id/fields', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    return readTaskFields(request.prisma, request.params.id);
+  });
+  fastify.put('/:id/fields', { onRequest: [fastify.authenticate], preHandler: [validateBody(taskFieldValuesSchema)] }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    return saveTaskFieldValues(request.prisma, request.params.id, request.body);
+  });
+  fastify.get('/:id/fields/:key/options', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    const query = taskViewFiltersSchema.safeParse({ search: request.query.search });
+    if (!taskStageKeySchema.safeParse(request.params.key).success || !query.success) return reply.status(400).send({ error: 'Invalid relation search' });
+    return taskFieldOptions(request.prisma, request.params.id, request.params.key, query.data.search ?? '');
+  });
   fastify.put('/:id/recurrence', { onRequest: [fastify.authenticate], preHandler: [validateBody(taskRecurrenceUpdateSchema)] }, async (request, reply) => {
     if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
     return saveTaskRecurrence(request.prisma, request.params.id, request.body);

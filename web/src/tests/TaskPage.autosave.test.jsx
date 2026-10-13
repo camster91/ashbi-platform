@@ -25,6 +25,7 @@ const updateTask = vi.fn(async () => ({ id: 'task-1' }));
 vi.mock('../lib/api', () => ({
   api: {
     getTaskPage: vi.fn(async () => task),
+    getTaskFields: vi.fn(async () => ({ projectId: 'p1', fields: [], values: {}, relations: {}, revision: 0, definitionRevision: 0 })),
     getTaskBreadcrumbs: vi.fn(async () => []),
     updateTaskContent: (...args) => updateTaskContent(...args),
     updateTask: (...args) => updateTask(...args),

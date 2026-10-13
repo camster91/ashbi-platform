@@ -124,6 +124,20 @@ export const TASK_STATUS_VALUES = [
 export const portfolioSchema = z.enum(PORTFOLIO_VALUES);
 export const portfolioFilterSchema = portfolioSchema.or(z.literal('UNCLASSIFIED')).optional();
 export const taskStageKeySchema = z.string().min(1).max(80).regex(/^[a-zA-Z0-9_-]+$/);
+export const taskFieldDefinitionSchema = z.object({
+  key: taskStageKeySchema.refine(value => !['__proto__', 'prototype', 'constructor'].includes(value)), name: z.string().trim().min(1).max(80),
+  type: z.enum(['TEXT', 'NUMBER', 'BOOLEAN', 'DATE', 'URL', 'SELECT', 'MULTI_SELECT', 'RELATION']),
+  archived: z.boolean().default(false), options: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
+  target: z.enum(['TASK', 'PROJECT', 'CLIENT', 'PERSON']).optional(),
+}).strict().refine(field => ['SELECT', 'MULTI_SELECT'].includes(field.type)
+  ? Boolean(field.options?.length && new Set(field.options).size === field.options.length && !field.target)
+  : field.type === 'RELATION' ? Boolean(field.target && !field.options) : !field.options && !field.target,
+{ message: 'Choices are required for select fields; a target is required for relations.' });
+export const projectTaskFieldsSchema = z.object({ revision: z.number().int().min(0), fields: z.array(taskFieldDefinitionSchema).max(40) }).strict()
+  .refine(({ fields }) => ['key', 'name'].every(key => new Set(fields.map(field => field[key].toLowerCase())).size === fields.length), { message: 'Field keys and names must be unique.' });
+export const taskFieldValuesSchema = z.object({ revision: z.number().int().min(0), definitionRevision: z.number().int().min(0),
+  values: z.record(taskStageKeySchema.refine(value => !['__proto__', 'prototype', 'constructor'].includes(value)), z.unknown()).refine(value => Object.keys(value).length <= 40),
+}).strict();
 export const taskViewFiltersSchema = z.object({
   search: z.string().trim().max(200).optional(), stageKey: taskStageKeySchema.optional(),
   status: z.enum(TASK_STATUS_VALUES).optional(), priority: z.enum(TASK_PRIORITIES).optional(),

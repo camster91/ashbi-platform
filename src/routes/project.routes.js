@@ -26,6 +26,8 @@ import { projectTaskStagesSchema } from '../validators/schemas.js';
 import { saveTaskStages } from '../services/task-stages.service.js';
 import { projectTaskViewsSchema } from '../validators/schemas.js';
 import { readTaskViews, saveTaskViews } from '../services/task-views.service.js';
+import { projectTaskFieldsSchema } from '../validators/schemas.js';
+import { readTaskFieldDefinitions, saveTaskFieldDefinitions } from '../services/task-fields.service.js';
 
 /**
  * Check that a project's client and default owner belong to the caller's
@@ -50,6 +52,14 @@ export async function projectReferenceError(db, { clientId, defaultOwnerId }) {
 }
 
 export default async function projectRoutes(fastify) {
+  fastify.get('/:id/task-fields', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    return readTaskFieldDefinitions(request.prisma, request.params.id);
+  });
+  fastify.put('/:id/task-fields', { onRequest: [fastify.authenticate], preHandler: [validateBody(projectTaskFieldsSchema)] }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    return saveTaskFieldDefinitions(request.prisma, request.params.id, request.body);
+  });
   fastify.get('/:id/task-views', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
     return readTaskViews(request.prisma, request.params.id);

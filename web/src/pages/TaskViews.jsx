@@ -94,6 +94,7 @@ export default function TaskViews() {
         <option value="">All tasks</option>{config.views.map(view => <option key={view.key} value={view.key}>{view.name}</option>)}
       </select></label>
       <Link to={`/project/${projectId}/kanban`} className={`${controlClass} inline-flex items-center text-primary`}>Open task board</Link>
+      <Link to={`/project/${projectId}/fields`} className={`${controlClass} inline-flex items-center text-primary`}>Configure task fields</Link>
     </div>
     <fieldset disabled={save.isPending} className="flex flex-wrap gap-3 items-end">
       <label className="text-sm">Search<input aria-label="Search tasks in view" className={`block ${controlClass}`} value={filters.search || ''} maxLength={200} onChange={event => setFilter('search', event.target.value)} /></label>

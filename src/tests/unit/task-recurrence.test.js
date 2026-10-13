@@ -61,7 +61,7 @@ test('editing uses revisions, stopping preserves history, and an old date cannot
   assert.equal(stopped.status, 'COMPLETED');
 });
 test('worker creates one catch-up task, resets lifecycle and retains source date; retries make no duplicate', async () => {
-  const { db, created, rows } = fixture();
+  const { db, created, rows } = fixture([{ ...source(), fieldValues: { brief: 'Review design', estimate: 0 } }]);
   const now = new Date('2026-04-18T16:00:00Z');
   const result = await processRecurringTasks(db, { now });
   assert.equal(result.generated, 1);
@@ -70,6 +70,7 @@ test('worker creates one catch-up task, resets lifecycle and retains source date
   assert.equal(created[0].dueDate.toISOString().slice(0, 10), '2026-01-31');
   assert.equal(created[0].stageKey, undefined);
   assert.equal(created[0].recurrenceRule, undefined);
+  assert.deepEqual(created[0].fieldValues, { brief: 'Review design', estimate: 0 });
   assert.equal(rows[0].recurrenceNextDate.toISOString().slice(0, 10), '2026-04-30');
   assert.equal((await processRecurringTasks(db, { now })).generated, 0);
   assert.equal(created.length, 1);
