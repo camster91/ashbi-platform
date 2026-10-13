@@ -1,0 +1,36 @@
+import { expect, test } from '@playwright/test';
+import { createClientWithContact, json, loginAdminThroughUi } from './support';
+
+test('shared board templates create fresh projects and archive without losing workflow settings', async ({ page }) => {
+  await loginAdminThroughUi(page);
+  const admin = page.request;
+  const { client, suffix } = await createClientWithContact(admin, 'Board template QA');
+  const source = await json(await admin.post('/api/projects', { data: { clientId: client.id, name: `Source board ${suffix}` } }), 201);
+  await json(await admin.put(`/api/projects/${source.id}/task-stages`, { data: { revision: 0, stages: [{ key: 'review', name: 'Client approval', status: 'REVIEW' }] } }));
+  await json(await admin.put(`/api/projects/${source.id}/task-fields`, { data: { revision: 0, fields: [{ key: 'brief', name: 'Brief', type: 'TEXT', archived: false }] } }));
+  await json(await admin.put(`/api/projects/${source.id}/task-views`, { data: { revision: 0, views: [{ key: 'table', name: 'Briefs', layout: 'TABLE', sort: 'TITLE', filters: {}, columns: ['brief'] }] } }));
+  await json(await admin.post(`/api/tasks/${source.id}/quick`, { data: { title: `Private source task ${suffix}` } }));
+  await page.goto(`/project/${source.id}/templates`);
+  await page.getByLabel('Board template name').fill(`Delivery board ${suffix}`);
+  await page.getByRole('button', { name: 'Save board template', exact: true }).click();
+  await expect(page.getByText('Board template saved.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: `Use Delivery board ${suffix}`, exact: true }).click();
+  await page.getByLabel('Template project name').fill(`Freelance delivery ${suffix}`);
+  await page.getByLabel('Template project portfolio').selectOption('FREELANCE');
+  await page.getByRole('button', { name: 'Create project from template', exact: true }).click();
+  await expect(page).toHaveURL(/\/project\/[^/]+\/kanban$/);
+  const id = page.url().match(/\/project\/([^/]+)\/kanban$/)![1];
+  await expect(page.getByRole('heading', { name: 'Client approval', exact: true })).toBeVisible();
+  const project = await json(await admin.get(`/api/projects/${id}`));
+  expect(project.clientId).toBe(client.id);
+  expect(project.portfolio).toBe('FREELANCE');
+  expect(project.tasks).toHaveLength(0);
+  expect(project.taskFields[0].name).toBe('Brief');
+  expect(project.taskViews[0].columns).toEqual(['brief']);
+  await page.goto(`/project/${source.id}/templates`);
+  await page.getByRole('button', { name: `Archive Delivery board ${suffix}`, exact: true }).click();
+  await expect(page.getByRole('button', { name: `Use Delivery board ${suffix}`, exact: true })).toHaveCount(0);
+  await page.getByRole('checkbox', { name: 'Show archived templates' }).check();
+  await page.getByRole('button', { name: `Restore Delivery board ${suffix}`, exact: true }).click();
+  await expect(page.getByRole('button', { name: `Use Delivery board ${suffix}`, exact: true })).toBeVisible();
+});

@@ -28,6 +28,8 @@ import { projectTaskViewsSchema } from '../validators/schemas.js';
 import { readTaskViews, saveTaskViews } from '../services/task-views.service.js';
 import { projectTaskFieldsSchema } from '../validators/schemas.js';
 import { readTaskFieldDefinitions, saveTaskFieldDefinitions } from '../services/task-fields.service.js';
+import { boardTemplateSaveSchema, boardTemplateArchiveSchema, boardTemplateProjectSchema } from '../validators/schemas.js';
+import { saveBoardTemplate, listBoardTemplates, archiveBoardTemplate, projectFromBoardTemplate } from '../services/board-templates.service.js';
 
 /**
  * Check that a project's client and default owner belong to the caller's
@@ -52,6 +54,24 @@ export async function projectReferenceError(db, { clientId, defaultOwnerId }) {
 }
 
 export default async function projectRoutes(fastify) {
+  fastify.get('/board-templates', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    if (request.query.includeArchived !== undefined && !['true', 'false'].includes(request.query.includeArchived)) return reply.status(400).send({ error: 'Invalid archive filter' });
+    if (request.query.after !== undefined && (typeof request.query.after !== 'string' || !request.query.after.length || request.query.after.length > 80)) return reply.status(400).send({ error: 'Invalid template cursor' });
+    return listBoardTemplates(request.prisma, request.query.includeArchived === 'true', request.query.after);
+  });
+  fastify.post('/board-templates', { onRequest: [fastify.authenticate], preHandler: [validateBody(boardTemplateSaveSchema)] }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    return reply.status(201).send(await saveBoardTemplate(request.prisma, request.body));
+  });
+  fastify.patch('/board-templates/:templateId', { onRequest: [fastify.authenticate], preHandler: [validateBody(boardTemplateArchiveSchema)] }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    return archiveBoardTemplate(request.prisma, request.params.templateId, request.body.archived);
+  });
+  fastify.post('/from-board-template', { onRequest: [fastify.authenticate], preHandler: [validateBody(boardTemplateProjectSchema)] }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    return reply.status(201).send(await projectFromBoardTemplate(request.prisma, request.body));
+  });
   fastify.get('/:id/task-fields', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
     return readTaskFieldDefinitions(request.prisma, request.params.id);
@@ -676,6 +696,7 @@ Brief: ${brief}`;
     onRequest: [fastify.authenticate]
   }, async () => {
     const templates = await fastify.prisma.projectTemplate.findMany({
+      where: { kind: 'PROJECT' },
       orderBy: { updatedAt: 'desc' }
     });
 
@@ -786,7 +807,7 @@ Brief: ${brief}`;
     const { templateId, clientId, name } = request.body || {};
 
     const template = await fastify.prisma.projectTemplate.findUnique({ where: { id: templateId } });
-    if (!template) {
+    if (!template || template.kind && template.kind !== 'PROJECT') {
       return reply.status(404).send({ error: 'Template not found' });
     }
 
@@ -864,7 +885,7 @@ Brief: ${brief}`;
     const { templateId } = request.params;
 
     try {
-      await fastify.prisma.projectTemplate.delete({ where: { id: templateId } });
+      await fastify.prisma.projectTemplate.delete({ where: { id: templateId, kind: 'PROJECT' } });
       return { success: true };
     } catch (error) {
       return reply.status(404).send({ error: 'Template not found' });

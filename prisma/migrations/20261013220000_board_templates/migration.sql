@@ -1,0 +1,1 @@
+ALTER TABLE "project_templates" ADD COLUMN "kind" TEXT NOT NULL DEFAULT 'PROJECT', ADD COLUMN "boardConfig" JSONB;
