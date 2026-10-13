@@ -21,6 +21,6 @@ test('an invoice with no amount in its currency is refused, never converted', ()
 test('the seed persists the currency it billed in', () => {
   const seed = readFileSync(new URL('../../../prisma/bonsai-seed.js', import.meta.url), 'utf8');
   assert.match(seed, /bonsaiInvoiceAmount\(inv\)/);
-  assert.match(seed, /total: amount,\n\s+currency,/);
+  assert.match(seed, /total: amount,\r?\n\s+currency,/);
   assert.doesNotMatch(seed, /amountCad \* 0\.8/);
 });

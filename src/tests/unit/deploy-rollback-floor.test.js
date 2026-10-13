@@ -10,15 +10,19 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-const script = fs.readFileSync(new URL('../../../scripts/deploy-vps-direct.sh', import.meta.url), 'utf8');
+const script = fs.readFileSync(new URL('../../../scripts/deploy-vps-direct.sh', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+// Use the native Git-for-Windows runtime, not the WindowsApps WSL launcher.
+const bashBinary = process.env.BASH_TEST_EXECUTABLE || (process.platform === 'win32' ? path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git', 'bin', 'bash.exe') : 'bash');
+const bashPath = value => process.platform === 'win32' ? value.replaceAll('\\', '/').replace(/^([A-Za-z]):/, (_, drive) => `/${drive.toLowerCase()}`) : value;
+const shellQuote = value => `'${bashPath(value).replaceAll("'", "'\\''")}'`;
 const floorBlock = script.slice(script.indexOf('# --- rollback floor ---'), script.indexOf('# --- end rollback floor ---'));
 const CHAT = '20260927030000_chat_message_visibility';
 
 function bash(releaseDir, images, body) {
   // An image named broken:* makes the probe itself fail (docker exits 125).
   const stub = `docker() { [[ $1 == run && $3 == --entrypoint && $4 == test ]] || return 2; [[ $5 == broken:* ]] && return 125; grep -qxF "$5 $7" "$IMAGES"; }`;
-  const program = `set -euo pipefail\nRELEASE_DIR=${JSON.stringify(releaseDir)}\nIMAGES=${JSON.stringify(images)}\n${stub}\n${floorBlock}\n${body}`;
-  return execFileSync('bash', ['-c', program], { encoding: 'utf8' });
+  const program = `set -euo pipefail\nRELEASE_DIR=${shellQuote(releaseDir)}\nIMAGES=${shellQuote(images)}\n${stub}\n${floorBlock}\n${body}`;
+  return execFileSync(bashBinary, ['-c', program], { encoding: 'utf8' });
 }
 
 function fixture() {
@@ -75,7 +79,7 @@ test('a refused rollback also removes the rejected candidate', () => {
 
 function stopProbe(dockerBody) {
   const program = `set -euo pipefail\nRELEASE_DIR=/nonexistent\n${dockerBody}\n${floorBlock}\nif stop_below_floor api 30; then echo stopped; else echo still-running; fi\ncat "$LOG"`;
-  return execFileSync('bash', ['-c', program], { encoding: 'utf8', env: { ...process.env, LOG: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'stop-')), 'log') } });
+  return execFileSync(bashBinary, ['-c', program], { encoding: 'utf8', env: { ...process.env, LOG: bashPath(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'stop-')), 'log')) } });
 }
 
 test('stop_below_floor force-removes a container whose stop did not take, and fails if it still runs', () => {
@@ -119,7 +123,7 @@ test('a probe that cannot run fails closed: the floor is still raised and the im
 });
 
 test('container_image distinguishes a missing container from an unreadable one', () => {
-  const run = (dockerBody) => execFileSync('bash', ['-c', `set -euo pipefail\nRELEASE_DIR=/nonexistent\n${dockerBody}\n${floorBlock}\nprintf '[%s]' "$(container_image api)"`], { encoding: 'utf8' });
+  const run = (dockerBody) => execFileSync(bashBinary, ['-c', `set -euo pipefail\nRELEASE_DIR=/nonexistent\n${dockerBody}\n${floorBlock}\nprintf '[%s]' "$(container_image api)"`], { encoding: 'utf8' });
   assert.equal(run('docker() { echo "ashbi:old"; }'), '[ashbi:old]');
   assert.equal(run('docker() { echo "Error: No such object: api" >&2; return 1; }'), '[]');
   assert.equal(run('docker() { echo "error: no such object: api" >&2; return 1; }'), '[]');

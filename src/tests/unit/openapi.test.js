@@ -117,7 +117,7 @@ function operationsOf(spec) {
 test('docs/openapi.json matches the application', async () => {
   const actual = await getSpecText();
   const expected = fs.existsSync(OPENAPI_URL) ? fs.readFileSync(OPENAPI_URL, 'utf8') : '';
-  assert.ok(actual === expected, 'docs/openapi.json is stale; run npm run docs:openapi');
+  assert.equal(actual.replaceAll('\r\n', '\n'), expected.replaceAll('\r\n', '\n'), 'docs/openapi.json is stale; run npm run docs:openapi');
 });
 
 test('every route in the committed route table is in the spec', async () => {

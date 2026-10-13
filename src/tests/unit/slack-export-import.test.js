@@ -343,10 +343,11 @@ test('an import for organization A never reads or writes organization B', async 
 });
 
 test('path traversal: unsafe channel names, links and oversize files are refused', async () => {
+  const root = path.resolve(os.tmpdir(), 'export');
   for (const unsafe of ['../outside', '/etc/passwd', 'a/../../b', 'a\\..\\b', '']) {
-    assert.throws(() => resolveInsideExport('/tmp/export', unsafe), /relative to the export root/);
+    assert.throws(() => resolveInsideExport(root, unsafe), /relative to the export root/);
   }
-  assert.equal(resolveInsideExport('/tmp/export', 'general/2026-01-01.json'), '/tmp/export/general/2026-01-01.json');
+  assert.equal(resolveInsideExport(root, 'general/2026-01-01.json'), path.join(root, 'general', '2026-01-01.json'));
 
   const exportData = await readSlackExport(traversalExport);
   assert.deepEqual(exportData.findings.channelFindings.map((finding) => finding.code).sort(), ['INVALID_CHANNEL', 'UNSAFE_CHANNEL_NAME', 'UNSAFE_CHANNEL_NAME']);

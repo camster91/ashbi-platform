@@ -55,8 +55,8 @@ test('docs/data-dictionary.md matches prisma/schema.prisma', () => {
   const expected = generateDataDictionary();
   assert.equal(expected, generateDataDictionary(), 'generator output must be deterministic');
   assert.equal(
-    fs.readFileSync(DOC_URL, 'utf8'),
-    expected,
+    fs.readFileSync(DOC_URL, 'utf8').replaceAll('\r\n', '\n'),
+    expected.replaceAll('\r\n', '\n'),
     'docs/data-dictionary.md is stale; run npm run docs:data-dictionary',
   );
 });

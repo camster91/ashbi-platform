@@ -248,8 +248,11 @@ test('exportWorkspace copies safe files and records unsafe ones as exceptions wi
     assert.deepEqual(codes(result), ['a2:FILE_QUARANTINED', 'a3:FILE_NOT_REGULAR', 'a4:FILE_MISSING', 'b1:FILE_NOT_REGULAR', 'e2:FILE_NOT_RECEIPT']);
     const copied = fs.readdirSync(path.join(outputDir, 'files'), { recursive: true }).map(String);
     assert.ok(!copied.some((name) => name.includes('secret')), 'nothing outside the upload root is copied');
-    assert.equal(fs.statSync(outputDir).mode & 0o777, 0o700);
-    assert.equal(fs.statSync(path.join(outputDir, 'manifest.json')).mode & 0o777, 0o600);
+    // Windows mode bits do not implement Unix owner/group permission modes.
+    if (process.platform !== 'win32') {
+      assert.equal(fs.statSync(outputDir).mode & 0o777, 0o700);
+      assert.equal(fs.statSync(path.join(outputDir, 'manifest.json')).mode & 0o777, 0o600);
+    }
     assert.equal((await verifyWorkspaceExportDirectory(outputDir, { expectedManifestSha256: result.manifestSha256 })).valid, true);
   });
 });
@@ -275,7 +278,7 @@ test('exportWorkspace verifies expense receipts against receiptChecksumSha256', 
 });
 
 test('exportWorkspace records an unreadable upload as FILE_UNREADABLE and finishes', {
-  skip: typeof process.getuid === 'function' && process.getuid() === 0 && 'root can read a mode-000 file',
+  skip: process.platform === 'win32' ? 'Windows chmod does not implement a mode-000 unreadable file' : typeof process.getuid === 'function' && process.getuid() === 0 && 'root can read a mode-000 file',
 }, async () => {
   await withExport(({ uploads }) => {
     fs.writeFileSync(path.join(uploads, 'locked.png'), 'x');
