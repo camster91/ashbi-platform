@@ -52,7 +52,7 @@ export default function TaskCustomFields({ taskId }) {
   return <section aria-label="Custom task fields" className="my-6 space-y-3">
     <div className="flex flex-wrap items-center gap-3"><h2 className="font-semibold">Custom fields</h2><Link className="text-primary min-h-11 inline-flex items-center" to={`/project/${config.projectId}/fields`}>Configure fields</Link></div>
     <form className="space-y-3" onSubmit={event => { event.preventDefault(); save.mutate(); }}>
-      <fieldset disabled={save.isPending} className="space-y-3">
+      <fieldset disabled={save.isPending} className="min-w-0 space-y-3">
         {!fields.length && <p className="text-sm text-muted-foreground">No active custom fields in this project.</p>}
         {fields.map(field => <div key={field.key}><p className="text-sm font-medium mb-1">{field.name}</p><FieldInput field={field} taskId={taskId} relation={config.relations[field.key]} value={values[field.key]} onChange={value => setDraft({ config, values: { ...values, [field.key]: value } })} /></div>)}
         {!!fields.length && <button type="submit" disabled={!draft || !Object.keys(changes).length} className="min-h-11 rounded bg-primary text-primary-foreground px-3 disabled:opacity-50">Save custom fields</button>}

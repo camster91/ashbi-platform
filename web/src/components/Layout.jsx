@@ -500,7 +500,7 @@ export default function Layout({ children }) {
 
       {/* Main content */}
       <main className={cn(
-        'flex-1 min-h-screen flex flex-col w-full transition-all duration-300',
+        'flex-1 min-w-0 min-h-screen flex flex-col w-full transition-all duration-300 motion-reduce:transition-none',
         sidebarCollapsed ? 'lg:ml-[60px]' : 'lg:ml-72'
       )}>
         {/* Top bar */}

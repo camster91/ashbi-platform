@@ -10,7 +10,7 @@ const targets = ['TASK', 'PROJECT', 'CLIENT', 'PERSON'];
 const control = 'min-h-11 rounded border border-border bg-card px-3 max-w-full';
 function FieldEditor({ current, onChange, existing, index, onRemove }) {
   const choices = ['SELECT', 'MULTI_SELECT'].includes(current.type);
-  return <fieldset className="rounded border border-border p-3 space-y-3">
+  return <fieldset className="min-w-0 rounded border border-border p-3 space-y-3">
     <legend className="px-2">{current.name || 'New field'}</legend>
     <div className="flex flex-wrap gap-3">
       <label>Name<input aria-label={`Field ${index + 1} name`} required className={`block ${control}`} value={current.name} maxLength={80} onChange={event => onChange({ ...current, name: event.target.value })} /></label>
@@ -44,7 +44,7 @@ export default function TaskFieldSettings() {
     <h1 className="text-2xl font-heading font-bold">Task fields — {config.projectName}</h1>
     <p>Define shared fields for this project. Archive a field to hide it while retaining its values. Existing types and choices are preserved.</p>
     <form className="space-y-4" onSubmit={event => { event.preventDefault(); save.mutate(); }}>
-      <fieldset disabled={save.isPending} className="space-y-4">
+      <fieldset disabled={save.isPending} className="min-w-0 space-y-4">
         {config.fields.map((field, index) => <FieldEditor key={field.key} current={field} index={index} onChange={change} onRemove={() => setDraft({ ...config, fields: config.fields.filter(item => item.key !== field.key) })} existing={query.data.fields.some(item => item.key === field.key)} />)}
         {!config.fields.length && <p>No custom fields yet.</p>}
         <div className="flex flex-wrap gap-3">

@@ -89,8 +89,8 @@ export default function TaskViews() {
   const columns = columnKeys.map(key => fields.find(field => field.key === key && !field.archived)).filter(Boolean);
   const board = {};
   for (const task of tasks) (board[task.status || 'PENDING'] ??= []).push(task);
-  const controlClass = 'min-h-11 rounded border border-border bg-card px-3';
-  return <div className="space-y-4">
+  const controlClass = 'min-h-11 max-w-full rounded border border-border bg-card px-3';
+  return <div className="space-y-4 min-w-0">
     <div><Link to={`/project/${projectId}`} className="text-sm text-primary">{config.projectName}</Link><h1 className="text-2xl font-heading font-bold">Task views</h1>
       <p className="text-sm text-muted-foreground">Save reusable views for this project. Existing task permissions still apply.</p></div>
     <div className="flex flex-wrap gap-3 items-end">
@@ -101,7 +101,7 @@ export default function TaskViews() {
       <Link to={`/project/${projectId}/kanban`} className={`${controlClass} inline-flex items-center text-primary`}>Open task board</Link>
       <Link to={`/project/${projectId}/fields`} className={`${controlClass} inline-flex items-center text-primary`}>Configure task fields</Link>
     </div>
-    <fieldset disabled={save.isPending} className="flex flex-wrap gap-3 items-end">
+    <fieldset disabled={save.isPending} className="min-w-0 flex flex-wrap gap-3 items-end">
       <label className="text-sm">Search<input aria-label="Search tasks in view" className={`block ${controlClass}`} value={filters.search || ''} maxLength={200} onChange={event => setFilter('search', event.target.value)} /></label>
       <label className="text-sm">Status<select aria-label="View status filter" className={`block ${controlClass}`} value={filters.status || ''} onChange={event => setFilter('status', event.target.value)}>
         <option value="">All statuses</option>{STATUSES.map(status => <option key={status} value={status}>{text(status)}</option>)}
@@ -118,7 +118,7 @@ export default function TaskViews() {
       </select></label>
       <label className="text-sm">Layout<select aria-label="Task view layout" className={`block ${controlClass}`} value={layout} onChange={event => setLayout(event.target.value)}><option value="TABLE">Table</option><option value="BOARD">Board</option><option value="CALENDAR">Calendar</option></select></label>
     </fieldset>
-    {(fields.some(field => !field.archived) || columnKeys.length > 0) && <fieldset className="rounded border border-border p-3" disabled={save.isPending}>
+    {(fields.some(field => !field.archived) || columnKeys.length > 0) && <fieldset className="min-w-0 rounded border border-border p-3" disabled={save.isPending}>
       <legend className="px-2 text-sm">Custom table columns</legend>
       <div className="flex flex-wrap gap-3">{fields.filter(field => !field.archived).map(field => <label key={field.key} className="inline-flex min-h-11 items-center gap-2">
         <input type="checkbox" checked={columnKeys.includes(field.key)} disabled={!columnKeys.includes(field.key) && columnKeys.length >= 20} onChange={event => setColumnKeys(keys => event.target.checked ? [...keys, field.key] : keys.filter(key => key !== field.key))} />{field.name}
