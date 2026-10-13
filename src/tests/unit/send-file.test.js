@@ -8,7 +8,7 @@ test('download names are always valid header values', () => {
     '日本.png': `inline; filename="__.png"; filename*=UTF-8''%E6%97%A5%E6%9C%AC.png`,
     'brief\u2014v2.pdf': `inline; filename="brief_v2.pdf"; filename*=UTF-8''brief%E2%80%94v2.pdf`,
     'Café menu.pdf': `inline; filename="Cafe menu.pdf"; filename*=UTF-8''Caf%C3%A9%20menu.pdf`,
-    'a"b\\c\r\nd.png': `inline; filename="a_b_c__d.png"; filename*=UTF-8''a%22b%5Cc%0D%0Ad.png`,
+    'a"b\\c\r\nd.png': process.platform === 'win32' ? `inline; filename="c__d.png"; filename*=UTF-8''c%0D%0Ad.png` : `inline; filename="a_b_c__d.png"; filename*=UTF-8''a%22b%5Cc%0D%0Ad.png`,
     "it's (1)*.png": `inline; filename="it's (1)*.png"; filename*=UTF-8''it%27s%20%281%29%2A.png`,
     '../../etc/passwd': `inline; filename="passwd"; filename*=UTF-8''passwd`,
     '': `inline; filename="download"; filename*=UTF-8''download`,

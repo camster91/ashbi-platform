@@ -111,6 +111,10 @@ test('a second SIGTERM joins the drain instead of killing the process mid-drain'
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lifecycle-'));
   const script = path.join(dir, 'drain.mjs');
   const marker = path.join(dir, 'drained');
+  // Windows kill(SIGTERM) force-terminates the process, rather than delivering
+  // a catchable POSIX signal. Dispatch the real handler event in its child;
+  // Unix keeps the actual OS-signal coverage.
+  const signalSelf = process.platform === 'win32' ? "process.emit('SIGTERM')" : "process.kill(process.pid, 'SIGTERM')";
   fs.writeFileSync(script, `
     import fs from 'node:fs';
     import { createShutdown, installProcessHandlers } from ${JSON.stringify(lifecycleUrl)};
@@ -122,7 +126,7 @@ test('a second SIGTERM joins the drain instead of killing the process mid-drain'
     }]] });
     installProcessHandlers({ shutdown, logger });
     process.send?.('ready');
-    setTimeout(() => { process.kill(process.pid, 'SIGTERM'); setTimeout(() => process.kill(process.pid, 'SIGTERM'), 50); }, 20);
+    setTimeout(() => { ${signalSelf}; setTimeout(() => { ${signalSelf}; }, 50); }, 20);
   `);
   const result = spawnSync(process.execPath, [script], { timeout: 10_000 });
   assert.equal(result.status, 0, result.stderr.toString());
