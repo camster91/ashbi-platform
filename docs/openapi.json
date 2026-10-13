@@ -1031,6 +1031,82 @@
         ],
         "type": "object"
       },
+      "BoardTemplateArchive": {
+        "additionalProperties": false,
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "archived"
+        ],
+        "type": "object"
+      },
+      "BoardTemplateProject": {
+        "additionalProperties": false,
+        "properties": {
+          "clientId": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "portfolio": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ASHBI_DESIGN",
+                  "FREELANCE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "templateId": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "templateId",
+          "clientId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "BoardTemplateSave": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "projectId": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "name"
+        ],
+        "type": "object"
+      },
       "Booking": {
         "properties": {
           "date": {
@@ -23881,6 +23957,200 @@
           }
         ],
         "summary": "POST /api/projects",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/projects/board-templates": {
+      "get": {
+        "operationId": "get_api_projects_board_templates",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/projects/board-templates",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
+      "post": {
+        "operationId": "post_api_projects_board_templates",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BoardTemplateSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/projects/board-templates",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/projects/board-templates/{templateId}": {
+      "patch": {
+        "operationId": "patch_api_projects_board_templates_templateId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "templateId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BoardTemplateArchive"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PATCH /api/projects/board-templates/:templateId",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/projects/from-board-template": {
+      "post": {
+        "operationId": "post_api_projects_from_board_template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BoardTemplateProject"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/projects/from-board-template",
         "tags": [
           "projects"
         ],

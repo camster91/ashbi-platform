@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 376 |
+| staff | 380 |
 | staff (inline) | 1 |
-| **total** | 570 |
+| **total** | 574 |
 
 ## Routes by prefix
 
@@ -730,6 +730,10 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/projects/:projectId/revisions` | staff | scoped |  |
 | POST | `/api/projects/:projectId/revisions` | staff | scoped |  |
 | GET | `/api/projects/:projectId/time-entries` | staff | scoped |  |
+| GET | `/api/projects/board-templates` | staff | scoped |  |
+| POST | `/api/projects/board-templates` | staff | scoped |  |
+| PATCH | `/api/projects/board-templates/:templateId` | staff | scoped |  |
+| POST | `/api/projects/from-board-template` | staff | scoped |  |
 | POST | `/api/projects/from-template` | staff | scoped |  |
 | GET | `/api/projects/templates` | staff | scoped |  |
 | POST | `/api/projects/templates` | staff | scoped |  |
