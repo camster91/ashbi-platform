@@ -4009,6 +4009,104 @@
         ],
         "type": "object"
       },
+      "ProjectTaskViews": {
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "views": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "filters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "priority": {
+                      "enum": [
+                        "CRITICAL",
+                        "HIGH",
+                        "NORMAL",
+                        "LOW"
+                      ],
+                      "type": "string"
+                    },
+                    "search": {
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    "stageKey": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "pattern": "^[a-zA-Z0-9_-]+$",
+                      "type": "string"
+                    },
+                    "status": {
+                      "enum": [
+                        "PENDING",
+                        "UPCOMING",
+                        "IMMEDIATE",
+                        "IN_PROGRESS",
+                        "BLOCKED",
+                        "WAITING_US",
+                        "WAITING_CLIENT",
+                        "COMPLETED",
+                        "TODO",
+                        "REVIEW"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "key": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "pattern": "^[a-zA-Z0-9_-]+$",
+                  "type": "string"
+                },
+                "layout": {
+                  "enum": [
+                    "TABLE",
+                    "BOARD",
+                    "CALENDAR"
+                  ],
+                  "type": "string"
+                },
+                "name": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sort": {
+                  "enum": [
+                    "PRIORITY",
+                    "DUE_DATE",
+                    "TITLE"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "name",
+                "layout",
+                "sort",
+                "filters"
+              ],
+              "type": "object"
+            },
+            "maxItems": 20,
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision",
+          "views"
+        ],
+        "type": "object"
+      },
       "ProjectTemplateSave": {
         "properties": {
           "description": {
@@ -24583,6 +24681,118 @@
           }
         ],
         "summary": "PUT /api/projects/:id/task-stages",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/projects/{id}/task-views": {
+      "get": {
+        "operationId": "get_api_projects_id_task_views",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/projects/:id/task-views",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
+      "put": {
+        "operationId": "put_api_projects_id_task_views",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectTaskViews"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PUT /api/projects/:id/task-views",
         "tags": [
           "projects"
         ],

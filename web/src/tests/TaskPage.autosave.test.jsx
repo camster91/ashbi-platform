@@ -117,4 +117,19 @@ describe('TaskPage content autosave', () => {
     expect(updateTask).toHaveBeenCalledWith('task-1', { status: 'COMPLETED' });
     expect(updateTaskContent).not.toHaveBeenCalled();
   });
+  it('retains a review task status in the editor and supports legacy todo work', async () => {
+    const previous = task.status;
+    task.status = 'REVIEW';
+    try {
+      renderTask();
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit task properties' }));
+      const select = screen.getByRole('combobox', { name: 'Task status' });
+      expect(select).toHaveValue('REVIEW');
+      expect(updateTask).not.toHaveBeenCalled();
+      fireEvent.change(select, { target: { value: 'TODO' } });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
+      expect(updateTask).toHaveBeenCalledWith('task-1', { status: 'TODO' });
+      expect(updateTaskContent).not.toHaveBeenCalled();
+    } finally { task.status = previous; }
+  });
 });

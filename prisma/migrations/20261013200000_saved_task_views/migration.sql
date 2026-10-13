@@ -1,0 +1,2 @@
+ALTER TABLE "projects" ADD COLUMN "taskViews" JSONB;
+ALTER TABLE "projects" ADD COLUMN "taskViewsRevision" INTEGER NOT NULL DEFAULT 0;
