@@ -118,10 +118,13 @@ export default async function timeRoutes(fastify) {
   // Get my time entries
   fastify.get('/time-entries/my', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
     const { startDate, endDate, projectId } = request.query;
+    const portfolio = portfolioFilterSchema.safeParse(request.query.portfolio);
+    if (!portfolio.success) return reply.status(400).send({ error: 'Invalid portfolio filter' });
 
     const where = { userId: request.user.id };
+    if (portfolio.data) where.project = portfolioWhere(portfolio.data);
 
     if (projectId) where.projectId = projectId;
 
@@ -305,13 +308,21 @@ export default async function timeRoutes(fastify) {
       if (endDate) where.date.lte = new Date(endDate);
     }
 
-    const entries = await request.prisma.timeEntry.findMany({
-      where,
-      include: {
-        project: { select: { id: true, name: true } },
-        user: { select: { id: true, name: true } }
-      }
-    });
+    const entries = [];
+    for (;;) {
+      const page = await request.prisma.timeEntry.findMany({
+        where,
+        include: {
+          project: { select: { id: true, name: true } },
+          user: { select: { id: true, name: true } }
+        },
+        orderBy: [{ id: 'asc' }],
+        skip: entries.length,
+        take: TIMESHEET_PAGE,
+      });
+      entries.push(...page);
+      if (page.length < TIMESHEET_PAGE) break;
+    }
 
     // Group by project
     const byProject = entries.reduce((acc, entry) => {

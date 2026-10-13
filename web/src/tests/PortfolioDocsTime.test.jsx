@@ -1,0 +1,37 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, expect, it, vi } from 'vitest';
+import Docs from '../pages/Docs';
+import Timesheets from '../pages/Timesheets';
+import { api } from '../lib/api';
+
+vi.mock('../hooks/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'team', role: 'TEAM' } }) }));
+vi.mock('../lib/api', () => ({ api: { getAllNotes: vi.fn(), getWeeklyTimesheet: vi.fn() } }));
+function setup(component, url) {
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[url]}>{component}</MemoryRouter></QueryClientProvider>);
+}
+beforeEach(() => vi.clearAllMocks());
+it('loads later documents and resets pagination when switching portfolio', async () => {
+  api.getAllNotes.mockImplementation(async ({ page, portfolio }) => ({
+    notes: [{ id: `${portfolio}-${page}`, title: `${portfolio} brief ${page}`, type: 'DOC', updatedAt: '2026-10-13', project: { id: 'p', name: 'Project' } }],
+    pagination: { page, pages: portfolio === 'FREELANCE' ? 2 : 1 },
+  }));
+  setup(<Docs />, '/docs?portfolio=FREELANCE');
+  expect(await screen.findByText('FREELANCE brief 1')).toBeInTheDocument();
+  expect(screen.getByLabelText('Work portfolio')).toHaveValue('FREELANCE');
+  fireEvent.click(screen.getByRole('button', { name: 'Load more documents' }));
+  expect(await screen.findByText('FREELANCE brief 2')).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Work portfolio'), { target: { value: 'ASHBI_DESIGN' } });
+  expect(await screen.findByText('ASHBI_DESIGN brief 1')).toBeInTheDocument();
+  expect(screen.queryByText('FREELANCE brief 2')).not.toBeInTheDocument();
+  expect(api.getAllNotes).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, portfolio: 'ASHBI_DESIGN', paginated: 'true' }));
+});
+it('restores the timesheet portfolio from the URL and refetches all work', async () => {
+  api.getWeeklyTimesheet.mockResolvedValue({ timesheets: [] });
+  setup(<Timesheets />, '/timesheets?portfolio=UNCLASSIFIED');
+  await waitFor(() => expect(api.getWeeklyTimesheet).toHaveBeenCalledWith(expect.any(String), { portfolio: 'UNCLASSIFIED' }));
+  fireEvent.change(screen.getByLabelText('Work portfolio'), { target: { value: '' } });
+  await waitFor(() => expect(api.getWeeklyTimesheet).toHaveBeenLastCalledWith(expect.any(String), {}));
+});
