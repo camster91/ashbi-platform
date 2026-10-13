@@ -32,6 +32,7 @@ import { normalizeTaskBlocks } from '../lib/taskContent';
 import { Button, Badge, Card, EmptyState, LoadingState } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import TaskRecurrence from '../components/TaskRecurrence';
+import TaskCustomFields from '../components/TaskCustomFields';
 
 // Breadcrumbs component
 function Breadcrumbs({ taskId }) {
@@ -624,6 +625,7 @@ export default function TaskPage() {
       {/* Properties */}
       <PropertiesPanel task={task} onUpdate={propertyMutation.mutate} isSaving={propertyMutation.isPending} saveError={propertyMutation.isError} />
       <TaskRecurrence key={task.id} task={task} />
+      <TaskCustomFields key={`fields-${task.id}`} taskId={task.id} />
 
       {/* Content editor */}
       <div className="min-h-[300px]">

@@ -8,6 +8,7 @@ import LoadingState from '../components/ui/LoadingState';
 import QueryErrorState from '../components/QueryErrorState';
 import { buildKanbanColumns } from './TaskKanban';
 import TaskViewCalendar from '../components/TaskViewCalendar';
+import TaskFieldCell from '../components/TaskFieldCell';
 
 const STATUSES = ['PENDING', 'IN_PROGRESS', 'REVIEW', 'WAITING_CLIENT', 'WAITING_US', 'BLOCKED', 'COMPLETED', 'UPCOMING', 'IMMEDIATE', 'TODO'];
 const text = value => String(value || '').toLowerCase().replaceAll('_', ' ');
@@ -29,6 +30,7 @@ export default function TaskViews() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('PRIORITY');
   const [layout, setLayout] = useState('TABLE');
+  const [columnKeys, setColumnKeys] = useState([]);
   const [name, setName] = useState('');
   const [saveError, setSaveError] = useState('');
   const configQuery = useQuery({ queryKey: ['taskViews', projectId], queryFn: () => api.getTaskViews(projectId) });
@@ -37,6 +39,7 @@ export default function TaskViews() {
   useEffect(() => {
     setFilters(selected?.filters ?? {}); setSort(selected?.sort ?? 'PRIORITY');
     setLayout(selected?.layout ?? 'TABLE'); setName(selected?.name ?? ''); setSaveError('');
+    setColumnKeys(selected?.columns ?? []);
   }, [selected]);
   useEffect(() => {
     const timeout = setTimeout(() => setSearch(filters.search?.trim() || ''), 300);
@@ -75,17 +78,19 @@ export default function TaskViews() {
   }
   function saveCurrent(asNew) {
     const key = asNew ? crypto.randomUUID() : selected.key;
-    const view = { key, name: name.trim(), filters, sort, layout };
+    const view = { key, name: name.trim(), filters, sort, layout, ...(columnKeys.length ? { columns: columnKeys } : {}) };
     const views = asNew ? [...config.views, view] : config.views.map(item => item.key === key ? view : item);
     save.mutate({ views, selectedKey: key });
   }
   if (configQuery.isLoading) return <LoadingState label="Loading task views" />;
   if (configQuery.isError) return <QueryErrorState error={configQuery.error} message="Task views could not be loaded" onRetry={configQuery.refetch} />;
   const tasks = sortViewTasks(tasksQuery.data ?? [], sort);
+  const fields = config.fields ?? [];
+  const columns = columnKeys.map(key => fields.find(field => field.key === key && !field.archived)).filter(Boolean);
   const board = {};
   for (const task of tasks) (board[task.status || 'PENDING'] ??= []).push(task);
-  const controlClass = 'min-h-11 rounded border border-border bg-card px-3';
-  return <div className="space-y-4">
+  const controlClass = 'min-h-11 max-w-full rounded border border-border bg-card px-3';
+  return <div className="space-y-4 min-w-0">
     <div><Link to={`/project/${projectId}`} className="text-sm text-primary">{config.projectName}</Link><h1 className="text-2xl font-heading font-bold">Task views</h1>
       <p className="text-sm text-muted-foreground">Save reusable views for this project. Existing task permissions still apply.</p></div>
     <div className="flex flex-wrap gap-3 items-end">
@@ -94,8 +99,9 @@ export default function TaskViews() {
         <option value="">All tasks</option>{config.views.map(view => <option key={view.key} value={view.key}>{view.name}</option>)}
       </select></label>
       <Link to={`/project/${projectId}/kanban`} className={`${controlClass} inline-flex items-center text-primary`}>Open task board</Link>
+      <Link to={`/project/${projectId}/fields`} className={`${controlClass} inline-flex items-center text-primary`}>Configure task fields</Link>
     </div>
-    <fieldset disabled={save.isPending} className="flex flex-wrap gap-3 items-end">
+    <fieldset disabled={save.isPending} className="min-w-0 flex flex-wrap gap-3 items-end">
       <label className="text-sm">Search<input aria-label="Search tasks in view" className={`block ${controlClass}`} value={filters.search || ''} maxLength={200} onChange={event => setFilter('search', event.target.value)} /></label>
       <label className="text-sm">Status<select aria-label="View status filter" className={`block ${controlClass}`} value={filters.status || ''} onChange={event => setFilter('status', event.target.value)}>
         <option value="">All statuses</option>{STATUSES.map(status => <option key={status} value={status}>{text(status)}</option>)}
@@ -112,6 +118,14 @@ export default function TaskViews() {
       </select></label>
       <label className="text-sm">Layout<select aria-label="Task view layout" className={`block ${controlClass}`} value={layout} onChange={event => setLayout(event.target.value)}><option value="TABLE">Table</option><option value="BOARD">Board</option><option value="CALENDAR">Calendar</option></select></label>
     </fieldset>
+    {(fields.some(field => !field.archived) || columnKeys.length > 0) && <fieldset className="min-w-0 rounded border border-border p-3" disabled={save.isPending}>
+      <legend className="px-2 text-sm">Custom table columns</legend>
+      <div className="flex flex-wrap gap-3">{fields.filter(field => !field.archived).map(field => <label key={field.key} className="inline-flex min-h-11 items-center gap-2">
+        <input type="checkbox" checked={columnKeys.includes(field.key)} disabled={!columnKeys.includes(field.key) && columnKeys.length >= 20} onChange={event => setColumnKeys(keys => event.target.checked ? [...keys, field.key] : keys.filter(key => key !== field.key))} />{field.name}
+      </label>)}</div>
+      {columnKeys.some(key => !fields.some(field => field.key === key && !field.archived)) && <p role="status" className="text-sm">Some saved columns are archived or unavailable. <button type="button" className="min-h-11 underline" onClick={() => setColumnKeys(columns.map(field => field.key))}>Clear unavailable columns</button></p>}
+      <p className="text-xs text-muted-foreground">Choose up to 20 fields. Columns apply to the table layout.</p>
+    </fieldset>}
     <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); saveCurrent(true); }}>
       <label className="text-sm">View name<input aria-label="Task view name" value={name} onChange={event => setName(event.target.value)} required maxLength={80} className={`block ${controlClass}`} /></label>
       <button type="submit" disabled={save.isPending || !name.trim() || config.views.length >= 20} className={`${controlClass} bg-primary text-primary-foreground disabled:opacity-50`}>Save as new view</button>
@@ -128,10 +142,10 @@ export default function TaskViews() {
           <ul className="space-y-2">{column.tasks.map(task => <li key={task.id}><Link className="block min-h-11 rounded bg-card border border-border p-3 text-primary" to={`/task/${task.id}`}>{task.title}</Link></li>)}</ul>
         </section>)}
       </div> : <div className="overflow-x-auto min-w-0 focus-visible:ring-2 focus-visible:ring-ring" role="region" aria-label="Task table" tabIndex={0}><table className="w-full text-sm"><caption className="sr-only">Tasks in {selected?.name ?? 'All tasks'}</caption>
-        <thead><tr>{['Task', 'Status', 'Priority', 'Assignee', 'Due date'].map(label => <th key={label} className="text-left border-b border-border p-3">{label}</th>)}</tr></thead>
+        <thead><tr>{['Task', 'Status', 'Priority', 'Assignee', 'Due date'].map(label => <th key={label} className="text-left border-b border-border p-3">{label}</th>)}{columns.map(field => <th key={field.key} className="text-left border-b border-border p-3">{field.name}</th>)}</tr></thead>
         <tbody>{tasks.map(task => <tr key={task.id}><td className="border-b border-border p-3"><Link className="text-primary" to={`/task/${task.id}`}>{task.title}</Link></td>
           <td className="p-3 border-b border-border">{text(task.status)}</td><td className="p-3 border-b border-border">{TASK_PRIORITY_LABELS[task.priority] || task.priority}</td>
-          <td className="p-3 border-b border-border">{task.assignee?.name || 'Unassigned'}</td><td className="p-3 border-b border-border whitespace-nowrap">{task.dueDate ? formatDate(task.dueDate, { dateOnly: true }) : 'No date'}</td></tr>)}</tbody>
+          <td className="p-3 border-b border-border">{task.assignee?.name || 'Unassigned'}</td><td className="p-3 border-b border-border whitespace-nowrap">{task.dueDate ? formatDate(task.dueDate, { dateOnly: true }) : 'No date'}</td>{columns.map(field => <td key={field.key} className="p-3 border-b border-border"><TaskFieldCell field={field} value={task.fieldValues?.[field.key]} /></td>)}</tr>)}</tbody>
       </table></div>}
   </div>;
 }

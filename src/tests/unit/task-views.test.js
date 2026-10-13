@@ -19,6 +19,7 @@ test('view metadata rejects unsupported layouts, duplicate keys/names and unboun
   for (const views of [[view, { ...view, key: 'other', name: 'review queue' }], [{ ...view, layout: 'SCRIPT' }], [{ ...view, filters: { search: 'x'.repeat(201) } }]]) {
     assert.equal(projectTaskViewsSchema.safeParse({ revision: 0, views }).success, false);
   }
+  assert.equal(projectTaskViewsSchema.safeParse({ revision: 0, views: [{ ...view, columns: ['same', 'same'] }] }).success, false);
 });
 test('saving shared views advances only metadata revision and empty views do not delete tasks', async () => {
   const { prisma, writes } = db();
@@ -34,6 +35,7 @@ test('foreign/missing project, stale edits and unavailable stages refuse metadat
   const { prisma, writes } = db();
   await assert.rejects(saveTaskViews(prisma, 'p1', { revision: 1, views: [view] }), { statusCode: 409 });
   await assert.rejects(saveTaskViews(prisma, 'p1', { revision: 0, views: [{ ...view, filters: { stageKey: 'foreign-stage' } }] }), { statusCode: 400 });
+  await assert.rejects(saveTaskViews(prisma, 'p1', { revision: 0, views: [{ ...view, columns: ['unavailable'] }] }), { statusCode: 400 });
   assert.equal(writes.length, 0);
 });
 test('task search/stage filters combine with project, priority and existing assignment restrictions', async () => {

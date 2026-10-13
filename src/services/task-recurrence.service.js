@@ -47,7 +47,7 @@ export async function processRecurringTasks(prisma, { now = new Date() } = {}) {
         if (claimed.count !== 1) return null;
         const owner = live.assigneeId ? await tx.user.findFirst({ where: { id: live.assigneeId, isActive: true }, select: { id: true } }) : null;
         return tx.task.create({ data: { projectId: live.projectId, title: live.title, description: live.description,
-          content: live.content, properties: live.properties, tags: live.tags, priority: live.priority, category: live.category,
+          content: live.content, properties: live.properties, ...(live.fieldValues ? { fieldValues: live.fieldValues } : {}), tags: live.tags, priority: live.priority, category: live.category,
           icon: live.icon, coverImage: live.coverImage, estimatedTime: live.estimatedTime,
           assigneeId: owner?.id ?? null, status: 'PENDING', dueDate: scheduledDate,
           recurrenceSourceId: source.id, recurrenceScheduledDate: scheduledDate } });

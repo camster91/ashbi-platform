@@ -3953,6 +3953,81 @@
         ],
         "type": "object"
       },
+      "ProjectTaskFields": {
+        "additionalProperties": false,
+        "properties": {
+          "fields": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "archived": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "key": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "pattern": "^[a-zA-Z0-9_-]+$",
+                  "type": "string"
+                },
+                "name": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "options": {
+                  "items": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 30,
+                  "type": "array"
+                },
+                "target": {
+                  "enum": [
+                    "TASK",
+                    "PROJECT",
+                    "CLIENT",
+                    "PERSON"
+                  ],
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "TEXT",
+                    "NUMBER",
+                    "BOOLEAN",
+                    "DATE",
+                    "URL",
+                    "SELECT",
+                    "MULTI_SELECT",
+                    "RELATION"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "name",
+                "type"
+              ],
+              "type": "object"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "revision": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "fields"
+        ],
+        "type": "object"
+      },
       "ProjectTaskStages": {
         "additionalProperties": false,
         "properties": {
@@ -4020,6 +4095,16 @@
             "items": {
               "additionalProperties": false,
               "properties": {
+                "columns": {
+                  "items": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "pattern": "^[a-zA-Z0-9_-]+$",
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "type": "array"
+                },
                 "filters": {
                   "additionalProperties": false,
                   "properties": {
@@ -5544,6 +5629,35 @@
         },
         "required": [
           "dependsOnId"
+        ],
+        "type": "object"
+      },
+      "TaskFieldValues": {
+        "additionalProperties": false,
+        "properties": {
+          "definitionRevision": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "revision": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "values": {
+            "additionalProperties": {},
+            "propertyNames": {
+              "maxLength": 80,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "revision",
+          "definitionRevision",
+          "values"
         ],
         "type": "object"
       },
@@ -24626,6 +24740,118 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/projects/{id}/task-fields": {
+      "get": {
+        "operationId": "get_api_projects_id_task_fields",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/projects/:id/task-fields",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
+      "put": {
+        "operationId": "put_api_projects_id_task_fields",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectTaskFields"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PUT /api/projects/:id/task-fields",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/projects/{id}/task-stages": {
       "put": {
         "operationId": "put_api_projects_id_task_stages",
@@ -31107,6 +31333,178 @@
           }
         ],
         "summary": "PUT /api/tasks/:id/dependency",
+        "tags": [
+          "tasks"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/tasks/{id}/fields": {
+      "get": {
+        "operationId": "get_api_tasks_id_fields",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/tasks/:id/fields",
+        "tags": [
+          "tasks"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
+      "put": {
+        "operationId": "put_api_tasks_id_fields",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskFieldValues"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PUT /api/tasks/:id/fields",
+        "tags": [
+          "tasks"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/tasks/{id}/fields/{key}/options": {
+      "get": {
+        "operationId": "get_api_tasks_id_fields_key_options",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/tasks/:id/fields/:key/options",
         "tags": [
           "tasks"
         ],
