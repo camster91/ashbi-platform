@@ -8,6 +8,8 @@ import { softDelete } from '../services/trash.service.js';
 import { clampTake } from '../utils/query-limits.js';
 import { recordRejectedUpload, sha256Hex } from '../services/upload-integrity.service.js';
 import { DEFAULT_UPLOADS_DIR, hashStoredUpload, receiptRelativePath, sendStoredUpload } from '../utils/stored-upload.js';
+import { portfolioFilterSchema } from '../validators/schemas.js';
+import { financialPortfolioWhere } from '../shared/financial-portfolio.js';
 
 const RECEIPT_REFUSED = 'receiptUrl must be a receipt uploaded through /api/expenses/upload-receipt';
 const RECEIPT_TAKEN_MESSAGE = 'expense receipt belongs to another organization';
@@ -55,18 +57,20 @@ export default async function expenseRoutes(fastify, options = {}) {
   await fs.mkdir(UPLOAD_DIR, { recursive: true });
 
   // ─── GET / — list expenses with filters ────────────────────────────────────
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
+  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const portfolio = portfolioFilterSchema.safeParse(request.query?.portfolio);
+    if (!portfolio.success) return reply.status(400).send({ error: 'Invalid portfolio filter' });
     const { category, clientId, projectId, startDate, endDate, search, sort, order, limit, offset } = request.query;
 
-    const where = {};
+    const where = financialPortfolioWhere(portfolio.data);
     if (category) where.category = category;
     if (clientId) where.clientId = clientId;
     if (projectId) where.projectId = projectId;
     if (search) {
-      where.OR = [
+      where.AND = [{ OR: [
         { description: { contains: search, mode: 'insensitive' } },
         { notes: { contains: search, mode: 'insensitive' } },
-      ];
+      ] }];
     }
     if (startDate || endDate) {
       where.date = {};
@@ -92,36 +96,38 @@ export default async function expenseRoutes(fastify, options = {}) {
   });
 
   // ─── GET /summary — monthly summary + category breakdown ───────────────────
-  fastify.get('/summary', { onRequest: [fastify.authenticate] }, async (request) => {
+  fastify.get('/summary', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const portfolio = portfolioFilterSchema.safeParse(request.query?.portfolio);
+    if (!portfolio.success) return reply.status(400).send({ error: 'Invalid portfolio filter' });
+    const where = financialPortfolioWhere(portfolio.data);
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    const monthExpenses = await request.prisma.expense.findMany({
-      where: {
-        date: { gte: startOfMonth, lte: endOfMonth }
-      }
-    });
-
-    const totalThisMonth = monthExpenses.reduce((sum, e) => sum + e.amount, 0);
-
-    // Category breakdown
-    const byCategory = {};
-    for (const e of monthExpenses) {
-      byCategory[e.category] = (byCategory[e.category] || 0) + e.amount;
+    const [monthly, allTime] = await Promise.all([
+      request.prisma.expense.groupBy({ by: ['currency', 'category'], where: { ...where, date: { gte: startOfMonth, lte: endOfMonth } }, _sum: { amount: true }, _count: { _all: true } }),
+      request.prisma.expense.groupBy({ by: ['currency'], where, _sum: { amount: true }, _count: { _all: true } }),
+    ]);
+    const byCurrency = {};
+    const bucket = currency => byCurrency[currency] ??= { totalThisMonth: 0, byCategory: {}, allTimeTotal: 0, allTimeCount: 0 };
+    for (const row of allTime) {
+      Object.assign(bucket(row.currency), { allTimeTotal: row._sum.amount ?? 0, allTimeCount: row._count._all });
     }
-
-    // All-time total
-    const allExpenses = await request.prisma.expense.aggregate({
-      _sum: { amount: true },
-      _count: true,
-    });
-
+    for (const row of monthly) {
+      const group = bucket(row.currency);
+      group.totalThisMonth += row._sum.amount ?? 0;
+      group.byCategory[row.category] = row._sum.amount ?? 0;
+    }
+    const currencies = Object.keys(byCurrency).sort();
+    const mixedCurrency = currencies.length > 1;
+    const single = currencies.length === 1 ? byCurrency[currencies[0]] : { totalThisMonth: 0, byCategory: {}, allTimeTotal: 0 };
+    const categories = [...new Set(monthly.map(row => row.category))];
     return {
-      totalThisMonth: parseFloat(totalThisMonth.toFixed(2)),
-      byCategory,
-      allTimeTotal: allExpenses._sum.amount || 0,
-      allTimeCount: allExpenses._count || 0,
+      totalThisMonth: mixedCurrency ? null : single.totalThisMonth,
+      byCategory: mixedCurrency ? Object.fromEntries(categories.map(category => [category, null])) : single.byCategory,
+      allTimeTotal: mixedCurrency ? null : single.allTimeTotal,
+      allTimeCount: allTime.reduce((sum, row) => sum + row._count._all, 0),
+      currencies, mixedCurrency, byCurrency,
     };
   });
 
