@@ -859,6 +859,7 @@
   "PUT /api/pipeline/deals/:id",
   "PUT /api/pipeline/stages/:id",
   "PUT /api/projects/:id|:projectId",
+  "PUT /api/projects/:id|:projectId/task-stages",
   "PUT /api/proposal-builder/:id",
   "PUT /api/proposals/:id",
   "PUT /api/rate-cards/:id",

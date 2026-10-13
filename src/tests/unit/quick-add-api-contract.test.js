@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createClientSchema, taskCreateQuickSchema } from '../../validators/schemas.js';
+import registerTaskRoutes from '../../routes/task.routes.js';
 
 const clientRoutes = readFileSync(new URL('../../routes/client.routes.js', import.meta.url), 'utf8');
 const taskRoutes = readFileSync(new URL('../../routes/task.routes.js', import.meta.url), 'utf8');
@@ -21,11 +22,17 @@ test('client creation persists contacts atomically instead of discarding email',
   assert.match(clientRoutes, /contacts:\s*contactRows\?\.length\s*\?[\s\S]*create:/);
 });
 
-test('quick tasks accept canonical Kanban status and never write NOT_STARTED', () => {
+test('quick tasks accept canonical Kanban status and never write NOT_STARTED', async () => {
   const result = taskCreateQuickSchema.safeParse({ title: 'Draft homepage', status: 'IN_PROGRESS' });
   assert.equal(result.success, true);
   assert.equal(result.data.status, 'IN_PROGRESS');
-  assert.match(taskRoutes, /const \{ title, assigneeId, priority = 'NORMAL', status = 'PENDING' \}/);
-  assert.match(taskRoutes, /status,\s*priority/);
+  let quick;
+  const noop = () => {};
+  await registerTaskRoutes({ authenticate: noop, get: noop, put: noop, patch: noop, delete: noop,
+    post: (path, _options, handler) => { if (path === '/:projectId/quick') quick = handler; } });
+  const created = await quick({ params: { projectId: 'project-1' }, body: result.data,
+    prisma: { task: { create: async ({ data }) => data } } });
+  assert.equal(created.status, 'IN_PROGRESS');
+  assert.equal(created.priority, 'NORMAL');
   assert.doesNotMatch(taskRoutes, /status:\s*'NOT_STARTED'/);
 });
