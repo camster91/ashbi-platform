@@ -37,7 +37,7 @@ test('boards retain canonical task identity, isolated configuration and database
     await saveTaskStages(scoped, projects[0].id, { revision: 0, stages: [{ key: 'review', name: 'Review', status: 'IN_PROGRESS' }] }, board.id);
     await saveTaskViews(scoped, projects[0].id, { revision: 0, views: [{ key: 'delivery', name: 'Delivery', layout: 'TABLE', sort: 'TITLE', filters: {} }] }, board.id);
     assert.equal((await readTaskViews(scoped, projects[0].id, board.id)).views[0].name, 'Delivery');
-    assert.deepEqual((await raw.project.findUnique({ where: { id: projects[0].id } })).taskViews, []);
+    assert.deepEqual((await raw.project.findUnique({ where: { id: projects[0].id } })).taskViews, projects[0].taskViews);
     await saveTaskRecurrence(scoped, task.id, { revision: 0, rule: { frequency: 'DAILY', interval: 1, startDate: '2026-01-01', timeZone: 'UTC' } }, new Date('2026-01-01T12:00:00Z'));
     assert.equal((await processRecurringTasks(scoped, { now: new Date('2026-01-01T12:00:00Z') })).generated, 1);
     const occurrence = await raw.task.findFirst({ where: { recurrenceSourceId: task.id } });
