@@ -17,7 +17,11 @@ test('additional board creation, task membership and saved views persist in the 
   const task = await json(await api.post(`/api/tasks/${project.id}/quick`, { data: { title: `Movable ${suffix}` } }));
   await page.goto(`/task/${task.id}`);
   await page.getByLabel('Destination board').selectOption(board.id);
+  const committedMove = page.waitForResponse(response => response.url().endsWith(`/api/tasks/${task.id}/board`) && response.request().method() === 'PUT');
   await page.getByRole('button', { name: 'Move to board', exact: true }).click();
+  const moved = await committedMove;
+  expect(moved.status()).toBe(200);
+  expect((await moved.json()).boardId).toBe(board.id);
   await expect(page.getByRole('button', { name: 'Move to board', exact: true })).toBeDisabled();
   await page.reload();
   await expect(page.getByLabel('Destination board')).toHaveValue(board.id);
