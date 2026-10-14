@@ -5,7 +5,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import WorkspaceWiki from '../pages/WorkspaceWiki';
 import WorkspaceWikiPage from '../pages/WorkspaceWikiPage';
 import { api } from '../lib/api';
-vi.mock('../lib/api', () => ({ api: { getWorkspacePages: vi.fn(), getWorkspacePage: vi.fn(), createWorkspacePage: vi.fn(), updateWorkspacePage: vi.fn() } }));
+vi.mock('../lib/api', () => ({ api: { getWorkspacePages: vi.fn(), getWorkspacePage: vi.fn(), createWorkspacePage: vi.fn(), updateWorkspacePage: vi.fn(), getWorkspacePageAccess: vi.fn(), getWorkspacePageAccessOptions: vi.fn(), saveWorkspacePageAccess: vi.fn() } }));
 function mount(url) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={cache}><MemoryRouter initialEntries={[url]}><Routes><Route path="/wiki" element={<WorkspaceWiki />} /><Route path="/wiki/:pageId" element={<WorkspaceWikiPage />} /></Routes></MemoryRouter></QueryClientProvider>);
@@ -14,19 +14,21 @@ function mount(url) {
 beforeEach(() => {
   vi.resetAllMocks();
   api.getWorkspacePages.mockResolvedValue({ items: [], nextCursor: null });
+  api.getWorkspacePageAccess.mockResolvedValue({ revision: 0, mode: 'TEAM', members: [] });
+  api.getWorkspacePageAccessOptions.mockResolvedValue({ items: [], nextCursor: null });
 });
 it('creates knowledge without a client/project and navigates to the returned canonical page', async () => {
   api.createWorkspacePage.mockResolvedValue({ id: 'page' });
-  api.getWorkspacePage.mockResolvedValue({ id: 'page', title: 'Ashbi handbook', content: '# Welcome', revision: 0, parentId: null });
+  api.getWorkspacePage.mockResolvedValue({ id: 'page', title: 'Ashbi handbook', content: '# Welcome', revision: 0, parentId: null, permissions: { canEdit: true, canManage: true } });
   mount('/wiki');
   fireEvent.change(screen.getByLabelText('Page title'), { target: { value: 'Ashbi handbook' } });
   fireEvent.change(screen.getByLabelText('Page content'), { target: { value: '# Welcome' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create page' }));
   await screen.findByRole('heading', { name: 'Ashbi handbook' });
-  expect(api.createWorkspacePage).toHaveBeenCalledWith({ title: 'Ashbi handbook', content: '# Welcome', parentId: null });
+  expect(api.createWorkspacePage).toHaveBeenCalledWith({ title: 'Ashbi handbook', content: '# Welcome', parentId: null, accessMode: 'TEAM' });
 });
 it('retains a wiki draft and observed revision through background refetch and failed reload', async () => {
-  let page = { id: 'page', title: 'Handbook', content: 'Original', revision: 2, parentId: null };
+  let page = { id: 'page', title: 'Handbook', content: 'Original', revision: 2, parentId: null, permissions: { canEdit: true, canManage: true } };
   api.getWorkspacePage.mockImplementation(async () => page);
   api.updateWorkspacePage.mockRejectedValue(new Error('Knowledge page changed'));
   const cache = mount('/wiki/page');
@@ -45,7 +47,7 @@ it('retains a wiki draft and observed revision through background refetch and fa
   await waitFor(() => expect(screen.getByLabelText('Page content')).toHaveValue('Team edit'));
 });
 it('resets draft identity when following another knowledge page link', async () => {
-  api.getWorkspacePage.mockImplementation(async id => ({ id, title: id, content: `Content ${id}`, revision: 0, parentId: null }));
+  api.getWorkspacePage.mockImplementation(async id => ({ id, title: id, content: `Content ${id}`, revision: 0, parentId: null, permissions: { canEdit: true, canManage: true } }));
   api.getWorkspacePages.mockImplementation(async input => ({ items: input.parentId === 'first' ? [{ id: 'second', title: 'Second page' }] : [], nextCursor: null }));
   mount('/wiki/first');
   fireEvent.click(await screen.findByRole('button', { name: 'Edit page' }));
@@ -55,4 +57,15 @@ it('resets draft identity when following another knowledge page link', async () 
   expect(screen.queryByLabelText('Page content')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Edit page' }));
   expect(screen.getByLabelText('Page content')).toHaveValue('Content second');
+});
+
+it('shows a read-only page without edit, hierarchy, archive or audience controls', async () => {
+  api.getWorkspacePage.mockResolvedValue({ id: 'page', title: 'Read-only handbook', content: 'Visible content', revision: 1, parentId: null, accessMode: 'RESTRICTED', permissions: { canRead: true, canEdit: false, canManage: false } });
+  mount('/wiki/page');
+  await screen.findByRole('heading', { name: 'Read-only handbook' });
+  expect(screen.getByText('This page is read only.')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Edit page' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Archive page' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Create nested page' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Knowledge page access' })).not.toBeInTheDocument();
 });

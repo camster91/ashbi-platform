@@ -17,6 +17,8 @@ import { listProjectBoards } from '../services/project-boards.service.js';
 import { activeTaskBoard, taskBoardWhere } from '../services/task-board-scope.js';
 import { listWorkspacePages, readWorkspacePage } from '../services/workspace-pages.service.js';
 import { WORKSPACE_WIKI_ACTIONS } from './workspace-wiki-actions.js';
+import { readWorkspacePageAccess } from '../services/workspace-page-access.service.js';
+import { wikiToolCall } from './workspace-wiki-tool-errors.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
@@ -42,16 +44,21 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 
 export const workspaceRegistry = createToolRegistry([
   {
+    name: 'get_workspace_page_access', description: 'Read current page audience, staff grants and observed access revision. Only the page owner or organization administrator may inspect this roster; parent restrictions still apply.', class: 'read', roles: ['ADMIN', 'TEAM'], timeoutMs: 5000,
+    inputSchema: z.object({ pageId: z.string().min(1).max(80) }).strict(), resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
+    run: ({ prisma, user, input }) => wikiToolCall(() => readWorkspacePageAccess(prisma, input.pageId, user)),
+  },
+  {
     name: 'list_workspace_pages', description: 'Read shared team knowledge metadata, independent of clients and projects. Search title/content and page with nextCursor; archived pages are optional.', class: 'read', roles: ['ADMIN', 'TEAM'], timeoutMs: 5000,
     inputSchema: pageSchema.extend({ search: z.string().max(200).default(''), includeArchived: z.boolean().default(false), parentId: z.string().min(1).max(80).optional() }),
     resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
-    run: ({ prisma, user, input }) => listWorkspacePages(prisma, input, user),
+    run: ({ prisma, user, input }) => wikiToolCall(() => listWorkspacePages(prisma, input, user)),
   },
   {
     name: 'get_workspace_page', description: 'Read one shared team knowledge page and its observed revision. Archived content requires includeArchived=true; no client portal access is granted.', class: 'read', roles: ['ADMIN', 'TEAM'], timeoutMs: 5000,
     inputSchema: z.object({ pageId: z.string().min(1).max(80), includeArchived: z.boolean().default(false) }).strict(),
     resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
-    run: ({ prisma, user, input }) => readWorkspacePage(prisma, input.pageId, user, input.includeArchived),
+    run: ({ prisma, user, input }) => wikiToolCall(() => readWorkspacePage(prisma, input.pageId, user, input.includeArchived)),
   },
   ...WORKSPACE_WIKI_ACTIONS,
   {

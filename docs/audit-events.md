@@ -26,6 +26,10 @@ Related #412 references, all generated and checked for drift:
 
 ## Guarantees
 
+`workspace_page.access_changed` records only `fromMode`, `toMode`, `revision`
+and `memberCount`. The permissions change and required audit record share one
+transaction; page content and staff names are not copied into this event.
+
 Workspace knowledge pages emit `workspace_page.created`, `workspace_page.updated`,
 `workspace_page.archived` and `workspace_page.restored`. Metadata contains only
 `revision` and `parentId`; content stays in the page. These writes require their

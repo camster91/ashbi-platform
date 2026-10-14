@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 391 |
+| staff | 394 |
 | staff (inline) | 1 |
-| **total** | 585 |
+| **total** | 588 |
 
 ## Routes by prefix
 
@@ -1048,6 +1048,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/wiki/pages` | staff | scoped |  |
 | GET | `/api/wiki/pages/:id` | staff | scoped |  |
 | PUT | `/api/wiki/pages/:id` | staff | scoped |  |
+| GET | `/api/wiki/pages/:id/access` | staff | scoped |  |
+| PUT | `/api/wiki/pages/:id/access` | staff | scoped |  |
+| GET | `/api/wiki/pages/:id/access/options` | staff | scoped |  |
 
 ### /api/work-queue
 

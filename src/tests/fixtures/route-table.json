@@ -304,6 +304,8 @@
   "GET /api/webhooks/email/status",
   "GET /api/wiki/pages",
   "GET /api/wiki/pages/:id",
+  "GET /api/wiki/pages/:id/access",
+  "GET /api/wiki/pages/:id/access/options",
   "GET /api/work-queue",
   "GET /api/work-queue/",
   "HEAD /api/agent/tools",
@@ -571,6 +573,8 @@
   "HEAD /api/webhooks/email/status",
   "HEAD /api/wiki/pages",
   "HEAD /api/wiki/pages/:id",
+  "HEAD /api/wiki/pages/:id/access",
+  "HEAD /api/wiki/pages/:id/access/options",
   "HEAD /api/work-queue",
   "HEAD /api/work-queue/",
   "OPTIONS /*",
@@ -908,5 +912,6 @@
   "PUT /api/templates/:id",
   "PUT /api/threads/:id",
   "PUT /api/time-entries/:id",
-  "PUT /api/wiki/pages/:id"
+  "PUT /api/wiki/pages/:id",
+  "PUT /api/wiki/pages/:id/access"
 ]

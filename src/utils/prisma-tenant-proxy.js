@@ -46,7 +46,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'impersonationsession', 'breakglassgrant',
   // Expenses: the client and project are optional, so the organization is a
   // column of its own (migration 20261001130000_expense_organization).
-  'expense', 'taskcollaborator', 'projectboard', 'workspacepage'
+  'expense', 'taskcollaborator', 'projectboard', 'workspacepage', 'workspacepagegrant'
 ]);
 
 // Evidence tables that may only ever be appended to. Request-scoped code gets
@@ -90,6 +90,10 @@ const DIRECT_PARENT_RELATIONS = {
   workspacepage: [
     { relation: 'author', field: 'authorId', model: 'user', delegate: 'user', required: true },
     { relation: 'parent', field: 'parentId', model: 'workspacepage', delegate: 'workspacePage' },
+  ],
+  workspacepagegrant: [
+    { relation: 'page', field: 'pageId', model: 'workspacepage', delegate: 'workspacePage', required: true },
+    { relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true },
   ],
   projectboard: [{ relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true }],
   taskcollaborator: [

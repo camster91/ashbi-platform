@@ -34,6 +34,7 @@ model Organization {
   taskCollaborations TaskCollaborator[]
   projectBoards      ProjectBoard[]
   workspacePages     WorkspacePage[]
+  workspacePageGrants WorkspacePageGrant[]
   clients            Client[]
   projects           Project[]
   formDrafts         FormDraft[]
@@ -131,6 +132,7 @@ model User {
   chatReactions      ChatReaction[]
   notes              Note[]              @relation("NoteAuthor")
   workspacePages     WorkspacePage[]      @relation("WorkspacePageAuthor")
+  workspacePageGrants WorkspacePageGrant[]
   timeEntries        TimeEntry[]
   attachments        Attachment[]
   activities         Activity[]
@@ -695,6 +697,8 @@ model WorkspacePage {
   title          String
   content        String @default("")
   revision       Int @default(0)
+  accessMode     String @default("TEAM")
+  accessRevision Int @default(0)
   archivedAt     DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -703,12 +707,30 @@ model WorkspacePage {
   author User @relation("WorkspacePageAuthor", fields: [authorId], references: [id], onDelete: Restrict)
   parent WorkspacePage? @relation("WorkspacePageHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
   children WorkspacePage[] @relation("WorkspacePageHierarchy")
+  grants WorkspacePageGrant[]
 
   @@index([organizationId])
   @@index([organizationId, archivedAt, id])
   @@index([authorId])
   @@index([parentId])
   @@map("workspace_pages")
+}
+
+model WorkspacePageGrant {
+  id             String @id @default(cuid())
+  organizationId String
+  pageId         String
+  userId         String
+  role           String
+  createdAt      DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  page WorkspacePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([pageId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@map("workspace_page_grants")
 }
 
 model Note {

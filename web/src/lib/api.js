@@ -535,6 +535,9 @@ export const api = {
     request(`/notes/${id}`),
   getWorkspacePages: (params = {}) => request(`/wiki/pages?${new URLSearchParams(params)}`),
   getWorkspacePage: (id) => request(`/wiki/pages/${id}?includeArchived=true`),
+  getWorkspacePageAccess: (id) => request(`/wiki/pages/${id}/access`),
+  saveWorkspacePageAccess: (id, data) => request(`/wiki/pages/${id}/access`, { method: 'PUT', body: data }),
+  getWorkspacePageAccessOptions: (id, params = {}) => request(`/wiki/pages/${id}/access/options?${new URLSearchParams(params)}`),
   createWorkspacePage: (data) => request('/wiki/pages', { method: 'POST', body: data }),
   updateWorkspacePage: (id, data) => request(`/wiki/pages/${id}`, { method: 'PUT', body: data }),
   getNoteTemplates: () =>

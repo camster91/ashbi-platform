@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-110 models, 0 enums, 56 tenant-scoped, 13 soft-deletable.
+111 models, 0 enums, 57 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -78,7 +78,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 65 |
+| [Organization](#model-organization) | `organizations` | no | no | 66 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -120,7 +120,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [TimeSession](#model-timesession) | `time_sessions` | no | no | 16 |
 | [TrashedItem](#model-trasheditem) | `trashed_items` | yes | yes | 9 |
 | [UnmatchedEmail](#model-unmatchedemail) | `unmatched_emails` | yes | no | 16 |
-| [User](#model-user) | `users` | yes | no | 54 |
+| [User](#model-user) | `users` | yes | no | 55 |
 | [WPAlert](#model-wpalert) | `wp_alerts` | yes | no | 9 |
 | [WPBackup](#model-wpbackup) | `wp_backups` | yes | no | 15 |
 | [WPBridgeNonce](#model-wpbridgenonce) | `wp_bridge_nonces` | yes | no | 7 |
@@ -129,7 +129,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [WPReport](#model-wpreport) | `wp_reports` | yes | no | 14 |
 | [WPSite](#model-wpsite) | `wp_sites` | yes | no | 32 |
 | [WeeklyDigest](#model-weeklydigest) | `weekly_digests` | yes | no | 14 |
-| [WorkspacePage](#model-workspacepage) | `workspace_pages` | yes | no | 14 |
+| [WorkspacePage](#model-workspacepage) | `workspace_pages` | yes | no | 17 |
+| [WorkspacePageGrant](#model-workspacepagegrant) | `workspace_page_grants` | yes | no | 9 |
 
 ## Models
 
@@ -1711,6 +1712,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `taskCollaborations` | TaskCollaborator[] | list, required |  | → TaskCollaborator |  |
 | `projectBoards` | ProjectBoard[] | list, required |  | → ProjectBoard |  |
 | `workspacePages` | WorkspacePage[] | list, required |  | → WorkspacePage |  |
+| `workspacePageGrants` | WorkspacePageGrant[] | list, required |  | → WorkspacePageGrant |  |
 | `clients` | Client[] | list, required |  | → Client |  |
 | `projects` | Project[] | list, required |  | → Project |  |
 | `formDrafts` | FormDraft[] | list, required |  | → FormDraft |  |
@@ -3005,6 +3007,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `chatReactions` | ChatReaction[] | list, required |  | → ChatReaction |  |
 | `notes` | Note[] | list, required |  | → Note, "NoteAuthor" |  |
 | `workspacePages` | WorkspacePage[] | list, required |  | → WorkspacePage, "WorkspacePageAuthor" |  |
+| `workspacePageGrants` | WorkspacePageGrant[] | list, required |  | → WorkspacePageGrant |  |
 | `timeEntries` | TimeEntry[] | list, required |  | → TimeEntry |  |
 | `attachments` | Attachment[] | list, required |  | → Attachment |  |
 | `activities` | Activity[] | list, required |  | → Activity |  |
@@ -3268,6 +3271,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `title` | String | required |  |  |  |
 | `content` | String | required | `""` |  |  |
 | `revision` | Int | required | `0` |  |  |
+| `accessMode` | String | required | `"TEAM"` |  |  |
+| `accessRevision` | Int | required | `0` |  |  |
 | `archivedAt` | DateTime | optional |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
@@ -3275,6 +3280,29 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `author` | User | required |  | → User, via (authorId) → (id), onDelete Restrict, "WorkspacePageAuthor" |  |
 | `parent` | WorkspacePage | optional |  | → WorkspacePage, via (parentId) → (id), onDelete Restrict, "WorkspacePageHierarchy" |  |
 | `children` | WorkspacePage[] | list, required |  | → WorkspacePage, "WorkspacePageHierarchy" |  |
+| `grants` | WorkspacePageGrant[] | list, required |  | → WorkspacePageGrant |  |
+
+### Model WorkspacePageGrant
+
+- Table: `workspace_page_grants`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([pageId, userId])`
+  - `@@index([organizationId])`
+  - `@@index([userId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `pageId` | String | required |  |  |  |
+| `userId` | String | required |  |  |  |
+| `role` | String | required |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `page` | WorkspacePage | required |  | → WorkspacePage, via (pageId) → (id), onDelete Cascade |  |
+| `user` | User | required |  | → User, via (userId) → (id), onDelete Restrict |  |
 
 ## Enums
 

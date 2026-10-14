@@ -12,6 +12,7 @@
 let nextId = 1;
 
 const RELATIONS = {
+  workspacePageGrant: { page: ['workspacePage', 'pageId'], user: ['user', 'userId'] },
   workspacePage: { author: ['user', 'authorId'], parent: ['workspacePage', 'parentId'] },
   projectBoard: { project: ['project', 'projectId'] },
   taskCollaborator: { user: ['user', 'userId'], task: ['task', 'taskId'] },
@@ -26,7 +27,7 @@ const TERMINAL = new Set(['EXECUTED', 'FAILED', 'REJECTED', 'EXPIRED']);
 
 export function createFakeToolDb() {
   const tables = {
-    organization: [], user: [], client: [], project: [], projectBoard: [], workspacePage: [], task: [], taskCollaborator: [], calendarEvent: [], chatMessage: [],
+    organization: [], user: [], client: [], project: [], projectBoard: [], workspacePage: [], workspacePageGrant: [], task: [], taskCollaborator: [], calendarEvent: [], chatMessage: [],
     slackInstallation: [], slackChannelMapping: [], aiBridgeAction: [], auditEvent: [],
     aiProviderConnection: [], aiUsageRecord: [], platformSetting: [], credential: [],
   };
@@ -51,6 +52,7 @@ export function createFakeToolDb() {
       if (condition === null) return value === null || value === undefined;
       if (condition instanceof Date) return value?.getTime?.() === condition.getTime();
       if (condition && typeof condition === 'object' && !Array.isArray(condition)) {
+        if ('contains' in condition) return typeof value === 'string' && (condition.mode === 'insensitive' ? value.toLowerCase().includes(condition.contains.toLowerCase()) : value.includes(condition.contains));
         if ('in' in condition) return condition.in.includes(value);
         if ('notIn' in condition) return !condition.notIn.includes(value);
         if ('not' in condition) return value !== condition.not;
@@ -69,6 +71,10 @@ export function createFakeToolDb() {
     const out = select ? {} : structuredClone(row);
     for (const [key, spec] of Object.entries(select ?? include)) {
       if (!spec) continue;
+      if (model === 'workspacePage' && key === 'grants') {
+        out[key] = tables.workspacePageGrant.filter(grant => grant.pageId === row.id && matches('workspacePageGrant', grant, spec.where)).map(grant => shape('workspacePageGrant', grant, spec));
+        continue;
+      }
       const relation = related(model, row, key);
       if (relation) out[key] = spec === true ? structuredClone(relation.row) : shape(relation.target, relation.row, spec);
       else out[key] = structuredClone(row[key]);
