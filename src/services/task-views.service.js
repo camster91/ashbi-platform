@@ -1,5 +1,6 @@
 import { withStageTransaction } from './task-stages.service.js';
 import { validateTaskFieldFilterDefinitions } from './task-field-filters.service.js';
+import { validateTaskViewGrouping } from '../shared/task-view-groups.js';
 
 const fail = (statusCode, message) => { throw Object.assign(new Error(message), { statusCode }); };
 export async function readTaskViews(prisma, projectId) {
@@ -14,6 +15,7 @@ export async function saveTaskViews(prisma, projectId, { revision, views }) {
     const current = await readTaskViews(tx, projectId);
     if (current.revision !== revision) fail(409, 'Saved views changed. Reload before saving.');
     for (const view of views) {
+      validateTaskViewGrouping(current.fields, view.grouping);
       validateTaskFieldFilterDefinitions(current.fields, view.filters.fieldFilters);
       if (view.filters.stageKey && !current.stages.some(stage => stage.key === view.filters.stageKey)) fail(400, 'A selected stage is unavailable. Choose another stage.');
       if ((view.columns ?? []).some(key => !current.fields.some(field => field.key === key && !field.archived))) fail(400, 'A selected field is unavailable. Clear it from the table columns.');
