@@ -429,6 +429,7 @@ export default function InvoiceDetail() {
 
         {/* Mobile Actions - Stacked */}
         <div className="sm:hidden flex flex-wrap gap-2">
+          {isAdmin && invoice.status === 'VOID' && invoice.billingSources && !invoice.billingSourcesReleasedAt && <Button variant="outline" size="sm" onClick={() => navigate(`/invoices/unbilled?release=${invoice.id}`)}>Review source release</Button>}
           {isDraft && canManage && (
             <>
               <Button variant="outline" size="sm" leftIcon={<Edit2 className="w-4 h-4" />} onClick={startEdit}>
