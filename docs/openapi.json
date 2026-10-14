@@ -4266,6 +4266,31 @@
                   },
                   "type": "object"
                 },
+                "grouping": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "by": {
+                      "enum": [
+                        "NONE",
+                        "STATUS",
+                        "PRIORITY",
+                        "STAGE",
+                        "FIELD"
+                      ],
+                      "type": "string"
+                    },
+                    "fieldKey": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "pattern": "^[a-zA-Z0-9_-]+$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "by"
+                  ],
+                  "type": "object"
+                },
                 "key": {
                   "maxLength": 80,
                   "minLength": 1,
@@ -4276,7 +4301,8 @@
                   "enum": [
                     "TABLE",
                     "BOARD",
-                    "CALENDAR"
+                    "CALENDAR",
+                    "GALLERY"
                   ],
                   "type": "string"
                 },
