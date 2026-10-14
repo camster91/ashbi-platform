@@ -58,6 +58,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { isWorkspaceDestinationActive } from '../lib/workspace-navigation';
 import { isComingSoon } from '../lib/featureFlags';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import NotificationsDropdown from './NotificationsDropdown';
@@ -254,9 +255,7 @@ export default function Layout({ children }) {
     });
   };
 
-  const isNavItemActive = (item) => location.pathname === item.href
-    || (!item.exact && location.pathname.startsWith(`${item.href}/`))
-    || (item.href === '/projects' && location.pathname.startsWith('/project/'));
+  const isNavItemActive = (item) => isWorkspaceDestinationActive(item, location.pathname);
 
   function renderNavItems(items) {
     return items.map((item) => {
