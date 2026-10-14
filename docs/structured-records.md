@@ -2,6 +2,8 @@
 
 Implementation in progress on `feat/structured-records-20261014`, tracked by #565. The shared calculation/input contracts are implemented and locally tested. Collection storage, permission-aware services, HTTP/MCP actions, UI screens, PostgreSQL and browser journeys remain open. This document does not claim a shipped feature or replacement readiness. Production remains held.
 
+Local contract validation on October 14: 25 focused Node tests pass, changed-file ESLint passes with zero warnings, and repository TypeScript checking passes. The full local backend/AI regression suite finished with 1,896 passes, zero failures and one skip (1,897 tests). No PostgreSQL/browser acceptance of standalone collections has been run.
+
 ## Intended usable workflow
 
 Staff create a standalone named collection in the existing organization, define typed fields, and create/edit/archive canonical records without manufacturing tasks or projects. Records retain revisions and archived values. Collections and relations stay inside the organization, and client/BOT access is denied unless explicitly designed and tested later. Ashbi Design and Freelance remain shared organizational views, not new tenants. Records can reference existing canonical clients/projects/tasks/people in the service layer; collection relations enable rollups.

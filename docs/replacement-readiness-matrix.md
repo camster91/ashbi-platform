@@ -4,6 +4,8 @@ This is the working acceptance map for making Ashbi the agency's primary operati
 
 The October 11 [master-app consolidation plan](master-app-consolidation.md) adds Fluent Boards and Cameron's freelance work to the shared-team scope. It records the feature gaps, shared portfolio decision and features-first delivery followed by one-time data input; it does not supersede existing acceptance gates.
 
+October 14 code/CI update: consolidated delivery/wiki/conflict recovery (#586), atomic invoice drafts (#588) and approved unbilled billing (#589) are merged with required gates passed. Main CI 38570627359 passed at `9d969e9`; release 38571830817 is pending under the owner's hold. Earlier row references to pending slice reviews/wiki CI are superseded by this evidence. Standalone records/forms have [shared contracts in progress](structured-records.md); they are not usable end to end yet. Project Note audiences, simultaneous editing and history restoration remain open. No row is promoted to target-ready by these merges.
+
 | Agency need | Ashbi capability | Current state | Evidence required for replacement readiness |
 | --- | --- | --- | --- |
 | Fluent Boards: board workflows and time | Configurable stages, shared templates and saved views, independent boards, contributors, workload and calendar/completion recurrence | Implementation CI passed through #583; required approving reviews, deployment and target acceptance pending | Prove named stages, saved views, task hierarchy, assignments, files, comments, dependencies and time through authenticated keyboard/mobile delivery. Populate reviewed records once after the workflow is usable; reusable importers are outside scope |
