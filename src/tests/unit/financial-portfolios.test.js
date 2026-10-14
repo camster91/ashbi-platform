@@ -30,6 +30,9 @@ test('invoice list and all currency/payment statistics use the same selected por
   assert.deepEqual(calls[2].where.OR, calls[0].where.OR);
   assert.deepEqual(calls[3].where.OR, calls[0].where.OR);
   assert.deepEqual(calls[4].where.invoice.OR, calls[0].where.OR);
+  await routes['/']({ query: { portfolio: 'FREELANCE', projectId: 'other-project' } }, reply);
+  assert.deepEqual(calls[5].where.projectId, { in: ['p1'] });
+  assert.deepEqual(calls[5].where.AND, [{ projectId: 'other-project' }]);
   const before = calls.length;
   assert.equal((await routes['/stats']({ query: { portfolio: 'PRIVATE' } }, reply)).status, 400);
   assert.equal(calls.length, before);

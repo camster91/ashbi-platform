@@ -135,12 +135,12 @@ export default async function invoiceRoutes(fastify, options = {}) {
     const portfolioWhere = await invoicePortfolioWhere(fastify.prisma, portfolio.data, request.user?.organizationId);
     const where = { ...portfolioWhere };
     if (clientId) where.clientId = clientId;
-    if (projectId) where.projectId = projectId;
+    if (projectId && !portfolio.data) where.projectId = projectId;
     // "SENT" lists every sent-but-unpaid invoice, including any marked
     // VIEWED (VIEWED behaves exactly like SENT).
     if (status === 'SENT') where.status = { in: [...SENT_INVOICE_STATUSES] };
     else if (status && status !== 'OVERDUE') where.status = status;
-    const and = [];
+    const and = projectId && portfolio.data ? [{ projectId }] : [];
     if (status === 'OVERDUE') {
       and.push({ OR: [
         { status: 'OVERDUE' },
