@@ -16,8 +16,8 @@ test('approved work becomes one confirmed draft, survives receipt recovery and r
   await page.goto('/invoices');
   await page.getByRole('button', { name: 'Bill approved work' }).click();
   await page.getByLabel('Find client').fill(client.name);
-  await expect(page.getByLabel('Client', { exact: true }).locator('option', { hasText: client.name })).toHaveCount(1);
-  await page.getByLabel('Client', { exact: true }).selectOption(client.id);
+  await expect(page.getByRole('combobox', { name: 'Client', exact: true }).locator('option', { hasText: client.name })).toHaveCount(1);
+  await page.getByRole('combobox', { name: 'Client', exact: true }).selectOption(client.id);
   await page.getByLabel('Invoice title').fill(`Reviewed draft ${suffix}`);
   await page.getByRole('button', { name: 'Load unbilled work', exact: true }).click();
   await page.getByRole('checkbox', { name: description, exact: true }).check();

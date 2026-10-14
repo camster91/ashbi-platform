@@ -3,6 +3,21 @@ import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import invoiceBillingRoutes from '../../routes/invoice-billing.routes.js';
 import { createWorkspaceTools } from '../../integrations/workspace-tools.js';
+import { WORKSPACE_BILLING_TOOLS } from '../../integrations/workspace-billing-tools.js';
+
+test('billing execution resolves minimal requester identities to a fresh active administrator before any mutation', async () => {
+  const identity = { id: 'admin', organizationId: 'org' };
+  let current = null;
+  const prisma = { user: { findFirst: async ({ where }) => {
+    assert.equal(where.role, 'ADMIN'); assert.equal(where.isActive, true); assert.equal(where.id, identity.id); assert.equal(where.organizationId, identity.organizationId);
+    return current;
+  } }, client: { findFirst: async () => null } };
+  const tool = WORKSPACE_BILLING_TOOLS.find(tool => tool.name === 'create_unbilled_invoice_draft');
+  const input = { selection: { clientId: 'client', title: 'Reviewed', currency: 'CAD', taxType: 'NONE', taxRate: 0, times: [{ id: 'time', updatedAt: '2026-10-14T00:00:00Z', hourlyRate: 0 }] }, fingerprint: 'a'.repeat(64) };
+  await assert.rejects(tool.execution.execute({ prisma, user: identity, input }), { code: 'ROLE_DENIED' });
+  current = { ...identity, role: 'ADMIN' };
+  await assert.rejects(tool.execution.execute({ prisma, user: identity, input }), { code: 'RECORD_NOT_FOUND' });
+});
 
 test('workspace billing receipts and preparation replays recheck administrator status before returning private history', async () => {
   const tools = createWorkspaceTools();

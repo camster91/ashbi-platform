@@ -14,6 +14,15 @@ async function billingCall(work) {
     throw error;
   }
 }
+// The executor supplies the requester identity rather than session role claims.
+// Resolve its current administrator role inside the execution transaction.
+function executeBilling(prisma, identity, work) {
+  return billingCall(async () => {
+    const actor = await prisma.user.findFirst({ where: { id: identity.id, organizationId: identity.organizationId, role: 'ADMIN', isActive: true }, select: { id: true, organizationId: true, role: true } });
+    if (!actor) throw Object.assign(new Error('An active administrator is required.'), { statusCode: 403 });
+    return work(actor);
+  });
+}
 function billingRead(name, description, inputSchema, read) {
   return { name, description, class: 'read', roles: ['ADMIN'], inputSchema, timeoutMs: 10_000,
     resolveScope: ({ prisma, user, input }) => billingCall(async () => ({ ids: { organizationId: user.organizationId }, records: { output: await read(prisma, input, user) } })),
@@ -39,7 +48,7 @@ export const WORKSPACE_BILLING_TOOLS = [
     }),
     preview: async ({ scope }) => ({ kind: 'create_unbilled_invoice_draft', ...scope.records.preview }),
     rollback: 'Failure rolls back invoice, number, lines, claims, audit and receipt. Reverse committed draft claims by voiding the unpaid draft and reviewing source release after its undo window; original history is retained.',
-    execution: { mode: 'transaction', isolationLevel: 'Serializable', execute: ({ prisma, user, input }) => billingCall(() => createUnbilledInvoiceInTransaction(prisma, input.selection, input.fingerprint, user)) },
+    execution: { mode: 'transaction', isolationLevel: 'Serializable', execute: ({ prisma, user, input }) => executeBilling(prisma, user, actor => createUnbilledInvoiceInTransaction(prisma, input.selection, input.fingerprint, actor)) },
   },
   {
     name: 'release_unbilled_invoice_sources', description: 'Release exactly the reviewed invoice-owned claims on an unpaid voided invoice after its undo window. Retains original history and does not reopen the invoice. Requires human confirmation.',
@@ -52,6 +61,6 @@ export const WORKSPACE_BILLING_TOOLS = [
     }),
     preview: async ({ scope }) => ({ kind: 'release_unbilled_invoice_sources', ...scope.records.preview }),
     rollback: 'Failure retains claims, invoice marker, audit and receipt. After a committed release, a fresh confirmed draft can claim the work again; the original voided invoice and its history remain retained.',
-    execution: { mode: 'transaction', isolationLevel: 'Serializable', execute: ({ prisma, user, input }) => billingCall(() => releaseUnbilledSourcesInTransaction(prisma, input.invoiceId, input.fingerprint, user)) },
+    execution: { mode: 'transaction', isolationLevel: 'Serializable', execute: ({ prisma, user, input }) => executeBilling(prisma, user, actor => releaseUnbilledSourcesInTransaction(prisma, input.invoiceId, input.fingerprint, actor)) },
   },
 ];
