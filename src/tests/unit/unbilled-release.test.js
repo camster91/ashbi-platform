@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { previewUnbilledRelease, releaseUnbilledSourcesInTransaction } from '../../services/unbilled-invoice.service.js';
-import { withSoftDelete } from '../../services/soft-delete.service.js';
 
 const actor = { id: 'admin', role: 'ADMIN', organizationId: 'org' };
 const now = new Date('2026-10-14T01:00:00Z');
@@ -48,19 +47,4 @@ test('release clears exactly the invoice-owned claims and retains original histo
   assert.equal(claims.length, 2);
   assert.ok(claims.every(query => query.where.invoiceId === 'invoice' && query.where.invoiced && query.data.invoiceId === null && query.data.invoiced === false));
   await assert.rejects(previewUnbilledRelease(prisma, 'invoice', actor, now), { statusCode: 409 });
-});
-test('archived owned claims can be released without restoring them or widening tenant/invoice scope', async () => {
-  const { prisma, claims } = fixture();
-  for (const [model, sourceId] of [['timeEntry', 'time'], ['expense', 'expense']]) {
-    prisma[model].findMany = async ({ where }) => {
-      assert.equal(where.invoiceId, 'invoice');
-      assert.equal(model === 'timeEntry' ? where.project.organizationId : where.organizationId, actor.organizationId);
-      return where.deletedAt === null ? [] : [{ id: sourceId, updatedAt: now, invoiced: true }];
-    };
-  }
-  const scoped = withSoftDelete(prisma);
-  const preview = await previewUnbilledRelease(scoped, 'invoice', actor, now);
-  assert.deepEqual(preview.sourceCount, { time: 1, expense: 1 });
-  await releaseUnbilledSourcesInTransaction(scoped, 'invoice', preview.fingerprint, actor, now);
-  assert.ok(claims.every(query => !('deletedAt' in query.data)));
 });

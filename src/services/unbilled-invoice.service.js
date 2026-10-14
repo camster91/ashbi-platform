@@ -133,10 +133,8 @@ export async function previewUnbilledRelease(prisma, invoiceId, actor, now = new
   if (invoice.status !== 'VOID' || !invoice.voidedAt || now.getTime() - new Date(invoice.voidedAt).getTime() < 10_000) fail(409, 'Void the unpaid invoice and wait until its undo window ends before releasing sources.');
   if (await prisma.invoicePayment.count({ where: { invoiceId: invoice.id } })) fail(409, 'An invoice with payment records cannot release its sources.');
   const [times, expenses] = await Promise.all([
-    // Explicit all-deletion-state filters preserve archived invoice-owned claims
-    // through the scoped soft-delete wrapper. Release never restores sources.
-    prisma.timeEntry.findMany({ where: { invoiceId: invoice.id, deletedAt: {}, project: { organizationId: admin.organizationId } }, select: { id: true, updatedAt: true, invoiced: true }, take: 100, orderBy: { id: 'asc' } }),
-    prisma.expense.findMany({ where: { invoiceId: invoice.id, deletedAt: {}, organizationId: admin.organizationId }, select: { id: true, updatedAt: true, invoiced: true }, take: 100, orderBy: { id: 'asc' } }),
+    prisma.timeEntry.findMany({ where: { invoiceId: invoice.id, project: { organizationId: admin.organizationId } }, select: { id: true, updatedAt: true, invoiced: true }, take: 100, orderBy: { id: 'asc' } }),
+    prisma.expense.findMany({ where: { invoiceId: invoice.id, organizationId: admin.organizationId }, select: { id: true, updatedAt: true, invoiced: true }, take: 100, orderBy: { id: 'asc' } }),
   ]);
   const original = invoice.billingSources.lineItems.map(line => line.source);
   for (const [kind, rows] of [['TIME', times], ['EXPENSE', expenses]]) {

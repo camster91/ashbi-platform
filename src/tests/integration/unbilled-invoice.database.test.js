@@ -95,8 +95,6 @@ test('unbilled selection preserves canonical clients and currency, approval, pag
     assert.deepEqual((await raw.invoice.findUnique({ where: { id: invoice.id } })).billingSources, invoice.billingSources, 'receipt notes do not rewrite the original billing history');
     assert.ok(await raw.auditEvent.findFirst({ where: { organizationId: orgs[0], action: 'invoice.created_from_unbilled', entityId: invoice.id } }));
     await assert.rejects(previewUnbilledRelease(scoped, invoice.id, actors[0]), { statusCode: 409 });
-    await raw.timeEntry.update({ where: { id: sourceTime.id }, data: { deletedAt: new Date() } });
-    await raw.expense.update({ where: { id: expense.id }, data: { deletedAt: new Date() } });
     await raw.invoice.update({ where: { id: invoice.id }, data: { status: 'VOID', voidedAt: new Date(Date.now() - 20_000), voidedFromStatus: 'DRAFT' } });
     const release = await previewUnbilledRelease(scoped, invoice.id, actors[0]);
     assert.equal(release.sourceCount.time, 1); assert.equal(release.sourceCount.expense, 1);
@@ -107,14 +105,10 @@ test('unbilled selection preserves canonical clients and currency, approval, pag
     assert.equal((await raw.timeEntry.findUnique({ where: { id: sourceTime.id } })).invoiceId, null);
     assert.equal((await raw.expense.findUnique({ where: { id: expense.id } })).invoiceId, null);
     assert.equal((await raw.timeEntry.findUnique({ where: { id: sourceTime.id } })).reviewStatus, 'APPROVED');
-    assert.ok((await raw.timeEntry.findUnique({ where: { id: sourceTime.id } })).deletedAt);
-    assert.ok((await raw.expense.findUnique({ where: { id: expense.id } })).deletedAt);
     await assert.rejects(raw.invoice.update({ where: { id: invoice.id }, data: { status: 'DRAFT' } }), /cannot be reopened/);
     await assert.rejects(previewUnbilledRelease(scoped, invoice.id, actors[0]), { statusCode: 409 });
     assert.ok(await raw.auditEvent.findFirst({ where: { organizationId: orgs[0], action: 'invoice.sources_released', entityId: invoice.id } }));
     const tools = createWorkspaceTools();
-    await raw.timeEntry.update({ where: { id: sourceTime.id }, data: { deletedAt: null } });
-    await raw.expense.update({ where: { id: expense.id }, data: { deletedAt: null } });
     const ctx = { prisma: scoped, user: actors[0], scopes: ['workspace:read', 'workspace:actions'] };
     await assert.rejects(tools.call({ ...ctx, scopes: ['workspace:read'] }, 'create_unbilled_invoice_draft', {}), { code: 'TOOL_UNAVAILABLE' });
     const currentTime = await raw.timeEntry.findUnique({ where: { id: sourceTime.id } });
