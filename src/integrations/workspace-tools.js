@@ -6,7 +6,7 @@ import { portfolioWhere } from '../shared/portfolio.js';
 import { portfolioFilterSchema } from '../validators/schemas.js';
 import { taskViewFiltersSchema } from '../validators/schemas.js';
 import { taskViewWhere } from '../shared/task-view-filters.js';
-import { financialPortfolioWhere } from '../shared/financial-portfolio.js';
+import { financialPortfolioWhere, invoicePortfolioWhere } from '../shared/financial-portfolio.js';
 import { validateTaskFieldFilters } from '../services/task-field-filters.service.js';
 
 const pageSchema = z.object({
@@ -22,7 +22,7 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
     run: async ({ prisma, user, input }) => {
       await preflight({ prisma, user, input });
       const rows = await prisma[model].findMany({
-        where: { ...where(user, input), ...(input.after ? { id: { gt: input.after } } : {}) },
+        where: { ...await where(user, input, prisma), ...(input.after ? { id: { gt: input.after } } : {}) },
         select, orderBy: { id: 'asc' }, take: input.limit + 1,
       });
       const items = rows.slice(0, input.limit);
@@ -34,7 +34,7 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 export const workspaceRegistry = createToolRegistry([
   listTool('list_invoices', 'Page through internal invoice identities and monetary values, preserving each currency. Optionally filter by portfolio.',
     'invoice', { id: true, invoiceNumber: true, status: true, total: true, currency: true, clientId: true, projectId: true, issueDate: true, dueDate: true },
-    (user, input) => ({ organizationId: user.organizationId, ...financialPortfolioWhere(input.portfolio) }),
+    async (user, input, prisma) => ({ organizationId: user.organizationId, ...await invoicePortfolioWhere(prisma, input.portfolio, user.organizationId) }),
     pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_expenses', 'Page through expenses with their original currency and project/client identities. Optionally filter by portfolio; receipt URLs are omitted.',
     'expense', { id: true, description: true, amount: true, currency: true, category: true, date: true, clientId: true, projectId: true, billable: true, invoiced: true },
