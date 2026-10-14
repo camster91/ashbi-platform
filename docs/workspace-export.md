@@ -15,6 +15,13 @@ export and offline verification). Tests:
 `src/tests/unit/workspace-export.test.js`,
 `src/tests/integration/workspace-export.database.test.js`.
 
+Standalone collections, canonical record values/relations and reusable form
+configurations are included under `workspace_collections`, `workspace_records`
+and `workspace_record_forms`. These entities preserve archived rows, schema
+revisions and form defaults and are filtered directly by organization. This
+extends the existing offboarding export; it does not add an importer or prove
+source cutover, real-tenant export or restore acceptance.
+
 ## Running an export
 
 1. Confirm the request: the organization id, who asked, and where the export

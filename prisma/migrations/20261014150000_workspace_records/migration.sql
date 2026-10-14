@@ -72,6 +72,11 @@ CREATE INDEX "workspace_record_forms_collectionId_archivedAt_id_idx" ON "workspa
 CREATE UNIQUE INDEX "users_id_organizationId_key" ON "users"("id", "organizationId");
 
 -- AddForeignKey
+CREATE INDEX "workspace_collections_authorId_organizationId_idx" ON "workspace_collections"("authorId", "organizationId");
+CREATE INDEX "workspace_records_authorId_organizationId_idx" ON "workspace_records"("authorId", "organizationId");
+CREATE INDEX "workspace_records_collectionId_organizationId_idx" ON "workspace_records"("collectionId", "organizationId");
+CREATE INDEX "workspace_record_forms_authorId_organizationId_idx" ON "workspace_record_forms"("authorId", "organizationId");
+CREATE INDEX "workspace_record_forms_collectionId_organizationId_idx" ON "workspace_record_forms"("collectionId", "organizationId");
 ALTER TABLE "workspace_collections" ADD CONSTRAINT "workspace_collections_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey

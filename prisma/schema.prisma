@@ -911,6 +911,7 @@ model WorkspaceCollection {
   records        WorkspaceRecord[]
   forms          WorkspaceRecordForm[]
   @@unique([id, organizationId])
+  @@index([authorId, organizationId])
   @@index([organizationId])
   @@index([organizationId, archivedAt, id])
   @@map("workspace_collections")
@@ -930,6 +931,8 @@ model WorkspaceRecord {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   collection     WorkspaceCollection @relation(fields: [collectionId, organizationId], references: [id, organizationId], onDelete: Cascade)
   author         User @relation("WorkspaceRecordAuthor", fields: [authorId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@index([authorId, organizationId])
+  @@index([collectionId, organizationId])
   @@index([organizationId])
   @@index([collectionId, archivedAt, id])
   @@map("workspace_records")
@@ -948,6 +951,8 @@ model WorkspaceRecordForm {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   collection     WorkspaceCollection @relation(fields: [collectionId, organizationId], references: [id, organizationId], onDelete: Cascade)
   author         User @relation("WorkspaceRecordFormAuthor", fields: [authorId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@index([authorId, organizationId])
+  @@index([collectionId, organizationId])
   @@index([organizationId])
   @@index([collectionId, archivedAt, id])
   @@map("workspace_record_forms")

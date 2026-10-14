@@ -3271,6 +3271,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: no
 - Constraints and indexes:
   - `@@unique([id, organizationId])`
+  - `@@index([authorId, organizationId])`
   - `@@index([organizationId])`
   - `@@index([organizationId, archivedAt, id])`
 
@@ -3352,6 +3353,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Tenant-scoped: yes (`organizationId`)
 - Soft-deletable: no
 - Constraints and indexes:
+  - `@@index([authorId, organizationId])`
+  - `@@index([collectionId, organizationId])`
   - `@@index([organizationId])`
   - `@@index([collectionId, archivedAt, id])`
 
@@ -3377,6 +3380,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Tenant-scoped: yes (`organizationId`)
 - Soft-deletable: no
 - Constraints and indexes:
+  - `@@index([authorId, organizationId])`
+  - `@@index([collectionId, organizationId])`
   - `@@index([organizationId])`
   - `@@index([collectionId, archivedAt, id])`
 

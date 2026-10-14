@@ -385,6 +385,16 @@ export function createScopedPrisma(prisma, organizationId) {
     return { AND: [where, buildTenantWhere(TENANT_PATHS[modelKey], organizationId)] };
   }
 
+  function ownedSelector(modelKey, where) {
+    if (isPlainObject(where?.id_organizationId)) {
+      if (!['user', 'workspacecollection'].includes(modelKey) || Object.keys(where.id_organizationId).length !== 2 || typeof where.id_organizationId.id !== 'string' || typeof where.id_organizationId.organizationId !== 'string') throw new TenancyError('Unsupported composite reference', 400);
+      where = { ...where, ...where.id_organizationId };
+      delete where.id_organizationId;
+    }
+    if (where?.organizationId !== undefined && where.organizationId !== organizationId) throw new TenancyError('Referenced record is unavailable in this workspace', 404);
+    return where;
+  }
+
   /**
    * Prove that the record of `modelKey` matching `where` (a unique input)
    * belongs to this organization. Each distinct record is checked once per
@@ -394,6 +404,7 @@ export function createScopedPrisma(prisma, organizationId) {
     if (!isPlainObject(where) || Object.keys(where).length === 0) {
       throw new TenancyError(`${label} reference is not a unique record`, 400);
     }
+    where = ownedSelector(modelKey, where);
     const cacheKey = `${modelKey}:${includeDeleted ? 'any:' : ''}${JSON.stringify(where)}`;
     if (verified.has(cacheKey)) return;
     if (modelKey === 'organization') {
@@ -633,7 +644,8 @@ export function createScopedPrisma(prisma, organizationId) {
                   if (row?.[parent.relation]?.create || row?.[parent.relation]?.connectOrCreate) {
                     throw new TenancyError(`nested ${parent.relation} creation is not allowed in scoped writes`);
                   }
-                  const ownerId = row?.[parent.field] ?? row?.[parent.relation]?.connect?.id;
+                  const connected = row?.[parent.relation]?.connect;
+                  const ownerId = row?.[parent.field] ?? (connected ? ownedSelector(parent.model, connected).id : undefined);
                   if (!ownerId && creating && parent.required) {
                     throw new TenancyError(`${String(modelName)}.${parent.field} is required`, 400);
                   }
