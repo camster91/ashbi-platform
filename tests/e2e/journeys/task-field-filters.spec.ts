@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { createClientWithContact, json, loginAdminThroughUi } from './support';
 
 test('typed field filters and named relations persist in saved views', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await loginAdminThroughUi(page);
   const admin = page.request;
   const { client, suffix } = await createClientWithContact(admin, 'Field filter QA');
@@ -36,4 +38,10 @@ test('typed field filters and named relations persist in saved views', async ({ 
   const saved = await json(await admin.get(`/api/projects/${project.id}/task-views`));
   expect(saved.views[0].filters.fieldFilters).toContainEqual({ key: 'estimate', operator: 'EQ', value: 0 });
   expect(saved.views[0].filters.fieldFilters).toContainEqual({ key: 'approved', operator: 'EQ', value: false });
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    const result = await new AxeBuilder({ page }).include('[aria-label="Custom field filters"]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+    expect(result.violations).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
+  }
 });
