@@ -32,7 +32,7 @@ BEGIN
   IF NEW."parentId" IS NOT NULL THEN
     SELECT "organizationId", "archivedAt" INTO parent_org, parent_archived FROM "workspace_pages" WHERE "id" = NEW."parentId";
     IF parent_org IS DISTINCT FROM NEW."organizationId" THEN RAISE EXCEPTION 'Workspace page parent belongs to another organization'; END IF;
-    IF parent_archived IS NOT NULL AND (TG_OP = 'INSERT' OR NEW."parentId" IS DISTINCT FROM OLD."parentId") THEN RAISE EXCEPTION 'Workspace page parent is archived'; END IF;
+    IF parent_archived IS NOT NULL AND (TG_OP = 'INSERT' OR NEW."parentId" IS DISTINCT FROM OLD."parentId" OR NEW."archivedAt" IS NULL) THEN RAISE EXCEPTION 'Workspace page parent is archived'; END IF;
     seen := ARRAY[NEW."id"]; current_parent := NEW."parentId"; depth := 0;
     WHILE current_parent IS NOT NULL LOOP
       IF current_parent = ANY(seen) THEN RAISE EXCEPTION 'Workspace page hierarchy cycle'; END IF;
