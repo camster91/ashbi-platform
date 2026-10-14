@@ -5,7 +5,7 @@ export default function DocumentSaveRecovery({ noteId, draft, error, onReload })
   const [loading, setLoading] = useState(false);
   const [reloadError, setReloadError] = useState('');
   if (!error) return null;
-  return <div className="my-3 rounded border border-destructive/30 p-3 space-y-2">
+  return <div role="region" aria-label="Document save recovery" className="my-3 rounded border border-destructive/30 p-3 space-y-2">
     <p role="alert">{error.message || 'Document could not be saved.'} Your draft is retained.</p>
     <p className="text-sm">Download your draft before reloading if you want to keep it for comparison.</p>
     <div className="flex flex-wrap gap-3">

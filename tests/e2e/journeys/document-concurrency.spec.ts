@@ -16,7 +16,7 @@ test('concurrent document changes reject a stale draft, preserve it and allow an
   await page.getByLabel(`Edit ${title} content`, { exact: true }).fill('My pending draft');
   await json(await api.put(`/api/notes/${note.id}`, { data: { revision: note.revision, content: 'Teammate update' } }));
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByRole('alert').filter({ hasText: 'Document changed since you started editing' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Document save recovery', exact: true }).getByRole('alert').filter({ hasText: 'Document changed since you started editing' })).toBeVisible();
   await expect(page.getByLabel(`Edit ${title} content`, { exact: true })).toHaveValue('My pending draft');
   const downloading = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download draft' }).click();
