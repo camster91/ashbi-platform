@@ -48,3 +48,9 @@ BEGIN
 END;
 $$;
 CREATE TRIGGER note_audience_guard BEFORE INSERT OR UPDATE ON notes FOR EACH ROW EXECUTE FUNCTION note_audience_guard();
+-- Restoration is a hierarchy write even when parentId itself is unchanged.
+-- A raw restore cannot bypass the active same-project-parent guard.
+DROP TRIGGER "notes_parent_project_guard" ON "notes";
+CREATE TRIGGER "notes_parent_project_guard"
+BEFORE INSERT OR UPDATE OF "parentId", "projectId", "deletedAt" ON "notes"
+FOR EACH ROW EXECUTE FUNCTION enforce_note_parent_project();

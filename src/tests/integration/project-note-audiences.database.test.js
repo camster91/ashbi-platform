@@ -23,6 +23,11 @@ test('project notes preserve inherited read/edit audiences across API/MCP, promo
   const note=await raw.note.create({data:{title:'Private brief',content:'Private words',authorId:owner.id,projectId:project.id}});
   const child=await raw.note.create({data:{title:'Nested brief',content:'Nested words',authorId:reader.id,projectId:project.id,parentId:note.id}});
   const hidden=await raw.note.create({data:{title:'Hidden brief',content:'Hidden words',authorId:owner.id,projectId:project.id,accessMode:'RESTRICTED'}});
+  const archivedRoot=await raw.note.create({data:{title:'Legacy parent',content:'',projectId:project.id,authorId:owner.id}});
+  const archivedChild=await raw.note.create({data:{title:'Legacy child',content:'',projectId:project.id,authorId:owner.id,parentId:archivedRoot.id}});
+  await raw.note.update({where:{id:archivedChild.id},data:{deletedAt:new Date()}});
+  await raw.note.update({where:{id:archivedRoot.id},data:{deletedAt:new Date()}});
+  await assert.rejects(raw.note.update({where:{id:archivedChild.id},data:{deletedAt:null}}),/active note/);
   const scoped=createScopedPrisma(withSoftDelete(raw),orgs[0]);
   const saved=await saveNoteAccess(scoped,note.id,{revision:0,mode:'RESTRICTED',members:[{userId:reader.id,role:'READ'}]},owner);
   assert.equal(saved.revision,1);
