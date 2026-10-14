@@ -33,6 +33,10 @@ test('persisted contributors retain owner/join dates and enforce both tenant bou
     await assert.rejects(readTaskCollaborators(createScopedPrisma(raw, orgs[1]), task.id, foreign), { statusCode: 404 });
     await assert.rejects(raw.taskCollaborator.create({ data: { taskId: task.id, userId: foreign.id, organizationId: orgs[0] } }));
     await assert.rejects(raw.user.update({ where: { id: helper.id }, data: { organizationId: orgs[1] } }));
+    const foreignClient = await raw.client.create({ data: { organizationId: orgs[1], name: 'Foreign canonical client' } });
+    const foreignProject = await raw.project.create({ data: { organizationId: orgs[1], clientId: foreignClient.id, name: 'Foreign project' } });
+    await assert.rejects(raw.task.update({ where: { id: task.id }, data: { projectId: foreignProject.id } }));
+    await assert.rejects(raw.project.update({ where: { id: project.id }, data: { organizationId: orgs[1] } }));
     const inactive = await raw.user.create({ data: { organizationId: orgs[0], email: `${randomUUID()}@e2e.example.test`, name: 'Inactive', password: fixturePassword(), role: 'TEAM', isActive: false } });
     const clientPrincipal = await raw.user.create({ data: { organizationId: orgs[0], email: `${randomUUID()}@e2e.example.test`, name: 'Client principal', password: fixturePassword(), role: 'CLIENT' } });
     for (const member of [inactive, clientPrincipal]) {

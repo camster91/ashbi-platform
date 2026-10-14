@@ -27,7 +27,7 @@ BEGIN
   IF TG_TABLE_NAME = 'users' THEN
     IF EXISTS (SELECT 1 FROM task_collaborators c WHERE c."userId" = NEW.id AND c."organizationId" IS DISTINCT FROM NEW."organizationId") THEN RAISE EXCEPTION 'Collaboration tenant mismatch'; END IF;
   ELSIF TG_TABLE_NAME = 'tasks' THEN
-    SELECT p."organizationId" INTO target_org FROM projects p WHERE p.id = NEW."projectId";
+    SELECT p."organizationId" INTO target_org FROM projects p WHERE p.id = NEW."projectId" FOR UPDATE;
     IF EXISTS (SELECT 1 FROM task_collaborators c WHERE c."taskId" = NEW.id AND c."organizationId" IS DISTINCT FROM target_org) THEN RAISE EXCEPTION 'Collaboration tenant mismatch'; END IF;
   ELSE
     IF EXISTS (SELECT 1 FROM task_collaborators c JOIN tasks t ON t.id = c."taskId" WHERE t."projectId" = NEW.id AND c."organizationId" IS DISTINCT FROM NEW."organizationId") THEN RAISE EXCEPTION 'Collaboration tenant mismatch'; END IF;
