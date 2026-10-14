@@ -75,6 +75,6 @@ test('workspace/MCP template reads keep explicit tenant and archive scope', asyn
   let query;
   const context = { user: { id: 'u1', role: 'TEAM', organizationId: 'org-a' }, scopes: ['workspace:read'], prisma: { projectTemplate: { findMany: async args => { query = args; return []; } } } };
   await createWorkspaceTools().call(context, 'list_board_templates', { includeArchived: true, after: 'cursor', limit: 10 });
-  assert.deepEqual(query.where, { organizationId: 'org-a', kind: { in: ['BOARD', 'BOARD_ARCHIVED'] }, id: { gt: 'cursor' } });
+  assert.deepEqual(query.where, { AND: [{ organizationId: 'org-a', kind: { in: ['BOARD', 'BOARD_ARCHIVED'] } }, { id: { gt: 'cursor' } }] });
   assert.equal(query.take, 11);
 });
