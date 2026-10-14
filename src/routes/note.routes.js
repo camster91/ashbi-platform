@@ -380,7 +380,7 @@ export default async function noteRoutes(fastify) {
   fastify.post('/notes/:id/restore', { onRequest: [fastify.authenticate] }, async request => {
     const note = await withStageTransaction(request.prisma, async transaction => {
       const data = await noteRestoreData(transaction, request.params.id, request.user);
-      return transaction.note.update({ where: { id: request.params.id }, data });
+      return transaction.note.update({ where: { id: request.params.id, deletedAt: { not: null } }, data });
     });
     return { success: true, note: presentNote(note) };
   });

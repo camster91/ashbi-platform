@@ -65,6 +65,9 @@ test('project notes preserve inherited read/edit audiences across API/MCP, promo
   assert.equal((await authorizeNote(scoped,child.id,admin)).permissions.canRead,true);await raw.user.update({where:{id:admin.id},data:{role:'TEAM'}});await assert.rejects(authorizeNote(scoped,child.id,admin),{statusCode:404});
   await assert.rejects(restoreTrashedItem({scopedPrisma:scoped,rawPrisma:raw,trashId,actor:reader}),{statusCode:403});
   await restoreTrashedItem({scopedPrisma:scoped,rawPrisma:raw,trashId,actor:owner});await assert.rejects(authorizeNote(scoped,note.id,outsider),{statusCode:404});
+  response=await app.inject({method:'DELETE',url:'/api/notes/'+note.id});assert.equal(response.statusCode,200,response.body);
+  actor=reader;response=await app.inject({method:'POST',url:'/api/notes/'+note.id+'/restore'});assert.equal(response.statusCode,403,response.body);
+  actor=owner;response=await app.inject({method:'POST',url:'/api/notes/'+note.id+'/restore'});assert.equal(response.statusCode,200,response.body);assert.equal((await authorizeNote(scoped,note.id,reader)).permissions.canEdit,false);
   await raw.user.update({where:{id:reader.id},data:{isActive:false}});assert.equal(await raw.notification.count({where:{userId:reader.id,...await noteNotificationWhere(scoped,reader)}}),0);await assert.rejects(authorizeNote(scoped,child.id,reader),{statusCode:403});
   const stored=await raw.note.findUnique({where:{id:note.id}});assert.equal(stored.content,'Private words');
  }catch(error){console.error('[Project Note acceptance]',error.message);throw error;}finally{

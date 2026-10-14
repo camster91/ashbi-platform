@@ -371,6 +371,14 @@ function describeWhere(where) {
   return JSON.stringify(where);
 }
 
+// Preserve a reviewed deletion criterion at the top level: the underlying
+// soft-delete policy must see it after tenant filters are combined. Ordinary
+// reads/mutations still have no escape hatch and receive deletedAt: null.
+function tenantFilteredWhere(where, tenantWhere) {
+  const deletion = Object.prototype.hasOwnProperty.call(where ?? {}, 'deletedAt') && where.deletedAt !== undefined ? { deletedAt: where.deletedAt } : {};
+  return { ...deletion, AND: [where ?? {}, tenantWhere] };
+}
+
 export function createScopedPrisma(prisma, organizationId) {
   if (!organizationId) {
     throw new TenancyError('organizationId is required for scoped queries');
@@ -382,7 +390,7 @@ export function createScopedPrisma(prisma, organizationId) {
   /** The where that proves a record of `modelKey` belongs to this organization. */
   function ownedWhere(modelKey, where) {
     if (DIRECT_SCOPED_MODELS.has(modelKey)) return { ...where, organizationId };
-    return { AND: [where, buildTenantWhere(TENANT_PATHS[modelKey], organizationId)] };
+    return tenantFilteredWhere(where, buildTenantWhere(TENANT_PATHS[modelKey], organizationId));
   }
 
   function ownedSelector(modelKey, where) {
@@ -668,7 +676,7 @@ export function createScopedPrisma(prisma, organizationId) {
             // include/select from the original args.
             if (methodName === 'findUnique' || methodName === 'findUniqueOrThrow') {
               const findFirstArgs = {
-                where: { AND: [queryArgs.where ?? {}, tenantWhere] },
+                where: tenantFilteredWhere(queryArgs.where, tenantWhere),
               };
               if (queryArgs.include) findFirstArgs.include = queryArgs.include;
               if (queryArgs.select)  findFirstArgs.select  = queryArgs.select;
@@ -681,7 +689,7 @@ export function createScopedPrisma(prisma, organizationId) {
             }
 
             if (READ_METHODS.has(methodName) || methodName === 'deleteMany' || BULK_UPDATE_METHODS.has(methodName)) {
-              queryArgs.where = { AND: [queryArgs.where ?? {}, tenantWhere] };
+              queryArgs.where = tenantFilteredWhere(queryArgs.where, tenantWhere);
             }
 
             // Prisma update/delete require a WhereUniqueInput. Adding a
@@ -692,7 +700,7 @@ export function createScopedPrisma(prisma, organizationId) {
             // across tenants.
             if (methodName === 'update' || methodName === 'delete') {
               const scopedTarget = await modelTarget.findFirst({
-                where: { AND: [queryArgs.where ?? {}, tenantWhere] },
+                where: tenantFilteredWhere(queryArgs.where, tenantWhere),
                 // Stored scalar references, so an unchanged one is not re-checked.
                 select: { id: true, ...Object.fromEntries(Object.keys(SCALAR_REFERENCES[modelKey] || {}).map((field) => [field, true])) },
               });
@@ -709,7 +717,7 @@ export function createScopedPrisma(prisma, organizationId) {
               }
 
               const scopedTarget = await modelTarget.findFirst({
-                where: { AND: [queryArgs.where ?? {}, tenantWhere] },
+                where: tenantFilteredWhere(queryArgs.where, tenantWhere),
                 select: { id: true },
               });
               const branch = scopedTarget ? queryArgs.update : queryArgs.create;
