@@ -2,6 +2,9 @@
 
 import { validateBody, noteProjectCreateSchema, noteUpdateV2Schema, noteFromTemplateSchema } from '../validators/schemas.js';
 import { softDelete } from '../services/trash.service.js';
+import { portfolioFilterSchema } from '../validators/schemas.js';
+import { portfolioWhere } from '../shared/portfolio.js';
+import { z } from 'zod';
 
 function parseStringArray(value) {
   try {
@@ -70,10 +73,17 @@ export default async function noteRoutes(fastify) {
   // List ALL notes across all projects (global docs view)
   fastify.get('/notes', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
     const { type, search, pinned, projectId } = request.query;
+    const portfolio = portfolioFilterSchema.safeParse(request.query.portfolio);
+    if (!portfolio.success) return reply.status(400).send({ error: 'Invalid portfolio filter' });
+    const paginated = request.query.paginated === 'true';
+    if (request.query.paginated !== undefined && !['true', 'false'].includes(request.query.paginated)) return reply.status(400).send({ error: 'Invalid pagination mode' });
+    const paging = z.object({ page: z.coerce.number().int().min(1).max(100000), limit: z.coerce.number().int().min(1).max(100) }).safeParse({ page: request.query.page ?? '1', limit: request.query.limit ?? '100' });
+    if (paginated && !paging.success) return reply.status(400).send({ error: 'Invalid document pagination' });
 
     const where = {};
+    if (portfolio.data) where.project = portfolioWhere(portfolio.data);
     if (projectId) where.projectId = projectId;
     if (type) where.type = type;
     if (pinned === 'true') where.isPinned = true;
@@ -92,11 +102,16 @@ export default async function noteRoutes(fastify) {
       },
       orderBy: [
         { isPinned: 'desc' },
-        { updatedAt: 'desc' }
+        { updatedAt: 'desc' },
+        { id: 'asc' }
       ],
-      take: 200
+      take: paginated ? paging.data.limit : 200,
+      ...(paginated ? { skip: (paging.data.page - 1) * paging.data.limit } : {})
     });
-
+    if (paginated) {
+      const total = await request.prisma.note.count({ where });
+      return { notes: notes.map(presentNote), pagination: { page: paging.data.page, limit: paging.data.limit, total, pages: Math.ceil(total / paging.data.limit) } };
+    }
     return notes.map(presentNote);
   });
 

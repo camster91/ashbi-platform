@@ -1299,8 +1299,8 @@ export const api = {
   syncIntegration: (type) => request(`/integrations/${type}/sync`, { method: 'POST' }),
 
   // ===== TIMESHEETS =====
-  getWeeklyTimesheet: (weekStart) => {
-    const query = weekStart ? `?weekStart=${weekStart}` : '';
+  getWeeklyTimesheet: (weekStart, params = {}) => {
+    const query = `?${new URLSearchParams({ ...params, ...(weekStart ? { weekStart } : {}) })}`;
     return request(`/timesheets/weekly${query}`);
   },
   approveTimesheetEntry: (id) => request(`/timesheets/${id}/approve`, { method: 'PATCH' }),

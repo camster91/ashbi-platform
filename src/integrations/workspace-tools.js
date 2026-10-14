@@ -29,6 +29,14 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 }
 
 export const workspaceRegistry = createToolRegistry([
+  listTool('list_notes', 'Page through internal project documents and notes. Optionally filter by portfolio.',
+    'note', { id: true, title: true, content: true, type: true, projectId: true, updatedAt: true },
+    (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) } }),
+    pageSchema.extend({ portfolio: portfolioFilterSchema })),
+  listTool('list_time_entries', 'Page through canonical time entries. Team members see their own entries; admins see the workspace. Optionally filter by portfolio.',
+    'timeEntry', { id: true, projectId: true, taskId: true, userId: true, date: true, duration: true, billable: true, invoiced: true, reviewStatus: true },
+    (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }, ...(user.role === 'ADMIN' ? {} : { userId: user.id }) }),
+    pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_board_templates', 'Page through shared workflow templates. Definitions only; archived templates are omitted unless includeArchived is true.',
     'projectTemplate', { id: true, name: true, description: true, kind: true, boardConfig: true },
     (user, input) => ({ organizationId: user.organizationId, kind: { in: input.includeArchived ? ['BOARD', 'BOARD_ARCHIVED'] : ['BOARD'] } }),
