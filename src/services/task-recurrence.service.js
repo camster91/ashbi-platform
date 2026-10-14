@@ -40,17 +40,21 @@ export async function processRecurringTasks(prisma, { now = new Date() } = {}) {
       if (dateText(scheduledDate) > today) continue;
       const next = asDate(recurrenceAfter(rule, today));
       const occurrence = await prisma.$transaction(async tx => {
-        const live = await tx.task.findFirst({ where: { id: source.id, project: { deletedAt: null, status: { notIn: ['ON_HOLD', 'CANCELLED'] } } } });
+        const live = await tx.task.findFirst({ where: { id: source.id, project: { deletedAt: null, status: { notIn: ['ON_HOLD', 'CANCELLED'] } } }, include: { project: { select: { organizationId: true } } } });
         if (!live) return null;
         const claimed = await tx.task.updateMany({ where: { id: source.id, recurrenceNextDate: scheduledDate,
           recurrenceRevision: source.recurrenceRevision }, data: { recurrenceNextDate: next, recurrenceLastDate: scheduledDate } });
         if (claimed.count !== 1) return null;
-        const owner = live.assigneeId ? await tx.user.findFirst({ where: { id: live.assigneeId, isActive: true }, select: { id: true } }) : null;
-        return tx.task.create({ data: { projectId: live.projectId, title: live.title, description: live.description,
+        const organizationId = live.project.organizationId;
+        const owner = live.assigneeId ? await tx.user.findFirst({ where: { id: live.assigneeId, organizationId, isActive: true, role: { in: ['ADMIN', 'TEAM'] } }, select: { id: true } }) : null;
+        const contributors = await tx.taskCollaborator.findMany({ where: { taskId: live.id, organizationId, user: { organizationId, isActive: true, role: { in: ['ADMIN', 'TEAM'] } } }, select: { userId: true }, take: 30, orderBy: { userId: 'asc' } });
+        const created = await tx.task.create({ data: { projectId: live.projectId, title: live.title, description: live.description,
           content: live.content, properties: live.properties, ...(live.fieldValues ? { fieldValues: live.fieldValues } : {}), tags: live.tags, priority: live.priority, category: live.category,
           icon: live.icon, coverImage: live.coverImage, estimatedTime: live.estimatedTime,
           assigneeId: owner?.id ?? null, status: 'PENDING', dueDate: scheduledDate,
           recurrenceSourceId: source.id, recurrenceScheduledDate: scheduledDate } });
+        if (contributors.length) await tx.taskCollaborator.createMany({ data: contributors.map(({ userId }) => ({ taskId: created.id, userId, organizationId })) });
+        return created;
       }, { isolationLevel: 'Serializable' });
       if (occurrence) generated += 1;
       } catch (error) { failures.push({ taskId: source.id, code: error.code ?? 'RECURRENCE_FAILED' }); }

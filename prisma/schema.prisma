@@ -31,6 +31,7 @@ model Organization {
 
   // Relations
   users              User[]
+  taskCollaborations TaskCollaborator[]
   clients            Client[]
   projects           Project[]
   formDrafts         FormDraft[]
@@ -119,6 +120,7 @@ model User {
   // Relations
   assignedThreads    Thread[]            @relation("AssignedTo")
   assignedTasks      Task[]              @relation("TaskAssignee")
+  taskCollaborations TaskCollaborator[]
   draftedResponses   Response[]          @relation("DraftedBy")
   approvedResponses  Response[]          @relation("ApprovedBy")
   notifications      Notification[]
@@ -373,6 +375,7 @@ model Task {
   properties String  @default("{}") // JSON: Custom properties/fields
   fieldValues Json? // Typed custom values, separate from legacy properties
   fieldValuesRevision Int @default(0)
+  collaboratorsRevision Int @default(0)
 
   // Hierarchy
   parentId String? // For subpages/subtasks
@@ -399,6 +402,7 @@ model Task {
   assignee     User?         @relation("TaskAssignee", fields: [assigneeId], references: [id])
   milestone    Milestone?    @relation("MilestoneTasks", fields: [milestoneId], references: [id])
   comments     TaskComment[]
+  collaborators TaskCollaborator[]
   timeEntries  TimeEntry[]
   timeSessions TimeSession[]
 
@@ -821,6 +825,21 @@ model Activity {
   @@index([userId, createdAt])
   @@index([entityType, entityId])
   @@map("activities")
+}
+
+model TaskCollaborator {
+  id             String @id @default(cuid())
+  taskId         String
+  userId         String
+  organizationId String
+  createdAt      DateTime @default(now())
+  task           Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@unique([taskId, userId])
+  @@index([userId])
+  @@index([organizationId, userId])
+  @@map("task_collaborators")
 }
 
 model TaskComment {

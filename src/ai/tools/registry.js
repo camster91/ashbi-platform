@@ -333,7 +333,7 @@ export const BUILTIN_TOOLS = Object.freeze([
   },
   {
     name: 'list_my_tasks',
-    description: 'List open tasks assigned to the signed-in user.',
+    description: 'List open tasks owned by the signed-in user or explicitly shared with them as a contributor.',
     class: 'read',
     roles: ['ADMIN', 'TEAM'],
     inputSchema: z.object({
@@ -344,11 +344,11 @@ export const BUILTIN_TOOLS = Object.freeze([
     timeoutMs: 5_000,
     run: ({ prisma, user, input }) => prisma.task.findMany({
       where: {
-        assigneeId: user.id,
+        OR: [{ assigneeId: user.id }, { collaborators: { some: { userId: user.id } } }],
         project: { organizationId: user.organizationId },
         ...(input.includeCompleted ? {} : { status: { not: 'COMPLETED' } }),
       },
-      select: { id: true, title: true, status: true, priority: true, dueDate: true, projectId: true },
+      select: { id: true, title: true, status: true, priority: true, dueDate: true, projectId: true, assigneeId: true },
       orderBy: { updatedAt: 'desc' },
       take: input.limit,
     }),

@@ -17,6 +17,10 @@ test('list tools return only the caller\'s organization, even on an unscoped cli
   harness.db.tables.task.push({ id: 'task-b-planted', projectId: 'project-b', title: 'planted', status: 'PENDING', assigneeId: 'team-a', updatedAt: new Date() });
   const again = await harness.executor.invoke(harness.ctx('team-a'), { tool: 'list_my_tasks', input: {} });
   assert.deepEqual(again.output.map((row) => row.id), ['task-a']);
+  harness.db.tables.task.push({ id: 'task-c', projectId: 'project-a', title: 'Contribution', status: 'PENDING', assigneeId: 'admin-a', updatedAt: new Date() });
+  harness.db.tables.taskCollaborator.push({ taskId: 'task-c', userId: 'team-a' }, { taskId: 'task-b', userId: 'team-a' });
+  const contributions = await harness.executor.invoke(harness.ctx('team-a'), { tool: 'list_my_tasks', input: {} });
+  assert.deepEqual(new Set(contributions.output.map(row => row.id)), new Set(['task-a', 'task-c']));
 });
 
 test('another organization\'s pending action cannot be approved or rejected', async () => {

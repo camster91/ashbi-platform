@@ -141,6 +141,7 @@ export const projectTaskFieldsSchema = z.object({ revision: z.number().int().min
 export const taskFieldValuesSchema = z.object({ revision: z.number().int().min(0), definitionRevision: z.number().int().min(0),
   values: z.record(taskStageKeySchema.refine(value => !['__proto__', 'prototype', 'constructor'].includes(value)), z.unknown()).refine(value => Object.keys(value).length <= 40),
 }).strict();
+export const taskCollaboratorsSchema = z.object({ revision: z.number().int().min(0), userIds: z.array(cuidId).max(30).refine(ids => new Set(ids).size === ids.length) }).strict();
 export const taskViewFiltersSchema = z.object({
   search: z.string().trim().max(200).optional(), stageKey: taskStageKeySchema.optional(),
   status: z.enum(TASK_STATUS_VALUES).optional(), priority: z.enum(TASK_PRIORITIES).optional(),

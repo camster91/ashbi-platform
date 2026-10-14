@@ -43,8 +43,8 @@ test('task search/stage filters combine with project, priority and existing assi
   const noop = () => {};
   await taskRoutes({ authenticate: noop, get: (path, options, run) => { if (path === '/') handler = run; }, post: noop, put: noop, patch: noop, delete: noop });
   await handler({ query: { projectId: 'p1', stageKey: 'review', search: ' art ', priority: 'HIGH' }, user: { id: 'member', role: 'TEAM' },
-    prisma: { task: { count: async ({ where }) => { if (!where.AND) counted = where; return 0; } } } });
-  assert.deepEqual(counted, { projectId: 'p1', stageKey: 'review', priority: 'HIGH', assigneeId: 'member',
+    prisma: { task: { count: async ({ where }) => { if (!where.AND?.some(clause => clause.priority)) counted = where; return 0; } } } });
+  assert.deepEqual(counted, { projectId: 'p1', stageKey: 'review', priority: 'HIGH', AND: [{ OR: [{ assigneeId: 'member' }, { collaborators: { some: { userId: 'member' } } }] }],
     OR: [{ title: { contains: 'art', mode: 'insensitive' } }, { description: { contains: 'art', mode: 'insensitive' } }] });
 });
 test('workspace view filters preserve explicit tenant scope and pagination bounds', async () => {

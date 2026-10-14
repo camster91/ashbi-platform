@@ -16,6 +16,9 @@ import { saveTaskRecurrence } from '../services/task-recurrence.service.js';
 import { taskViewFiltersSchema } from '../validators/schemas.js';
 import { taskViewWhere } from '../shared/task-view-filters.js';
 import { validateTaskFieldFilters } from '../services/task-field-filters.service.js';
+import { readTaskCollaborators, saveTaskCollaborators } from '../services/task-collaborators.service.js';
+import { taskCollaboratorsSchema } from '../validators/schemas.js';
+import { taskParticipationWhere } from '../shared/task-participation.js';
 
 /**
  * Why a task's assignee or dependency reference is unacceptable, or null.
@@ -37,6 +40,8 @@ async function taskReferenceProblem(prisma, { assigneeId, dependsOnId }) {
 }
 
 export default async function taskRoutes(fastify) {
+  fastify.get('/:id/collaborators', { onRequest: [fastify.authenticate] }, request => readTaskCollaborators(request.prisma, request.params.id, request.user));
+  fastify.put('/:id/collaborators', { onRequest: [fastify.authenticate], preHandler: [validateBody(taskCollaboratorsSchema)] }, request => saveTaskCollaborators(request.prisma, request.params.id, request.body, request.user));
   fastify.get('/:id/fields', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
     return readTaskFields(request.prisma, request.params.id);
@@ -87,9 +92,9 @@ export default async function taskRoutes(fastify) {
       }))];
     }
 
-    // Team members see only their tasks
+    // Staff task lists include assigned work and explicit contributions.
     if (request.user.role !== 'ADMIN') {
-      where.assigneeId = request.user.id;
+      where.AND = [...(where.AND ?? []), taskParticipationWhere(request.user.id)];
     } else if (assigneeId) {
       where.assigneeId = assigneeId;
     }
@@ -130,7 +135,7 @@ export default async function taskRoutes(fastify) {
     // the global CRITICAL > HIGH > NORMAL > LOW order, not per page.
     const tasks = await findTasksInPriorityOrder(request.prisma.task, {
       where: {
-        assigneeId: request.user.id,
+        ...taskParticipationWhere(request.user.id),
         status: { not: 'COMPLETED' }
       },
       include: {
