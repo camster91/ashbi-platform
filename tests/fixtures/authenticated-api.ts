@@ -316,6 +316,7 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
     }
     if (path === '/tasks/my') return json(route, { IMMEDIATE: [tasks[0]], THIS_WEEK: [], UPCOMING: [], WAITING_CLIENT: [tasks[1]], WAITING_US: [] });
     if (/^\/tasks\/[^/]+\/fields$/.test(path)) return json(route, { taskId: path.split('/')[2], projectId: 'project-a', projectName: project.name, fields: [], values: {}, relations: {}, revision: 0, definitionRevision: 0 });
+    if (/^\/tasks\/[^/]+\/collaborators$/.test(path)) return json(route, { taskId: path.split('/')[2], ownerId: adminUser.id, revision: 0, canManage: false, collaborators: [] });
 
     // Clients.
     if (path === '/clients') return json(route, { clients: [client], total: 1 });
