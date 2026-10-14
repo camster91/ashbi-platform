@@ -11,7 +11,7 @@ export default function TaskViewGallery({ groups, fields, grouped }) {
       {task.description && <p className="text-sm text-muted-foreground line-clamp-3 [overflow-wrap:anywhere]">{task.description}</p>}
       <p className="text-xs">{String(task.status).replaceAll('_', ' ').toLowerCase()} · {TASK_PRIORITY_LABELS[task.priority] || task.priority}</p>
       <p className="text-sm [overflow-wrap:anywhere]">{task.assignee?.name || 'Unassigned'} · {task.dueDate ? formatDate(task.dueDate, { dateOnly: true }) : 'No due date'}</p>
-      {fields.length > 0 && <dl className="space-y-1">{fields.map(field => <div key={field.key} className="text-sm [overflow-wrap:anywhere]"><dt className="font-medium">{field.name}</dt><dd><TaskFieldCell field={field} value={task.fieldValues?.[field.key]} /></dd></div>)}</dl>}
+      {fields.length > 0 && <dl className="space-y-1">{fields.map(field => <div key={field.key} className="text-sm [overflow-wrap:anywhere]"><dt className="font-medium">{field.name}</dt><dd><TaskFieldCell field={field} value={task.fieldValues?.[field.key]} relation={task.fieldRelations?.[field.key]} /></dd></div>)}</dl>}
     </li>)}</ul>
   </section>)}</div>;
 }

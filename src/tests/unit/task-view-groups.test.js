@@ -17,10 +17,21 @@ test('multi-select groups include each selected choice once and retain empty rec
   assert.deepEqual(groups.map(group => group.label), ['Build', 'Design', 'Unspecified']);
   assert.ok(groups.every(group => group.tasks.length === 1));
 });
-test('gallery/group metadata rejects incomplete criteria and archived or relational grouping', () => {
+test('gallery/group metadata accepts relations and rejects incomplete criteria or archived grouping', () => {
   const base = { key: 'gallery', name: 'Gallery', layout: 'GALLERY', sort: 'TITLE', filters: {} };
   assert.equal(projectTaskViewsSchema.safeParse({ revision: 0, views: [{ ...base, grouping: { by: 'STATUS' } }] }).success, true);
   assert.equal(projectTaskViewsSchema.safeParse({ revision: 0, views: [{ ...base, grouping: { by: 'FIELD' } }] }).success, false);
-  assert.throws(() => validateTaskViewGrouping([{ key: 'client', type: 'RELATION' }], { by: 'FIELD', fieldKey: 'client' }), { statusCode: 400 });
+  assert.doesNotThrow(() => validateTaskViewGrouping([{ key: 'client', type: 'RELATION' }], { by: 'FIELD', fieldKey: 'client' }));
   assert.throws(() => validateTaskViewGrouping([{ key: 'flag', type: 'BOOLEAN', archived: true }], { by: 'FIELD', fieldKey: 'flag' }), { statusCode: 400 });
+});
+
+test('relation groups retain distinct canonical identities with equal names and never render unknown ids', () => {
+  const fields = [{ key: 'client', type: 'RELATION', target: 'CLIENT' }];
+  const rows = [{ id: 'one', fieldValues: { client: 'c1' }, fieldRelations: { client: { id: 'c1', name: 'Same name' } } }, { id: 'two', fieldValues: { client: 'c2' }, fieldRelations: { client: { id: 'c2', name: 'Same name' } } }, { id: 'three', fieldValues: { client: 'foreign-secret-id' }, fieldRelations: { client: null } }, { id: 'four', fieldValues: {} }];
+  const groups = groupTaskViewRows(rows, { by: 'FIELD', fieldKey: 'client' }, fields);
+  assert.equal(groups.length, 4);
+  assert.equal(groups.filter(group => group.label === 'Same name').length, 2);
+  assert.ok(groups.some(group => group.label === 'Unavailable related record'));
+  assert.ok(groups.every(group => !group.label.includes('foreign-secret-id')));
+  assert.equal(groups.flatMap(group => group.tasks).length, 4);
 });

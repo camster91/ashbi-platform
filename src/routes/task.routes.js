@@ -19,6 +19,7 @@ import { validateTaskFieldFilters } from '../services/task-field-filters.service
 import { readTaskCollaborators, saveTaskCollaborators } from '../services/task-collaborators.service.js';
 import { taskCollaboratorsSchema } from '../validators/schemas.js';
 import { taskParticipationWhere } from '../shared/task-participation.js';
+import { taskRelationLabels } from '../services/task-relation-labels.service.js';
 
 /**
  * Why a task's assignee or dependency reference is unacceptable, or null.
@@ -69,6 +70,9 @@ export default async function taskRoutes(fastify) {
       return reply.status(400).send({ error: 'Invalid portfolio filter' });
     }
     const { status, priority, category, projectId, assigneeId, tags, page: pageParam = '1', limit: limitParam = '50' } = request.query;
+    const relationField = request.query.relationField;
+    if (!taskStageKeySchema.optional().safeParse(relationField).success) return reply.status(400).send({ error: 'Invalid relation field' });
+    if (relationField && !projectId) return reply.status(400).send({ error: 'Choose a project for related-record labels' });
 
     const page = parseInt(pageParam);
     const limit = parseInt(limitParam);
@@ -118,7 +122,7 @@ export default async function taskRoutes(fastify) {
     ]);
 
     return {
-      tasks,
+      tasks: await taskRelationLabels(request.prisma, projectId, relationField, tasks, request.user),
       pagination: { page, limit, total, pages: Math.ceil(total / limit) }
     };
   });

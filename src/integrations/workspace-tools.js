@@ -10,13 +10,15 @@ import { financialPortfolioWhere, invoicePortfolioWhere } from '../shared/financ
 import { validateTaskFieldFilters } from '../services/task-field-filters.service.js';
 import { readTeamWorkload } from '../services/team-workload.service.js';
 import { WORKSPACE_TASK_ACTIONS } from './workspace-task-actions.js';
+import { taskRelationLabels } from '../services/task-relation-labels.service.js';
+import { taskStageKeySchema } from '../validators/schemas.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
   after: z.string().min(1).max(50).optional(),
 }).strict();
 
-function listTool(name, description, model, select, where, inputSchema = pageSchema, preflight = async () => {}) {
+function listTool(name, description, model, select, where, inputSchema = pageSchema, preflight = async () => {}, decorate = async rows => rows) {
   return {
     name, description, class: 'read', roles: ['ADMIN', 'TEAM'], inputSchema,
     resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
@@ -27,7 +29,7 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
         where: { ...await where(user, input, prisma), ...(input.after ? { id: { gt: input.after } } : {}) },
         select, orderBy: { id: 'asc' }, take: input.limit + 1,
       });
-      const items = rows.slice(0, input.limit);
+      const items = await decorate(rows.slice(0, input.limit), { prisma, user, input });
       return { items, nextCursor: rows.length > input.limit ? items.at(-1).id : null };
     },
   };
@@ -67,12 +69,13 @@ export const workspaceRegistry = createToolRegistry([
     pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_clients', 'Page through workspace clients. Returns business identity, never credentials.',
     'client', { id: true, name: true, status: true, domain: true }, user => ({ organizationId: user.organizationId })),
-  listTool('list_tasks', 'Page through workspace tasks, including unassigned work. Filter by projectId, status, priority, stageKey or search to reproduce a saved project view.',
+  listTool('list_tasks', 'Page through workspace tasks, including unassigned work. Filter by projectId, status, priority, stageKey or search to reproduce a saved project view. With projectId, relationField resolves authorized names for one active relation field.',
     'task', { id: true, title: true, projectId: true, status: true, stageKey: true, priority: true, dueDate: true, fieldValues: true, fieldValuesRevision: true, assigneeId: true, collaboratorsRevision: true, collaborators: { select: { userId: true, user: { select: { name: true, isActive: true } } } },
       recurrenceRule: true, recurrenceNextDate: true, recurrenceRevision: true, recurrenceSourceId: true, recurrenceScheduledDate: true, recurrenceCompletionSourceId: true, recurrenceFirstCompletedAt: true, recurrenceCompletionProcessedAt: true },
     (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }, ...taskViewWhere(input) }),
-    pageSchema.extend({ portfolio: portfolioFilterSchema, projectId: z.string().min(1).max(50).optional(), ...taskViewFiltersSchema.shape }),
-    ({ prisma, user, input }) => validateTaskFieldFilters(prisma, input.projectId, input.fieldFilters, user.organizationId)),
+    pageSchema.extend({ portfolio: portfolioFilterSchema, projectId: z.string().min(1).max(50).optional(), relationField: taskStageKeySchema.optional(), ...taskViewFiltersSchema.shape }).refine(input => !input.relationField || Boolean(input.projectId), { message: 'Choose a project for related-record labels' }),
+    ({ prisma, user, input }) => validateTaskFieldFilters(prisma, input.projectId, input.fieldFilters, user.organizationId),
+    (rows, { prisma, user, input }) => taskRelationLabels(prisma, input.projectId, input.relationField, rows, user)),
   ...BUILTIN_TOOLS.filter(tool => ['list_my_tasks', 'get_project_summary', 'create_task', 'create_calendar_event'].includes(tool.name)),
 ]);
 

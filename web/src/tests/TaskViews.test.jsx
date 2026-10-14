@@ -15,8 +15,36 @@ vi.mock('../lib/api', () => ({ api: {
 function setup(initial = '/project/p1/views') {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[initial]}><Routes><Route path="/project/:projectId/views" element={<TaskViews />} /></Routes></MemoryRouter></QueryClientProvider>);
 }
-beforeEach(() => { config = { projectId: 'p1', projectName: 'Agency project', views: [], revision: 0, stages: [] }; vi.clearAllMocks(); });
+beforeEach(() => { config = { projectId: 'p1', projectName: 'Agency project', views: [], revision: 0, stages: [] }; vi.clearAllMocks(); api.getTasks.mockImplementation(async params => ({ tasks: params.status ? rows.filter(row => row.status === params.status) : rows, pagination: { pages: 1 } })); });
 describe('saved task views', () => {
+  it('clears archived relation grouping without changing the saved board layout', async () => {
+    config.fields = [{ key: 'old', name: 'Archived relation', type: 'RELATION', target: 'CLIENT', archived: true }];
+    config.views = [{ key: 'board', name: 'Board', layout: 'BOARD', sort: 'TITLE', filters: {}, columns: ['old'], grouping: { by: 'FIELD', fieldKey: 'old' } }];
+    setup('/project/p1/views?view=board');
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear unavailable grouping' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear unavailable columns' }));
+    expect(screen.getByLabelText('Task view layout')).toHaveValue('BOARD');
+    fireEvent.click(screen.getByRole('button', { name: 'Save view changes' }));
+    await waitFor(() => expect(config.views[0].grouping).toBeUndefined());
+    expect(config.views[0].layout).toBe('BOARD');
+    expect(config.views[0].columns).toBeUndefined();
+  });
+  it('requests authorized relation labels and persists named gallery grouping', async () => {
+    config.fields = [{ key: 'client', name: 'Related client', type: 'RELATION', target: 'CLIENT' }];
+    api.getTasks.mockImplementation(async params => ({ tasks: params.relationField ? [{ id: 'named', projectId: 'p1', title: 'Named relation', status: 'PENDING', fieldValues: { client: 'c1' }, fieldRelations: { client: { id: 'c1', name: 'Canonical client' } } }, { id: 'missing', projectId: 'p1', title: 'Unavailable relation', status: 'PENDING', fieldValues: { client: 'unknown' }, fieldRelations: { client: null } }] : rows, pagination: { pages: 1 } }));
+    const first = setup();
+    await screen.findByRole('table');
+    fireEvent.change(screen.getByLabelText('Task view layout'), { target: { value: 'GALLERY' } });
+    fireEvent.change(screen.getByLabelText('Task view grouping'), { target: { value: 'FIELD:client' } });
+    expect(await screen.findByRole('heading', { name: 'Canonical client (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Unavailable related record (1)' })).toBeInTheDocument();
+    expect(api.getTasks).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'p1', relationField: 'client' }));
+    fireEvent.change(screen.getByLabelText('Task view name'), { target: { value: 'By client' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save as new view' }));
+    await waitFor(() => expect(config.views[0]?.grouping).toEqual({ by: 'FIELD', fieldKey: 'client' }));
+    first.unmount(); setup(`/project/p1/views?view=${config.views[0].key}`);
+    expect(await screen.findByRole('heading', { name: 'Canonical client (1)' })).toBeInTheDocument();
+  });
   it('saves a grouped gallery and restores it from the selected-view URL', async () => {
     const first = setup();
     await screen.findByRole('table');
