@@ -93,9 +93,9 @@ export default function Docs() {
     refetch: refetchProjects,
     isFetching: projectsFetching,
   } = useInfiniteQuery({
-    queryKey: ['docs-projects', portfolio], initialPageParam: 1,
-    queryFn: ({ pageParam }) => api.getProjects({ page: pageParam, limit: 100, ...(portfolio && { portfolio }) }),
-    getNextPageParam: response => response.pagination?.page < response.pagination?.pages ? response.pagination.page + 1 : undefined,
+    queryKey: ['docs-projects', portfolio], initialPageParam: 0,
+    queryFn: ({ pageParam }) => api.getProjects({ offset: pageParam, limit: 100, ...(portfolio && { portfolio }) }),
+    getNextPageParam: response => Number.isInteger(response.offset) && Number.isInteger(response.limit) && response.limit > 0 && response.offset + response.limit < response.total ? response.offset + response.limit : undefined,
     enabled: showNewNote,
   });
   const projects = [...new Map((projectPages?.pages.flatMap(page => Array.isArray(page) ? page : page.projects ?? []) ?? []).map(project => [project.id, project])).values()];

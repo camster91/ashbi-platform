@@ -5,7 +5,7 @@ const skills = value => {
   catch { return []; }
 };
 
-// Capacity is weekly hours in Profile. Compare logged hours with those hours,
+// User.capacity is a percentage: 100 percent represents a 40-hour week.
 // while showing owned work and explicit contributions as separate counts.
 export async function readTeamWorkload(prisma, actor, now = new Date()) {
   if (!actor?.organizationId || !staffRoles.includes(actor.role)) fail();
@@ -27,7 +27,7 @@ export async function readTeamWorkload(prisma, actor, now = new Date()) {
   for (;;) {
     const members = await prisma.user.findMany({ where: { organizationId, isActive: true, role: { in: staffRoles }, ...(after ? { id: { gt: after } } : {}) }, select: { id: true, name: true, role: true, skills: true, capacity: true }, take: 100, orderBy: { id: 'asc' } });
     for (const member of members) {
-      const weeklyCapacityHours = Number.isFinite(member.capacity) && member.capacity > 0 ? member.capacity : 0;
+      const weeklyCapacityHours = Number.isFinite(member.capacity) && member.capacity > 0 ? member.capacity / 100 * 40 : 0;
       const weeklyHours = (minutes.get(member.id) ?? 0) / 60;
       const utilizationPercent = weeklyCapacityHours ? Math.round(weeklyHours / weeklyCapacityHours * 100) : null;
       result.push({ id: member.id, name: member.name, role: member.role, skills: skills(member.skills), activeTasks: ownerCounts.get(member.id) ?? 0, contributedTasks: contributionCounts.get(member.id) ?? 0, activeThreads: threadCounts.get(member.id) ?? 0, capacity: member.capacity, weeklyCapacityHours, weeklyHours, utilizationPercent, status: utilizationPercent === null ? 'unconfigured' : utilizationPercent >= 90 ? 'overloaded' : utilizationPercent >= 70 ? 'busy' : 'available', measurement: 'LOGGED_LAST_7_DAYS' });

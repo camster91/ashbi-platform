@@ -12,13 +12,13 @@ test('workload compares logged hours with weekly hours and retains contributors 
     taskCollaborator: group('collaborator', [{ userId: 'one', _count: { _all: 5 } }]),
     thread: group('thread', [{ assignedToId: 'one', _count: { _all: 3 } }]),
     timeEntry: group('time', [{ userId: 'one', _sum: { duration: 3000 } }, { userId: 'two', _sum: { duration: 60 } }]),
-    user: { findMany: async ({ where, take }) => { assert.equal(where.organizationId, 'org-a'); assert.deepEqual(where.role.in, ['ADMIN', 'TEAM']); assert.equal(take, 100); return [{ id: 'one', name: 'One', role: 'TEAM', skills: '[]', capacity: 40 }, { id: 'two', name: 'Two', role: 'TEAM', skills: 'invalid', capacity: 0 }]; } },
+    user: { findMany: async ({ where, take }) => { assert.equal(where.organizationId, 'org-a'); assert.deepEqual(where.role.in, ['ADMIN', 'TEAM']); assert.equal(take, 100); return [{ id: 'one', name: 'One', role: 'TEAM', skills: '[]', capacity: 50 }, { id: 'two', name: 'Two', role: 'TEAM', skills: 'invalid', capacity: 0 }]; } },
   };
   const result = await readTeamWorkload(prisma, actor, new Date('2026-10-14T00:00:00Z'));
   const one = result.find(row => row.id === 'one');
   assert.equal(one.activeTasks, 123); assert.equal(one.contributedTasks, 5);
-  assert.equal(one.weeklyHours, 50); assert.equal(one.weeklyCapacityHours, 40);
-  assert.equal(one.utilizationPercent, 125); assert.equal(one.status, 'overloaded');
+  assert.equal(one.weeklyHours, 50); assert.equal(one.weeklyCapacityHours, 20);
+  assert.equal(one.utilizationPercent, 250); assert.equal(one.status, 'overloaded');
   const two = result.find(row => row.id === 'two');
   assert.equal(two.utilizationPercent, null); assert.equal(two.status, 'unconfigured'); assert.deepEqual(two.skills, []);
   for (const call of calls) assert.match(JSON.stringify(call.query.where), /org-a/);
@@ -36,7 +36,7 @@ test('project allocations aggregate full owned counts and bound canonical projec
   const empty = { groupBy: async () => [] };
   const batches = [];
   const prisma = { task: { groupBy: async ({ by }) => by.length === 2 ? groups : [{ assigneeId: 'one', _count: { _all: 15150 } }] }, taskCollaborator: empty, thread: empty, timeEntry: empty,
-    user: { findMany: async () => [{ id: 'one', name: 'One', capacity: 40, role: 'TEAM', skills: '[]' }] },
+    user: { findMany: async () => [{ id: 'one', name: 'One', capacity: 50, role: 'TEAM', skills: '[]' }] },
     project: { findMany: async ({ where, take }) => { assert.equal(where.organizationId, actor.organizationId); assert.equal(take, 100); batches.push(where.id.in.length); return where.id.in.map(id => ({ id, name: id })); } },
   };
   const result = await readTeamAllocations(prisma, actor);
@@ -49,7 +49,7 @@ test('project allocations aggregate full owned counts and bound canonical projec
 
 test('staff pagination passes the default 100-row cap and rejects client actors before reads', async () => {
   let pages = 0;
-  const members = Array.from({ length: 101 }, (_, i) => ({ id: `u${String(i).padStart(3, '0')}`, name: 'Staff', capacity: 40, role: 'TEAM', skills: '[]' }));
+  const members = Array.from({ length: 101 }, (_, i) => ({ id: `u${String(i).padStart(3, '0')}`, name: 'Staff', capacity: 50, role: 'TEAM', skills: '[]' }));
   const empty = { groupBy: async () => [] };
   const prisma = { task: empty, taskCollaborator: empty, thread: empty, timeEntry: empty, user: { findMany: async ({ where, take }) => { pages++; return members.filter(member => !where.id || member.id > where.id.gt).slice(0, take); } } };
   assert.equal((await readTeamWorkload(prisma, actor)).length, 101); assert.equal(pages, 2);
