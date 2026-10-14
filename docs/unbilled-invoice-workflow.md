@@ -1,0 +1,18 @@
+# Approved work to draft invoice
+
+This feature is in implementation. Candidate selection and exact preview services have focused unit coverage; HTTP routes, the staff UI, confirmed MCP execution, source claims/release and PostgreSQL/browser acceptance are not complete. It is not enabled in production.
+
+An active administrator selects approved, billable, uninvoiced time and billable expenses for one canonical client. A project selection narrows both sources to that client's canonical project; omitting it permits work across that client's projects. Sources retain their original identity, owner, date and project. Pending, rejected, deleted or previously invoiced work is unavailable.
+
+The administrator explicitly chooses each time rate, invoice currency and tax treatment. Time records do not carry a rate currency, so their suggested rate does not imply a conversion or billing currency. Expense currencies must match the chosen invoice currency. The preview lists the exact proposed lines, source snapshots, quantities, declared rates, rounded amounts, tax and total. It has a fingerprint that changes when source/context values change, even when a raw writer leaves a timestamp unchanged. No email or payment provider is called.
+
+Required remaining behavior:
+
+1. Prepare an exact draft preview through the staff UI or scoped API/MCP, then require human confirmation. Recheck the current administrator, canonical scope, source availability and fingerprint at confirmation.
+2. Allocate the invoice number, create its draft/lines, claim each selected source and record the audit/receipt in one serializable transaction. Competing claims have one winner. Replay returns the existing receipt rather than creating another invoice.
+3. Persist immutable original source snapshots on the invoice. Preserve original source history when edits or later release occur; do not silently change the selected client, project or rate currency while claims remain active.
+4. Lock billed expense edits as well as already locked billed time. Guard source and reverse-parent tenant/client changes. A failed write/audit rolls back the invoice number, lines, source claims and receipt.
+5. Release source claims only through a separate reviewed action on a voided, unpaid invoice after its undo window. Retain the source snapshot/release history and refuse reopening that released invoice. Preview and recheck exactly which claims remain owned by it.
+6. Prove persisted selection, preview, confirmation, reload, retry, release, denial, competing claims and source integrity in disposable PostgreSQL and authenticated keyboard/mobile/accessibility journeys.
+
+This does not send invoices, create payment links, charge clients or change issuer/provider mappings. Real provider acceptance and the reviewed one-time input/cutover remain separate pending gates in #565 and #280.
