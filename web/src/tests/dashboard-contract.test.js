@@ -36,6 +36,6 @@ describe('dashboard production contract', () => {
     expect(dashboard).not.toContain('to="/activity"');
     expect(dashboard).not.toMatch(/to=["']\/(activity|revenue|reports)["']/);
     expect(layout).toContain("name: 'Dashboard', href: '/dashboard'");
-    expect(layout).toContain("href: '/dashboard', icon: LayoutDashboard, label: 'Home'");
+    expect(layout).toContain("href: '/dashboard', icon: LayoutDashboard, label: 'Work'");
   });
 });

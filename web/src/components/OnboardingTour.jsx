@@ -24,14 +24,14 @@ const FEATURE_INTRO_STEPS = [
     icon: LayoutDashboard,
     title: 'Your agency command center',
     description:
-      'Ashbi Hub brings clients, projects, proposals, and invoices into one calm workspace. Start each day on the dashboard to see what needs attention.',
+      'Use Work, Clients, Knowledge, Finance, and Settings to find what you need. Start each day in Work on the dashboard or Daily Queue.',
   },
   {
     id: 'inbox',
     icon: Inbox,
     title: 'Never miss a client message',
     description:
-      'The Smart Inbox surfaces urgent threads, sentiment, and AI summaries so you can triage in seconds—not scroll through email.',
+      'Find Inbox in Clients to review conversations and messages that need a response. Keep project delivery in Work and notes in Knowledge.',
   },
   {
     id: 'quick-create',

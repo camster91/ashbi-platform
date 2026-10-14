@@ -17,7 +17,7 @@ test('the More menu stays within a phone viewport and every item is reachable', 
   await page.setViewportSize({ width: 375, height: 667 });
   await page.goto('/dashboard');
   // A real click: the floating AI Chat button must not cover the More tab.
-  await page.getByRole('button', { name: 'Open more navigation options' }).click();
+  await page.getByRole('button', { name: 'Open Settings navigation options' }).click();
   const menu = page.getByRole('menu');
   await expect(menu).toBeVisible();
   expect((await menu.boundingBox())!.y).toBeGreaterThanOrEqual(0);
