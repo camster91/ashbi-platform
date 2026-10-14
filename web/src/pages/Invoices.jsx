@@ -390,6 +390,7 @@ export default function Invoices() {
 function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, sendLoading }) {
   const displayStatus = invoiceDisplayStatus(invoice);
   const leftToPay = balanceNote(invoice);
+  const canManage = isAdmin || !(invoice.sourceBilling || invoice.billingSources);
   const repeats = recurrenceSummary(invoice);
 
   return (
@@ -440,7 +441,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
           {invoice.status === 'DRAFT' && isAdmin && (
             <Button size="sm" variant="outline" onClick={onSend} loading={sendLoading} leftIcon={<Send className="w-3 h-3" />}>Send</Button>
           )}
-          {(isOpenInvoice(invoice) || invoice.isOverdue) && (
+          {canManage && (isOpenInvoice(invoice) || invoice.isOverdue) && (
             <Button size="sm" variant="outline" onClick={onMarkPaid} leftIcon={<DollarSign className="w-3 h-3" />}>Mark Paid</Button>
           )}
           {isAdmin && invoice.status !== 'PAID' && !(invoice.amountPaid > 0) && (
@@ -501,7 +502,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
               Send
             </Button>
           )}
-          {(isOpenInvoice(invoice) || invoice.isOverdue) && (
+          {canManage && (isOpenInvoice(invoice) || invoice.isOverdue) && (
             <Button size="sm" variant="outline" leftIcon={<DollarSign className="w-3 h-3" />}
               onClick={(e) => { e.stopPropagation(); onMarkPaid(); }}>
               Mark Paid

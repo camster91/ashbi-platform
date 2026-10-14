@@ -236,7 +236,7 @@ export default function InvoiceDetail() {
       internalNotes: invoice.internalNotes || '',
       dueDate: toDateInputValue(invoice.dueDate),
       currency: invoice.currency || 'CAD',
-      taxRate: invoice.taxRate || HST_RATE,
+      taxRate: invoice.taxRate ?? HST_RATE,
       taxType: invoice.taxType || 'HST',
       discountAmount: invoice.discountAmount || 0,
       lineItems: (invoice.lineItems || []).map(li => ({
@@ -292,6 +292,8 @@ export default function InvoiceDetail() {
   const displayStatus = invoiceDisplayStatus(invoice);
   const repeats = recurrenceSummary(invoice);
   const isDraft = invoice.status === 'DRAFT';
+  const sourceBacked = Boolean(invoice.sourceBilling || invoice.billingSources);
+  const canManage = isAdmin || !sourceBacked;
   // Sent, viewed by the client, or overdue: payable and resendable.
   const isSent = isOpenInvoice(invoice) || invoice.isOverdue;
   const isPaid = invoice.status === 'PAID';
@@ -347,7 +349,7 @@ export default function InvoiceDetail() {
 
         {/* Desktop Actions */}
         <div className="hidden sm:flex items-center gap-2 flex-wrap justify-end">
-          {isDraft && (
+          {isDraft && canManage && (
             <>
               <Button variant="outline" size="sm" leftIcon={<Edit2 className="w-4 h-4" />} onClick={startEdit}>
                 Edit
@@ -360,7 +362,7 @@ export default function InvoiceDetail() {
               )}
             </>
           )}
-          {isSent && !isPaid && (
+          {isSent && !isPaid && canManage && (
             <Button size="sm" leftIcon={<DollarSign className="w-4 h-4" />}
               onClick={openMarkPaid}>
               Mark as Paid
@@ -398,7 +400,7 @@ export default function InvoiceDetail() {
               </button>
             </div>
           ) : (
-            invoice.status !== 'VOID' && invoice.status !== 'PAID' && (
+            canManage && invoice.status !== 'VOID' && invoice.status !== 'PAID' && (
               <Button
                 variant="outline" size="sm"
                 leftIcon={<CreditCard className="w-4 h-4" />}
@@ -427,7 +429,7 @@ export default function InvoiceDetail() {
 
         {/* Mobile Actions - Stacked */}
         <div className="sm:hidden flex flex-wrap gap-2">
-          {isDraft && (
+          {isDraft && canManage && (
             <>
               <Button variant="outline" size="sm" leftIcon={<Edit2 className="w-4 h-4" />} onClick={startEdit}>
                 Edit
@@ -440,7 +442,7 @@ export default function InvoiceDetail() {
               )}
             </>
           )}
-          {isSent && !isPaid && (
+          {isSent && !isPaid && canManage && (
             <Button size="sm" leftIcon={<DollarSign className="w-4 h-4" />}
               onClick={openMarkPaid}>
               Mark Paid
@@ -471,7 +473,7 @@ export default function InvoiceDetail() {
       )}
 
       {/* Edit Mode */}
-      {editing && editForm ? (
+      {editing && editForm && canManage ? (
         <Card className="p-4 sm:p-6">
           <h2 className="font-semibold text-lg mb-4">Edit Invoice</h2>
           <DraftRecoveryNotice
@@ -499,7 +501,7 @@ export default function InvoiceDetail() {
               </div>
               <div>
                 <label htmlFor="invoice-edit-currency" className="block text-sm font-medium mb-1">Currency</label>
-                <select id="invoice-edit-currency" value={editForm.currency || 'CAD'}
+                <select id="invoice-edit-currency" disabled={sourceBacked} value={editForm.currency || 'CAD'}
                   onChange={(e) => setEditForm(f => ({ ...f, currency: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm">
                   {INVOICE_CURRENCY_OPTIONS.map(code => <option key={code} value={code}>{code}</option>)}
