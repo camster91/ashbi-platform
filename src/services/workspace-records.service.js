@@ -73,7 +73,7 @@ async function decorateRecords(prisma, collection, records, actor) {
   for (const field of collection.fields.filter(field => field.type === 'RELATION' && !field.archived)) {
     const ids = [...new Set(records.flatMap(record => Array.isArray(record.values?.[field.key]) ? record.values[field.key] : []))];
     if (ids.some(id => typeof id !== 'string' || !id || id.length > 80)) fail(400, 'Record relation data is invalid.');
-    selectedCount += ids.length;
+    selectedCount += records.reduce((count, record) => count + (Array.isArray(record.values?.[field.key]) ? record.values[field.key].length : 0), 0);
     if (selectedCount > 5000) fail(400, 'This page has too many relations. Use a smaller record page.');
     const valueKeys = [...new Set(collection.fields.filter(item => item.type === 'ROLLUP' && !item.archived && item.relationKey === field.key && item.targetKey).map(item => item.targetKey))];
     const rows = new Map();

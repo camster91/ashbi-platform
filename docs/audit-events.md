@@ -35,10 +35,12 @@ Workspace knowledge pages emit `workspace_page.created`, `workspace_page.updated
 `revision` and `parentId`; content stays in the page. These writes require their
 audit record in the same transaction and roll back if it cannot be recorded.
 
-Standalone collections emit `workspace_collection.created/updated` with only
+Standalone collections emit `workspace_collection.created` and
+`workspace_collection.updated` with only
 `revision`, `schemaRevision` and the archived flag. Records emit
-`workspace_record.created/updated` with `revision`, `collectionId` and the archived
-flag. Reusable forms emit `workspace_record_form.created/updated` with those same
+`workspace_record.created` and `workspace_record.updated` with `revision`,
+`collectionId` and the archived flag. Reusable forms emit
+`workspace_record_form.created` and `workspace_record_form.updated` with those same
 safe fields; `workspace_record_form.submitted` identifies the resulting record
 and includes only `revision`, `collectionId`, `formId` and `formRevision`. Record
 content, field values, formula text, relation rosters and form defaults are not

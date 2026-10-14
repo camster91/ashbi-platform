@@ -168,7 +168,7 @@ BEGIN
       ELSE false END;
     IF NOT COALESCE(valid, false) THEN RAISE EXCEPTION 'Invalid typed record input'; END IF;
     IF f->>'type' IN ('RELATION','MULTI_SELECT') THEN
-      IF jsonb_array_length(pair.value) > CASE WHEN f->>'type' = 'RELATION' THEN 100 ELSE 30 END OR (SELECT count(DISTINCT value) FROM jsonb_array_elements(pair.value)) <> jsonb_array_length(pair.value) THEN RAISE EXCEPTION 'Invalid record selection'; END IF;
+      IF jsonb_array_length(pair.value) > (CASE WHEN f->>'type' = 'RELATION' THEN 100 ELSE 30 END) OR (SELECT count(DISTINCT value) FROM jsonb_array_elements(pair.value)) <> jsonb_array_length(pair.value) THEN RAISE EXCEPTION 'Invalid record selection'; END IF;
       FOR selected IN SELECT value FROM jsonb_array_elements(pair.value) LOOP
         IF jsonb_typeof(selected) IS DISTINCT FROM 'string' THEN RAISE EXCEPTION 'Selection must contain identifiers or choices'; END IF;
         IF f->>'type' = 'MULTI_SELECT' THEN

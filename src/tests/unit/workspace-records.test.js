@@ -180,3 +180,20 @@ test('malformed relation definitions are refused before reaching Prisma relation
   const f = fixture();
   await assert.rejects(collection(f, [{ key: 'bad', name: 'Bad', type: 'RELATION', collectionId: { id: 'foreign' } }]), { statusCode: 400 });
 });
+
+test('page rollups batch more than 100 distinct targets without substituting partial totals', async () => {
+  const f = fixture(), source = await collection(f, [hours]);
+  const ids = Array.from({ length: 130 }, (_, index) => `source-${String(index).padStart(3, '0')}`);
+  f.state.workspaceRecord.push(...ids.map(id => ({ id, title: id, organizationId: 'o1', collectionId: source.id, authorId: 'u1', archivedAt: null, revision: 0, values: { hours: 1 } })));
+  const definitions = [{ key: 'work', name: 'Work', type: 'RELATION', collectionId: source.id }, { key: 'sum', name: 'Sum', type: 'ROLLUP', relationKey: 'work', targetKey: 'hours', aggregate: 'SUM' }];
+  const parent = await collection(f, definitions);
+  f.state.workspaceRecord.push(...[ids.slice(0, 70), ids.slice(60)].map((work, index) => ({ id: `parent-${index}`, title: `Parent ${index}`, organizationId: 'o1', collectionId: parent.id, authorId: 'u1', archivedAt: null, revision: 0, values: { work } })));
+  const calls = [], original = f.prisma.workspaceRecord.findMany;
+  f.prisma.workspaceRecord.findMany = async args => { if (args.where.collectionId === source.id) calls.push(args); return original(args); };
+  const page = await listWorkspaceRecords(f.prisma, parent.id, {}, f.actor);
+  assert.deepEqual(page.items.map(record => record.computed.sum.value), [70, 70]);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].where.id.in.length, 100);
+  assert.equal(calls[1].where.id.in.length, 30);
+  assert.ok(calls.every(call => call.where.organizationId === 'o1' && call.select.values));
+});
