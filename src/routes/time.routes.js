@@ -44,11 +44,20 @@ async function lockedWriteReply(request, reply, id) {
 // reads are capped at 100 rows each).
 const TIMESHEET_PAGE = 100;
 
-async function summaryLabels(delegate, ids) {
+async function summaryLabels(delegate, ids, includeArchived = false) {
   const labels = new Map();
   for (let offset = 0; offset < ids.length; offset += TIMESHEET_PAGE) {
     const rows = await delegate.findMany({ where: { id: { in: ids.slice(offset, offset + TIMESHEET_PAGE) } }, select: { id: true, name: true }, take: TIMESHEET_PAGE });
     for (const row of rows) labels.set(row.id, row);
+    if (includeArchived) {
+      const missing = ids.slice(offset, offset + TIMESHEET_PAGE).filter(id => !labels.has(id));
+      if (missing.length) {
+        // Explicit archived-only criterion is the reviewed soft-delete escape
+        // hatch; the same tenant-scoped delegate remains in use.
+        const archived = await delegate.findMany({ where: { id: { in: missing }, deletedAt: { not: null } }, select: { id: true, name: true }, take: TIMESHEET_PAGE });
+        for (const row of archived) labels.set(row.id, row);
+      }
+    }
   }
   return labels;
 }
@@ -325,7 +334,7 @@ export default async function timeRoutes(fastify) {
       request.user.role === 'ADMIN' ? request.prisma.timeEntry.groupBy({ by: ['userId'], where, _sum: { duration: true }, _count: { _all: true } }) : Promise.resolve(null),
     ]);
     const [projectLabels, userLabels] = await Promise.all([
-      summaryLabels(request.prisma.project, projects.map(row => row.projectId)),
+      summaryLabels(request.prisma.project, projects.map(row => row.projectId), true),
       summaryLabels(request.prisma.user, users?.map(row => row.userId) ?? []),
     ]);
     const billableByProject = new Map(billable.map(row => [row.projectId, row._sum.duration ?? 0]));
