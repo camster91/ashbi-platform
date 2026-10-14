@@ -2039,6 +2039,12 @@ export const noteFromTemplateSchema = z.object({
   mentionUserIds: z.array(cuidId).max(50).default([]),
 });
 
+export const workspacePageCreateSchema = z.object({ title: z.string().trim().min(1).max(200), content: z.string().max(50_000).default(''), parentId: cuidId.nullable().default(null) }).strict();
+export const workspacePageUpdateSchema = z.object({ revision: z.number().int().min(0), title: z.string().trim().min(1).max(200).optional(), content: z.string().max(50_000).optional(), parentId: cuidId.nullable().optional(), archived: z.boolean().optional() }).strict().refine(input => ['title', 'content', 'parentId', 'archived'].some(key => input[key] !== undefined), { message: 'Choose a page change.' });
+export const workspacePageListSchema = z.object({ limit: z.coerce.number().int().min(1).max(50).default(25), after: z.string().min(1).max(80).optional(), search: z.string().trim().max(200).default(''), includeArchived: z.enum(['true', 'false']).default('false'), parentId: cuidId.or(z.literal('ROOT')).optional() }).strict();
+export const workspacePageReadQuerySchema = z.object({ includeArchived: z.enum(['true', 'false']).default('false') }).strict();
+export const workspacePageParamsSchema = z.object({ id: cuidId }).strict();
+
 export const onboardingTaskActionSchema = z.object({
   taskId: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/),
 });

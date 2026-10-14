@@ -266,6 +266,7 @@ export default function Docs() {
           <p className="text-sm text-muted-foreground mt-1">
             Meeting notes, wikis, and documents across all projects
           </p>
+          <Link to="/wiki" className="min-h-11 inline-flex items-center text-primary">Workspace knowledge without a project</Link>
         </div>
         <Button leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowNewNote(true)}>
           New Note

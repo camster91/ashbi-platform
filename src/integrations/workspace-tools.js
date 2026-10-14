@@ -15,6 +15,8 @@ import { taskStageKeySchema } from '../validators/schemas.js';
 import { projectBoardFilterSchema } from '../validators/schemas.js';
 import { listProjectBoards } from '../services/project-boards.service.js';
 import { activeTaskBoard, taskBoardWhere } from '../services/task-board-scope.js';
+import { listWorkspacePages, readWorkspacePage } from '../services/workspace-pages.service.js';
+import { WORKSPACE_WIKI_ACTIONS } from './workspace-wiki-actions.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
@@ -39,6 +41,19 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 }
 
 export const workspaceRegistry = createToolRegistry([
+  {
+    name: 'list_workspace_pages', description: 'Read shared team knowledge metadata, independent of clients and projects. Search title/content and page with nextCursor; archived pages are optional.', class: 'read', roles: ['ADMIN', 'TEAM'], timeoutMs: 5000,
+    inputSchema: pageSchema.extend({ search: z.string().max(200).default(''), includeArchived: z.boolean().default(false), parentId: z.string().min(1).max(80).optional() }),
+    resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
+    run: ({ prisma, user, input }) => listWorkspacePages(prisma, input, user),
+  },
+  {
+    name: 'get_workspace_page', description: 'Read one shared team knowledge page and its observed revision. Archived content requires includeArchived=true; no client portal access is granted.', class: 'read', roles: ['ADMIN', 'TEAM'], timeoutMs: 5000,
+    inputSchema: z.object({ pageId: z.string().min(1).max(80), includeArchived: z.boolean().default(false) }).strict(),
+    resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
+    run: ({ prisma, user, input }) => readWorkspacePage(prisma, input.pageId, user, input.includeArchived),
+  },
+  ...WORKSPACE_WIKI_ACTIONS,
   {
     name: 'list_project_boards', description: 'Page through a canonical project’s default and additional boards. Archived boards are omitted unless requested; fields and billing remain shared with the project.', class: 'read', roles: ['ADMIN', 'TEAM'],
     inputSchema: pageSchema.extend({ projectId: z.string().min(1).max(50), includeArchived: z.boolean().default(false) }),

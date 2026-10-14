@@ -114,6 +114,7 @@ export const EXPORT_ENTITIES = Object.freeze([
 
   // Documents and wiki
   { name: 'notes', model: 'Note', category: 'documents', where: (org) => ({ deletedAt: null, project: activeProject(org) }), description: 'Notes, meeting notes, wiki pages and docs' },
+  { name: 'workspace_pages', model: 'WorkspacePage', category: 'documents', where: (org) => ({ organizationId: org }), description: 'Shared workspace knowledge pages including archived pages and hierarchy; independent of clients and projects' },
 
   // Finance
   { name: 'invoices', model: 'Invoice', category: 'finance', where: invoiceScope, omit: ['viewToken', 'draftData'], description: 'Invoices' },

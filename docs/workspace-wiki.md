@@ -1,0 +1,15 @@
+# Shared workspace knowledge
+
+Workspace wiki pages belong directly to the organization and do not create or require a client, project or billing identity. Ashbi Design and freelance staff share the same canonical pages. The default audience is active organization staff; client portal users and other organizations cannot read or edit them.
+
+The wiki UI supports creating top-level and nested Markdown pages, searching title/content, cursor pagination, editing and moving pages with observed revisions, and reversible archive/restore. Archived content remains available to staff through explicit archived reads. Archiving promotes active children to the archived page's parent or the top level, preserving their identity and content while advancing their revisions. Restoring a page does not automatically undo those child moves. Users can choose an active parent or the top level if a former parent is unavailable.
+
+All writes use serializable transactions, fresh active staff checks, explicit organization filters and required append-only audit records. The database guards author/parent ownership, organization immutability, cycles and depth (up to 200 ancestors), archived-parent admission and reverse author transfers. Every update advances a database-maintained revision. Conflicts preserve the UI draft and provide download and explicit reload recovery; a failed reload does not discard a draft. Page navigation remounts the editor so a draft cannot be submitted to a different page identity.
+
+HTTP: GET/POST /api/wiki/pages and GET/PUT /api/wiki/pages/:id. List responses contain bounded metadata and nextCursor, not every page's content. A single-page read returns Markdown plaintext and revision. PUT requires the observed revision. Title is bounded at 200 characters, Markdown at 50,000 characters and each list page at 50 items.
+
+Workspace MCP exposes list_workspace_pages and get_workspace_page. create_workspace_page and update_workspace_page prepare exact previews, require human confirmation, revalidate the requester's current active staff identity and commit the page, audit and receipt in one transaction. Idempotency, scope, expiry and the existing 16 KiB serialized tool-input limit remain in force. No embedded model invocation or new scope grant is needed. Portable exports include canonical page content, authors, hierarchy, revisions and archived records with explicit organization filtering.
+
+This implements project-independent shared knowledge, not restricted page audiences or retained content history. Page-level permissions and the owner's pending retention/restore-authority decision remain separate work. No production migration, deployment, source data input, client publication or retention policy was applied.
+
+Required acceptance covers two real tenants and client-role denial, raw database ownership/cycle/archive/revision guards, competing hierarchy moves, stale API/MCP confirmation, transactional audit/receipt behaviour and authenticated browser create/edit/nest/archive/restore with unsafe Markdown and mobile accessibility/reflow. Local checks do not by themselves prove production replacement readiness.

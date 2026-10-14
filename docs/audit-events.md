@@ -26,6 +26,11 @@ Related #412 references, all generated and checked for drift:
 
 ## Guarantees
 
+Workspace knowledge pages emit `workspace_page.created`, `workspace_page.updated`,
+`workspace_page.archived` and `workspace_page.restored`. Metadata contains only
+`revision` and `parentId`; content stays in the page. These writes require their
+audit record in the same transaction and roll back if it cannot be recorded.
+
 | Guarantee | How it is enforced |
 | --- | --- |
 | Append-only | A `BEFORE UPDATE OR DELETE` row trigger and a `BEFORE TRUNCATE` statement trigger raise `audit events are append-only`. The request-scoped Prisma proxy also rejects `update`, `updateMany`, `upsert`, `delete` and `deleteMany` on the model, and the HTTP API has no write route. |

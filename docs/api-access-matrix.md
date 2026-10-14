@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 387 |
+| staff | 391 |
 | staff (inline) | 1 |
-| **total** | 581 |
+| **total** | 585 |
 
 ## Routes by prefix
 
@@ -1039,6 +1039,15 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/webhooks/email/status` | public | exempt | health: Static liveness response for the email webhook; reads no data. |
 | POST | `/api/webhooks/email/test` | staff | exempt | Admin only; runs the email pipeline inside the admin's organization via runTenantJob. |
 | POST | `/api/webhooks/stripe` | public | exempt | signed webhook: Stripe-Signature verified in the handler. |
+
+### /api/wiki
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/wiki/pages` | staff | scoped |  |
+| POST | `/api/wiki/pages` | staff | scoped |  |
+| GET | `/api/wiki/pages/:id` | staff | scoped |  |
+| PUT | `/api/wiki/pages/:id` | staff | scoped |  |
 
 ### /api/work-queue
 

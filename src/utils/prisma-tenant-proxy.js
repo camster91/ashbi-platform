@@ -46,7 +46,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'impersonationsession', 'breakglassgrant',
   // Expenses: the client and project are optional, so the organization is a
   // column of its own (migration 20261001130000_expense_organization).
-  'expense', 'taskcollaborator', 'projectboard'
+  'expense', 'taskcollaborator', 'projectboard', 'workspacepage'
 ]);
 
 // Evidence tables that may only ever be appended to. Request-scoped code gets
@@ -87,6 +87,10 @@ const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platfor
 // redundant organizationId is not enough: the referenced parent must belong
 // to the same organization or the graph would span tenants.
 const DIRECT_PARENT_RELATIONS = {
+  workspacepage: [
+    { relation: 'author', field: 'authorId', model: 'user', delegate: 'user', required: true },
+    { relation: 'parent', field: 'parentId', model: 'workspacepage', delegate: 'workspacePage' },
+  ],
   projectboard: [{ relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true }],
   taskcollaborator: [
     { relation: 'task', field: 'taskId', model: 'task', delegate: 'task', required: true },

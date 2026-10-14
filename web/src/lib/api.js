@@ -533,6 +533,10 @@ export const api = {
   },
   getNote: (id) =>
     request(`/notes/${id}`),
+  getWorkspacePages: (params = {}) => request(`/wiki/pages?${new URLSearchParams(params)}`),
+  getWorkspacePage: (id) => request(`/wiki/pages/${id}?includeArchived=true`),
+  createWorkspacePage: (data) => request('/wiki/pages', { method: 'POST', body: data }),
+  updateWorkspacePage: (id, data) => request(`/wiki/pages/${id}`, { method: 'PUT', body: data }),
   getNoteTemplates: () =>
     request('/notes/templates'),
   createNote: (projectId, data) =>

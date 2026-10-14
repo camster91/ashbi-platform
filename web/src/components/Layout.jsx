@@ -208,6 +208,7 @@ export default function Layout({ children }) {
     { name: 'Expenses', href: '/expenses', icon: Wallet },
     { name: 'Schedule', href: '/schedule', icon: Calendar },
     { name: 'Docs', href: '/docs', icon: BookOpen },
+    { name: 'Workspace wiki', href: '/wiki', icon: BookOpen },
   ];
 
   // Tools — staff workflows that were route-registered but easy to miss

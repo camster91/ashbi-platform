@@ -302,6 +302,8 @@
   "GET /api/trash/",
   "GET /api/users/mentionable",
   "GET /api/webhooks/email/status",
+  "GET /api/wiki/pages",
+  "GET /api/wiki/pages/:id",
   "GET /api/work-queue",
   "GET /api/work-queue/",
   "HEAD /api/agent/tools",
@@ -567,6 +569,8 @@
   "HEAD /api/trash/",
   "HEAD /api/users/mentionable",
   "HEAD /api/webhooks/email/status",
+  "HEAD /api/wiki/pages",
+  "HEAD /api/wiki/pages/:id",
   "HEAD /api/work-queue",
   "HEAD /api/work-queue/",
   "OPTIONS /*",
@@ -859,6 +863,7 @@
   "POST /api/webhooks/email",
   "POST /api/webhooks/email/test",
   "POST /api/webhooks/stripe",
+  "POST /api/wiki/pages",
   "PUT /api/auth/me",
   "PUT /api/brand",
   "PUT /api/brand/",
@@ -902,5 +907,6 @@
   "PUT /api/team/:id",
   "PUT /api/templates/:id",
   "PUT /api/threads/:id",
-  "PUT /api/time-entries/:id"
+  "PUT /api/time-entries/:id",
+  "PUT /api/wiki/pages/:id"
 ]

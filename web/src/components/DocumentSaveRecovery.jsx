@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
 
-export default function DocumentSaveRecovery({ noteId, draft, error, onReload }) {
+export default function DocumentSaveRecovery({ noteId, draft, error, onReload, loadCurrent }) {
   const [loading, setLoading] = useState(false);
   const [reloadError, setReloadError] = useState('');
   if (!error) return null;
@@ -15,7 +15,7 @@ export default function DocumentSaveRecovery({ noteId, draft, error, onReload })
       }}>Download draft</button>
       <button type="button" className="min-h-11 underline" disabled={loading} onClick={async () => {
         setLoading(true); setReloadError('');
-        try { const current = await api.getNote(noteId); onReload(current); }
+        try { const current = await (loadCurrent ? loadCurrent() : api.getNote(noteId)); onReload(current); }
         catch { setReloadError('The document could not be reloaded. Your draft is still retained.'); }
         finally { setLoading(false); }
       }}>{loading ? 'Reloading…' : 'Reload document and discard draft'}</button>

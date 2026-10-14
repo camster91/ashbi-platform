@@ -33,6 +33,7 @@ model Organization {
   users              User[]
   taskCollaborations TaskCollaborator[]
   projectBoards      ProjectBoard[]
+  workspacePages     WorkspacePage[]
   clients            Client[]
   projects           Project[]
   formDrafts         FormDraft[]
@@ -129,6 +130,7 @@ model User {
   chatMessages       ChatMessage[]       @relation("ChatAuthor")
   chatReactions      ChatReaction[]
   notes              Note[]              @relation("NoteAuthor")
+  workspacePages     WorkspacePage[]      @relation("WorkspacePageAuthor")
   timeEntries        TimeEntry[]
   attachments        Attachment[]
   activities         Activity[]
@@ -683,6 +685,30 @@ model ChatReaction {
   @@unique([messageId, userId, emoji])
   @@index([userId])
   @@map("chat_reactions")
+}
+
+model WorkspacePage {
+  id             String @id @default(cuid())
+  organizationId String
+  authorId       String
+  parentId       String?
+  title          String
+  content        String @default("")
+  revision       Int @default(0)
+  archivedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  author User @relation("WorkspacePageAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  parent WorkspacePage? @relation("WorkspacePageHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children WorkspacePage[] @relation("WorkspacePageHierarchy")
+
+  @@index([organizationId])
+  @@index([organizationId, archivedAt, id])
+  @@index([authorId])
+  @@index([parentId])
+  @@map("workspace_pages")
 }
 
 model Note {
