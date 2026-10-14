@@ -460,8 +460,8 @@ export default async function authRoutes(fastify, options = {}) {
     const { name, skills, capacity } = request.body;
     const data = {};
     if (name !== undefined) data.name = name;
-    if (skills !== undefined) data.skills = Array.isArray(skills) ? skills : [];
-    if (capacity !== undefined) data.capacity = parseInt(capacity) || 40;
+    if (skills !== undefined) data.skills = JSON.stringify(skills);
+    if (capacity !== undefined) data.capacity = capacity;
 
     const user = await request.prisma.user.update({
       where: { id: request.user.id },
