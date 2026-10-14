@@ -12,6 +12,7 @@
 let nextId = 1;
 
 const RELATIONS = {
+  projectBoard: { project: ['project', 'projectId'] },
   taskCollaborator: { user: ['user', 'userId'], task: ['task', 'taskId'] },
   task: { project: ['project', 'projectId'] },
   project: { client: ['client', 'clientId'] },
@@ -24,7 +25,7 @@ const TERMINAL = new Set(['EXECUTED', 'FAILED', 'REJECTED', 'EXPIRED']);
 
 export function createFakeToolDb() {
   const tables = {
-    organization: [], user: [], client: [], project: [], task: [], taskCollaborator: [], calendarEvent: [], chatMessage: [],
+    organization: [], user: [], client: [], project: [], projectBoard: [], task: [], taskCollaborator: [], calendarEvent: [], chatMessage: [],
     slackInstallation: [], slackChannelMapping: [], aiBridgeAction: [], auditEvent: [],
     aiProviderConnection: [], aiUsageRecord: [], platformSetting: [], credential: [],
   };

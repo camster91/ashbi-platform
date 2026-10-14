@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, ArrowLeft } from 'lucide-react';
 import { api } from '../lib/api';
@@ -63,6 +63,8 @@ export function buildKanbanColumns(board = {}, stages = []) {
 
 export default function TaskKanban() {
   const { projectId } = useParams();
+  const [params] = useSearchParams();
+  const boardId = params.get('board') && params.get('board') !== 'DEFAULT' ? params.get('board') : undefined;
   const queryClient = useQueryClient();
   const [draggedTask, setDraggedTask] = useState(null);
   const [moveError, setMoveError] = useState(null);
@@ -74,13 +76,18 @@ export default function TaskKanban() {
   const closeSettings = () => { setShowSettings(false); settingsButtonRef.current?.focus(); };
 
   const { data: board = {}, isLoading, error, isFetching, refetch } = useQuery({
-    queryKey: ['kanban', projectId],
-    queryFn: () => api.getKanbanBoard(projectId),
+    queryKey: ['kanban', projectId, ...(boardId ? [boardId] : [])],
+    queryFn: () => boardId ? api.getKanbanBoard(projectId, boardId) : api.getKanbanBoard(projectId),
   });
 
   const { data: project, error: projectError, refetch: refetchProject } = useQuery({
-    queryKey: ['project', projectId],
-    queryFn: () => api.getProject(projectId),
+    queryKey: boardId ? ['projectBoardSettings', projectId, boardId] : ['project', projectId],
+    queryFn: async () => {
+      const project = await api.getProject(projectId);
+      if (!boardId) return project;
+      const settings = await api.getTaskViews(projectId, boardId);
+      return { ...project, taskStages: settings.stages, boardRevision: settings.stageRevision, boardName: settings.boardName };
+    },
   });
 
   const columns = buildKanbanColumns(board, project?.taskStages);
@@ -102,7 +109,7 @@ export default function TaskKanban() {
   });
 
   const createMutation = useMutation({
-    mutationFn: ({ title, status }) => api.createQuickTask(projectId, { title, ...targetFor(status), priority: DEFAULT_TASK_PRIORITY }),
+    mutationFn: ({ title, status }) => api.createQuickTask(projectId, { title, ...(boardId ? { boardId } : {}), ...targetFor(status), priority: DEFAULT_TASK_PRIORITY }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kanban', projectId] });
       setNewTaskTitle('');
@@ -195,11 +202,12 @@ export default function TaskKanban() {
             <ArrowLeft className="w-3.5 h-3.5" /> {project.name}
           </Link>
         )}
-        <h1 className="text-2xl font-heading font-bold text-foreground">Kanban Board</h1>
-        <Link to={`/project/${projectId}/views`} className="inline-flex min-h-11 items-center text-sm text-primary">Saved task views</Link>
+        <h1 className="text-2xl font-heading font-bold text-foreground">{project?.boardName || 'Kanban Board'}</h1>
+        <Link to={`/project/${projectId}/views${boardId ? `?board=${encodeURIComponent(boardId)}` : ''}`} className="inline-flex min-h-11 items-center text-sm text-primary">Saved task views</Link>
+        <Link to={`/project/${projectId}/boards`} className="inline-flex min-h-11 items-center text-sm text-primary ml-4">Project boards</Link>
         {project && <button ref={settingsButtonRef} type="button" onClick={() => setShowSettings(current => !current)} className="mt-2 min-h-11 rounded-lg border border-border px-3" aria-expanded={showSettings}>Configure stages</button>}
       </div>
-      {showSettings && project && <TaskStageSettings project={project} onClose={closeSettings} />}
+      {showSettings && project && <TaskStageSettings project={project} boardId={boardId} onClose={closeSettings} />}
       {projectError && <div role="alert" className="text-sm text-destructive">Project stage settings could not be loaded. Tasks are shown by status. <button type="button" className="min-h-11 underline" onClick={() => refetchProject()}>Try again</button></div>}
       {moveError && <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"><span>Task move was not saved. Try again.</span><button type="button" onClick={() => moveMutation.mutate(moveError)} disabled={moveMutation.isPending} className="underline">Try again</button></div>}
 

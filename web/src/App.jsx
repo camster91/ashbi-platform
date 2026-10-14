@@ -64,6 +64,7 @@ const ResponseApprovals = lazy(() => import('./pages/ResponseApprovals'));
 const TaskPage = lazy(() => import('./pages/TaskPage'));
 const TaskKanban = lazy(() => import('./pages/TaskKanban'));
 const TaskViews = lazy(() => import('./pages/TaskViews'));
+const ProjectBoards = lazy(() => import('./pages/ProjectBoards'));
 const TaskFieldSettings = lazy(() => import('./pages/TaskFieldSettings'));
 const BoardTemplates = lazy(() => import('./pages/BoardTemplates'));
 const TimeTracking = lazy(() => import('./pages/TimeTracking'));
@@ -250,6 +251,7 @@ function AppRoutes() {
                   <Route path="/task/:id" element={<TaskPage />} />
                   <Route path="/project/:projectId/kanban" element={<TaskKanban />} />
                   <Route path="/project/:projectId/views" element={<TaskViews />} />
+                  <Route path="/project/:projectId/boards" element={<ProjectBoards />} />
                   <Route path="/project/:projectId/fields" element={<TaskFieldSettings />} />
                   <Route path="/project/:projectId/templates" element={<BoardTemplates />} />
                   <Route path="/project/:projectId/time" element={<TimeTracking />} />

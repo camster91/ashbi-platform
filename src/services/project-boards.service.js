@@ -1,4 +1,5 @@
-import { withStageTransaction } from './task-stages.service.js';
+import { withStageTransaction, resolveTaskStage } from './task-stages.service.js';
+import { activeTaskBoard } from './task-board-scope.js';
 
 export const DEFAULT_BOARD_ID = 'DEFAULT';
 const fail = (statusCode, message) => { throw Object.assign(new Error(message), { statusCode }); };
@@ -53,4 +54,23 @@ export async function updateProjectBoard(prisma, projectId, boardId, { revision,
     if (changed.count !== 1) fail(409, 'Board changed. Reload before saving.');
     return tx.projectBoard.findFirst({ where: { id: boardId, projectId, organizationId: actor.organizationId } });
   });
+}
+
+export async function moveTaskBoard(prisma, taskId, { projectId, revision, boardId, stageKey }, actor) {
+  return withStageTransaction(prisma, tx => moveTaskBoardInTransaction(tx, taskId, { projectId, revision, boardId, stageKey }, actor));
+}
+
+export async function moveTaskBoardInTransaction(tx, taskId, { projectId, revision, boardId, stageKey }, actor) {
+  staff(actor);
+  if (!Number.isInteger(revision) || revision < 0 || (boardId !== null && (typeof boardId !== 'string' || !boardId))) fail(400, 'Provide a board and membership revision.');
+    await projectFor(tx, projectId, actor);
+    const current = await tx.task.findFirst({ where: { id: taskId, projectId, deletedAt: null, project: { organizationId: actor.organizationId } } });
+    if (!current) fail(404, 'Task not found');
+    if (current.boardMembershipRevision !== revision) fail(409, 'Board membership changed. Reload before moving.');
+    await activeTaskBoard(tx, projectId, boardId, actor.organizationId);
+    const stage = stageKey ? await resolveTaskStage(tx, projectId, stageKey, boardId) : null;
+    const data = { boardId, stageKey: stage?.key ?? null, boardMembershipRevision: { increment: 1 }, ...(stage ? { status: stage.status, completedAt: stage.status === 'COMPLETED' ? new Date() : null } : {}) };
+    const moved = await tx.task.updateMany({ where: { id: taskId, projectId, boardMembershipRevision: revision }, data });
+    if (moved.count !== 1) fail(409, 'Board membership changed. Reload before moving.');
+    return tx.task.findFirst({ where: { id: taskId, projectId } });
 }

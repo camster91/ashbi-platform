@@ -396,6 +396,7 @@ model Task {
   projectId      String
   assigneeId     String?
   boardId        String?
+  boardMembershipRevision Int @default(0)
   milestoneId    String?
   dependsOnId    String? // Task dependency — this task depends on another
   createdAt      DateTime  @default(now())

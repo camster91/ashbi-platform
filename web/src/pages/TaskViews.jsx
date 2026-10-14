@@ -28,6 +28,8 @@ export function sortViewTasks(tasks, sort) {
 export default function TaskViews() {
   const { projectId } = useParams();
   const [params, setParams] = useSearchParams();
+  const boardId = params.get('board') && params.get('board') !== 'DEFAULT' ? params.get('board') : undefined;
+  const viewQueryKey = ['taskViews', projectId, ...(boardId ? [boardId] : [])];
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({});
   const [search, setSearch] = useState('');
@@ -38,7 +40,7 @@ export default function TaskViews() {
   const [fieldFiltersDirty, setFieldFiltersDirty] = useState(false);
   const [name, setName] = useState('');
   const [saveError, setSaveError] = useState('');
-  const configQuery = useQuery({ queryKey: ['taskViews', projectId], queryFn: () => api.getTaskViews(projectId) });
+  const configQuery = useQuery({ queryKey: viewQueryKey, queryFn: () => boardId ? api.getTaskViews(projectId, boardId) : api.getTaskViews(projectId) });
   const config = configQuery.data;
   const selected = config?.views.find(view => view.key === params.get('view'));
   useEffect(() => {
@@ -52,7 +54,7 @@ export default function TaskViews() {
     return () => clearTimeout(timeout);
   }, [filters.search]);
   const relationField = grouping.startsWith('FIELD:') ? config?.fields?.find(field => field.key === grouping.slice(6) && !field.archived && field.type === 'RELATION')?.key : undefined;
-  const queryFilters = { ...filters, search, ...(relationField ? { relationField } : {}) };
+  const queryFilters = { ...filters, search, boardId: boardId || 'DEFAULT', ...(relationField ? { relationField } : {}) };
   const tasksQuery = useQuery({
     queryKey: ['taskViewRows', projectId, queryFilters], enabled: Boolean(config),
     queryFn: async () => {
@@ -70,9 +72,9 @@ export default function TaskViews() {
     },
   });
   const save = useMutation({
-    mutationFn: ({ views }) => api.saveTaskViews(projectId, { revision: config.revision, views }),
+    mutationFn: ({ views }) => boardId ? api.saveTaskViews(projectId, { revision: config.revision, views }, boardId) : api.saveTaskViews(projectId, { revision: config.revision, views }),
     onSuccess: (saved, { selectedKey }) => {
-      queryClient.setQueryData(['taskViews', projectId], saved);
+      queryClient.setQueryData(viewQueryKey, saved);
       const next = new URLSearchParams(params);
       if (selectedKey) next.set('view', selectedKey); else next.delete('view');
       setParams(next); setSaveError('');
@@ -108,7 +110,7 @@ export default function TaskViews() {
         onChange={event => { const next = new URLSearchParams(params); if (event.target.value) next.set('view', event.target.value); else next.delete('view'); setParams(next); }}>
         <option value="">All tasks</option>{config.views.map(view => <option key={view.key} value={view.key}>{view.name}</option>)}
       </select></label>
-      <Link to={`/project/${projectId}/kanban`} className={`${controlClass} inline-flex items-center text-primary`}>Open task board</Link>
+      <Link to={`/project/${projectId}/kanban${boardId ? `?board=${encodeURIComponent(boardId)}` : ''}`} className={`${controlClass} inline-flex items-center text-primary`}>Open task board</Link>
       <Link to={`/project/${projectId}/fields`} className={`${controlClass} inline-flex items-center text-primary`}>Configure task fields</Link>
       <Link to={`/project/${projectId}/templates`} className={`${controlClass} inline-flex items-center text-primary`}>Board templates</Link>
     </div>

@@ -11,6 +11,7 @@ CREATE TABLE "project_boards" (
 CREATE INDEX "project_boards_organizationId_idx" ON project_boards("organizationId");
 CREATE INDEX "project_boards_projectId_archivedAt_id_idx" ON project_boards("projectId", "archivedAt", id);
 ALTER TABLE tasks ADD COLUMN "boardId" TEXT;
+ALTER TABLE tasks ADD COLUMN "boardMembershipRevision" INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE tasks ADD CONSTRAINT "tasks_boardId_fkey" FOREIGN KEY ("boardId") REFERENCES project_boards(id) ON DELETE RESTRICT ON UPDATE CASCADE;
 CREATE INDEX "tasks_boardId_status_idx" ON tasks("boardId", status);
 

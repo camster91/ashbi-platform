@@ -5,6 +5,7 @@ import { withStageTransaction } from './task-stages.service.js';
 const asDate = text => new Date(`${text}T00:00:00Z`);
 const dateText = date => new Date(date).toISOString().slice(0, 10);
 const fail = (statusCode, message) => { throw Object.assign(new Error(message), { statusCode }); };
+const activeBoard = { OR: [{ boardId: null }, { board: { archivedAt: null } }] };
 
 export async function saveTaskRecurrence(prisma, id, { rule, revision }, now = new Date()) {
   return withStageTransaction(prisma, tx => saveTaskRecurrenceInTransaction(tx, id, { rule, revision }, now), 'Recurrence changed while saving. Reload and try again.');
@@ -33,7 +34,7 @@ async function copyRecurringTask(tx, live, recurrence) {
   const organizationId = live.project.organizationId;
   const owner = live.assigneeId ? await tx.user.findFirst({ where: { id: live.assigneeId, organizationId, isActive: true, role: { in: ['ADMIN', 'TEAM'] } }, select: { id: true } }) : null;
   const contributors = await tx.taskCollaborator.findMany({ where: { taskId: live.id, organizationId, user: { organizationId, isActive: true, role: { in: ['ADMIN', 'TEAM'] } } }, select: { userId: true }, take: 30, orderBy: { userId: 'asc' } });
-  const created = await tx.task.create({ data: { projectId: live.projectId, title: live.title, description: live.description,
+  const created = await tx.task.create({ data: { projectId: live.projectId, ...(live.boardId ? { boardId: live.boardId } : {}), title: live.title, description: live.description,
     content: live.content, properties: live.properties, ...(live.fieldValues ? { fieldValues: live.fieldValues } : {}), tags: live.tags, priority: live.priority, category: live.category,
     icon: live.icon, coverImage: live.coverImage, estimatedTime: live.estimatedTime,
     assigneeId: owner?.id ?? null, status: 'PENDING', ...recurrence } });
@@ -50,20 +51,20 @@ export async function processCompletionRepeats(prisma, { now = new Date() } = {}
   const failures = [];
   const activeProject = { deletedAt: null, status: { notIn: ['ON_HOLD', 'CANCELLED'] } };
   for (;;) {
-    const roots = await prisma.task.findMany({ where: { deletedAt: null, recurrenceSourceId: null, recurrenceRule: { path: ['trigger'], equals: 'AFTER_COMPLETION' },
+    const roots = await prisma.task.findMany({ where: { AND: [activeBoard], deletedAt: null, recurrenceSourceId: null, recurrenceRule: { path: ['trigger'], equals: 'AFTER_COMPLETION' },
       ...(after ? { id: { gt: after } } : {}), project: activeProject }, select: { id: true }, orderBy: { id: 'asc' }, take: 100 });
     for (const source of roots) {
       let completedAfter;
       for (;;) {
-      const completed = await prisma.task.findMany({ where: { deletedAt: null, OR: [{ id: source.id }, { recurrenceSourceId: source.id }], status: 'COMPLETED', recurrenceFirstCompletedAt: { not: null }, recurrenceCompletionProcessedAt: null,
+      const completed = await prisma.task.findMany({ where: { AND: [activeBoard], deletedAt: null, OR: [{ id: source.id }, { recurrenceSourceId: source.id }], status: 'COMPLETED', recurrenceFirstCompletedAt: { not: null }, recurrenceCompletionProcessedAt: null,
         ...(completedAfter ? { id: { gt: completedAfter } } : {}), project: activeProject }, select: { id: true }, orderBy: { id: 'asc' }, take: 100 });
       for (const candidate of completed) {
       examined++;
       try {
         const occurrence = await prisma.$transaction(async tx => {
-          const live = await tx.task.findFirst({ where: { id: candidate.id, deletedAt: null, OR: [{ id: source.id }, { recurrenceSourceId: source.id }], status: 'COMPLETED', recurrenceCompletionProcessedAt: null, project: activeProject }, include: { project: { select: { organizationId: true } } } });
+          const live = await tx.task.findFirst({ where: { id: candidate.id, AND: [activeBoard], deletedAt: null, OR: [{ id: source.id }, { recurrenceSourceId: source.id }], status: 'COMPLETED', recurrenceCompletionProcessedAt: null, project: activeProject }, include: { project: { select: { organizationId: true } } } });
           if (!live?.recurrenceFirstCompletedAt) return null;
-          const root = await tx.task.findFirst({ where: { id: source.id, deletedAt: null, projectId: live.projectId, project: { ...activeProject, organizationId: live.project.organizationId } } });
+          const root = await tx.task.findFirst({ where: { id: source.id, AND: [activeBoard], deletedAt: null, projectId: live.projectId, project: { ...activeProject, organizationId: live.project.organizationId } } });
           if (!root || root.recurrenceRule?.trigger !== 'AFTER_COMPLETION' || root.recurrenceSourceId) return null;
           const rule = taskRecurrenceRuleSchema.safeParse(root?.recurrenceRule);
           if (!rule.success) fail(500, 'A completion repeat has invalid schedule data.');
@@ -96,7 +97,7 @@ export async function processRecurringTasks(prisma, { now = new Date() } = {}) {
   const failures = [];
   let after;
   for (;;) {
-    const sources = await prisma.task.findMany({ where: { recurrenceNextDate: { not: null },
+    const sources = await prisma.task.findMany({ where: { AND: [activeBoard], recurrenceNextDate: { not: null },
       ...(after ? { id: { gt: after } } : {}), project: { deletedAt: null, status: { notIn: ['ON_HOLD', 'CANCELLED'] } } },
     orderBy: { id: 'asc' }, take: 100 });
     for (const source of sources) {
@@ -111,7 +112,7 @@ export async function processRecurringTasks(prisma, { now = new Date() } = {}) {
       if (dateText(scheduledDate) > today) continue;
       const next = asDate(recurrenceAfter(rule, today));
       const occurrence = await prisma.$transaction(async tx => {
-        const live = await tx.task.findFirst({ where: { id: source.id, project: { deletedAt: null, status: { notIn: ['ON_HOLD', 'CANCELLED'] } } }, include: { project: { select: { organizationId: true } } } });
+        const live = await tx.task.findFirst({ where: { id: source.id, AND: [activeBoard], project: { deletedAt: null, status: { notIn: ['ON_HOLD', 'CANCELLED'] } } }, include: { project: { select: { organizationId: true } } } });
         if (!live) return null;
         const claimed = await tx.task.updateMany({ where: { id: source.id, recurrenceNextDate: scheduledDate,
           recurrenceRevision: source.recurrenceRevision }, data: { recurrenceNextDate: next, recurrenceLastDate: scheduledDate } });

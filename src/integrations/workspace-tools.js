@@ -12,6 +12,9 @@ import { readTeamWorkload } from '../services/team-workload.service.js';
 import { WORKSPACE_TASK_ACTIONS } from './workspace-task-actions.js';
 import { taskRelationLabels } from '../services/task-relation-labels.service.js';
 import { taskStageKeySchema } from '../validators/schemas.js';
+import { projectBoardFilterSchema } from '../validators/schemas.js';
+import { listProjectBoards } from '../services/project-boards.service.js';
+import { activeTaskBoard, taskBoardWhere } from '../services/task-board-scope.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
@@ -36,6 +39,12 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 }
 
 export const workspaceRegistry = createToolRegistry([
+  {
+    name: 'list_project_boards', description: 'Page through a canonical project’s default and additional boards. Archived boards are omitted unless requested; fields and billing remain shared with the project.', class: 'read', roles: ['ADMIN', 'TEAM'],
+    inputSchema: pageSchema.extend({ projectId: z.string().min(1).max(50), includeArchived: z.boolean().default(false) }),
+    resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }), timeoutMs: 5000,
+    run: ({ prisma, user, input }) => listProjectBoards(prisma, input.projectId, input, user),
+  },
   ...WORKSPACE_TASK_ACTIONS,
   {
     name: 'get_team_workload', description: 'Read active staff owned-task and contributor counts, and logged hours over the last seven days compared with weekly capacity. Counts can overlap; this does not forecast future availability.',
@@ -70,11 +79,11 @@ export const workspaceRegistry = createToolRegistry([
   listTool('list_clients', 'Page through workspace clients. Returns business identity, never credentials.',
     'client', { id: true, name: true, status: true, domain: true }, user => ({ organizationId: user.organizationId })),
   listTool('list_tasks', 'Page through workspace tasks, including unassigned work. Filter by projectId, status, priority, stageKey or search to reproduce a saved project view. With projectId, relationField resolves authorized names for one active relation field.',
-    'task', { id: true, title: true, projectId: true, status: true, stageKey: true, priority: true, dueDate: true, fieldValues: true, fieldValuesRevision: true, assigneeId: true, collaboratorsRevision: true, collaborators: { select: { userId: true, user: { select: { name: true, isActive: true } } } },
+    'task', { id: true, title: true, projectId: true, boardId: true, boardMembershipRevision: true, status: true, stageKey: true, priority: true, dueDate: true, fieldValues: true, fieldValuesRevision: true, assigneeId: true, collaboratorsRevision: true, collaborators: { select: { userId: true, user: { select: { name: true, isActive: true } } } },
       recurrenceRule: true, recurrenceNextDate: true, recurrenceRevision: true, recurrenceSourceId: true, recurrenceScheduledDate: true, recurrenceCompletionSourceId: true, recurrenceFirstCompletedAt: true, recurrenceCompletionProcessedAt: true },
-    (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }, ...taskViewWhere(input) }),
-    pageSchema.extend({ portfolio: portfolioFilterSchema, projectId: z.string().min(1).max(50).optional(), relationField: taskStageKeySchema.optional(), ...taskViewFiltersSchema.shape }).refine(input => !input.relationField || Boolean(input.projectId), { message: 'Choose a project for related-record labels' }),
-    ({ prisma, user, input }) => validateTaskFieldFilters(prisma, input.projectId, input.fieldFilters, user.organizationId),
+    (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }, ...(input.boardId ? taskBoardWhere(input.boardId) : {}), ...taskViewWhere(input) }),
+    pageSchema.extend({ portfolio: portfolioFilterSchema, projectId: z.string().min(1).max(50).optional(), boardId: projectBoardFilterSchema, relationField: taskStageKeySchema.optional(), ...taskViewFiltersSchema.shape }).refine(input => (!input.relationField && !input.boardId) || Boolean(input.projectId), { message: 'Choose a project for board or related-record reads' }),
+    async ({ prisma, user, input }) => { await validateTaskFieldFilters(prisma, input.projectId, input.fieldFilters, user.organizationId); if (input.boardId) await activeTaskBoard(prisma, input.projectId, input.boardId, user.organizationId); },
     (rows, { prisma, user, input }) => taskRelationLabels(prisma, input.projectId, input.relationField, rows, user)),
   ...BUILTIN_TOOLS.filter(tool => ['list_my_tasks', 'get_project_summary', 'create_task', 'create_calendar_event'].includes(tool.name)),
 ]);

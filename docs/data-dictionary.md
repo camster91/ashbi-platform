@@ -110,7 +110,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [SlackInstallation](#model-slackinstallation) | `slack_installations` | yes | no | 15 |
 | [Snippet](#model-snippet) | `snippets` | no | no | 13 |
 | [SupportHourEntry](#model-supporthourentry) | `support_hours` | yes | no | 12 |
-| [Task](#model-task) | `tasks` | no | yes | 54 |
+| [Task](#model-task) | `tasks` | no | yes | 55 |
 | [TaskCollaborator](#model-taskcollaborator) | `task_collaborators` | yes | no | 8 |
 | [TaskComment](#model-taskcomment) | `task_comments` | no | no | 9 |
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
@@ -2687,6 +2687,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `projectId` | String | required |  |  |  |
 | `assigneeId` | String | optional |  |  |  |
 | `boardId` | String | optional |  |  |  |
+| `boardMembershipRevision` | Int | required | `0` |  |  |
 | `milestoneId` | String | optional |  |  |  |
 | `dependsOnId` | String | optional |  |  | Task dependency — this task depends on another |
 | `createdAt` | DateTime | required | `now()` |  |  |

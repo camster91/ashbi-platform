@@ -290,6 +290,7 @@ export default function Project() {
           >
             Task board
           </Link>
+          <Link to={`/project/${project.id}/boards`} className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg focus-visible:ring-2 focus-visible:ring-ring">Boards</Link>
           {embeddedAiEnabled && <button
             type="button"
             aria-label="Draft project update"

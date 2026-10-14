@@ -178,6 +178,11 @@ export const projectTaskStagesSchema = z.object({
     if (new Set(values).size !== values.length) ctx.addIssue({ code: 'custom', path: ['stages'], message: `Stage ${field}s must be unique` });
   }
 });
+export const projectBoardFilterSchema = z.union([z.literal('DEFAULT'), cuidId]).optional();
+export const projectBoardCreateSchema = z.object({ name: z.string().trim().min(1).max(80), description: z.string().max(2000).optional() }).strict();
+export const projectBoardUpdateSchema = z.object({ revision: z.number().int().min(0), name: z.string().trim().min(1).max(80).optional(), description: z.string().max(2000).optional(), archived: z.boolean().optional() }).strict().refine(input => input.name !== undefined || input.description !== undefined || input.archived !== undefined);
+export const taskBoardMoveSchema = z.object({ projectId: cuidId, revision: z.number().int().min(0), boardId: cuidId.nullable(), stageKey: taskStageKeySchema.optional() }).strict();
+
 export const createProjectSchema = z.object({
   portfolio: portfolioSchema.nullable().optional(),
   name: z.string().min(1).max(200),
@@ -1209,6 +1214,7 @@ export const taskDependencyCreateSchema = z.object({
 });
 
 export const taskCreateQuickSchema = z.object({
+  boardId: cuidId.nullable().optional(),
   stageKey: taskStageKeySchema.optional(),
   title: z.string().min(1).max(500),
   assigneeId: cuidId.optional(),

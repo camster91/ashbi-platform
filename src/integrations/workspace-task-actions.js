@@ -1,13 +1,16 @@
 import { z } from 'zod';
 import { ToolError, recordNotFound, targetUnavailable } from '../ai/tools/registry.js';
-import { taskRecurrenceUpdateSchema } from '../validators/schemas.js';
+import { taskRecurrenceUpdateSchema, taskBoardMoveSchema } from '../validators/schemas.js';
+import { moveTaskBoardInTransaction } from '../services/project-boards.service.js';
+import { activeTaskBoard } from '../services/task-board-scope.js';
+import { resolveTaskStage } from '../services/task-stages.service.js';
 import { readTaskCollaborators, saveTaskCollaboratorsInTransaction } from '../services/task-collaborators.service.js';
 import { saveTaskRecurrenceInTransaction } from '../services/task-recurrence.service.js';
 
 const recordId = z.string().min(1).max(50);
 const target = { taskId: recordId, projectId: recordId };
 async function taskScope(prisma, user, input) {
-  const task = await prisma.task.findFirst({ where: { id: input.taskId, projectId: input.projectId, deletedAt: null, project: { organizationId: user.organizationId, deletedAt: null } }, select: { id: true, title: true, projectId: true, assigneeId: true, recurrenceRule: true, recurrenceRevision: true, recurrenceSourceId: true } });
+  const task = await prisma.task.findFirst({ where: { id: input.taskId, projectId: input.projectId, deletedAt: null, project: { organizationId: user.organizationId, deletedAt: null } }, select: { id: true, title: true, projectId: true, boardId: true, boardMembershipRevision: true, assigneeId: true, recurrenceRule: true, recurrenceRevision: true, recurrenceSourceId: true } });
   if (!task) throw recordNotFound('Task not found');
   return task;
 }
@@ -36,6 +39,25 @@ async function recurrenceScope({ prisma, user, input }) {
 }
 
 export const WORKSPACE_TASK_ACTIONS = [
+  {
+    name: 'set_task_board', description: 'Move one task to an active board in its canonical project, or null for its default board. Preserves owner and billing; absent stageKey keeps lifecycle and clears the previous stage. Requires observed membership revision and human approval.',
+    class: 'execute', roles: ['ADMIN', 'TEAM'], requiresConfirmation: true, idempotency: 'required', timeoutMs: 10_000,
+    inputSchema: taskBoardMoveSchema.extend({ taskId: recordId }).strict(),
+    resolveScope: async ({ prisma, user, input }) => {
+      const task = await taskScope(prisma, user, input);
+      if (task.boardMembershipRevision !== input.revision) throw targetUnavailable('Board membership revision changed');
+      const board = await activeTaskBoard(prisma, input.projectId, input.boardId, user.organizationId);
+      const stage = input.stageKey ? await resolveTaskStage(prisma, input.projectId, input.stageKey, input.boardId) : null;
+      return { ids: { taskId: task.id, projectId: task.projectId }, records: { task, board, stage } };
+    },
+    preview: async ({ scope, input }) => ({ kind: 'set_task_board', task: { id: scope.records.task.id, title: scope.records.task.title, projectId: scope.records.task.projectId }, ownerId: scope.records.task.assigneeId, revision: input.revision, beforeBoardId: scope.records.task.boardId, afterBoard: { id: scope.records.board?.id ?? null, name: scope.records.board?.name ?? 'Project board' }, stageKey: input.stageKey ?? null, afterStage: scope.records.stage, retainsLifecycle: !input.stageKey }),
+    rollback: 'Failure rolls back membership and its receipt. A committed move can be reversed through a fresh preview with the latest membership revision; task identity and links are retained.',
+    execution: { mode: 'transaction', isolationLevel: 'Serializable', execute: async ({ prisma, user, input }) => {
+      const actor = await currentActor(prisma, user);
+      await taskScope(prisma, actor, input);
+      return moveTaskBoardInTransaction(prisma, input.taskId, input, actor);
+    } },
+  },
   {
     name: 'set_task_collaborators', description: 'Set an exact staff contributor roster, preserving the accountable owner. Requires the observed roster revision and human approval of its preview.',
     class: 'execute', roles: ['ADMIN', 'TEAM'], requiresConfirmation: true, idempotency: 'required', timeoutMs: 10_000,

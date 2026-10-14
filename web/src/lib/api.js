@@ -351,7 +351,11 @@ export const api = {
   },
   getProject: (id) =>
     request(`/projects/${id}`),
-  getTaskViews: (id) => request(`/projects/${id}/task-views`),
+  getTaskViews: (id, boardId) => request(`/projects/${id}/task-views${boardId ? `?boardId=${encodeURIComponent(boardId)}` : ''}`),
+  getProjectBoards: (id, params = {}) => request(`/projects/${id}/boards?${new URLSearchParams(params)}`),
+  createProjectBoard: (id, data) => request(`/projects/${id}/boards`, { method: 'POST', body: data }),
+  updateProjectBoard: (id, boardId, data) => request(`/projects/${id}/boards/${boardId}`, { method: 'PUT', body: data }),
+  moveTaskBoard: (id, data) => request(`/tasks/${id}/board`, { method: 'PUT', body: data }),
   getTaskFieldDefinitions: (id) => request(`/projects/${id}/task-fields`),
   getProjectTaskFieldOptions: (id, key, search = '') => request(`/projects/${id}/task-fields/${encodeURIComponent(key)}/options?search=${encodeURIComponent(search)}`),
   saveTaskFieldDefinitions: (id, data) => request(`/projects/${id}/task-fields`, { method: 'PUT', body: data }),
@@ -360,7 +364,7 @@ export const api = {
   saveTaskCollaborators: (id, data) => request(`/tasks/${id}/collaborators`, { method: 'PUT', body: data }),
   saveTaskFields: (id, data) => request(`/tasks/${id}/fields`, { method: 'PUT', body: data }),
   getTaskFieldOptions: (id, key, search = '') => request(`/tasks/${id}/fields/${key}/options?search=${encodeURIComponent(search)}`),
-  saveTaskViews: (id, data) => request(`/projects/${id}/task-views`, { method: 'PUT', body: data }),
+  saveTaskViews: (id, data, boardId) => request(`/projects/${id}/task-views${boardId ? `?boardId=${encodeURIComponent(boardId)}` : ''}`, { method: 'PUT', body: data }),
   createProject: (data) =>
     request('/projects', { method: 'POST', body: data }),
   updateProject: (id, data) =>
@@ -393,12 +397,12 @@ export const api = {
   },
   getMyTasks: () =>
     request('/tasks/my'),
-  getKanbanBoard: (projectId) =>
-    request(`/tasks/kanban/${projectId}`),
+  getKanbanBoard: (projectId, boardId) =>
+    request(`/tasks/kanban/${projectId}${boardId ? `?boardId=${encodeURIComponent(boardId)}` : ''}`),
   moveTask: (taskId, status, stageKey) =>
     request(`/tasks/${taskId}/move`, { method: 'POST', body: { status, ...(stageKey ? { stageKey } : {}) } }),
-  saveTaskStages: (projectId, data) =>
-    request(`/projects/${projectId}/task-stages`, { method: 'PUT', body: data }),
+  saveTaskStages: (projectId, data, boardId) =>
+    request(`/projects/${projectId}/task-stages${boardId ? `?boardId=${encodeURIComponent(boardId)}` : ''}`, { method: 'PUT', body: data }),
   createQuickTask: (projectId, data) =>
     request(`/tasks/${projectId}/quick`, { method: 'POST', body: data }),
   updateTask: (id, data) =>

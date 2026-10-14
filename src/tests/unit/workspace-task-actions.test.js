@@ -55,3 +55,28 @@ test('stale previews, moved tasks and deactivated requesters fail atomically at 
     assert.equal(db.tables.aiBridgeAction[0].status, 'FAILED');
   }
 });
+
+test('board action previews the destination, requires confirmation and refuses a stale membership', async () => {
+  const { db, ctx, tools, transactions } = fixture();
+  const projectId = 'cabcdefghijklmnopqrstuvwx';
+  const boardId = 'cabcdefghijklmnopqrstuvwy';
+  db.tables.project[0].id = projectId;
+  Object.assign(db.tables.task[0], { projectId, boardId: null, boardMembershipRevision: 0 });
+  db.tables.projectBoard.push({ id: boardId, projectId, organizationId: 'org-a', name: 'Delivery', archivedAt: null, taskStages: [{ key: 'review', name: 'Review', status: 'IN_PROGRESS' }] });
+  const input = { taskId: 'task-a', projectId, boardId, revision: 0, stageKey: 'review' };
+  const prepared = await tools.call(ctx, 'set_task_board', { input, idempotencyKey: 'board-action-1' });
+  assert.equal(prepared.action.preview.afterBoard.name, 'Delivery');
+  assert.equal(prepared.action.preview.afterStage.status, 'IN_PROGRESS');
+  assert.equal(db.tables.task[0].boardId, null); assert.equal(transactions(), 0);
+  assert.equal((await tools.call(ctx, 'confirm_action', { actionId: prepared.action.id })).action.status, 'EXECUTED');
+  assert.equal(db.tables.task[0].boardId, boardId); assert.equal(db.tables.task[0].assigneeId, 'team-a');
+  assert.equal(db.tables.task[0].boardMembershipRevision, 1); assert.equal(transactions(), 1);
+  assert.equal((await tools.call(ctx, 'confirm_action', { actionId: prepared.action.id })).idempotent, true);
+  const stale = await tools.call(ctx, 'set_task_board', { input: { ...input, boardId: null, revision: 1, stageKey: undefined }, idempotencyKey: 'board-action-2' });
+  db.tables.task[0].boardMembershipRevision = 2;
+  await assert.rejects(tools.call(ctx, 'confirm_action', { actionId: stale.action.id }), { code: 'EXECUTION_FAILED' });
+  assert.equal(db.tables.task[0].boardId, boardId);
+  await assert.rejects(tools.call(ctx, 'set_task_board', { input: { ...input, revision: 2, stageKey: 'missing' }, idempotencyKey: 'board-action-3' }));
+  db.tables.projectBoard[0].archivedAt = new Date();
+  await assert.rejects(tools.call(ctx, 'set_task_board', { input: { ...input, revision: 2 }, idempotencyKey: 'board-action-4' }));
+});
