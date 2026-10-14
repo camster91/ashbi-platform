@@ -9,6 +9,7 @@ import QueryErrorState from '../components/QueryErrorState';
 import { buildKanbanColumns } from './TaskKanban';
 import TaskViewCalendar from '../components/TaskViewCalendar';
 import TaskFieldCell from '../components/TaskFieldCell';
+import TaskFieldFilters from '../components/TaskFieldFilters';
 
 const STATUSES = ['PENDING', 'IN_PROGRESS', 'REVIEW', 'WAITING_CLIENT', 'WAITING_US', 'BLOCKED', 'COMPLETED', 'UPCOMING', 'IMMEDIATE', 'TODO'];
 const text = value => String(value || '').toLowerCase().replaceAll('_', ' ');
@@ -31,6 +32,7 @@ export default function TaskViews() {
   const [sort, setSort] = useState('PRIORITY');
   const [layout, setLayout] = useState('TABLE');
   const [columnKeys, setColumnKeys] = useState([]);
+  const [fieldFiltersDirty, setFieldFiltersDirty] = useState(false);
   const [name, setName] = useState('');
   const [saveError, setSaveError] = useState('');
   const configQuery = useQuery({ queryKey: ['taskViews', projectId], queryFn: () => api.getTaskViews(projectId) });
@@ -53,7 +55,7 @@ export default function TaskViews() {
       let page = 1;
       let response;
       do {
-        response = await api.getTasks({ projectId, ...queryFilters, page, limit: 100 });
+        response = await api.getTasks({ projectId, ...queryFilters, ...(queryFilters.fieldFilters && { fieldFilters: JSON.stringify(queryFilters.fieldFilters) }), page, limit: 100 });
         const rows = response?.tasks ?? [];
         tasks.push(...rows);
         if (!rows.length) break;
@@ -119,6 +121,7 @@ export default function TaskViews() {
       </select></label>
       <label className="text-sm">Layout<select aria-label="Task view layout" className={`block ${controlClass}`} value={layout} onChange={event => setLayout(event.target.value)}><option value="TABLE">Table</option><option value="BOARD">Board</option><option value="CALENDAR">Calendar</option></select></label>
     </fieldset>
+    <TaskFieldFilters projectId={projectId} fields={fields} value={filters.fieldFilters} onDirtyChange={setFieldFiltersDirty} disabled={save.isPending} onChange={fieldFilters => setFilters(current => { const next = { ...current }; if (fieldFilters.length) next.fieldFilters = fieldFilters; else delete next.fieldFilters; return next; })} />
     {(fields.some(field => !field.archived) || columnKeys.length > 0) && <fieldset className="min-w-0 rounded border border-border p-3" disabled={save.isPending}>
       <legend className="px-2 text-sm">Custom table columns</legend>
       <div className="flex flex-wrap gap-3">{fields.filter(field => !field.archived).map(field => <label key={field.key} className="inline-flex min-h-11 items-center gap-2">
@@ -129,8 +132,8 @@ export default function TaskViews() {
     </fieldset>}
     <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); saveCurrent(true); }}>
       <label className="text-sm">View name<input aria-label="Task view name" value={name} onChange={event => setName(event.target.value)} required maxLength={80} className={`block ${controlClass}`} /></label>
-      <button type="submit" disabled={save.isPending || !name.trim() || config.views.length >= 20} className={`${controlClass} bg-primary text-primary-foreground disabled:opacity-50`}>Save as new view</button>
-      {selected && <><button type="button" disabled={save.isPending || !name.trim()} className={controlClass} onClick={() => saveCurrent(false)}>Save view changes</button>
+      <button type="submit" disabled={save.isPending || fieldFiltersDirty || !name.trim() || config.views.length >= 20} className={`${controlClass} bg-primary text-primary-foreground disabled:opacity-50`}>Save as new view</button>
+      {selected && <><button type="button" disabled={save.isPending || fieldFiltersDirty || !name.trim()} className={controlClass} onClick={() => saveCurrent(false)}>Save view changes</button>
         <button type="button" disabled={save.isPending} className={`${controlClass} text-destructive`} onClick={() => save.mutate({ views: config.views.filter(view => view.key !== selected.key), selectedKey: null })}>Delete view</button></>}
     </form>
     {saveError && <div role="alert" className="text-sm text-destructive">{saveError} <button type="button" className="min-h-11 underline" onClick={() => configQuery.refetch()}>Reload saved views</button></div>}

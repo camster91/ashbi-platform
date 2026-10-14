@@ -353,6 +353,7 @@ export const api = {
     request(`/projects/${id}`),
   getTaskViews: (id) => request(`/projects/${id}/task-views`),
   getTaskFieldDefinitions: (id) => request(`/projects/${id}/task-fields`),
+  getProjectTaskFieldOptions: (id, key, search = '') => request(`/projects/${id}/task-fields/${encodeURIComponent(key)}/options?search=${encodeURIComponent(search)}`),
   saveTaskFieldDefinitions: (id, data) => request(`/projects/${id}/task-fields`, { method: 'PUT', body: data }),
   getTaskFields: (id) => request(`/tasks/${id}/fields`),
   saveTaskFields: (id, data) => request(`/tasks/${id}/fields`, { method: 'PUT', body: data }),
