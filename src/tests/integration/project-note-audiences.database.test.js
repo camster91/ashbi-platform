@@ -67,5 +67,18 @@ test('project notes preserve inherited read/edit audiences across API/MCP, promo
   await restoreTrashedItem({scopedPrisma:scoped,rawPrisma:raw,trashId,actor:owner});await assert.rejects(authorizeNote(scoped,note.id,outsider),{statusCode:404});
   await raw.user.update({where:{id:reader.id},data:{isActive:false}});assert.equal(await raw.notification.count({where:{userId:reader.id,...await noteNotificationWhere(scoped,reader)}}),0);await assert.rejects(authorizeNote(scoped,child.id,reader),{statusCode:403});
   const stored=await raw.note.findUnique({where:{id:note.id}});assert.equal(stored.content,'Private words');
- }finally{if(app)await app.close();for(const organizationId of orgs){await purgeFixtureAuditEvents(raw,organizationId);await raw.organization.deleteMany({where:{id:organizationId}});}await raw.$disconnect();}
+ }catch(error){console.error('[Project Note acceptance]',error.message);throw error;}finally{
+  if(app)await app.close();
+  await purgeFixtureAuditEvents(raw,{ids:orgs});
+  await raw.trashedItem.deleteMany({where:{organizationId:{in:orgs}}});
+  await raw.aiBridgeAction.deleteMany({where:{organizationId:{in:orgs}}});
+  await raw.notification.deleteMany({where:{user:{organizationId:{in:orgs}}}});
+  await raw.activity.deleteMany({where:{project:{organizationId:{in:orgs}}}});
+  await raw.note.deleteMany({where:{project:{organizationId:{in:orgs}}}});
+  await raw.project.deleteMany({where:{organizationId:{in:orgs}}});
+  await raw.client.deleteMany({where:{organizationId:{in:orgs}}});
+  await raw.user.deleteMany({where:{organizationId:{in:orgs}}});
+  await raw.organization.deleteMany({where:{id:{in:orgs}}});
+  await raw.$disconnect();
+ }
 });
