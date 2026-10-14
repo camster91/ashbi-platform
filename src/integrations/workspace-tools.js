@@ -8,6 +8,7 @@ import { taskViewFiltersSchema } from '../validators/schemas.js';
 import { taskViewWhere } from '../shared/task-view-filters.js';
 import { financialPortfolioWhere, invoicePortfolioWhere } from '../shared/financial-portfolio.js';
 import { validateTaskFieldFilters } from '../services/task-field-filters.service.js';
+import { readTeamWorkload } from '../services/team-workload.service.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
@@ -32,6 +33,12 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 }
 
 export const workspaceRegistry = createToolRegistry([
+  {
+    name: 'get_team_workload', description: 'Read active staff owned-task and contributor counts, and logged hours over the last seven days compared with weekly capacity. Counts can overlap; this does not forecast future availability.',
+    class: 'read', roles: ['ADMIN', 'TEAM'], inputSchema: z.object({}).strict(),
+    resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }), timeoutMs: 5000,
+    run: async ({ prisma, user }) => readTeamWorkload(prisma, user),
+  },
   listTool('list_invoices', 'Page through internal invoice identities and monetary values, preserving each currency. Optionally filter by portfolio.',
     'invoice', { id: true, invoiceNumber: true, status: true, total: true, currency: true, clientId: true, projectId: true, issueDate: true, dueDate: true },
     async (user, input, prisma) => ({ organizationId: user.organizationId, ...await invoicePortfolioWhere(prisma, input.portfolio, user.organizationId) }),

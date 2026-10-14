@@ -33,6 +33,7 @@ const roleColors = {
 const VIEWABLE_ROLES = new Set(['TEAM', 'STAFF', 'CLIENT']);
 
 const statusColor = (status) => {
+  if (status === 'unconfigured') return 'text-muted-foreground bg-muted';
   if (status === 'overloaded') return 'text-destructive bg-destructive/5';
   if (status === 'busy') return 'text-warning bg-warning/5';
   return 'text-success bg-success/5';
@@ -129,6 +130,7 @@ export default function Team() {
   const activeCount = team.filter(m => m.isActive).length;
   const overloadedCount = workload.filter(w => w.status === 'overloaded').length;
   const allocations = allocationsData?.allocations || [];
+  const configuredAllocations = allocations.filter(member => member.utilization != null);
 
   return (
     <div className="space-y-6">
@@ -184,8 +186,9 @@ export default function Team() {
 
           {/* Workload Overview */}
           {workload.length > 0 && (
-            <div>
+            <div role="region" aria-label="Team workload">
               <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">Workload</h2>
+              <p className="text-sm text-muted-foreground mb-3">Logged time covers the last seven days. Owned tasks and contributions can overlap; these counts do not estimate future availability.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {workload.map((member) => (
                   <Card key={member.id} className="p-4">
@@ -206,9 +209,9 @@ export default function Team() {
                     <div className="space-y-2">
                       <div>
                         <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                          <span>Utilization</span>
+                          <span>Logged time / weekly capacity</span>
                           <span className={member.utilizationPercent > 80 ? 'text-warning font-semibold' : ''}>
-                            {member.utilizationPercent}%
+                            {member.utilizationPercent == null ? 'Set capacity' : `${member.utilizationPercent}%`}
                           </span>
                         </div>
                         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -218,14 +221,14 @@ export default function Team() {
                           />
                         </div>
                       </div>
-                      <div className="flex justify-between text-xs text-muted-foreground">
+                      <div className="flex flex-wrap gap-2 justify-between text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <MessageSquare className="w-3 h-3" />
                           {member.activeThreads} threads
                         </span>
                         <span className="flex items-center gap-1">
                           <CheckSquare className="w-3 h-3" />
-                          {member.activeTasks} tasks
+                          {member.activeTasks} owned tasks · {member.contributedTasks ?? 0} contributions
                         </span>
                       </div>
                     </div>
@@ -404,14 +407,15 @@ export default function Team() {
           ) : (
             <div className="space-y-4">
               {/* Capacity overview */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <p className="text-sm text-muted-foreground">Logged time covers the last seven days. Task counts show owned work and contributions separately; they can overlap and do not estimate future availability.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Card className="p-4">
                   <p className="text-xs text-muted-foreground">Team Members</p>
                   <p className="text-2xl font-bold">{allocations.length}</p>
                 </Card>
                 <Card className="p-4">
-                  <p className="text-xs text-muted-foreground">Avg Utilization</p>
-                  <p className="text-2xl font-bold">{allocations.length > 0 ? Math.round(allocations.reduce((s, a) => s + a.utilization, 0) / allocations.length) : 0}%</p>
+                   <p className="text-xs text-muted-foreground">Avg logged time / capacity</p>
+                   <p className="text-2xl font-bold">{configuredAllocations.length ? `${Math.round(configuredAllocations.reduce((sum, member) => sum + member.utilization, 0) / configuredAllocations.length)}%` : 'Set capacity'}</p>
                 </Card>
                 <Card className="p-4">
                   <p className="text-xs text-muted-foreground">Overloaded</p>
@@ -433,7 +437,7 @@ export default function Team() {
                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
                           <span>{a.weeklyHours.toFixed(1)}h/week</span>
                           <span className={cn('px-2 py-0.5 rounded-full font-medium', a.utilization > 90 ? 'text-destructive bg-destructive/5' : a.utilization > 70 ? 'text-warning bg-warning/5' : 'text-success bg-success/5')}>
-                            {a.utilization}%
+                             {a.utilization == null ? 'Set capacity' : `${a.utilization}%`}
                           </span>
                         </div>
                       </div>
