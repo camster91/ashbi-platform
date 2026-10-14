@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 const { billingTool } = vi.hoisted(() => ({ billingTool: vi.fn() }));
@@ -11,6 +12,12 @@ const preview = { kind: 'create_unbilled_invoice_draft', client: { name: 'Acme' 
   totals: { total: 50, tax: 0 }, lineItems: [{ description: 'Approved design', quantity: 1, unitPrice: 50, total: 50, source: { id: 'time', date: '2026-10-14', project: { name: 'Site' } } }] };
 const action = { id: 'receipt', status: 'PENDING_CONFIRMATION', preview, expiresAt: '2026-10-14T02:00:00Z' };
 beforeEach(() => { billingTool.mockReset(); });
+let queryClient;
+function renderPage(entry = '/invoices/unbilled') {
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } });
+  queryClient.setQueryData(['invoice', 'invoice'], { status: 'VOID', billingSourcesReleasedAt: null });
+  return render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[entry]}><UnbilledInvoice /></MemoryRouter></QueryClientProvider>);
+}
 it('previews exact selections and never confirms until the user explicitly confirms; lost confirmation retrieves its receipt', async () => {
   billingTool.mockImplementation(async (name, body) => {
     if (name === 'list_unbilled_candidates') return { output: { items: body.kind === 'TIME' ? [{ id: 'time', description: 'Approved design', duration: 60, date: '2026-10-14', updatedAt: '2026-10-14T00:00:00Z', suggestedHourlyRate: 0 }] : [], nextCursor: null } };
@@ -20,7 +27,7 @@ it('previews exact selections and never confirms until the user explicitly confi
     if (name === 'get_action') return { action: { ...action, status: 'EXECUTED', result: { id: 'invoice' } } };
     throw new Error(`Unexpected operation: ${name}`);
   });
-  render(<MemoryRouter><UnbilledInvoice /></MemoryRouter>);
+  renderPage();
   fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'client' } });
   fireEvent.change(screen.getByLabelText('Invoice title'), { target: { value: 'Design' } });
   fireEvent.click(screen.getByText('Load unbilled work'));
@@ -39,11 +46,12 @@ it('previews exact selections and never confirms until the user explicitly confi
 });
 it('reload can recover a receipt from the URL without creating or executing an action', async () => {
   billingTool.mockResolvedValue({ action: { ...action, status: 'EXECUTED', result: { id: 'invoice' } } });
-  render(<MemoryRouter initialEntries={['/invoices/unbilled?action=receipt']}><UnbilledInvoice /></MemoryRouter>);
+  renderPage('/invoices/unbilled?action=receipt');
   expect(screen.getByLabelText('Action receipt ID').value).toBe('receipt');
   fireEvent.click(screen.getByText('Retrieve receipt'));
   await waitFor(() => expect(screen.getByText('Open invoice')).toBeTruthy());
   expect(billingTool).toHaveBeenCalledExactlyOnceWith('get_action', { actionId: 'receipt' });
+  expect(queryClient.getQueryState(['invoice', 'invoice']).isInvalidated).toBe(true);
 });
 it('source release displays the retained original roster and requires a separate explicit confirmation', async () => {
   const release = { kind: 'release_unbilled_invoice_sources', invoiceNumber: 'INV-1', currency: 'CAD', total: 50,
@@ -54,11 +62,12 @@ it('source release displays the retained original roster and requires a separate
     if (name === 'confirm_action') return { action: { ...action, preview: release, status: 'EXECUTED', result: { id: 'invoice' } } };
     throw new Error(`Unexpected operation ${name}`);
   });
-  render(<MemoryRouter initialEntries={['/invoices/unbilled?release=invoice']}><UnbilledInvoice /></MemoryRouter>);
+  renderPage('/invoices/unbilled?release=invoice');
   fireEvent.click(screen.getByText('Preview source release'));
   await screen.findByText(/Original approved work/);
   expect(billingTool.mock.calls.some(([name]) => name === 'confirm_action')).toBe(false);
   fireEvent.click(screen.getByText('Confirm source release'));
   await screen.findByText(/Sources released; original history retained/);
   expect(billingTool.mock.calls.filter(([name]) => name === 'confirm_action')).toHaveLength(1);
+  expect(queryClient.getQueryState(['invoice', 'invoice']).isInvalidated).toBe(true);
 });

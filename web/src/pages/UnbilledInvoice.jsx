@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import useClients, { useClientSearch } from '../hooks/useClients';
@@ -7,6 +8,7 @@ import { formatInvoiceMoney } from '../lib/format';
 
 const field = 'block w-full rounded border border-border bg-background p-2 text-foreground';
 export default function UnbilledInvoice() {
+  const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const releaseId = params.get('release');
   const [form, setForm] = useState({ clientId: '', title: '', currency: 'CAD', taxRate: 0, taxType: 'NONE' });
@@ -57,11 +59,17 @@ export default function UnbilledInvoice() {
   };
   const recover = async () => {
     const result = await api.billingTool('get_action', { actionId: receiptId });
-    setPrepared(result.action);
+    await remember(result.action);
   };
   const confirm = async () => {
     const result = await api.billingTool('confirm_action', { actionId: prepared.id });
-    setPrepared(result.action);
+    await remember(result.action);
+  };
+  const remember = async action => {
+    setPrepared(action);
+    if (action.status === 'EXECUTED' && action.result?.id) await Promise.all([
+      ['invoice', action.result.id], ['invoices'], ['invoice-stats'], ['expenses'], ['expense-summary'], ['time-entries'], ['timesheets'],
+    ].map(queryKey => queryClient.invalidateQueries({ queryKey })));
   };
   const preview = prepared?.preview;
   const pending = prepared?.status === 'PENDING_CONFIRMATION';
