@@ -43,7 +43,7 @@ test('a draft sent after the initial read refuses edits before touching any line
   const db = fixture(), originalRead = db.invoice.findUnique;
   db.invoice.findUnique = async query => {
     const observed = await originalRead(query);
-    db.state.invoices[0].status = 'SENT';
+    if (!query.select) db.state.invoices[0].status = 'SENT';
     return observed;
   };
   const app = await buildInvoiceApp(t, invoiceRoutes, db);

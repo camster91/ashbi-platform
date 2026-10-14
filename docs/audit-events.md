@@ -86,6 +86,7 @@ notes, signer names, email addresses, API key material or password hashes.
 
 | Action | Entity type | Actor | Emitted by | Metadata |
 | --- | --- | --- | --- | --- |
+| `invoice.created_from_unbilled` | `invoice` | USER | Confirmed approved-work draft transaction | `clientId`, `projectId`, `timeCount`, `expenseCount`, `total`, `currency` |
 | `invoice.sent` | `invoice` | USER | `POST /api/invoices/:id/send`, `POST /api/invoices/bulk/send` | `fromStatus`, `toStatus`, `deliveryAccepted`, `paymentLinkAttached`, `total`, `currency`, `bulk` (bulk only) |
 | `invoice.paid` | `invoice` | USER or WEBHOOK | `POST /api/invoices/:id/mark-paid`, `POST /api/invoices/bulk/mark-paid`, Stripe `checkout.session.completed` (`/api/webhooks/stripe`, `/api/invoices/stripe-webhook`); only when the recorded payments cover the total (a partial payment writes `payment.recorded` alone) | `fromStatus`, `toStatus`, `method`, `bulk`, `total`, `currency`; Stripe: `stripeEventId` |
 | `invoice.voided` | `invoice` | USER (admin) | `DELETE /api/invoices/:id`, `POST /api/invoices/bulk/archive` (only after the compare-and-set from DRAFT, SENT or OVERDUE succeeded; an invoice with recorded payments is never voided) | `fromStatus`, `toStatus`, `total`, `currency`, `bulk` (bulk only) |

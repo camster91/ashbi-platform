@@ -21,6 +21,7 @@ const ACTOR_TYPE_SET = new Set(AUDIT_ACTOR_TYPES);
  * listed for the action are dropped.
  */
 export const AUDIT_EVENT_CATALOG = Object.freeze({
+  'invoice.created_from_unbilled': { entityType: 'invoice', metadata: ['clientId', 'projectId', 'timeCount', 'expenseCount', 'total', 'currency'] },
   'workspace_page.access_changed': { entityType: 'workspace_page', metadata: ['fromMode', 'toMode', 'revision', 'memberCount'] },
   'workspace_page.created': { entityType: 'workspace_page', metadata: ['revision', 'parentId'] },
   'workspace_page.updated': { entityType: 'workspace_page', metadata: ['revision', 'parentId'] },

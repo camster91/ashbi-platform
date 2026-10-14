@@ -1,6 +1,6 @@
 # Approved work to draft invoice
 
-This feature is in implementation. Candidate selection and exact preview services have focused unit coverage; HTTP routes, the staff UI, confirmed MCP execution, source claims/release and PostgreSQL/browser acceptance are not complete. It is not enabled in production.
+This feature is in implementation. Candidate/preview services and draft creation inside a caller-owned serializable transaction are implemented, along with immutable source snapshots, deferred database claim/parent guards, private administrator-only source history and source-backed write controls. Focused unit checks pass. The new migration and concurrency/rollback assertions still await PostgreSQL CI. HTTP/UI/confirmed MCP wiring, reviewed claim release and complete feature browser acceptance remain unfinished. It is not enabled in production.
 
 An active administrator selects approved, billable, uninvoiced time and billable expenses for one canonical client. A project selection narrows both sources to that client's canonical project; omitting it permits work across that client's projects. Sources retain their original identity, owner, date and project. Pending, rejected, deleted or previously invoiced work is unavailable.
 
@@ -11,7 +11,7 @@ Required remaining behavior:
 1. Prepare an exact draft preview through the staff UI or scoped API/MCP, then require human confirmation. Recheck the current administrator, canonical scope, source availability and fingerprint at confirmation.
 2. Allocate the invoice number, create its draft/lines, claim each selected source and record the audit/receipt in one serializable transaction. Competing claims have one winner. Replay returns the existing receipt rather than creating another invoice.
 3. Persist immutable original source snapshots on the invoice. Preserve original source history when edits or later release occur; do not silently change the selected client, project or rate currency while claims remain active.
-4. Lock billed expense edits as well as already locked billed time. Guard source and reverse-parent tenant/client changes. A failed write/audit rolls back the invoice number, lines, source claims and receipt.
+4. Lock billed financial source fields and source/reverse-parent tenant/client changes, while allowing expense receipt notes to be maintained. Source-backed invoices remain administrator-managed and cannot become recurring templates. A failed write/audit rolls back the invoice number, lines, source claims and receipt.
 5. Release source claims only through a separate reviewed action on a voided, unpaid invoice after its undo window. Retain the source snapshot/release history and refuse reopening that released invoice. Preview and recheck exactly which claims remain owned by it.
 6. Prove persisted selection, preview, confirmation, reload, retry, release, denial, competing claims and source integrity in disposable PostgreSQL and authenticated keyboard/mobile/accessibility journeys.
 

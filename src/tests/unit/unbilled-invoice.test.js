@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { listUnbilledCandidates, previewUnbilledInvoice } from '../../services/unbilled-invoice.service.js';
+import { listUnbilledCandidates, previewUnbilledInvoice, createUnbilledInvoiceInTransaction } from '../../services/unbilled-invoice.service.js';
+import { createFakeInvoiceDb } from '../helpers/fake-invoice-db.js';
 
 const actor = { id: 'admin', organizationId: 'org-a', role: 'ADMIN' };
 const updatedAt = new Date('2026-10-14T00:00:00Z');
@@ -35,6 +36,7 @@ test('billing preview uses explicit rate/currency/tax choices, rounded cents and
   assert.doesNotMatch(JSON.stringify(preview), /private-receipt|private-note|omit/);
   assert.equal(queries[0].where.reviewStatus, 'APPROVED');
   assert.equal(queries[0].where.project.organizationId, actor.organizationId);
+  assert.equal(queries[0].where.user.organizationId, actor.organizationId);
   assert.equal(queries[1].where.organizationId, actor.organizationId);
   assert.equal(queries[1].where.invoiced, false); assert.equal(queries[1].where.invoiceId, null);
   assert.equal(preview.fingerprint, (await previewUnbilledInvoice(prisma, input, actor)).fingerprint);
@@ -88,4 +90,32 @@ test('candidate pages retain later source identities with bounded tenant-scoped 
   assert.equal(first.items.length, 50); assert.equal(second.items.length, 10); assert.equal(second.nextCursor, null);
   assert.equal(new Set([...first.items, ...second.items].map(row => row.id)).size, 60);
   assert.deepEqual(pages, [51, 51]);
+});
+
+test('draft creation checks its reviewed fingerprint and claims both sources with a required audit', async () => {
+  const { prisma } = fixture();
+  const db = createFakeInvoiceDb({ clients: [{ id: 'client', name: 'Canonical client' }] });
+  Object.assign(prisma, { invoice: db.invoice, $queryRaw: db.$queryRaw, auditEvent: db.auditEvent });
+  const claims = [];
+  for (const kind of ['timeEntry', 'expense']) {
+    prisma[kind].updateMany = async ({ where, data }) => {
+      claims.push({ kind, where, data });
+      return { count: 1 };
+    };
+  }
+  const preview = await previewUnbilledInvoice(prisma, input, actor);
+  await assert.rejects(createUnbilledInvoiceInTransaction(prisma, input, '0'.repeat(64), actor), { statusCode: 409 });
+  assert.equal(db.state.invoices.length, 0);
+  const invoice = await createUnbilledInvoiceInTransaction(prisma, input, preview.fingerprint, actor);
+  assert.equal(invoice.status, 'DRAFT'); assert.equal(invoice.total, 117.24);
+  assert.equal(invoice.billingSources.version, 1);
+  assert.equal(invoice.billingSources.clientId, input.clientId);
+  assert.equal(invoice.billingSources.lineItems[0].source.id, 'time');
+  assert.equal(invoice.lineItems.length, 2);
+  assert.ok(invoice.lineItems.every(line => !('source' in line)), 'internal origins belong to the private snapshot');
+  assert.equal(claims.length, 2);
+  assert.ok(claims.every(claim => claim.data.invoiceId === invoice.id && claim.data.invoiced));
+  assert.ok(db.state.audit.some(event => event.action === 'invoice.created_from_unbilled'));
+  prisma.auditEvent.create = async () => { throw new Error('Audit unavailable'); };
+  await assert.rejects(createUnbilledInvoiceInTransaction(prisma, input, preview.fingerprint, actor), { statusCode: 503 });
 });

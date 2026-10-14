@@ -19,6 +19,9 @@ import { invoiceTotals, lineTotal } from '../utils/money-totals.js';
 import { portfolioFilterSchema } from '../validators/schemas.js';
 import { invoicePortfolioWhere } from '../shared/financial-portfolio.js';
 import { updateDraftInvoice } from '../services/invoice-draft.service.js';
+import { hasInvoiceBillingSources, withoutInvoiceBillingSources } from '../utils/invoice-billing-privacy.js';
+import { currentInvoiceAdmin } from '../services/unbilled-invoice.service.js';
+import prismaPkg from '@prisma/client';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
@@ -65,6 +68,24 @@ export const INVOICE_BULK_SEND_MAX = 25;
  *   Test seams for the Stripe and email providers; production uses the defaults.
  */
 export default async function invoiceRoutes(fastify, options = {}) {
+  fastify.addHook('preSerialization', async (request, _reply, payload) => {
+    if (request.user?.role === 'ADMIN' && hasInvoiceBillingSources(payload)) {
+      try { await currentInvoiceAdmin(request.prisma, request.user); return payload; }
+      catch (error) { if (error.statusCode !== 403) throw error; }
+    }
+    return withoutInvoiceBillingSources(payload);
+  });
+  fastify.addHook('preHandler', async request => {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method) || !request.user) return;
+    const ids = request.params?.id ? [request.params.id] : Array.isArray(request.body?.ids) ? request.body.ids.slice(0, 100).filter(id => typeof id === 'string') : [];
+    if (!ids.length) return;
+    const select = { id: true, billingSources: true };
+    const protectedInvoice = ids.length === 1
+      ? (await request.prisma.invoice.findUnique({ where: { id: ids[0], organizationId: request.user.organizationId }, select }))?.billingSources
+      : await request.prisma.invoice.findFirst({ where: { id: { in: ids }, organizationId: request.user.organizationId,
+        billingSources: { not: prismaPkg.Prisma.DbNull } }, select: { id: true } });
+    if (protectedInvoice) await currentInvoiceAdmin(request.prisma, request.user);
+  });
   const createCheckout = options.createPaymentLink || createPaymentLink;
   const deliverInvoiceEmail = options.sendInvoiceDeliveryEmail || sendInvoiceDeliveryEmail;
   const expireSession = options.expireCheckoutSession || expireCheckoutSession;

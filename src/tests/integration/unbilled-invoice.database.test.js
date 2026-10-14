@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
-import { listUnbilledCandidates, previewUnbilledInvoice } from '../../services/unbilled-invoice.service.js';
+import { listUnbilledCandidates, previewUnbilledInvoice, createUnbilledInvoiceInTransaction } from '../../services/unbilled-invoice.service.js';
+import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 
 const url = process.env.TENANT_INTEGRATION_DATABASE_URL;
 test('unbilled selection preserves canonical clients and currency, approval, pagination and tenant boundaries', {
@@ -53,15 +54,59 @@ test('unbilled selection preserves canonical clients and currency, approval, pag
     }
     assert.equal(await raw.invoice.count({ where: { organizationId: { in: orgs } } }), 0, 'selection and preview do not bill sources');
     assert.equal(await raw.timeEntry.count({ where: { projectId: projects[0].id, invoiced: true } }), 1);
+    const sourceTime = await raw.timeEntry.findFirst({ where: { projectId: projects[0].id, reviewStatus: 'APPROVED', invoiced: false } });
+    const selected = { clientId: clients[0].id, title: 'Confirmed billing', currency: 'CAD', taxRate: 13, taxType: 'HST',
+      times: [{ id: sourceTime.id, updatedAt: sourceTime.updatedAt.toISOString(), hourlyRate: 125 }],
+      expenses: [{ id: expense.id, updatedAt: expense.updatedAt.toISOString() }],
+    };
+    const scoped = createScopedPrisma(raw, orgs[0]);
+    const reviewed = await previewUnbilledInvoice(scoped, selected, actors[0]);
+    await assert.rejects(raw.$transaction(tx => createUnbilledInvoiceInTransaction(tx, selected, '0'.repeat(64), actors[0]), { isolationLevel: 'Serializable' }), { statusCode: 409 });
+    assert.equal(await raw.invoice.count({ where: { organizationId: orgs[0] } }), 0);
+    await assert.rejects(scoped.$transaction(tx => createUnbilledInvoiceInTransaction(new Proxy(tx, {
+      get(target, property) {
+        if (property === 'auditEvent') return { create: async () => { throw new Error('Synthetic audit failure'); } };
+        const value = Reflect.get(target, property);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }), selected, reviewed.fingerprint, actors[0]), { isolationLevel: 'Serializable' }), { statusCode: 503 });
+    assert.equal(await raw.invoice.count({ where: { organizationId: orgs[0] } }), 0);
+    assert.equal(await raw.documentNumberSequence.count({ where: { organizationId: orgs[0] } }), 0, 'failed audit releases the allocated number');
+    assert.equal((await raw.timeEntry.findUnique({ where: { id: sourceTime.id } })).invoiceId, null);
+    assert.equal((await raw.expense.findUnique({ where: { id: expense.id } })).invoiceId, null);
+    const race = await Promise.allSettled([1, 2].map(() => scoped.$transaction(tx => createUnbilledInvoiceInTransaction(tx, selected, reviewed.fingerprint, actors[0]), { isolationLevel: 'Serializable' })));
+    assert.equal(race.filter(result => result.status === 'fulfilled').length, 1, 'competing source claims must have one invoice winner');
+    const invoice = race.find(result => result.status === 'fulfilled').value;
+    assert.equal(invoice.status, 'DRAFT'); assert.equal(invoice.total, 117.24);
+    assert.equal(invoice.lineItems.length, 2);
+    assert.equal(invoice.billingSources.clientId, clients[0].id);
+    assert.equal(invoice.billingSources.lineItems[0].source.id, sourceTime.id);
+    assert.equal((await raw.timeEntry.findUnique({ where: { id: sourceTime.id } })).invoiceId, invoice.id);
+    assert.equal((await raw.expense.findUnique({ where: { id: expense.id } })).invoiceId, invoice.id);
+    await assert.rejects(raw.invoice.update({ where: { id: invoice.id }, data: { billingSources: {} } }), /billing sources cannot change/);
+    await assert.rejects(raw.invoice.update({ where: { id: invoice.id }, data: { currency: 'USD' } }), /client project and currency cannot change/);
+    await assert.rejects(raw.invoice.update({ where: { id: invoice.id }, data: { isRecurring: true } }), /cannot recur/);
+    await assert.rejects(raw.timeEntry.update({ where: { id: sourceTime.id }, data: { duration: 60 } }), /billed time/);
+    await assert.rejects(raw.expense.update({ where: { id: expense.id }, data: { amount: 20 } }), /billed expense/);
+    await assert.rejects(raw.project.update({ where: { id: projects[0].id }, data: { clientId: otherClient.id } }), /billed time/);
+    await assert.rejects(raw.timeEntry.update({ where: { id: sourceTime.id }, data: { invoiceId: null, invoiced: false } }), /billed time/);
+    await raw.expense.update({ where: { id: expense.id }, data: { notes: 'Receipt follow-up' } });
+    assert.deepEqual((await raw.invoice.findUnique({ where: { id: invoice.id } })).billingSources, invoice.billingSources, 'receipt notes do not rewrite the original billing history');
+    assert.ok(await raw.auditEvent.findFirst({ where: { organizationId: orgs[0], action: 'invoice.created_from_unbilled', entityId: invoice.id } }));
     await raw.user.update({ where: { id: actors[0].id }, data: { role: 'TEAM' } });
     await assert.rejects(listUnbilledCandidates(raw, { clientId: clients[0].id, kind: 'TIME' }, actors[0]), { statusCode: 403 });
   } finally {
-    await raw.timeEntry.deleteMany({ where: { project: { organizationId: { in: orgs } } } });
-    await raw.expense.deleteMany({ where: { organizationId: { in: orgs } } });
+    await raw.$transaction(async tx => {
+      await tx.timeEntry.deleteMany({ where: { project: { organizationId: { in: orgs } } } });
+      await tx.expense.deleteMany({ where: { organizationId: { in: orgs } } });
+      await tx.invoiceLineItem.deleteMany({ where: { invoice: { organizationId: { in: orgs } } } });
+      await tx.invoice.deleteMany({ where: { organizationId: { in: orgs } } });
+      await tx.documentNumberSequence.deleteMany({ where: { organizationId: { in: orgs } } });
+    });
     await raw.project.deleteMany({ where: { organizationId: { in: orgs } } });
     await raw.client.deleteMany({ where: { organizationId: { in: orgs } } });
     await raw.user.deleteMany({ where: { organizationId: { in: orgs } } });
-    await raw.organization.deleteMany({ where: { id: { in: orgs } } });
+    if (await purgeFixtureAuditEvents(raw, { ids: orgs })) await raw.organization.deleteMany({ where: { id: { in: orgs } } });
     await raw.$disconnect();
   }
 });

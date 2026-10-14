@@ -65,7 +65,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [IntakeFormResponse](#model-intakeformresponse) | `intake_form_responses` | no | no | 8 |
 | [Integration](#model-integration) | `integrations` | yes | no | 11 |
 | [InternalNote](#model-internalnote) | `internal_notes` | no | no | 7 |
-| [Invoice](#model-invoice) | `invoices` | yes | yes | 62 |
+| [Invoice](#model-invoice) | `invoices` | yes | yes | 64 |
 | [InvoiceLineItem](#model-invoicelineitem) | `invoice_line_items` | no | no | 9 |
 | [InvoicePayment](#model-invoicepayment) | `invoice_payments` | no | no | 9 |
 | [LineItemTemplate](#model-lineitemtemplate) | `line_item_templates` | yes | no | 11 |
@@ -1312,6 +1312,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: yes (`deletedAt`)
 - Constraints and indexes:
   - `@@unique([organizationId, invoiceNumber])`
+  - `@@index([organizationId], map: "invoices_billing_sources_scope_idx", where: raw("\"billingSources\" IS NOT NULL"))`
   - `@@unique([clientId, retainerPeriod], map: "invoices_clientId_retainerPeriod_live_key", where: raw("\"retainerPeriod\" IS NOT NULL AND status <> 'VOID' AND \"deletedAt\" IS NULL"))`
   - `@@index([status, dueDate])`
   - `@@index([status, overdueEscalatedAt, dueDate])`
@@ -1381,6 +1382,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `expenses` | Expense[] | list, required |  | → Expense |  |
 | `deletedAt` | DateTime | optional |  |  |  |
 | `draftData` | String | optional |  |  | JSON of unsaved form data |
+| `billingSources` | Json | optional |  |  | Immutable original approved-work preview; internal billing history |
+| `billingSourcesReleasedAt` | DateTime | optional |  |  | Reviewed release on an unpaid voided invoice |
 
 ### Model InvoiceLineItem
 

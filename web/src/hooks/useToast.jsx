@@ -15,10 +15,10 @@ const ICONS = {
 };
 
 const STYLES = {
-  success: 'border-success/30 bg-success/5 text-success',
-  error: 'border-destructive/30 bg-destructive/5 text-destructive',
-  warning: 'border-warning/30 bg-warning/5 text-warning',
-  info: 'border-info/30 bg-info/5 text-info',
+  success: 'border-success/30 bg-card text-card-foreground',
+  error: 'border-destructive/30 bg-card text-card-foreground',
+  warning: 'border-warning/30 bg-card text-card-foreground',
+  info: 'border-info/30 bg-card text-card-foreground',
 };
 
 const ICON_STYLES = {

@@ -10538,8 +10538,8 @@
             "required": false,
             "schema": {
               "enum": [
-                "workspace_page",
                 "invoice",
+                "workspace_page",
                 "invoice_payment",
                 "proposal",
                 "contract",
@@ -10580,6 +10580,7 @@
             "required": false,
             "schema": {
               "enum": [
+                "invoice.created_from_unbilled",
                 "workspace_page.access_changed",
                 "workspace_page.created",
                 "workspace_page.updated",

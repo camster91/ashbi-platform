@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { unbilledCandidateSchema, unbilledInvoiceSchema } from '../shared/unbilled-invoice.js';
 import { invoiceTotals, lineTotal } from '../utils/money-totals.js';
+import { allocateInvoiceNumber } from '../utils/invoice.js';
+import { recordAuditEvent } from './audit-event.service.js';
 
 const fail = (statusCode, message) => { throw Object.assign(new Error(message), { statusCode }); };
 const parse = (schema, input) => {
@@ -24,7 +26,7 @@ async function targets(prisma, input, actor) {
 function sourceWhere(input, organizationId, kind) {
   const project = { organizationId, clientId: input.clientId, deletedAt: null };
   const common = { deletedAt: null, billable: true, invoiced: false, invoiceId: null, ...(input.projectId ? { projectId: input.projectId } : {}) };
-  if (kind === 'TIME') return { ...common, duration: { gt: 0 }, reviewStatus: 'APPROVED', project };
+  if (kind === 'TIME') return { ...common, duration: { gt: 0 }, reviewStatus: 'APPROVED', project, user: { organizationId } };
   // A direct client link cannot override a different project's client.
   return { ...common, organizationId, AND: [
     { OR: [{ clientId: input.clientId }, { clientId: null, project }] },
@@ -62,6 +64,7 @@ async function selected(prisma, input, admin, kind) {
     if (!row) fail(409, 'Selected work is no longer available for billing. Refresh the selection.');
     if (new Date(row.updatedAt).getTime() !== new Date(observed.updatedAt).getTime()) fail(409, 'Selected work changed. Review it again.');
     if (kind === 'TIME' && (!Number.isInteger(row.duration) || row.duration <= 0)) fail(409, 'Selected time has an invalid duration.');
+    if (kind === 'TIME' && row.hourlyRate !== null && row.hourlyRate !== undefined && (!Number.isFinite(row.hourlyRate) || row.hourlyRate < 0)) fail(409, 'Selected time has an invalid stored rate. Review the source first.');
     if (kind === 'EXPENSE' && (!Number.isFinite(row.amount) || row.amount < 0 || row.currency !== input.currency)) fail(409, 'Selected expenses must have valid amounts in the invoice currency. No conversion is performed.');
     return { row, observed };
   });
@@ -85,4 +88,35 @@ export async function previewUnbilledInvoice(prisma, rawInput, actor) {
     fail(400, 'The selected billing amounts are too large to represent safely.');
   }
   return { ...preview, fingerprint: createHash('sha256').update(JSON.stringify(preview)).digest('hex') };
+}
+
+// The caller owns a serializable transaction (HTTP confirmation or the
+// governed tool receipt). Never allocate a number or claim sources beforehand.
+export async function createUnbilledInvoiceInTransaction(tx, rawInput, fingerprint, actor) {
+  if (typeof fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(fingerprint)) fail(400, 'Provide the reviewed billing preview.');
+  const input = parse(unbilledInvoiceSchema, rawInput);
+  const preview = await previewUnbilledInvoice(tx, input, actor);
+  if (preview.fingerprint !== fingerprint) fail(409, 'The billing preview changed. Review it again.');
+  const allocated = await allocateInvoiceNumber(tx, { clientId: input.clientId, organizationId: actor.organizationId });
+  const snapshot = JSON.parse(JSON.stringify({ version: 1, ...preview, clientId: input.clientId, projectId: input.projectId ?? null }));
+  const invoice = await tx.invoice.create({ data: {
+    organizationId: allocated.organizationId, invoiceNumber: allocated.invoiceNumber, clientId: input.clientId,
+    projectId: input.projectId ?? null, createdById: actor.id, title: input.title, status: 'DRAFT', currency: input.currency,
+    taxRate: input.taxRate, taxType: input.taxType, subtotal: preview.totals.subtotal, tax: preview.totals.tax, total: preview.totals.total,
+    billingSources: snapshot, lineItems: { create: preview.lineItems.map(line => ({ description: line.description, itemType: line.itemType,
+      quantity: line.quantity, unitPrice: line.unitPrice, total: line.total, position: line.position })) },
+  }, include: { client: { select: { id: true, name: true } }, lineItems: { orderBy: { position: 'asc' } } } });
+  for (const kind of ['TIME', 'EXPENSE']) {
+    const selections = kind === 'TIME' ? input.times : input.expenses;
+    if (!selections.length) continue;
+    const delegate = kind === 'TIME' ? tx.timeEntry : tx.expense;
+    const claimed = await delegate.updateMany({ where: { ...sourceWhere(input, actor.organizationId, kind),
+      OR: selections.map(source => ({ id: source.id, updatedAt: new Date(source.updatedAt) })) }, data: { invoiced: true, invoiceId: invoice.id } });
+    if (claimed.count !== selections.length) fail(409, 'Selected work was claimed or changed. Review it again.');
+  }
+  const event = await recordAuditEvent(tx, { organizationId: actor.organizationId, actorType: 'USER', actorUserId: actor.id,
+    action: 'invoice.created_from_unbilled', entityId: invoice.id, metadata: { clientId: input.clientId, projectId: input.projectId ?? null,
+      timeCount: input.times.length, expenseCount: input.expenses.length, total: invoice.total, currency: invoice.currency } });
+  if (!event) fail(503, 'The invoice could not be saved with its audit record. No work was billed.');
+  return invoice;
 }
