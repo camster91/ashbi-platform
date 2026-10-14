@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import invoiceRoutes from '../../routes/invoice.routes.js';
 import expenseRoutes from '../../routes/expense.routes.js';
-import { financialPortfolioWhere } from '../../shared/financial-portfolio.js';
+import { financialPortfolioWhere, invoicePortfolioWhere } from '../../shared/financial-portfolio.js';
 import { createWorkspaceTools } from '../../integrations/workspace-tools.js';
 
 const reply = { status(code) { this.code = code; return this; }, send(body) { return { status: this.code, ...body }; } };
@@ -22,10 +22,10 @@ test('unclassified financial records include unlinked projects without inferring
 });
 test('invoice list and all currency/payment statistics use the same selected portfolio', async () => {
   const calls = [];
-  const prisma = { invoice: { findMany: async query => { calls.push(query); return []; }, count: async query => { calls.push(query); return 0; }, groupBy: async query => { calls.push(query); return []; } }, invoicePayment: { findMany: async query => { calls.push(query); return []; } } };
+  const prisma = { project: { findMany: async () => [{ id: 'p1' }] }, invoice: { findMany: async query => { calls.push(query); return []; }, count: async query => { calls.push(query); return 0; }, groupBy: async query => { calls.push(query); return []; } }, invoicePayment: { findMany: async query => { calls.push(query); return []; } } };
   const routes = await handlers(invoiceRoutes, prisma);
   await routes['/']({ query: { portfolio: 'UNCLASSIFIED', search: 'brief', status: 'OVERDUE' } }, reply);
-  assert.deepEqual(calls[0].where.OR, financialPortfolioWhere('UNCLASSIFIED').OR);
+  assert.deepEqual(calls[0].where.OR, [{ projectId: null }, { projectId: { in: ['p1'] } }]);
   assert.equal(calls[0].where.AND.length, 2);
   assert.deepEqual(calls[2].where.OR, calls[0].where.OR);
   assert.deepEqual(calls[3].where.OR, calls[0].where.OR);
@@ -62,14 +62,25 @@ test('expense summaries keep currencies separate and search cannot overwrite the
 });
 test('MCP financial reads retain explicit organization scope and omit payable links and receipt URLs', async () => {
   const calls = {};
-  const prisma = { invoice: { findMany: async args => { calls.invoice = args; return []; } }, expense: { findMany: async args => { calls.expense = args; return []; } } };
+  const prisma = { project: { findMany: async () => [{ id: 'p1' }] }, invoice: { findMany: async args => { calls.invoice = args; return []; } }, expense: { findMany: async args => { calls.expense = args; return []; } } };
   const ctx = { user: { id: 'staff', role: 'TEAM', organizationId: 'org-a' }, scopes: ['workspace:read'], prisma };
   const tools = createWorkspaceTools();
   await tools.call(ctx, 'list_invoices', { portfolio: 'FREELANCE' });
   await tools.call(ctx, 'list_expenses', { portfolio: 'UNCLASSIFIED' });
-  assert.deepEqual(calls.invoice.where, { organizationId: 'org-a', project: { portfolio: 'FREELANCE' } });
+  assert.deepEqual(calls.invoice.where, { organizationId: 'org-a', projectId: { in: ['p1'] } });
   assert.deepEqual(calls.expense.where, { organizationId: 'org-a', ...financialPortfolioWhere('UNCLASSIFIED') });
   assert.equal(calls.invoice.select.stripePaymentLink, undefined);
   assert.equal(calls.expense.select.receiptUrl, undefined);
   assert.equal(calls.invoice.take, 26);
+});
+test('invoice classification reads all authorized project IDs without altering archived history', async () => {
+  const rows = Array.from({ length: 101 }, (_, i) => ({ id: `p${String(i).padStart(3, '0')}` }));
+  const queries = [];
+  const prisma = { project: { findMany: async query => { queries.push(query); return rows.filter(row => !query.where.id || row.id > query.where.id.gt).slice(0, query.take); } } };
+  const where = await invoicePortfolioWhere(prisma, 'FREELANCE', 'org-a');
+  assert.equal(where.projectId.in.length, 101);
+  assert.equal(queries.length, 2);
+  assert.ok(queries.every(query => query.where.organizationId === 'org-a' && query.where.portfolio === 'FREELANCE'));
+  assert.deepEqual(queries[0].where.deletedAt, {});
+  assert.equal(where.project, undefined);
 });

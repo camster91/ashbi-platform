@@ -17,7 +17,7 @@ import { firstRecurringDate } from '../jobs/recurring-invoices.js';
 import { proposalTaxRate, taxTypeForRate } from '../utils/proposal-totals.js';
 import { invoiceTotals, lineTotal } from '../utils/money-totals.js';
 import { portfolioFilterSchema } from '../validators/schemas.js';
-import { financialPortfolioWhere } from '../shared/financial-portfolio.js';
+import { invoicePortfolioWhere } from '../shared/financial-portfolio.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
@@ -132,7 +132,8 @@ export default async function invoiceRoutes(fastify, options = {}) {
     if (!portfolio.success) return reply.status(400).send({ error: 'Invalid portfolio filter' });
     const { clientId, projectId, status, search, sort, order, limit, offset } = request.query;
 
-    const where = financialPortfolioWhere(portfolio.data);
+    const portfolioWhere = await invoicePortfolioWhere(fastify.prisma, portfolio.data, request.user?.organizationId);
+    const where = { ...portfolioWhere };
     if (clientId) where.clientId = clientId;
     if (projectId) where.projectId = projectId;
     // "SENT" lists every sent-but-unpaid invoice, including any marked
@@ -185,7 +186,7 @@ export default async function invoiceRoutes(fastify, options = {}) {
     return {
       invoices: invoices.map((inv) => flagOverdue({ ...inv, ...invoiceBalance(inv.total, paidByInvoice.get(inv.id) ?? 0) })),
       total,
-      stats: await getStats(financialPortfolioWhere(portfolio.data))
+      stats: await getStats(portfolioWhere)
     };
   });
 
@@ -276,7 +277,7 @@ export default async function invoiceRoutes(fastify, options = {}) {
   fastify.get('/stats', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     const portfolio = portfolioFilterSchema.safeParse(request.query?.portfolio);
     if (!portfolio.success) return reply.status(400).send({ error: 'Invalid portfolio filter' });
-    return getStats(financialPortfolioWhere(portfolio.data));
+    return getStats(await invoicePortfolioWhere(fastify.prisma, portfolio.data, request.user?.organizationId));
   });
 
   // ─── GET /templates — line item templates ──────────────────────────────────
