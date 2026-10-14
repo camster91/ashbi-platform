@@ -384,6 +384,9 @@ model Task {
   startDate      DateTime?
   dueDate        DateTime?
   completedAt    DateTime?
+  recurrenceFirstCompletedAt DateTime?
+  recurrenceCompletionProcessedAt DateTime?
+  recurrenceCompletionSourceId String? @unique
   sourceThreadId String?
   blockedBy      String?
   aiGenerated    Boolean   @default(false)
@@ -422,6 +425,7 @@ model Task {
   @@index([dependsOnId])
   @@index([assigneeId])
   @@index([projectId, status])
+  @@index([status, recurrenceCompletionProcessedAt, id])
   @@index([milestoneId])
   @@unique([recurrenceSourceId, recurrenceScheduledDate])
   @@index([recurrenceNextDate])

@@ -5931,6 +5931,13 @@
                   "timeZone": {
                     "maxLength": 100,
                     "type": "string"
+                  },
+                  "trigger": {
+                    "enum": [
+                      "CALENDAR",
+                      "AFTER_COMPLETION"
+                    ],
+                    "type": "string"
                   }
                 },
                 "required": [

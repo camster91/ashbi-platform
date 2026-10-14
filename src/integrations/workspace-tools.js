@@ -67,7 +67,7 @@ export const workspaceRegistry = createToolRegistry([
     'client', { id: true, name: true, status: true, domain: true }, user => ({ organizationId: user.organizationId })),
   listTool('list_tasks', 'Page through workspace tasks, including unassigned work. Filter by projectId, status, priority, stageKey or search to reproduce a saved project view.',
     'task', { id: true, title: true, projectId: true, status: true, stageKey: true, priority: true, dueDate: true, fieldValues: true, fieldValuesRevision: true, assigneeId: true, collaboratorsRevision: true, collaborators: { select: { userId: true, user: { select: { name: true, isActive: true } } } },
-      recurrenceRule: true, recurrenceNextDate: true, recurrenceRevision: true, recurrenceSourceId: true, recurrenceScheduledDate: true },
+      recurrenceRule: true, recurrenceNextDate: true, recurrenceRevision: true, recurrenceSourceId: true, recurrenceScheduledDate: true, recurrenceCompletionSourceId: true, recurrenceFirstCompletedAt: true, recurrenceCompletionProcessedAt: true },
     (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }, ...taskViewWhere(input) }),
     pageSchema.extend({ portfolio: portfolioFilterSchema, projectId: z.string().min(1).max(50).optional(), ...taskViewFiltersSchema.shape }),
     ({ prisma, user, input }) => validateTaskFieldFilters(prisma, input.projectId, input.fieldFilters, user.organizationId)),

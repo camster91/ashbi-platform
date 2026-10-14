@@ -109,7 +109,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [SlackInstallation](#model-slackinstallation) | `slack_installations` | yes | no | 15 |
 | [Snippet](#model-snippet) | `snippets` | no | no | 13 |
 | [SupportHourEntry](#model-supporthourentry) | `support_hours` | yes | no | 12 |
-| [Task](#model-task) | `tasks` | no | yes | 49 |
+| [Task](#model-task) | `tasks` | no | yes | 52 |
 | [TaskCollaborator](#model-taskcollaborator) | `task_collaborators` | yes | no | 8 |
 | [TaskComment](#model-taskcomment) | `task_comments` | no | no | 9 |
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
@@ -2611,6 +2611,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([dependsOnId])`
   - `@@index([assigneeId])`
   - `@@index([projectId, status])`
+  - `@@index([status, recurrenceCompletionProcessedAt, id])`
   - `@@index([milestoneId])`
   - `@@unique([recurrenceSourceId, recurrenceScheduledDate])`
   - `@@index([recurrenceNextDate])`
@@ -2644,6 +2645,9 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `startDate` | DateTime | optional |  |  |  |
 | `dueDate` | DateTime | optional |  |  |  |
 | `completedAt` | DateTime | optional |  |  |  |
+| `recurrenceFirstCompletedAt` | DateTime | optional |  |  |  |
+| `recurrenceCompletionProcessedAt` | DateTime | optional |  |  |  |
+| `recurrenceCompletionSourceId` | String | unique, optional |  |  |  |
 | `sourceThreadId` | String | optional |  |  |  |
 | `blockedBy` | String | optional |  |  |  |
 | `aiGenerated` | Boolean | required | `false` |  |  |

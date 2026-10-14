@@ -158,6 +158,7 @@ export const projectTaskViewsSchema = z.object({
 }).strict().refine(({ views }) => ['key', 'name'].every(field => new Set(views.map(view => view[field].toLowerCase())).size === views.length),
 { message: 'View keys and names must be unique' });
 export const taskRecurrenceRuleSchema = z.object({
+  trigger: z.enum(['CALENDAR', 'AFTER_COMPLETION']).optional(),
   frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY']),
   interval: z.number().int().min(1).max(365),
   startDate: z.string().refine(isRecurrenceDate, 'Enter a valid calendar date (2000–2099)'),
