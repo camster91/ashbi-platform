@@ -14,7 +14,8 @@ test('additional board creation, task membership and saved views persist in the 
   await expect(page.getByRole('heading', { name: `Delivery ${suffix}`, exact: true })).toBeVisible();
   const boards = await json(await api.get(`/api/projects/${project.id}/boards`));
   const board = boards.items.find((row: any) => !row.isDefault);
-  const task = await json(await api.post(`/api/tasks/${project.id}/quick`, { data: { title: `Movable ${suffix}` } }));
+  const task = await json(await api.post(`/api/tasks/${project.id}/quick`, { data: { title: `Movable ${suffix}`, boardId: 'DEFAULT' } }));
+  expect(task.boardId).toBeNull();
   await page.goto(`/task/${task.id}`);
   await page.getByLabel('Destination board').selectOption(board.id);
   await page.getByRole('button', { name: 'Move to board', exact: true }).click();

@@ -1,3 +1,5 @@
+export const normalizeTaskBoardId = boardId => boardId === 'DEFAULT' ? null : boardId;
+
 export async function activeTaskBoard(prisma, projectId, boardId, organizationId) {
   if (!boardId || boardId === 'DEFAULT') return null;
   const board = await prisma.projectBoard.findFirst({ where: { id: boardId, projectId, archivedAt: null, ...(organizationId ? { organizationId } : {}), project: { deletedAt: null } } });

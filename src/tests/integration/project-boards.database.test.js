@@ -47,7 +47,7 @@ test('boards retain canonical task identity, isolated configuration and database
     assert.equal((await processRecurringTasks(scoped, { now: new Date('2026-01-03T12:00:00Z') })).generated, 0);
     const tools = createWorkspaceTools();
     const ctx = { prisma: scoped, user: people[0], scopes: ['workspace:read', 'workspace:actions'] };
-    const prepared = await tools.call(ctx, 'set_task_board', { input: { taskId: task.id, projectId: projects[0].id, boardId: null, revision: 1 }, idempotencyKey: `board-${randomUUID()}` });
+    const prepared = await tools.call(ctx, 'set_task_board', { input: { taskId: task.id, projectId: projects[0].id, boardId: 'DEFAULT', revision: 1 }, idempotencyKey: `board-${randomUUID()}` });
     assert.equal((await raw.task.findUnique({ where: { id: task.id } })).boardId, board.id);
     assert.equal(prepared.action.preview.retainsLifecycle, true);
     assert.equal((await tools.call(ctx, 'confirm_action', { actionId: prepared.action.id })).action.status, 'EXECUTED');
