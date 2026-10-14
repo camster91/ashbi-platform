@@ -21,14 +21,19 @@ function collectionRecords(records, collection) {
 }
 
 export function buildWorkspaceExportManifest(records) {
+  // Hash the values written to disk: Prisma dates/decimals expose toJSON,
+  // and JSON omits undefined object fields (or writes null in arrays).
+  const serializedRecords = JSON.parse(JSON.stringify(Object.fromEntries(
+    WORKSPACE_EXPORT_COLLECTIONS.map((collection) => [collection, collectionRecords(records, collection)]),
+  )));
   const collections = Object.fromEntries(WORKSPACE_EXPORT_COLLECTIONS.map((collection) => {
-    const entries = collectionRecords(records, collection);
+    const entries = serializedRecords[collection];
     return [collection, { count: entries.length, sha256: sha256(entries) }];
   }));
   return {
     version: 1,
     collections,
-    recordsSha256: sha256(Object.fromEntries(WORKSPACE_EXPORT_COLLECTIONS.map((collection) => [collection, collectionRecords(records, collection)]))),
+    recordsSha256: sha256(serializedRecords),
   };
 }
 
