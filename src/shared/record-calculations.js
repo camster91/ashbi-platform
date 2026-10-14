@@ -20,14 +20,18 @@ export function validateRecordDefinitions(fields, catalog = {}) {
   const byKey = new Map();
   const names = new Set();
   for (const field of fields) {
-    if (!exact(field, ['key', 'name', 'type', 'archived', 'required', 'options', 'collectionId', 'expression', 'relationKey', 'targetKey', 'aggregate']) || !safeKey(field.key) || !TYPES.has(field.type) || typeof field.name !== 'string' || !field.name.trim() || field.name.length > 80 || (field.archived !== undefined && typeof field.archived !== 'boolean') || (field.required !== undefined && typeof field.required !== 'boolean')) fail('Invalid record field.');
+    if (!exact(field, ['key', 'name', 'type', 'archived', 'required', 'options', 'collectionId', 'target', 'expression', 'relationKey', 'targetKey', 'aggregate']) || !safeKey(field.key) || !TYPES.has(field.type) || typeof field.name !== 'string' || !field.name.trim() || field.name.length > 80 || (field.archived !== undefined && typeof field.archived !== 'boolean') || (field.required !== undefined && typeof field.required !== 'boolean')) fail('Invalid record field.');
     if (byKey.has(field.key.toLowerCase()) || names.has(field.name.trim().toLowerCase())) fail('Field keys and names must be unique.');
     byKey.set(field.key.toLowerCase(), field);
     names.add(field.name.trim().toLowerCase());
-    const allowed = ['key', 'name', 'type', 'archived', 'required', ...(['SELECT', 'MULTI_SELECT'].includes(field.type) ? ['options'] : field.type === 'RELATION' ? ['collectionId'] : field.type === 'FORMULA' ? ['expression'] : field.type === 'ROLLUP' ? ['relationKey', 'targetKey', 'aggregate'] : [])];
+    const allowed = ['key', 'name', 'type', 'archived', 'required', ...(['SELECT', 'MULTI_SELECT'].includes(field.type) ? ['options'] : field.type === 'RELATION' ? ['collectionId', 'target'] : field.type === 'FORMULA' ? ['expression'] : field.type === 'ROLLUP' ? ['relationKey', 'targetKey', 'aggregate'] : [])];
     if (!exact(field, allowed)) fail(`Unexpected configuration for ${field.name}.`);
     if (['SELECT', 'MULTI_SELECT'].includes(field.type) && (!Array.isArray(field.options) || !field.options.length || field.options.length > 30 || field.options.some(item => typeof item !== 'string' || !item.trim() || item.length > 80) || new Set(field.options).size !== field.options.length)) fail('Select fields need unique choices.');
-    if (field.type === 'RELATION' && (typeof field.collectionId !== 'string' || !field.collectionId || field.collectionId.length > 80 || !own(catalog, field.collectionId) || !Array.isArray(catalog[field.collectionId]))) fail('Related collection is unavailable.');
+    if (field.type === 'RELATION') {
+      if (field.target !== undefined) {
+        if (!['TASK', 'PROJECT', 'CLIENT', 'PERSON'].includes(field.target) || field.collectionId !== undefined) fail('Choose one canonical relation target or a collection.');
+      } else if (typeof field.collectionId !== 'string' || !field.collectionId || field.collectionId.length > 80 || !own(catalog, field.collectionId) || !Array.isArray(catalog[field.collectionId])) fail('Related collection is unavailable.');
+    }
     if (['FORMULA', 'ROLLUP'].includes(field.type) && field.required) fail('Computed fields cannot be required inputs.');
   }
   const lookup = key => fields.find(field => field.key === key);
@@ -82,7 +86,7 @@ export function validateRecordDefinitions(fields, catalog = {}) {
     }
     if (field.type === 'ROLLUP') {
       const relation = lookup(field.relationKey);
-      if (!relation || relation.archived || relation.type !== 'RELATION' || !['COUNT', 'SUM', 'AVERAGE', 'MIN', 'MAX', 'UNIQUE'].includes(field.aggregate)) fail('Rollup requires an active relation and supported aggregate.');
+      if (!relation || relation.archived || relation.type !== 'RELATION' || relation.target || !['COUNT', 'SUM', 'AVERAGE', 'MIN', 'MAX', 'UNIQUE'].includes(field.aggregate)) fail('Rollup requires an active collection relation and supported aggregate.');
       if (field.aggregate === 'COUNT') {
         if (field.targetKey !== undefined) fail('Count does not take a target field.');
         type = 'NUMBER';

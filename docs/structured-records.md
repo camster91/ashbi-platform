@@ -1,8 +1,12 @@
 # Standalone collections, computed fields, and reusable forms
 
-Implementation in progress on `feat/structured-records-20261014`, tracked by #565. The shared calculation/input contracts are implemented and locally tested. Collection storage, permission-aware services, HTTP/MCP actions, UI screens, PostgreSQL and browser journeys remain open. This document does not claim a shipped feature or replacement readiness. Production remains held.
+Implementation in progress in draft #590 on `feat/structured-records-20261014`, tracked by #565. Shared calculation/input contracts, Prisma models/migration, fresh staff authorization, serializable audited services and authenticated HTTP endpoints are implemented. Local service/HTTP tests pass; PostgreSQL acceptance is pending CI. Confirmed API/MCP actions, UI screens and new browser journeys remain open. This document does not claim a shipped feature or replacement readiness. Production remains held.
 
-Local contract validation on October 14: 25 focused Node tests pass, changed-file ESLint passes with zero warnings, and repository TypeScript checking passes. The full local backend/AI regression suite finished with 1,896 passes, zero failures and one skip (1,897 tests). No PostgreSQL/browser acceptance of standalone collections has been run.
+Local validation on October 14: 58 contract/service/HTTP/tenant-policy tests pass, changed-file ESLint passes with zero warnings, Prisma validation/generation and repository TypeScript checking pass. Route/access/OpenAPI/data-dictionary snapshots are regenerated. The earlier contract-only full backend/AI run passed 1,896 tests with zero failures and one skip; it does not cover the subsequent persistence changes. A new PostgreSQL integration test covers same-workspace composite foreign keys, raw relation/type/identity refusal, one-winner concurrent revisions, required-audit rollback, dependent rollup guards, stale forms and archived-parent refusal. No local PostgreSQL instance is available and no standalone-collection browser journey has run yet.
+
+Persistence uses `WorkspaceCollection`, `WorkspaceRecord` and `WorkspaceRecordForm` in the existing organization; it does not create projects/tasks as surrogates. `RELATION` selects either a collection or a canonical CLIENT/PROJECT/TASK/PERSON target, with up to 100 selected IDs. Shared services validate IDs against active available same-workspace records. Composite foreign keys bind collection and author ownership; database triggers retain identities, increment revisions, validate relation rosters/defaults and refuse stored computed values. Collection schema changes preserve existing input types/choices and reject invalid active data or dependent rollups. Forms pin `schemaRevision` and report `needsReview` after schema changes. Writes require the audit evidence in their transaction. Relation hydration is batched in chunks of 100 and retains only scalar rollup targets, with a 5,000-reference page budget; no partial sum is substituted when a selected row is unavailable.
+
+Session HTTP endpoints are under `/api/collections`: collection/record/form list/read/create/update, relation options and form submissions. Pagination uses stable ID cursors with page size at most 50. Archive restores the existing identity and values; restoring a record under an archived collection is rejected. CLIENT/BOT/deactivated users cannot access these routes, and mutations resolve the stored staff role rather than trusting actor metadata.
 
 ## Intended usable workflow
 
@@ -28,8 +32,8 @@ Rollups support COUNT, SUM, AVERAGE, MIN, MAX and UNIQUE over an active collecti
 
 ## Remaining completion evidence
 
-- Prisma migration, tenant policy and database guards for collections, records and reusable forms; cross-organization and direct-write integration refusal.
-- Atomic revision-checked service writes, fresh staff authorization, relation validation/resolution, pagination and archive behavior.
+- PostgreSQL acceptance of the implemented migration, tenant policy and direct-write guards.
+- Broader regression acceptance of implemented service/HTTP writes, fresh authorization, relation resolution, pagination and archive behavior.
 - Usable collection/field/form builders and table/record screens, errors and recovery with scoped API/MCP parity, confirmation/audit and idempotency.
 - PostgreSQL tests plus authenticated full-stack journeys at desktop/mobile widths; required PR/main CI and normal merge.
 - Owner-held release, populated target QA, approved one-time mappings/input and team acceptance tracked separately.

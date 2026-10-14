@@ -35,6 +35,9 @@ model Organization {
   projectBoards      ProjectBoard[]
   workspacePages     WorkspacePage[]
   workspacePageGrants WorkspacePageGrant[]
+  workspaceCollections WorkspaceCollection[]
+  workspaceRecords WorkspaceRecord[]
+  workspaceRecordForms WorkspaceRecordForm[]
   clients            Client[]
   projects           Project[]
   formDrafts         FormDraft[]
@@ -133,6 +136,9 @@ model User {
   notes              Note[]              @relation("NoteAuthor")
   workspacePages     WorkspacePage[]      @relation("WorkspacePageAuthor")
   workspacePageGrants WorkspacePageGrant[]
+  workspaceCollections WorkspaceCollection[] @relation("WorkspaceCollectionAuthor")
+  workspaceRecords WorkspaceRecord[] @relation("WorkspaceRecordAuthor")
+  workspaceRecordForms WorkspaceRecordForm[] @relation("WorkspaceRecordFormAuthor")
   timeEntries        TimeEntry[]
   attachments        Attachment[]
   activities         Activity[]
@@ -154,6 +160,7 @@ model User {
   ownedPublicInquiries   PublicInquiry[] @relation("PublicInquiryOwner")
 
   @@index([organizationId])
+  @@unique([id, organizationId])
   @@map("users")
 }
 
@@ -884,6 +891,66 @@ model Activity {
   @@index([userId, createdAt])
   @@index([entityType, entityId])
   @@map("activities")
+}
+
+model WorkspaceCollection {
+  id             String @id @default(cuid())
+  organizationId String
+  authorId       String
+  name           String
+  description    String @default("")
+  portfolio      String?
+  fields         Json @default("[]")
+  revision       Int @default(0)
+  schemaRevision Int @default(0)
+  archivedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  author         User @relation("WorkspaceCollectionAuthor", fields: [authorId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  records        WorkspaceRecord[]
+  forms          WorkspaceRecordForm[]
+  @@unique([id, organizationId])
+  @@index([organizationId])
+  @@index([organizationId, archivedAt, id])
+  @@map("workspace_collections")
+}
+
+model WorkspaceRecord {
+  id             String @id @default(cuid())
+  organizationId String
+  collectionId   String
+  authorId       String
+  title          String
+  values         Json @default("{}")
+  revision       Int @default(0)
+  archivedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  collection     WorkspaceCollection @relation(fields: [collectionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  author         User @relation("WorkspaceRecordAuthor", fields: [authorId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@index([organizationId])
+  @@index([collectionId, archivedAt, id])
+  @@map("workspace_records")
+}
+
+model WorkspaceRecordForm {
+  id             String @id @default(cuid())
+  organizationId String
+  collectionId   String
+  authorId       String
+  configuration  Json
+  revision       Int @default(0)
+  archivedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  collection     WorkspaceCollection @relation(fields: [collectionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  author         User @relation("WorkspaceRecordFormAuthor", fields: [authorId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@index([organizationId])
+  @@index([collectionId, archivedAt, id])
+  @@map("workspace_record_forms")
 }
 
 model ProjectBoard {

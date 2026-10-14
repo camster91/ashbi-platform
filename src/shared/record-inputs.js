@@ -60,7 +60,7 @@ export function validateRecordDefinitionUpdate(previous, next, catalog = {}) {
   for (const old of previous) {
     const current = next.find(field => field.key === old.key);
     if (!current) fail('Archive fields instead of deleting them.');
-    if (current.type !== old.type || current.collectionId !== old.collectionId) fail('Existing field types and relation collections cannot change.');
+    if (current.type !== old.type || current.collectionId !== old.collectionId || current.target !== old.target) fail('Existing field types and relation targets cannot change.');
     if ((old.options ?? []).some(option => !current.options?.includes(option))) fail('Existing choices must be retained.');
   }
 }

@@ -21,6 +21,13 @@ const ACTOR_TYPE_SET = new Set(AUDIT_ACTOR_TYPES);
  * listed for the action are dropped.
  */
 export const AUDIT_EVENT_CATALOG = Object.freeze({
+  'workspace_collection.created': { entityType: 'workspace_collection', metadata: ['revision', 'schemaRevision'] },
+  'workspace_collection.updated': { entityType: 'workspace_collection', metadata: ['revision', 'schemaRevision', 'archived'] },
+  'workspace_record.created': { entityType: 'workspace_record', metadata: ['revision', 'collectionId'] },
+  'workspace_record.updated': { entityType: 'workspace_record', metadata: ['revision', 'collectionId', 'archived'] },
+  'workspace_record_form.created': { entityType: 'workspace_record_form', metadata: ['revision', 'collectionId'] },
+  'workspace_record_form.updated': { entityType: 'workspace_record_form', metadata: ['revision', 'collectionId', 'archived'] },
+  'workspace_record_form.submitted': { entityType: 'workspace_record', metadata: ['revision', 'collectionId', 'formId', 'formRevision'] },
   'invoice.created_from_unbilled': { entityType: 'invoice', metadata: ['clientId', 'projectId', 'timeCount', 'expenseCount', 'total', 'currency'] },
   'invoice.sources_released': { entityType: 'invoice', metadata: ['timeCount', 'expenseCount', 'total', 'currency'] },
   'workspace_page.access_changed': { entityType: 'workspace_page', metadata: ['fromMode', 'toMode', 'revision', 'memberCount'] },

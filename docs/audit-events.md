@@ -35,6 +35,16 @@ Workspace knowledge pages emit `workspace_page.created`, `workspace_page.updated
 `revision` and `parentId`; content stays in the page. These writes require their
 audit record in the same transaction and roll back if it cannot be recorded.
 
+Standalone collections emit `workspace_collection.created/updated` with only
+`revision`, `schemaRevision` and the archived flag. Records emit
+`workspace_record.created/updated` with `revision`, `collectionId` and the archived
+flag. Reusable forms emit `workspace_record_form.created/updated` with those same
+safe fields; `workspace_record_form.submitted` identifies the resulting record
+and includes only `revision`, `collectionId`, `formId` and `formRevision`. Record
+content, field values, formula text, relation rosters and form defaults are not
+copied into audit events. These writes require the audit evidence in the same
+serializable transaction and roll back when it cannot be saved.
+
 | Guarantee | How it is enforced |
 | --- | --- |
 | Append-only | A `BEFORE UPDATE OR DELETE` row trigger and a `BEFORE TRUNCATE` statement trigger raise `audit events are append-only`. The request-scoped Prisma proxy also rejects `update`, `updateMany`, `upsert`, `delete` and `deleteMany` on the model, and the HTTP API has no write route. |
