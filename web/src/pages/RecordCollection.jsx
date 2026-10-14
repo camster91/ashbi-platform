@@ -22,7 +22,7 @@ function RecordEditor({ collection, record, form, onDone }) {
     if (snapshot.form) return api.submitCollectionForm(source.id, snapshot.form.id, { ...input, revision: snapshot.form.revision });
     if (!snapshot.record) return api.createCollectionRecord(source.id, input);
     const patch = Object.fromEntries(Object.entries(values).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(snapshot.record.values?.[key] ?? null)));
-    return api.updateCollectionRecord(source.id, snapshot.record.id, { title, definitionRevision: source.schemaRevision, revision: snapshot.record.revision, ...(Object.keys(patch).length ? { values: patch } : {}) });
+    return api.updateCollectionRecord(source.id, snapshot.record.id, { title, definitionRevision: source.schemaRevision, revision: snapshot.record.revision, ...(snapshot.record.archivedAt ? { archived: false } : {}), ...(Object.keys(patch).length ? { values: patch } : {}) });
   }, onSuccess: onDone });
   return <form aria-label={snapshot.form ? `Submit ${snapshot.form.configuration.name}` : snapshot.record ? 'Edit record' : 'Create record'} className="min-w-0 space-y-3 rounded border border-border p-4" onSubmit={event => { event.preventDefault(); save.mutate(); }}>
     <fieldset disabled={blocked || save.isPending} className="contents">
@@ -93,6 +93,7 @@ function CollectionWorkspace({ collectionId }) {
   if (collection.isPending) return <p role="status">Loading collection…</p>;
   const row = collection.data, fields = row.fields.filter(field => !field.archived);
   const hasDraft = Boolean(editor || buildingForm || configuring);
+  const missingRequired = record => editableRecordFields(fields).some(field => field.required && (record.values?.[field.key] == null || (typeof record.values[field.key] === 'string' && !record.values[field.key].trim()) || (Array.isArray(record.values[field.key]) && !record.values[field.key].length)));
   return <div className="min-w-0 space-y-5">
     <Link className="min-h-11 inline-flex items-center text-primary" to="/collections">All collections</Link>
     <h1 className="font-heading text-2xl font-bold [overflow-wrap:anywhere]">{row.name}</h1><p>{row.description}</p>
@@ -107,7 +108,7 @@ function CollectionWorkspace({ collectionId }) {
     {records.isError ? <QueryErrorState error={records.error} message="Records could not be loaded" onRetry={records.refetch} /> : records.isPending ? <p role="status">Loading records…</p> : <ul className="space-y-3">{records.data.pages.flatMap(page => page.items).map(record => <li key={record.id} className="min-w-0 rounded border border-border p-4 space-y-3">
       <h2 className="font-semibold [overflow-wrap:anywhere]">{record.title}{record.archivedAt && ' (archived)'}</h2>
       <dl className="grid sm:grid-cols-2 gap-3">{fields.map(field => <div key={field.key} className="min-w-0"><dt className="text-xs text-muted-foreground">{field.name}</dt><dd className="text-sm [overflow-wrap:anywhere] whitespace-pre-wrap">{recordDisplayValue(field, record)}</dd></div>)}</dl>
-      {!row.archivedAt && <div className="flex gap-2 flex-wrap">{!record.archivedAt && <button className={button} disabled={hasDraft} onClick={() => { setBuildingForm(null); setEditor({ record }); }}>Edit {record.title}</button>}<button className={button} disabled={hasDraft || archive.isPending} onClick={() => archive.mutate(record)}>{record.archivedAt ? 'Restore' : 'Archive'} {record.title}</button></div>}
+      {!row.archivedAt && <div className="flex gap-2 flex-wrap"><button className={button} disabled={hasDraft} onClick={() => { setBuildingForm(null); setEditor({ record }); }}>{record.archivedAt ? 'Restore and edit' : 'Edit'} {record.title}</button><button className={button} disabled={hasDraft || archive.isPending || (record.archivedAt && missingRequired(record))} onClick={() => archive.mutate(record)}>{record.archivedAt ? 'Restore' : 'Archive'} {record.title}</button>{record.archivedAt && missingRequired(record) && <p className="text-sm">Fill required fields through Restore and edit before restoring this record.</p>}</div>}
     </li>)}</ul>}
     {records.data?.pages.every(page => !page.items.length) && <p>No matching records.</p>}
     {records.hasNextPage && <button className={button} disabled={records.isFetchingNextPage} onClick={() => records.fetchNextPage()}>Load more records</button>}

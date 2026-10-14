@@ -155,3 +155,14 @@ it('retains and disables an open draft when its collection is archived during ba
   expect(screen.getByLabelText('Record title')).toHaveValue('Retain this draft');
   expect(screen.getByRole('button', { name: 'Save record' })).toBeDisabled();
 });
+
+it('repairs required fields while restoring an archived record in one revision-checked save', async () => {
+  api.getCollectionRecords.mockResolvedValue({ items: [{ ...record, values: { approved: false }, archivedAt: '2026-10-14' }], nextCursor: null });
+  api.updateCollectionRecord.mockResolvedValue(record);
+  mount();
+  expect(await screen.findByRole('button', { name: 'Restore Brief', exact: true })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Restore and edit Brief' }));
+  fireEvent.change(screen.getByLabelText('Hours (required)'), { target: { value: '0' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save record' }));
+  await waitFor(() => expect(api.updateCollectionRecord).toHaveBeenCalledWith('col', 'rec', expect.objectContaining({ revision: 3, definitionRevision: 1, archived: false, values: { hours: 0 } })));
+});
