@@ -23,7 +23,10 @@ describe('CreateTeamMemberModal', () => {
     expect(screen.getByRole('textbox', { name: /Email/ })).toBeRequired();
     expect(screen.getByLabelText(/Password/)).toHaveAccessibleDescription('At least 6 characters');
     expect(screen.getByRole('combobox', { name: 'Role' })).toHaveValue('TEAM');
-    expect(screen.getByRole('spinbutton', { name: 'Capacity (%)' })).toHaveAccessibleDescription('100% = full-time availability');
+    const capacity = screen.getByRole('spinbutton', { name: 'Capacity (%)' });
+    expect(capacity).toHaveAccessibleDescription('100% = 40 hours per week');
+    expect(capacity).toHaveAttribute('min', '0');
+    expect(capacity).toHaveAttribute('max', '200');
     expect(screen.getByRole('group', { name: 'Skills' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'design' })).toHaveAttribute('aria-pressed', 'false');
   });
