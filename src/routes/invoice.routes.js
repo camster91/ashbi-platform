@@ -18,6 +18,7 @@ import { proposalTaxRate, taxTypeForRate } from '../utils/proposal-totals.js';
 import { invoiceTotals, lineTotal } from '../utils/money-totals.js';
 import { portfolioFilterSchema } from '../validators/schemas.js';
 import { invoicePortfolioWhere } from '../shared/financial-portfolio.js';
+import { updateDraftInvoice } from '../services/invoice-draft.service.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
@@ -444,41 +445,11 @@ export default async function invoiceRoutes(fastify, options = {}) {
       updateData.recurringNextDate = firstRecurringDate(updateData.issueDate ?? invoice.issueDate, interval);
     }
 
-    if (lineItems) {
-      await fastify.prisma.invoiceLineItem.deleteMany({ where: { invoiceId: request.params.id } });
-      const processedItems = processLineItems(lineItems);
-      const effectiveTaxRate = updateData.taxRate ?? invoice.taxRate;
-      const effectiveDiscount = updateData.discountAmount ?? invoice.discountAmount;
-      const { subtotal, tax, total } = calcTotals(processedItems, effectiveTaxRate, effectiveDiscount);
-      updateData.subtotal = subtotal;
-      updateData.tax = tax;
-      updateData.total = total;
-
-      await fastify.prisma.invoiceLineItem.createMany({
-        data: processedItems.map(li => ({ ...li, invoiceId: request.params.id }))
-      });
-    } else if (taxRate !== undefined || discountAmount !== undefined) {
-      // Recalculate tax if rate/discount changed without new line items
-      const existingItems = await fastify.prisma.invoiceLineItem.findMany({
-        where: { invoiceId: request.params.id }
-      });
-      const effectiveTaxRate = updateData.taxRate ?? invoice.taxRate;
-      const effectiveDiscount = updateData.discountAmount ?? invoice.discountAmount;
-      const { subtotal, tax, total } = calcTotals(existingItems, effectiveTaxRate, effectiveDiscount);
-      updateData.subtotal = subtotal;
-      updateData.tax = tax;
-      updateData.total = total;
-    }
-
-    return fastify.prisma.invoice.update({
-      where: { id: request.params.id },
+    return updateDraftInvoice(request.prisma, invoice, {
       data: updateData,
-      include: {
-        client: { select: { id: true, name: true } },
-        lineItems: { orderBy: { position: 'asc' } },
-        payments: true,
-      }
-    });
+      lineItems: lineItems !== undefined ? processLineItems(lineItems) : undefined,
+      recalculate: taxRate !== undefined || discountAmount !== undefined,
+    }, request.user.organizationId);
   });
 
   // Void one invoice: compare-and-set from the status read (only a voidable
