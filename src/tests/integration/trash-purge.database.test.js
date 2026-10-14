@@ -58,6 +58,7 @@ test('real database permanent purge physically removes a soft-deleted record and
     });
     assert.notEqual((await raw.note.findUnique({ where: { id: note.id } })).deletedAt, null);
     const restored = await restoreTrashedItem({
+      actor: user,
       scopedPrisma,
       rawPrisma: raw,
       trashId: firstLedger.id,

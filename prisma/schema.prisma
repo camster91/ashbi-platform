@@ -743,6 +743,10 @@ model WorkspacePageGrant {
 model Note {
   id         String    @id @default(cuid())
   revision   Int       @default(0)
+  accessMode String    @default("TEAM")
+  accessRevision Int   @default(0)
+  accessGrants Json    @default("[]")
+  audienceBarrier Json?
   title      String
   content    String // Plain-text Markdown; clients must never render it as trusted HTML
   type       String    @default("NOTE") // NOTE, MEETING_NOTES, WIKI, DOC

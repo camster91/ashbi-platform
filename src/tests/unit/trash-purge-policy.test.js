@@ -94,56 +94,20 @@ test('unknown entity and hard-delete failure retain the recovery ledger', async 
   assert.equal(failed.calls.some(([name]) => name === 'delete-ledger'), false);
 });
 
-test('restore proves tenant ledger ownership and restores the hidden row atomically through raw Prisma', async () => {
-  const { scopedPrisma, rawPrisma, calls, ledger } = harness();
-  const transaction = {
-    trashedItem: {
-      findFirst: async (args) => { calls.push(['locked-ledger', args]); return ledger; },
-      update: async (args) => { calls.push(['restore-ledger', args]); return { ...ledger, restoredAt: args.data.restoredAt }; },
-    },
-    note: {
-      findFirst: async (args) => { calls.push(['find-original', args]); return { id: ledger.recordId }; },
-      update: async (args) => { calls.push(['restore-original', args]); return { id: ledger.recordId, deletedAt: null }; },
-    },
-  };
-  rawPrisma.$transaction = async (callback, options) => {
-    calls.push(['transaction', options]);
-    return callback(transaction);
-  };
 
-  const result = await restoreTrashedItem({ scopedPrisma, rawPrisma, trashId: ledger.id });
-
-  assert.deepEqual(result, { restoredId: ledger.recordId, entity: 'NOTE' });
-  assert.deepEqual(calls.map(([name]) => name), [
-    'scoped-ledger', 'transaction', 'locked-ledger', 'find-original', 'restore-original', 'restore-ledger',
-  ]);
-  assert.deepEqual(calls[4][1], { where: { id: ledger.recordId }, data: { deletedAt: null, parentId: null } });
-  assert.equal(calls[5][1].where.id, ledger.id);
-  assert.ok(calls[5][1].data.restoredAt instanceof Date);
+function restorationFixture() {
+ const state=harness({ledgerData:{parentId:'old-parent',projectId:'project-a'}}),actor={id:'owner',role:'TEAM',organizationId:'org-a'};
+ const row={id:state.ledger.recordId,projectId:'project-a',authorId:'owner',parentId:null,accessMode:'TEAM',accessGrants:[],audienceBarrier:{readUserIds:['owner'],editUserIds:['owner']},deletedAt:new Date()};
+ const transaction={user:{findFirst:async()=>actor},trashedItem:{findFirst:async()=>state.ledger,update:async args=>{state.calls.push(['restore-ledger',args]);return args;}},note:{findMany:async()=>[row],findFirst:async()=>row,update:async args=>{state.calls.push(['restore-original',args]);return args;}}};
+ state.rawPrisma.$transaction=async(callback,options)=>{state.calls.push(['transaction',options]);return callback(transaction);};return {...state,actor,row};
+}
+test('restore proves tenant ledger ownership and atomically restores the protected archived row',async()=>{
+ const state=restorationFixture();const result=await restoreTrashedItem({...state,trashId:state.ledger.id});assert.deepEqual(result,{restoredId:state.ledger.recordId,entity:'NOTE'});
+ assert.deepEqual(state.calls.find(([name])=>name==='transaction')[1],{isolationLevel:'Serializable'});
+ assert.deepEqual(state.calls.find(([name])=>name==='restore-original')[1],{where:{id:state.row.id},data:{deletedAt:null,parentId:null}});
+ assert.equal(state.calls.find(([name])=>name==='restore-ledger')[1].where.id,state.ledger.id);
 });
-
-test('restoring a note retains only an active parent from its original project', async () => {
-  const { scopedPrisma, rawPrisma, calls, ledger } = harness({ ledgerData: { parentId: 'parent-a', projectId: 'project-a' } });
-  let findCount = 0;
-  const transaction = {
-    trashedItem: {
-      findFirst: async () => ledger,
-      update: async args => args,
-    },
-    note: {
-      findFirst: async args => {
-        findCount += 1;
-        calls.push([findCount === 1 ? 'find-original' : 'find-parent', args]);
-        return findCount === 1 ? { id: ledger.recordId } : { id: 'parent-a' };
-      },
-      update: async args => { calls.push(['restore-original', args]); return args; },
-    },
-  };
-  rawPrisma.$transaction = async callback => callback(transaction);
-  await restoreTrashedItem({ scopedPrisma, rawPrisma, trashId: ledger.id });
-  const restore = calls.find(([name]) => name === 'restore-original')[1];
-  assert.deepEqual(restore.data, { deletedAt: null, parentId: 'parent-a' });
-  assert.deepEqual(calls.find(([name]) => name === 'find-parent')[1].where, {
-    id: 'parent-a', projectId: 'project-a', deletedAt: null,
-  });
+test('restore cannot revive the old parent or discard an inherited restriction from recovery metadata',async()=>{
+ const state=restorationFixture();await restoreTrashedItem({...state,trashId:state.ledger.id});const update=state.calls.find(([name])=>name==='restore-original')[1];assert.equal(update.data.parentId,null);assert.equal('audienceBarrier' in update.data,false);
+ state.actor.id='outsider';await assert.rejects(restoreTrashedItem({...state,trashId:state.ledger.id}),{statusCode:404});
 });

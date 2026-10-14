@@ -1,3 +1,4 @@
+import { authorizeNote } from '../services/note-access.service.js';
 import { rawPrisma } from '../config/db.js';
 import { permanentlyDeleteTrashedItem, restoreTrashedItem } from '../services/trash-purge.service.js';
 
@@ -6,11 +7,19 @@ export default async function trashRoutes(fastify) {
     const where = { restoredAt: null };
     if (request.query.entity) where.entity = request.query.entity;
 
-    const items = await request.prisma.trashedItem.findMany({
+    const candidates = await request.prisma.trashedItem.findMany({
       where,
       orderBy: { deletedAt: 'desc' },
       take: 100,
     });
+    const items = [];
+    for (const item of candidates) {
+      if (item.entity === 'NOTE') {
+        try { await authorizeNote(request.prisma, item.recordId, request.user, { includeDeleted: true }); }
+        catch (error) { if ([403, 404].includes(error.statusCode)) continue; throw error; }
+      }
+      items.push(item);
+    }
     const grouped = {};
     for (const item of items) (grouped[item.entity] ??= []).push(item);
     return { items, grouped };
@@ -19,6 +28,7 @@ export default async function trashRoutes(fastify) {
   fastify.post('/:id/restore', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     try {
       const result = await restoreTrashedItem({
+        actor: request.user,
         scopedPrisma: request.prisma,
         rawPrisma,
         trashId: request.params.id,

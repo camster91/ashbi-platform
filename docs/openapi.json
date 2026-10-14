@@ -10542,6 +10542,7 @@
                 "workspace_record",
                 "workspace_record_form",
                 "invoice",
+                "note",
                 "workspace_page",
                 "invoice_payment",
                 "proposal",
@@ -10592,6 +10593,7 @@
                 "workspace_record_form.submitted",
                 "invoice.created_from_unbilled",
                 "invoice.sources_released",
+                "note.access_changed",
                 "workspace_page.access_changed",
                 "workspace_page.created",
                 "workspace_page.updated",
@@ -23944,6 +23946,163 @@
           }
         ],
         "summary": "PUT /api/notes/:id",
+        "tags": [
+          "notes"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/notes/{id}/access": {
+      "get": {
+        "operationId": "get_api_notes_id_access",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/notes/:id/access",
+        "tags": [
+          "notes"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
+      "put": {
+        "operationId": "put_api_notes_id_access",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "members": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "role": {
+                          "enum": [
+                            "READ",
+                            "EDIT"
+                          ],
+                          "type": "string"
+                        },
+                        "userId": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "userId",
+                        "role"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 100,
+                    "type": "array"
+                  },
+                  "mode": {
+                    "enum": [
+                      "TEAM",
+                      "RESTRICTED"
+                    ],
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "revision",
+                  "mode",
+                  "members"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PUT /api/notes/:id/access",
         "tags": [
           "notes"
         ],

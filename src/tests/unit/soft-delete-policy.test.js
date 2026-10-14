@@ -85,3 +85,10 @@ test('the production lazy client keeps raw and policy caches separate', async ()
   assert.equal(typeof prisma.note.findMany, 'function');
   assert.equal(typeof prisma.note.delete, 'function');
 });
+import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
+test('tenant scoping preserves reviewed archived reads without opening ordinary or foreign records',async()=>{
+ const rows=[{id:'archived',project:{client:{organizationId:'org-a'}},deletedAt:new Date()},{id:'foreign',project:{client:{organizationId:'org-b'}},deletedAt:new Date()},{id:'active',project:{client:{organizationId:'org-a'}},deletedAt:null}];
+ const matches=(row,where)=>Object.entries(where).every(([key,value])=>key==='AND'?value.every(part=>matches(row,part)):typeof value==='object'&&value!==null&&!(value instanceof Date)?('not'in value?row[key]!==value.not:matches(row[key],value)):row[key]===value);
+ const raw={note:{findMany:async({where})=>rows.filter(row=>matches(row,where)),findFirst:async({where})=>rows.find(row=>matches(row,where))||null}};
+ const scoped=createScopedPrisma(raw,'org-a');assert.deepEqual((await scoped.note.findMany()).map(row=>row.id),['active']);assert.equal((await scoped.note.findFirst({where:{id:'archived',deletedAt:{not:null}}})).id,'archived');assert.equal(await scoped.note.findFirst({where:{id:'foreign',deletedAt:{not:null}}}),null);
+});

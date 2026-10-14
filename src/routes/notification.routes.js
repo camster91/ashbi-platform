@@ -1,3 +1,4 @@
+import { noteNotificationWhere } from '../services/note-access.service.js';
 // Notification routes
 
 import {
@@ -17,7 +18,8 @@ export default async function notificationRoutes(fastify) {
     const result = await getNotifications(request.user.id, {
       limit: parseInt(limit),
       offset: parseInt(offset),
-      unreadOnly: unreadOnly === 'true'
+      unreadOnly: unreadOnly === 'true',
+      visibilityWhere: await noteNotificationWhere(request.prisma, request.user)
     });
 
     return result;
@@ -27,7 +29,7 @@ export default async function notificationRoutes(fastify) {
   fastify.get('/unread-count', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const count = await getUnreadCount(request.user.id);
+    const count = await getUnreadCount(request.user.id, await noteNotificationWhere(request.prisma, request.user));
     return { count };
   });
 
@@ -37,7 +39,7 @@ export default async function notificationRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const notification = await markAsRead(request.user.id, id);
+    const notification = await markAsRead(request.user.id, id, await noteNotificationWhere(request.prisma, request.user));
 
     if (!notification) {
       return reply.status(404).send({ error: 'Notification not found' });
@@ -50,7 +52,7 @@ export default async function notificationRoutes(fastify) {
   fastify.patch('/read-all', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const count = await markAllAsRead(request.user.id);
+    const count = await markAllAsRead(request.user.id, await noteNotificationWhere(request.prisma, request.user));
     return { success: true, count };
   });
 

@@ -37,7 +37,7 @@ test('paginated reads explicitly scope tenant, bound page and redact secrets wit
       { id: 'b', name: 'Project', apiKey: 'hidden' }, { id: 'c', name: 'Next' },
     ]; };
     const result = await createWorkspaceTools().call(context, 'list_projects', { limit: 1, after: 'a' });
-    assert.deepEqual(query.where, { organizationId: 'org-1', id: { gt: 'a' } });
+    assert.deepEqual(query.where, { AND: [{ organizationId: 'org-1' }, { id: { gt: 'a' } }] });
     assert.equal(query.take, 2);
     assert.deepEqual(query.orderBy, { id: 'asc' });
     assert.deepEqual(result.output, { items: [{ id: 'b', name: 'Project' }], nextCursor: 'b' });

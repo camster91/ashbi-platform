@@ -1,10 +1,14 @@
 // Notes & Documents routes
 
 import { validateBody, noteProjectCreateSchema, noteUpdateV2Schema, noteFromTemplateSchema } from '../validators/schemas.js';
+import { noteRestoreData, noteAccessSchema, authorizeNote, publicNote, noteAccessContext, visibleNoteIds, readNoteAccess, saveNoteAccess, noteMentionUsers, preserveNoteAudience } from '../services/note-access.service.js';
+import { withStageTransaction } from '../services/task-stages.service.js';
 import { softDelete } from '../services/trash.service.js';
 import { portfolioFilterSchema } from '../validators/schemas.js';
 import { portfolioWhere } from '../shared/portfolio.js';
 import { z } from 'zod';
+import { currentWikiStaff as currentNoteStaff } from '../services/workspace-page-authorization.js';
+import { composeDocumentAudience } from '../shared/document-audiences.js';
 
 function parseStringArray(value) {
   try {
@@ -17,7 +21,7 @@ function parseStringArray(value) {
 
 export function presentNote(note) {
   return {
-    ...note,
+    ...publicNote(note, note.permissions),
     tags: parseStringArray(note.tags),
     mentions: parseStringArray(note.mentions),
     contentFormat: 'MARKDOWN_PLAINTEXT',
@@ -28,7 +32,7 @@ export async function findAuthorizedMentionUsers(prisma, organizationId, request
   const ids = [...new Set(requestedIds)];
   if (ids.length === 0) return [];
   const users = await prisma.user.findMany({
-    where: { id: { in: ids }, organizationId, isActive: true },
+    where: { id: { in: ids }, organizationId, isActive: true, role: { in: ['ADMIN', 'TEAM'] } },
     select: { id: true, name: true },
   });
   return users.length === ids.length ? users : null;
@@ -69,6 +73,12 @@ async function createMentionNotifications(prisma, { users, actorId, note, projec
   }
 }
 
+async function presentAuthorizedNotes(prisma, actor, notes) {
+  const access = await noteAccessContext(prisma, actor);
+  await access.load(notes.map(note => note.id), notes);
+  return notes.filter(note => access.rights(note.id).canRead).map(note => presentNote({ ...note, permissions: access.rights(note.id) }));
+}
+
 export default async function noteRoutes(fastify) {
   // List ALL notes across all projects (global docs view)
   fastify.get('/notes', {
@@ -94,6 +104,8 @@ export default async function noteRoutes(fastify) {
       ];
     }
 
+    const visibleIds = await visibleNoteIds(request.prisma, request.user, where);
+    where.id = { in: visibleIds };
     const notes = await request.prisma.note.findMany({
       where,
       include: {
@@ -110,9 +122,9 @@ export default async function noteRoutes(fastify) {
     });
     if (paginated) {
       const total = await request.prisma.note.count({ where });
-      return { notes: notes.map(presentNote), pagination: { page: paging.data.page, limit: paging.data.limit, total, pages: Math.ceil(total / paging.data.limit) } };
+      return { notes: await presentAuthorizedNotes(request.prisma, request.user, notes), pagination: { page: paging.data.page, limit: paging.data.limit, total, pages: Math.ceil(total / paging.data.limit) } };
     }
-    return notes.map(presentNote);
+    return await presentAuthorizedNotes(request.prisma, request.user, notes);
   });
 
   // List notes for a project
@@ -133,6 +145,8 @@ export default async function noteRoutes(fastify) {
       ];
     }
 
+    const visibleIds = await visibleNoteIds(request.prisma, request.user, where);
+    where.id = { in: visibleIds };
     const notes = await request.prisma.note.findMany({
       where,
       include: {
@@ -144,7 +158,7 @@ export default async function noteRoutes(fastify) {
       ]
     });
 
-    return notes.map(presentNote);
+    return await presentAuthorizedNotes(request.prisma, request.user, notes);
   });
 
   // Templates remain project-owned, so request tenancy guarantees they can
@@ -152,8 +166,9 @@ export default async function noteRoutes(fastify) {
   fastify.get('/notes/templates', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
+    const visibleIds = await visibleNoteIds(request.prisma, request.user, { isTemplate: true });
     const templates = await request.prisma.note.findMany({
-      where: { isTemplate: true },
+      where: { isTemplate: true, id: { in: visibleIds } },
       include: {
         author: { select: { id: true, name: true } },
         project: { select: { id: true, name: true } },
@@ -161,7 +176,7 @@ export default async function noteRoutes(fastify) {
       orderBy: [{ title: 'asc' }, { updatedAt: 'desc' }],
       take: 100,
     });
-    return templates.map(presentNote);
+    return presentAuthorizedNotes(request.prisma, request.user, templates);
   });
 
   // Get single note
@@ -170,6 +185,7 @@ export default async function noteRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
+    const authorized = await authorizeNote(request.prisma, id, request.user);
     const note = await request.prisma.note.findUnique({
       where: { id },
       include: {
@@ -182,7 +198,7 @@ export default async function noteRoutes(fastify) {
       return reply.status(404).send({ error: 'Note not found' });
     }
 
-    return presentNote(note);
+    return presentNote({ ...note, permissions: authorized.permissions });
   });
 
   // Create note
@@ -199,7 +215,10 @@ export default async function noteRoutes(fastify) {
     const mentionUsers = await findAuthorizedMentionUsers(request.prisma, request.user.organizationId, mentionUserIds);
     if (!mentionUsers) return reply.status(400).send({ error: 'Mentions must reference active members of your organization' });
 
-    const note = await request.prisma.$transaction(async transaction => {
+    const note = await withStageTransaction(request.prisma, async transaction => {
+      await currentNoteStaff(transaction, request.user);
+      if (parentId) await authorizeNote(transaction, parentId, request.user, { edit: true });
+      const authorizedMentions = await noteMentionUsers(transaction, request.user, mentionUserIds, { authorId: request.user.id, projectId }, parentId);
       const created = await transaction.note.create({
         data: {
           title, content, type, tags: JSON.stringify(tags), mentions: JSON.stringify(mentionUserIds),
@@ -214,7 +233,7 @@ export default async function noteRoutes(fastify) {
           projectId, userId: request.user.id,
         },
       });
-      await createMentionNotifications(transaction, { users: mentionUsers, actorId: request.user.id, note: created, projectId });
+      await createMentionNotifications(transaction, { users: authorizedMentions, actorId: request.user.id, note: created, projectId });
       return created;
     });
 
@@ -227,6 +246,7 @@ export default async function noteRoutes(fastify) {
   }, async (request, reply) => {
     const { projectId, templateId } = request.params;
     const { title, parentId = null, mentionUserIds = [] } = request.body;
+    await authorizeNote(request.prisma, templateId, request.user);
     const [project, template] = await Promise.all([
       request.prisma.project.findFirst({ where: { id: projectId }, select: { id: true } }),
       request.prisma.note.findFirst({ where: { id: templateId, isTemplate: true } }),
@@ -238,10 +258,16 @@ export default async function noteRoutes(fastify) {
     const mentionUsers = await findAuthorizedMentionUsers(request.prisma, request.user.organizationId, mentionUserIds);
     if (!mentionUsers) return reply.status(400).send({ error: 'Mentions must reference active members of your organization' });
 
-    const note = await request.prisma.$transaction(async transaction => {
+    const note = await withStageTransaction(request.prisma, async transaction => {
+      const sourceAccess = await authorizeNote(transaction, templateId, request.user);
+      if (sourceAccess.note.revision !== template.revision || !sourceAccess.note.isTemplate) throw Object.assign(new Error('Template changed. Reload before copying.'), { statusCode: 409 });
+      if (parentId) await authorizeNote(transaction, parentId, request.user, { edit: true });
+      const templateBarrier = composeDocumentAudience(sourceAccess.path);
+      const authorizedMentions = await noteMentionUsers(transaction, sourceAccess.user, mentionUserIds, { authorId: request.user.id, projectId, audienceBarrier: templateBarrier }, parentId);
       const created = await transaction.note.create({
         data: {
           title: title || template.title,
+          audienceBarrier: templateBarrier,
           content: template.content,
           type: template.type,
           tags: template.tags,
@@ -261,7 +287,7 @@ export default async function noteRoutes(fastify) {
           projectId, userId: request.user.id,
         },
       });
-      await createMentionNotifications(transaction, { users: mentionUsers, actorId: request.user.id, note: created, projectId });
+      await createMentionNotifications(transaction, { users: authorizedMentions, actorId: request.user.id, note: created, projectId });
       return created;
     });
     return reply.status(201).send(presentNote(note));
@@ -275,7 +301,7 @@ export default async function noteRoutes(fastify) {
     const { id } = request.params;
     const { revision, title, content, type, tags, isPinned, isTemplate, parentId, mentionUserIds } = request.body;
 
-    const existing = await request.prisma.note.findUnique({ where: { id } });
+    const { note: existing } = await authorizeNote(request.prisma, id, request.user, { edit: true });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Note not found' });
@@ -304,7 +330,14 @@ export default async function noteRoutes(fastify) {
 
     const priorMentions = new Set(parseStringArray(existing.mentions));
     const newlyMentioned = mentionUsers.filter(user => !priorMentions.has(user.id));
-    const note = await request.prisma.$transaction(async transaction => {
+    const note = await withStageTransaction(request.prisma, async transaction => {
+      const access = await authorizeNote(transaction, id, request.user, { edit: true, manage: parentId !== undefined && parentId !== existing.parentId });
+      if (access.note.revision !== revision) throw Object.assign(new Error('Document changed. Your draft is retained.'), { statusCode: 409 });
+      if (parentId !== undefined && parentId !== existing.parentId) {
+        if (parentId) await authorizeNote(transaction, parentId, request.user, { edit: true });
+        data.audienceBarrier = composeDocumentAudience(access.path);
+      }
+      const authorizedMentions = await noteMentionUsers(transaction, access.user, mentionUserIds || [], { ...access.note, ...data }, parentId !== undefined ? parentId : access.note.parentId);
       const changed = await transaction.note.updateMany({ where: { id, revision, deletedAt: null }, data });
       if (changed.count !== 1) throw Object.assign(new Error('Document changed since you started editing. Your draft has not been saved. Reload the document before trying again.'), { statusCode: 409 });
       const updated = await transaction.note.findUnique({ where: { id }, include: { author: { select: { id: true, name: true } } } });
@@ -317,87 +350,46 @@ export default async function noteRoutes(fastify) {
           projectId: existing.projectId, userId: request.user.id,
         },
       });
-      await createMentionNotifications(transaction, { users: newlyMentioned, actorId: request.user.id, note: updated, projectId: existing.projectId });
+      await createMentionNotifications(transaction, { users: authorizedMentions.filter(user => newlyMentioned.some(row => row.id === user.id)), actorId: request.user.id, note: updated, projectId: existing.projectId });
       return updated;
     });
 
     return presentNote(note);
   });
 
-  // Delete note
-  fastify.delete('/notes/:id', {
-    onRequest: [fastify.authenticate]
-  }, async (request, reply) => {
+  fastify.get('/notes/:id/access', { onRequest: [fastify.authenticate] }, request => readNoteAccess(request.prisma, request.params.id, request.user));
+  fastify.put('/notes/:id/access', { onRequest: [fastify.authenticate], preHandler: validateBody(noteAccessSchema) }, request => saveNoteAccess(request.prisma, request.params.id, request.body, request.user));
+
+  fastify.delete('/notes/:id', { onRequest: [fastify.authenticate] }, async request => {
     const { id } = request.params;
-
-    const existing = await request.prisma.note.findUnique({ where: { id } });
-
-    if (!existing) {
-      return reply.status(404).send({ error: 'Note not found' });
-    }
-
-    // Only author or admin can delete
-    if (existing.authorId !== request.user.id && request.user.role !== 'ADMIN') {
-      return reply.status(403).send({ error: 'Cannot delete this note' });
-    }
-
-    const { trashedItem } = await softDelete({
-      scopedPrisma: request.prisma,
-      entity: 'NOTE',
-      recordId: id,
-      organizationId: request.user.organizationId,
-      // Archived parents cannot remain in the active hierarchy. Promote their
-      // direct children atomically with the recovery ledger and soft deletion.
-      beforeDelete: transaction => transaction.note.updateMany({ where: { parentId: id }, data: { parentId: null } }),
+    const { trashedItem } = await softDelete({ scopedPrisma: request.prisma, entity: 'NOTE', recordId: id, organizationId: request.user.organizationId,
+      beforeDelete: async transaction => {
+        const barrier = await preserveNoteAudience(transaction, id, request.user);
+        const children = await transaction.note.findMany({ where: { parentId: id, deletedAt: null }, select: { id: true } });
+        // Compute every child barrier against the original tree before moving any.
+        const access = await noteAccessContext(transaction, request.user);
+        await access.load(children.map(row => row.id));
+        const promotions = children.map(row => ({ id: row.id, barrier: composeDocumentAudience(access.path(row.id)) }));
+        for (const child of promotions) await transaction.note.update({ where: { id: child.id }, data: { audienceBarrier: child.barrier, parentId: null } });
+        await transaction.note.update({ where: { id }, data: { audienceBarrier: barrier, parentId: null } });
+      }
     });
-
     return { success: true, trashId: trashedItem.id };
   });
 
-  // Restore one recently soft-deleted note. Explicit deletedAt criteria bypasses
-  // the normal soft-delete read filter while tenant scoping remains enforced.
-  fastify.post('/notes/:id/restore', {
-    onRequest: [fastify.authenticate]
-  }, async (request, reply) => {
-    const { id } = request.params;
-    const existing = await request.prisma.note.findFirst({
-      where: { id, deletedAt: { not: null } }
-    });
-
-    if (!existing) {
-      return reply.status(404).send({ error: 'Deleted note not found' });
-    }
-    if (existing.authorId !== request.user.id && request.user.role !== 'ADMIN') {
-      return reply.status(403).send({ error: 'Cannot restore this note' });
-    }
-
-    const parent = existing.parentId
-      ? await request.prisma.note.findFirst({ where: { id: existing.parentId, projectId: existing.projectId }, select: { id: true } })
-      : null;
-    const note = await request.prisma.note.update({
-      where: { id },
-      data: { deletedAt: null, parentId: parent?.id || null }
+  fastify.post('/notes/:id/restore', { onRequest: [fastify.authenticate] }, async request => {
+    const note = await withStageTransaction(request.prisma, async transaction => {
+      const data = await noteRestoreData(transaction, request.params.id, request.user);
+      return transaction.note.update({ where: { id: request.params.id, deletedAt: { not: null } }, data });
     });
     return { success: true, note: presentNote(note) };
   });
 
-  // Toggle pin status
-  fastify.post('/notes/:id/pin', {
-    onRequest: [fastify.authenticate]
-  }, async (request, reply) => {
-    const { id } = request.params;
-
-    const existing = await request.prisma.note.findUnique({ where: { id } });
-
-    if (!existing) {
-      return reply.status(404).send({ error: 'Note not found' });
-    }
-
-    const note = await request.prisma.note.update({
-      where: { id },
-      data: { isPinned: !existing.isPinned }
+  fastify.post('/notes/:id/pin', { onRequest: [fastify.authenticate] }, async request => {
+    return withStageTransaction(request.prisma, async transaction => {
+      const { note: existing } = await authorizeNote(transaction, request.params.id, request.user, { edit: true });
+      const note = await transaction.note.update({ where: { id: existing.id }, data: { isPinned: !existing.isPinned } });
+      return { isPinned: note.isPinned };
     });
-
-    return { isPinned: note.isPinned };
   });
 }

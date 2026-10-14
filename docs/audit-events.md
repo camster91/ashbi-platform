@@ -254,3 +254,5 @@ deletes audit rows, and organization hard-deletes are blocked by the foreign
 key. When #310 lands, retention must work by archiving or by a reviewed,
 superuser-run migration, never by relaxing the append-only triggers for the
 application role.
+
+Project Note audience changes emit `note.access_changed` with fromMode, toMode and memberCount; the immutable event and audience save share one transaction. Titles/content and member rosters are excluded from this event.

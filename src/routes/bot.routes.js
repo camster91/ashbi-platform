@@ -141,6 +141,7 @@ export default async function botRoutes(fastify) {
       }),
       prisma.project.count({ where: { health: 'AT_RISK' } }),
       prisma.activity.findMany({
+        where: { entityType: { not: 'NOTE' } },
         orderBy: { createdAt: 'desc' },
         take: 5,
         include: { user: { select: { name: true } } }
@@ -868,6 +869,7 @@ export default async function botRoutes(fastify) {
     const { limit = 50 } = request.query;
 
     const activities = await fastify.prisma.activity.findMany({
+        where: { entityType: { not: 'NOTE' } },
       orderBy: { createdAt: 'desc' },
       take: parseInt(limit),
       include: {

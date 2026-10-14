@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 408 |
+| staff | 410 |
 | staff (inline) | 1 |
-| **total** | 603 |
+| **total** | 605 |
 
 ## Routes by prefix
 
@@ -658,6 +658,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | DELETE | `/api/notes/:id` | staff | scoped |  |
 | GET | `/api/notes/:id` | staff | scoped |  |
 | PUT | `/api/notes/:id` | staff | scoped |  |
+| GET | `/api/notes/:id/access` | staff | scoped |  |
+| PUT | `/api/notes/:id/access` | staff | scoped |  |
 | POST | `/api/notes/:id/pin` | staff | scoped |  |
 | POST | `/api/notes/:id/restore` | staff | scoped |  |
 | GET | `/api/notes/templates` | staff | scoped |  |

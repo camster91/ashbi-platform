@@ -37,12 +37,13 @@ function createStore() {
       };
       return {
         onboardingProgress: model,
+        user: { findFirst: async () => ({ ...user, isActive: true }) },
         client: { count: async () => factsFor(user.id).clients || 0 },
         project: { count: async () => factsFor(user.id).projects || 0 },
         proposal: { count: async () => factsFor(user.id).proposals || 0 },
         task: { count: async () => factsFor(user.id).tasks || 0 },
         timeEntry: { count: async () => factsFor(user.id).timeEntries || 0 },
-        note: { count: async () => factsFor(user.id).notes || 0 },
+        note: { findMany: async () => Array.from({ length: factsFor(user.id).notes || 0 }, (_, index) => ({ id: 'onboarding-note-' + index, projectId: 'project', authorId: user.id, parentId: null, accessMode: 'TEAM', accessGrants: [], deletedAt: null })) },
       };
     },
   };

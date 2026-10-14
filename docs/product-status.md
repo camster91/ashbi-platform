@@ -6,7 +6,7 @@ The active agency-replacement acceptance map is [replacement-readiness-matrix.md
 
 Current shared-team scope and ordered TODOs: [reconciled delivery plan](master-app-delivery-plan.md). Portfolios, stages, recurrence, templates, typed task fields, saved views, filters/groups, contributors/workload, independent boards, wiki/inherited wiki audiences and draft conflict recovery merged through #566–#586. Atomic invoice saves #588 and approved-unbilled billing #589 are merged; required main CI passed at 9d969e9. Production remains held. Project Note audiences, simultaneous editing, retained history, real ChatGPT/provider acceptance, reviewed one-time input and target/cutover acceptance remain open.
 
-Standalone collections/records, formulas/rollups, reusable forms and scoped UI/API/MCP merged in #590 as e1690e4 after all required CI passed on 03be4e0 in run 38598141920. Required-field SQL and archived-record repair corrections are verified; the review thread is resolved. Required main CI and populated target acceptance remain separate gates.
+Standalone collections/records, formulas/rollups, reusable forms and scoped UI/API/MCP merged in #590 as e1690e4 after all required CI passed on 03be4e0 in run 38598141920. Required-field SQL and archived-record repair corrections are verified; the review thread is resolved. Required main CI 38600489530 passed at e1690e4; populated target acceptance and production release remain pending.
 
 ## Current supported milestone
 

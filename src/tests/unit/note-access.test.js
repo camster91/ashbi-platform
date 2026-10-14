@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { authorizeNote, visibleNoteIds, publicNote, noteMentionUsers, prepareNoteAccess, noteAccessSchema } from '../../services/note-access.service.js';
+function fixture() {
+ const staff={id:'reader',organizationId:'org',role:'TEAM',isActive:true};
+ const nodes=[{id:'private',projectId:'project',authorId:'owner',parentId:null,accessMode:'RESTRICTED',accessRevision:0,accessGrants:[{userId:'reader',role:'READ'}],audienceBarrier:null,deletedAt:null},{id:'child',projectId:'project',authorId:'reader',parentId:'private',accessMode:'TEAM',accessRevision:0,accessGrants:[],audienceBarrier:null,deletedAt:null},{id:'hidden',projectId:'project',authorId:'owner',parentId:null,accessMode:'RESTRICTED',accessRevision:0,accessGrants:[],deletedAt:null}];
+ const prisma={user:{findFirst:async()=>({...staff}),findMany:async({where})=>where.id.in.map(id=>({...staff,id}))},note:{findMany:async({where})=>nodes.filter(row=>where.id?where.id.in.includes(row.id):true).map(row=>structuredClone(row)),findFirst:async({where})=>structuredClone(nodes.find(row=>row.id===where.id))||null}};
+ return {prisma,staff,nodes};
+}
+test('owning a child does not override read-only ancestors; hidden notes are excluded before paging',async()=>{const {prisma,staff}=fixture();assert.deepEqual((await authorizeNote(prisma,'child',staff)).permissions,{canRead:true,canEdit:false,canManage:false});await assert.rejects(authorizeNote(prisma,'child',staff,{edit:true}),{statusCode:403});await assert.rejects(authorizeNote(prisma,'hidden',staff),{statusCode:404});assert.deepEqual(await visibleNoteIds(prisma,staff),['private','child']);});
+test('fresh role and membership revocation defeat stale administrator tokens',async()=>{const {prisma,staff,nodes}=fixture();nodes[0].accessGrants=[];await assert.rejects(authorizeNote(prisma,'child',{...staff,role:'ADMIN'}),{statusCode:404});prisma.user.findFirst=async()=>null;await assert.rejects(authorizeNote(prisma,'private',staff),{statusCode:403});});
+test('responses omit rosters/barriers; mention recipients need inherited read access',async()=>{const {prisma,staff,nodes}=fixture();const safe=publicNote(nodes[0]);assert.equal('accessGrants' in safe,false);assert.equal('audienceBarrier' in safe,false);await assert.rejects(noteMentionUsers(prisma,staff,['outsider'],{projectId:'project',authorId:'reader'},'private'),{statusCode:400});assert.equal((await noteMentionUsers(prisma,staff,['reader'],{projectId:'project',authorId:'reader'},'private')).length,1);});
+test('preview fingerprints bind changes and duplicate members are refused',async()=>{const {prisma,staff,nodes}=fixture();staff.id='owner';const input={revision:0,mode:'RESTRICTED',members:[{userId:'reader',role:'READ'}]};const a=await prepareNoteAccess(prisma,'private',input,staff);nodes[0].accessGrants=[{userId:'reader',role:'EDIT'}];const b=await prepareNoteAccess(prisma,'private',input,staff);assert.notEqual(a.fingerprint,b.fingerprint);assert.equal(noteAccessSchema.safeParse({...input,members:[...input.members,...input.members]}).success,false);});
+import { createWorkspaceTools } from '../../integrations/workspace-tools.js';
+test('MCP cursor paging retains visibility constraints instead of revealing restricted content',async()=>{
+ const {prisma,staff,nodes}=fixture();nodes.forEach(row=>{row.title=row.id;row.content=row.id==='hidden'?'private secret':'allowed';});
+ const matches=(row,where)=>!where||(!where.AND||where.AND.every(part=>matches(row,part)))&&(!where.id||(!where.id.in||where.id.in.includes(row.id))&&(!where.id.gt||row.id>where.id.gt));
+ prisma.note.findMany=async({where,take})=>nodes.filter(row=>matches(row,where)).sort((a,b)=>a.id.localeCompare(b.id)).slice(0,take).map(row=>structuredClone(row));
+ const tools=createWorkspaceTools();const result=await tools.call({prisma,user:staff,scopes:['workspace:read']},'list_notes',{limit:50,after:'child'});assert.deepEqual(result.output.items.map(row=>row.id),['private']);assert.equal(JSON.stringify(result).includes('private secret'),false);
+});

@@ -1,3 +1,4 @@
+import { noteRestoreData } from './note-access.service.js';
 import ENTITY_MAP from '../utils/entity-map.js';
 
 function httpError(message, statusCode) {
@@ -54,7 +55,7 @@ export async function permanentlyDeleteTrashedItem({ scopedPrisma, rawPrisma, tr
 }
 
 /** Restore one policy-hidden record after tenant ownership is proven. */
-export async function restoreTrashedItem({ scopedPrisma, rawPrisma, trashId }) {
+export async function restoreTrashedItem({ scopedPrisma, rawPrisma, trashId, actor }) {
   const authorizedLedger = await scopedPrisma.trashedItem.findFirst({
     where: { id: trashId, restoredAt: null },
   });
@@ -85,15 +86,7 @@ export async function restoreTrashedItem({ scopedPrisma, rawPrisma, trashId }) {
 
     const restoreData = { deletedAt: null };
     if (ledger.entity === 'NOTE') {
-      const formerParentId = ledger.data?.parentId;
-      const formerProjectId = ledger.data?.projectId;
-      const activeParent = formerParentId && formerProjectId
-        ? await transaction.note.findFirst({
-            where: { id: formerParentId, projectId: formerProjectId, deletedAt: null },
-            select: { id: true },
-          })
-        : null;
-      restoreData.parentId = activeParent?.id || null;
+      Object.assign(restoreData, await noteRestoreData(transaction, ledger.recordId, actor));
     }
     await model.update({ where: { id: ledger.recordId }, data: restoreData });
     if (ledger.entity === 'MILESTONE' && Array.isArray(ledger.data?.taskIds) && ledger.data.taskIds.length > 0) {

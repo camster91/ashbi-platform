@@ -4,12 +4,12 @@ import Fastify from 'fastify';
 import noteRoutes from '../../routes/note.routes.js';
 
 async function fixture() {
-  const row = { id: 'note', projectId: 'project', revision: 0, title: 'Original', content: 'Original content', authorId: 'staff', tags: '[]', mentions: '[]', deletedAt: null };
+  const row = { accessMode: 'TEAM', accessGrants: [], accessRevision: 0, parentId: null, id: 'note', projectId: 'project', revision: 0, title: 'Original', content: 'Original content', authorId: 'staff', tags: '[]', mentions: '[]', deletedAt: null };
   const activities = [], notifications = [];
   const prisma = {
-    note: { findUnique: async ({ where }) => where.id === row.id ? structuredClone(row) : null,
+    note: { findMany: async ({ where }) => (where.id.in.includes(row.id) && (where.deletedAt !== null || !row.deletedAt)) ? [structuredClone(row)] : [], findFirst: async ({ where }) => where.id === row.id && !row.deletedAt ? structuredClone(row) : null, findUnique: async ({ where }) => where.id === row.id ? structuredClone(row) : null,
       updateMany: async ({ where, data }) => { if (where.id !== row.id || where.revision !== row.revision || row.deletedAt) return { count: 0 }; Object.assign(row, data, { revision: row.revision + 1 }); return { count: 1 }; } },
-    user: { findMany: async () => [] },
+    user: { findFirst: async () => ({ id: 'staff', organizationId: 'org', role: 'TEAM' }), findMany: async () => [] },
     activity: { create: async ({ data }) => { activities.push(data); return data; } },
     notification: { create: async ({ data }) => { notifications.push(data); return data; } },
   };
@@ -41,7 +41,7 @@ test('foreign or deleted documents do not become writable through a revision gue
   try {
     assert.equal((await app.inject({ method: 'PUT', url: '/api/notes/foreign', payload: { revision: 0, content: 'Guess' } })).statusCode, 404);
     row.deletedAt = new Date();
-    assert.equal((await app.inject({ method: 'PUT', url: '/api/notes/note', payload: { revision: 0, content: 'Deleted draft' } })).statusCode, 409);
+    assert.equal((await app.inject({ method: 'PUT', url: '/api/notes/note', payload: { revision: 0, content: 'Deleted draft' } })).statusCode, 404);
     assert.equal(row.content, 'Original content');
   } finally { await app.close(); }
 });

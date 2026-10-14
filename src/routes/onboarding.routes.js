@@ -1,3 +1,4 @@
+import { visibleNoteIds } from '../services/note-access.service.js';
 import { onboardClient } from '../services/onboarding.service.js';
 import {
   validateBody,
@@ -80,7 +81,7 @@ async function completionFacts(request) {
     const [completedTaskCount, timeEntryCount, noteCount] = await Promise.all([
       request.prisma.task.count({ where: { assigneeId: userId, status: 'COMPLETED', deletedAt: null } }),
       request.prisma.timeEntry.count({ where: { userId, deletedAt: null } }),
-      request.prisma.note.count({ where: { authorId: userId, deletedAt: null } }),
+      visibleNoteIds(request.prisma, request.user, { authorId: userId }).then(ids => ids.length),
     ]);
     return {
       'complete-task': completedTaskCount > 0,
