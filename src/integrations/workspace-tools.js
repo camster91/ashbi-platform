@@ -9,6 +9,7 @@ import { taskViewWhere } from '../shared/task-view-filters.js';
 import { financialPortfolioWhere, invoicePortfolioWhere } from '../shared/financial-portfolio.js';
 import { validateTaskFieldFilters } from '../services/task-field-filters.service.js';
 import { readTeamWorkload } from '../services/team-workload.service.js';
+import { WORKSPACE_TASK_ACTIONS } from './workspace-task-actions.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
@@ -33,6 +34,7 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 }
 
 export const workspaceRegistry = createToolRegistry([
+  ...WORKSPACE_TASK_ACTIONS,
   {
     name: 'get_team_workload', description: 'Read active staff owned-task and contributor counts, and logged hours over the last seven days compared with weekly capacity. Counts can overlap; this does not forecast future availability.',
     class: 'read', roles: ['ADMIN', 'TEAM'], inputSchema: z.object({}).strict(),

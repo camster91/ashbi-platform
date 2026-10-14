@@ -7,22 +7,26 @@ const dateText = date => new Date(date).toISOString().slice(0, 10);
 const fail = (statusCode, message) => { throw Object.assign(new Error(message), { statusCode }); };
 
 export async function saveTaskRecurrence(prisma, id, { rule, revision }, now = new Date()) {
-  return withStageTransaction(prisma, async tx => {
-    const task = await tx.task.findFirst({ where: { id } });
+  return withStageTransaction(prisma, tx => saveTaskRecurrenceInTransaction(tx, id, { rule, revision }, now), 'Recurrence changed while saving. Reload and try again.');
+}
+
+export async function saveTaskRecurrenceInTransaction(tx, id, { rule, revision, projectId }, now = new Date()) {
+    const task = await tx.task.findFirst({ where: { id, ...(projectId ? { projectId } : {}) } });
     if (!task) fail(404, 'Task not found');
     if (task.recurrenceSourceId) fail(400, 'Change the schedule on the original recurring task.');
     if (task.recurrenceRevision !== revision) fail(409, 'Recurrence changed since you opened it. Reload and try again.');
     const afterCompletion = rule?.trigger === 'AFTER_COMPLETION';
+    const activatingCompletion = afterCompletion && task.recurrenceRule?.trigger !== 'AFTER_COMPLETION';
     let next = rule && !afterCompletion ? firstRecurrenceOnOrAfter(rule, dateInZone(now, rule.timeZone)) : null;
     if (next && task.recurrenceLastDate && next <= dateText(task.recurrenceLastDate)) next = recurrenceAfter(rule, dateText(task.recurrenceLastDate));
+    const claimed = await tx.task.updateMany({ where: { id, ...(projectId ? { projectId } : {}), recurrenceSourceId: null, recurrenceRevision: revision }, data: { recurrenceRule: rule ?? {}, recurrenceNextDate: next ? asDate(next) : null, recurrenceRevision: { increment: 1 } } });
+    if (claimed.count !== 1) fail(409, 'Recurrence changed while saving. Reload and try again.');
     // Enabling this option never replays completed historical work, including
     // old calendar instances whose original is switching recurrence mode.
-    if (afterCompletion && task.recurrenceRule?.trigger !== 'AFTER_COMPLETION') {
+    if (activatingCompletion) {
       await tx.task.updateMany({ where: { OR: [{ id }, { recurrenceSourceId: id }], recurrenceFirstCompletedAt: { not: null }, recurrenceCompletionProcessedAt: null }, data: { recurrenceCompletionProcessedAt: now } });
     }
-    return tx.task.update({ where: { id }, data: { recurrenceRule: rule ?? {}, recurrenceNextDate: next ? asDate(next) : null,
-      recurrenceRevision: { increment: 1 } }, select: { id: true, recurrenceRule: true, recurrenceNextDate: true, recurrenceRevision: true } });
-  }, 'Recurrence changed while saving. Reload and try again.');
+    return tx.task.findFirst({ where: { id }, select: { id: true, recurrenceRule: true, recurrenceNextDate: true, recurrenceRevision: true } });
 }
 
 async function copyRecurringTask(tx, live, recurrence) {

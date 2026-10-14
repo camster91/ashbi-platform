@@ -12,6 +12,7 @@
 let nextId = 1;
 
 const RELATIONS = {
+  taskCollaborator: { user: ['user', 'userId'], task: ['task', 'taskId'] },
   task: { project: ['project', 'projectId'] },
   project: { client: ['client', 'clientId'] },
   slackChannelMapping: { installation: ['slackInstallation', 'installationId'], project: ['project', 'projectId'] },
@@ -49,6 +50,7 @@ export function createFakeToolDb() {
       if (condition instanceof Date) return value?.getTime?.() === condition.getTime();
       if (condition && typeof condition === 'object' && !Array.isArray(condition)) {
         if ('in' in condition) return condition.in.includes(value);
+        if ('notIn' in condition) return !condition.notIn.includes(value);
         if ('not' in condition) return value !== condition.not;
         if ('gte' in condition) return value !== null && value !== undefined && value >= condition.gte;
         if ('gt' in condition) return value !== null && value !== undefined && value > condition.gt;
@@ -80,6 +82,10 @@ export function createFakeToolDb() {
         throw Object.assign(new Error(`AI action receipts are immutable once ${row.status}`), { code: 'P2010' });
       }
     };
+    const applyData = (row, data) => {
+      for (const [key, value] of Object.entries(data)) row[key] = typeof row[key] === 'number' && value && typeof value === 'object' && 'increment' in value ? row[key] + value.increment : structuredClone(value);
+      row.updatedAt = new Date();
+    };
     return {
       get rows() { return rows(); },
       findFirst: async (args = {}) => shape(model, find(args.where), args),
@@ -106,15 +112,17 @@ export function createFakeToolDb() {
         const row = find(where);
         if (!row) throw Object.assign(new Error('Record to update not found.'), { code: 'P2025' });
         guardReceipt(row);
-        Object.assign(row, structuredClone(data), { updatedAt: new Date() });
+        applyData(row, data);
         return structuredClone(row);
       },
       updateMany: async ({ where, data }) => {
         const hits = rows().filter((row) => matches(model, row, where));
         for (const row of hits) guardReceipt(row);
-        for (const row of hits) Object.assign(row, structuredClone(data), { updatedAt: new Date() });
+        for (const row of hits) applyData(row, data);
         return { count: hits.length };
       },
+      createMany: async ({ data }) => { for (const value of data) rows().push({ id: `${model}-${nextId++}`, createdAt: new Date(), ...structuredClone(value) }); return { count: data.length }; },
+      deleteMany: async ({ where }) => { const hits = rows().filter(row => matches(model, row, where)); for (const row of hits) { guardReceipt(row); rows().splice(rows().indexOf(row), 1); } return { count: hits.length }; },
       aggregate: async ({ where, _sum = {}, _count } = {}) => {
         const hits = rows().filter((row) => matches(model, row, where));
         const sums = {};

@@ -19,6 +19,12 @@ const base = {
   execution: { mode: 'transaction', execute: async () => ({}) },
 };
 
+test('optional action transaction isolation accepts Serializable and rejects unknown levels', () => {
+  const spec = { ...base, execution: { ...base.execution, isolationLevel: 'Serializable' } };
+  assert.equal(defineTool(spec).execution.isolationLevel, 'Serializable');
+  assert.throws(() => defineTool({ ...base, execution: { ...base.execution, isolationLevel: 'Unknown' } }), ToolRegistrationError);
+});
+
 test('the external allowlist holds only the existing, confirm-gated Slack post', () => {
   assert.deepEqual([...EXTERNAL_TOOL_ALLOWLIST], ['send_slack_message']);
   const slack = toolRegistry.get('send_slack_message');

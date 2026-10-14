@@ -17,8 +17,9 @@ function fixture(tasks = [source()]) {
       update: async ({ where, data }) => { const row = rows.find(item => item.id === where.id); Object.assign(row, data); row.recurrenceRevision = 1; return row; },
       updateMany: async ({ where, data }) => {
         const row = rows.find(item => item.id === where.id);
-        if (row.recurrenceRevision !== where.recurrenceRevision || +row.recurrenceNextDate !== +where.recurrenceNextDate) return { count: 0 };
-        Object.assign(row, data); return { count: 1 };
+        if (row.recurrenceRevision !== where.recurrenceRevision || (where.recurrenceNextDate && +row.recurrenceNextDate !== +where.recurrenceNextDate)) return { count: 0 };
+        const revision = row.recurrenceRevision;
+        Object.assign(row, data); if (data.recurrenceRevision?.increment) row.recurrenceRevision = revision + data.recurrenceRevision.increment; return { count: 1 };
       },
       create: async ({ data }) => { created.push(data); return { ...data, id: 'generated' }; },
     }, user: { findFirst: async () => null },

@@ -18,7 +18,7 @@ function fixture() {
     task: {
       findMany: async ({ where, take }) => { queries.push(where); assert.equal(take, 100); return rows.filter(row => match(row, where)).slice(0, take); },
       findFirst: async ({ where }) => rows.find(row => match(row, where)) ?? null,
-      updateMany: async ({ where, data }) => { const matched = rows.filter(row => match(row, where)); matched.forEach(row => Object.assign(row, data)); return { count: matched.length }; },
+      updateMany: async ({ where, data }) => { const matched = rows.filter(row => match(row, where)); matched.forEach(row => { const revision = row.recurrenceRevision; Object.assign(row, data); if (data.recurrenceRevision?.increment) row.recurrenceRevision = revision + data.recurrenceRevision.increment; }); return { count: matched.length }; },
       update: async ({ where, data }) => { const row = rows.find(row => row.id === where.id); Object.assign(row, data); row.recurrenceRevision = 1; return row; },
       create: async ({ data }) => { const row = { ...data, id: `copy-${rows.length}`, project: root.project, recurrenceCompletionProcessedAt: null }; rows.push(row); copied.push(row); return row; },
     },

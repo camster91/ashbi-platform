@@ -88,7 +88,7 @@ function fail(name, message) {
  *   rollback?: string,
  *   approval?: { approverRoles?: string[], requesterMayApprove?: boolean },
  *   run?: Function, preview?: Function,
- *   execution?: { mode: 'transaction', execute: Function } | { mode: 'external', claimTarget: Function, attemptedResult: Function, deliver: Function },
+ *   execution?: { mode: 'transaction', isolationLevel?: 'Serializable', execute: Function } | { mode: 'external', claimTarget: Function, attemptedResult: Function, deliver: Function },
  * }} spec
  * @param {{ allowlist?: readonly string[] }} [options]
  */
@@ -133,6 +133,7 @@ export function defineTool(spec, { allowlist = EXTERNAL_TOOL_ALLOWLIST } = {}) {
     if (typeof spec.preview !== 'function') fail(name, 'preview is required');
     const execution = spec.execution;
     if (execution?.mode === 'transaction') {
+      if (execution.isolationLevel !== undefined && execution.isolationLevel !== 'Serializable') fail(name, 'transaction isolation must be Serializable when specified');
       if (typeof execution.execute !== 'function') fail(name, 'execution.execute is required');
     } else if (execution?.mode === 'external') {
       if (!external) fail(name, 'external execution requires external: true');

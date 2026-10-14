@@ -12,9 +12,12 @@ export async function readTaskCollaborators(prisma, taskId, actor) {
   return { taskId, ownerId: task.assigneeId, revision: task.collaboratorsRevision, canManage: actor.role === 'ADMIN' || task.assigneeId === actor.id, collaborators: rows.map(row => row.user) };
 }
 export async function saveTaskCollaborators(prisma, taskId, { revision, userIds }, actor) {
+  return withStageTransaction(prisma, tx => saveTaskCollaboratorsInTransaction(tx, taskId, { revision, userIds }, actor), 'Collaborators changed while saving. Reload and try again.');
+}
+
+export async function saveTaskCollaboratorsInTransaction(tx, taskId, { revision, userIds, projectId }, actor) {
   assertStaff(actor);
   if (!Array.isArray(userIds) || userIds.length > 30 || new Set(userIds).size !== userIds.length || userIds.some(id => typeof id !== 'string' || !id || id.length > 50)) fail(400, 'Choose up to 30 unique collaborators.');
-  return withStageTransaction(prisma, async tx => {
     const current = await readTaskCollaborators(tx, taskId, actor);
     if (!current.canManage) fail(403, 'The task owner or an administrator manages collaborators.');
     if (revision !== current.revision) fail(409, 'Collaborators changed. Reload before saving.');
@@ -22,9 +25,9 @@ export async function saveTaskCollaborators(prisma, taskId, { revision, userIds 
     const additions = userIds.filter(id => !existing.has(id));
     const members = additions.length ? await tx.user.findMany({ where: { id: { in: additions }, organizationId: actor.organizationId, isActive: true, role: { in: ['ADMIN', 'TEAM'] } }, select: { id: true }, take: 30 }) : [];
     if (members.length !== additions.length) fail(404, 'A selected teammate is unavailable.');
+    const claim = await tx.task.updateMany({ where: { id: taskId, ...(projectId ? { projectId } : {}), collaboratorsRevision: revision, project: { organizationId: actor.organizationId, deletedAt: null }, ...(actor.role === 'ADMIN' ? {} : { assigneeId: actor.id }) }, data: { collaboratorsRevision: { increment: 1 } } });
+    if (claim.count !== 1) fail(409, 'Collaborators or ownership changed. Reload before saving.');
     await tx.taskCollaborator.deleteMany({ where: { taskId, organizationId: actor.organizationId, userId: { notIn: userIds } } });
     if (members.length) await tx.taskCollaborator.createMany({ data: members.map(member => ({ taskId, userId: member.id, organizationId: actor.organizationId })) });
-    await tx.task.update({ where: { id: taskId }, data: { collaboratorsRevision: { increment: 1 } } });
     return readTaskCollaborators(tx, taskId, actor);
-  }, 'Collaborators changed while saving. Reload and try again.');
 }

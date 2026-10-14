@@ -439,7 +439,7 @@ export function createToolExecutor(options = {}) {
             tool.timeoutMs,
           );
           return transition({ prisma: tx }, initial.id, 'EXECUTING', succeeded(result));
-        });
+        }, ...(tool.execution.isolationLevel ? [{ isolationLevel: tool.execution.isolationLevel }] : []));
         claimCommitted = true;
         await approvedEvent();
       } else {

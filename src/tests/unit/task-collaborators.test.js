@@ -8,7 +8,7 @@ function fixture() {
   let members = [];
   const writes = [];
   const prisma = {
-    task: { findFirst: async ({ where }) => where.project.organizationId === 'org-a' ? task : null, update: async ({ data }) => { writes.push(data); task.collaboratorsRevision++; } },
+    task: { findFirst: async ({ where }) => where.project.organizationId === 'org-a' ? task : null, updateMany: async ({ where, data }) => { if (where.collaboratorsRevision !== task.collaboratorsRevision || (where.assigneeId && where.assigneeId !== task.assigneeId)) return { count: 0 }; writes.push(data); task.collaboratorsRevision++; return { count: 1 }; } },
     taskCollaborator: { findMany: async () => members.map(id => ({ user: { id, name: id, isActive: true } })), deleteMany: async ({ where }) => { members = members.filter(id => where.userId.notIn.includes(id)); }, createMany: async ({ data }) => { members.push(...data.map(row => row.userId)); } },
     user: { findMany: async ({ where }) => {
       assert.equal(where.organizationId, owner.organizationId);
