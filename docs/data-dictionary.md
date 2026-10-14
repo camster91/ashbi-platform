@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-108 models, 0 enums, 54 tenant-scoped, 13 soft-deletable.
+109 models, 0 enums, 55 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -78,12 +78,13 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 63 |
+| [Organization](#model-organization) | `organizations` | no | no | 64 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
 | [PlatformSetting](#model-platformsetting) | `platform_settings` | no | no | 5 |
-| [Project](#model-project) | `projects` | yes | yes | 60 |
+| [Project](#model-project) | `projects` | yes | yes | 61 |
+| [ProjectBoard](#model-projectboard) | `project_boards` | yes | no | 16 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
 | [ProjectTemplate](#model-projecttemplate) | `project_templates` | yes | no | 12 |
@@ -109,7 +110,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [SlackInstallation](#model-slackinstallation) | `slack_installations` | yes | no | 15 |
 | [Snippet](#model-snippet) | `snippets` | no | no | 13 |
 | [SupportHourEntry](#model-supporthourentry) | `support_hours` | yes | no | 12 |
-| [Task](#model-task) | `tasks` | no | yes | 52 |
+| [Task](#model-task) | `tasks` | no | yes | 54 |
 | [TaskCollaborator](#model-taskcollaborator) | `task_collaborators` | yes | no | 8 |
 | [TaskComment](#model-taskcomment) | `task_comments` | no | no | 9 |
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
@@ -1706,6 +1707,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `users` | User[] | list, required |  | → User |  |
 | `taskCollaborations` | TaskCollaborator[] | list, required |  | → TaskCollaborator |  |
+| `projectBoards` | ProjectBoard[] | list, required |  | → ProjectBoard |  |
 | `clients` | Client[] | list, required |  | → Client |  |
 | `projects` | Project[] | list, required |  | → Project |  |
 | `formDrafts` | FormDraft[] | list, required |  | → FormDraft |  |
@@ -1893,6 +1895,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `client` | Client | required |  | → Client, via (clientId) → (id), onDelete Cascade |  |
 | `threads` | Thread[] | list, required |  | → Thread |  |
 | `tasks` | Task[] | list, required |  | → Task |  |
+| `boards` | ProjectBoard[] | list, required |  | → ProjectBoard |  |
 | `chatMessages` | ChatMessage[] | list, required |  | → ChatMessage |  |
 | `notes` | Note[] | list, required |  | → Note |  |
 | `milestones` | Milestone[] | list, required |  | → Milestone |  |
@@ -1916,6 +1919,34 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `loomImportRecords` | LoomImportRecord[] | list, required |  | → LoomImportRecord |  |
 | `markupImportRecords` | MarkupImportRecord[] | list, required |  | → MarkupImportRecord |  |
 | `reviewSessions` | ReviewSession[] | list, required |  | → ReviewSession |  |
+
+### Model ProjectBoard
+
+- Table: `project_boards`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([organizationId])`
+  - `@@index([projectId, archivedAt, id])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `projectId` | String | required |  |  |  |
+| `name` | String | required |  |  |  |
+| `description` | String | required | `""` |  |  |
+| `taskStages` | Json | required | `"[]"` |  |  |
+| `taskViews` | Json | required | `"[]"` |  |  |
+| `stageRevision` | Int | required | `0` |  |  |
+| `viewsRevision` | Int | required | `0` |  |  |
+| `revision` | Int | required | `0` |  |  |
+| `archivedAt` | DateTime | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `project` | Project | required |  | → Project, via (projectId) → (id), onDelete Cascade |  |
+| `tasks` | Task[] | list, required |  | → Task |  |
 
 ### Model ProjectCommunication
 
@@ -2611,6 +2642,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([dependsOnId])`
   - `@@index([assigneeId])`
   - `@@index([projectId, status])`
+  - `@@index([boardId, status])`
   - `@@index([status, recurrenceCompletionProcessedAt, id])`
   - `@@index([milestoneId])`
   - `@@unique([recurrenceSourceId, recurrenceScheduledDate])`
@@ -2654,12 +2686,14 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `position` | Int | required | `0` |  | For Kanban board ordering |
 | `projectId` | String | required |  |  |  |
 | `assigneeId` | String | optional |  |  |  |
+| `boardId` | String | optional |  |  |  |
 | `milestoneId` | String | optional |  |  |  |
 | `dependsOnId` | String | optional |  |  | Task dependency — this task depends on another |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `deletedAt` | DateTime | optional |  |  |  |
 | `project` | Project | required |  | → Project, via (projectId) → (id), onDelete Cascade |  |
+| `board` | ProjectBoard | optional |  | → ProjectBoard, via (boardId) → (id), onDelete Restrict |  |
 | `assignee` | User | optional |  | → User, via (assigneeId) → (id), "TaskAssignee" |  |
 | `milestone` | Milestone | optional |  | → Milestone, via (milestoneId) → (id), "MilestoneTasks" |  |
 | `comments` | TaskComment[] | list, required |  | → TaskComment |  |

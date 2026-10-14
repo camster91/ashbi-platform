@@ -100,6 +100,7 @@ export const EXPORT_ENTITIES = Object.freeze([
 
   // Projects and work
   { name: 'projects', model: 'Project', category: 'projects', where: activeProject, omit: ['viewToken', 'draftData'], description: 'Projects' },
+  { name: 'project_boards', model: 'ProjectBoard', category: 'projects', where: (org) => ({ organizationId: org, project: activeProject(org) }), description: 'Additional project boards, including archived workflow metadata' },
   { name: 'project_contexts', model: 'ProjectContext', category: 'projects', where: (org) => ({ project: activeProject(org) }), description: 'Project running context and notes' },
   { name: 'milestones', model: 'Milestone', category: 'projects', where: (org) => ({ deletedAt: null, project: activeProject(org) }), description: 'Project milestones' },
   { name: 'tasks', model: 'Task', category: 'projects', where: activeTask, description: 'Tasks and task pages' },

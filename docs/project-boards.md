@@ -1,0 +1,7 @@
+# Additional boards within canonical projects
+
+The implementation in progress adds ProjectBoard metadata and explicit task membership without creating another client, project, organization or billing identity. Existing tasks keep boardId null and remain in the original project board. That default board keeps the existing Project stage/view fields as its single authoritative configuration; additional boards own their stage and saved-view configuration. Field definitions remain canonical to the project and shared across its boards.
+
+Additional board metadata has an independent revision, reversible archive, bounded cursor pagination and explicit staff/tenant/project checks. Empty board creation copies the project's current stages but creates no task, participant or financial record. Board names need not be unique; ids preserve distinct identities. Archive preserves existing tasks and metadata, while database guards deny new membership in an archived board and reject cross-project/organization edges. Hard deletion cannot orphan board tasks into the default board.
+
+This is a foundation under development. API/UI creation and selection, stage/view configuration wiring, explicit task moves, recurring-copy membership, API/MCP coverage and PostgreSQL/browser acceptance remain required before the multiple-board feature is usable. Production remains held; no board migration or data reassignment has run in production.

@@ -32,6 +32,7 @@ model Organization {
   // Relations
   users              User[]
   taskCollaborations TaskCollaborator[]
+  projectBoards      ProjectBoard[]
   clients            Client[]
   projects           Project[]
   formDrafts         FormDraft[]
@@ -320,6 +321,7 @@ model Project {
   client         Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
   threads        Thread[]
   tasks          Task[]
+  boards         ProjectBoard[]
   chatMessages   ChatMessage[]
   notes          Note[]
   milestones     Milestone[]
@@ -393,6 +395,7 @@ model Task {
   position       Int       @default(0) // For Kanban board ordering
   projectId      String
   assigneeId     String?
+  boardId        String?
   milestoneId    String?
   dependsOnId    String? // Task dependency — this task depends on another
   createdAt      DateTime  @default(now())
@@ -402,6 +405,7 @@ model Task {
 
   // Relations
   project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  board        ProjectBoard? @relation(fields: [boardId], references: [id], onDelete: Restrict)
   assignee     User?         @relation("TaskAssignee", fields: [assigneeId], references: [id])
   milestone    Milestone?    @relation("MilestoneTasks", fields: [milestoneId], references: [id])
   comments     TaskComment[]
@@ -425,6 +429,7 @@ model Task {
   @@index([dependsOnId])
   @@index([assigneeId])
   @@index([projectId, status])
+  @@index([boardId, status])
   @@index([status, recurrenceCompletionProcessedAt, id])
   @@index([milestoneId])
   @@unique([recurrenceSourceId, recurrenceScheduledDate])
@@ -829,6 +834,28 @@ model Activity {
   @@index([userId, createdAt])
   @@index([entityType, entityId])
   @@map("activities")
+}
+
+model ProjectBoard {
+  id             String @id @default(cuid())
+  organizationId String
+  projectId      String
+  name           String
+  description    String @default("")
+  taskStages     Json @default("[]")
+  taskViews      Json @default("[]")
+  stageRevision  Int @default(0)
+  viewsRevision  Int @default(0)
+  revision       Int @default(0)
+  archivedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project        Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks          Task[]
+  @@index([organizationId])
+  @@index([projectId, archivedAt, id])
+  @@map("project_boards")
 }
 
 model TaskCollaborator {
