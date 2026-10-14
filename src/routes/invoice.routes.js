@@ -22,6 +22,7 @@ import { updateDraftInvoice } from '../services/invoice-draft.service.js';
 import { hasInvoiceBillingSources, withoutInvoiceBillingSources } from '../utils/invoice-billing-privacy.js';
 import { currentInvoiceAdmin } from '../services/unbilled-invoice.service.js';
 import prismaPkg from '@prisma/client';
+import invoiceBillingRoutes from './invoice-billing.routes.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
@@ -68,6 +69,7 @@ export const INVOICE_BULK_SEND_MAX = 25;
  *   Test seams for the Stripe and email providers; production uses the defaults.
  */
 export default async function invoiceRoutes(fastify, options = {}) {
+  await invoiceBillingRoutes(fastify, options);
   fastify.addHook('preSerialization', async (request, _reply, payload) => {
     if (request.user?.role === 'ADMIN' && hasInvoiceBillingSources(payload)) {
       try { await currentInvoiceAdmin(request.prisma, request.user); return payload; }

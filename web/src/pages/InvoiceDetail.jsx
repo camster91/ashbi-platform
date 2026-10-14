@@ -378,6 +378,7 @@ export default function InvoiceDetail() {
               Download PDF
             </Button>
           </a>
+          {isAdmin && invoice.status === 'VOID' && invoice.billingSources && !invoice.billingSourcesReleasedAt && <Button variant="outline" size="sm" onClick={() => navigate(`/invoices/unbilled?release=${invoice.id}`)}>Review source release</Button>}
           {invoice.stripePaymentLink ? (
             <div className="flex items-center gap-1">
               <span className="inline-flex items-center gap-1 text-xs font-medium bg-success/10 text-success px-2 py-1 rounded-full">

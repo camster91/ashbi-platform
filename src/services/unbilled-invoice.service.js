@@ -120,3 +120,53 @@ export async function createUnbilledInvoiceInTransaction(tx, rawInput, fingerpri
   if (!event) fail(503, 'The invoice could not be saved with its audit record. No work was billed.');
   return invoice;
 }
+
+export async function previewUnbilledRelease(prisma, invoiceId, actor, now = new Date()) {
+  const admin = await currentInvoiceAdmin(prisma, actor);
+  const invoice = await prisma.invoice.findFirst({ where: { id: invoiceId, organizationId: admin.organizationId, deletedAt: null }, select: {
+    id: true, invoiceNumber: true, status: true, voidedAt: true, updatedAt: true, currency: true, total: true,
+    billingSources: true, billingSourcesReleasedAt: true,
+  } });
+  if (!invoice) fail(404, 'Invoice not found.');
+  if (!invoice.billingSources || invoice.billingSources.version !== 1) fail(400, 'This invoice has no reviewed billing sources.');
+  if (invoice.billingSourcesReleasedAt) fail(409, 'The original source claims have already been released.');
+  if (invoice.status !== 'VOID' || !invoice.voidedAt || now.getTime() - new Date(invoice.voidedAt).getTime() < 10_000) fail(409, 'Void the unpaid invoice and wait until its undo window ends before releasing sources.');
+  if (await prisma.invoicePayment.count({ where: { invoiceId: invoice.id } })) fail(409, 'An invoice with payment records cannot release its sources.');
+  const [times, expenses] = await Promise.all([
+    prisma.timeEntry.findMany({ where: { invoiceId: invoice.id, project: { organizationId: admin.organizationId } }, select: { id: true, updatedAt: true, invoiced: true }, take: 100, orderBy: { id: 'asc' } }),
+    prisma.expense.findMany({ where: { invoiceId: invoice.id, organizationId: admin.organizationId }, select: { id: true, updatedAt: true, invoiced: true }, take: 100, orderBy: { id: 'asc' } }),
+  ]);
+  const original = invoice.billingSources.lineItems.map(line => line.source);
+  for (const [kind, rows] of [['TIME', times], ['EXPENSE', expenses]]) {
+    const ids = new Set(original.filter(source => source.kind === kind).map(source => source.id));
+    if (rows.length !== ids.size || rows.some(row => !row.invoiced || !ids.has(row.id))) fail(409, 'Billing claims changed. Review the invoice sources again.');
+  }
+  const preview = { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, status: invoice.status, voidedAt: invoice.voidedAt,
+    updatedAt: invoice.updatedAt, currency: invoice.currency, total: invoice.total, originalFingerprint: invoice.billingSources.fingerprint,
+    sources: original, claims: { times, expenses }, sourceCount: { time: times.length, expense: expenses.length },
+    retainsOriginalHistory: true, reopensInvoice: false, sendsMessage: false, chargesPayment: false,
+  };
+  return { ...preview, fingerprint: createHash('sha256').update(JSON.stringify(preview)).digest('hex') };
+}
+
+export async function releaseUnbilledSourcesInTransaction(tx, invoiceId, fingerprint, actor, now = new Date()) {
+  if (typeof fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(fingerprint)) fail(400, 'Provide the reviewed release preview.');
+  const preview = await previewUnbilledRelease(tx, invoiceId, actor, now);
+  if (preview.fingerprint !== fingerprint) fail(409, 'The release preview changed. Review it again.');
+  const changed = await tx.invoice.updateMany({ where: { id: invoiceId, organizationId: actor.organizationId,
+    status: 'VOID', updatedAt: new Date(preview.updatedAt), billingSourcesReleasedAt: null }, data: { billingSourcesReleasedAt: now } });
+  if (changed.count !== 1) fail(409, 'Invoice changed before source release. Review it again.');
+  for (const [kind, rows] of [['TIME', preview.claims.times], ['EXPENSE', preview.claims.expenses]]) {
+    if (!rows.length) continue;
+    const delegate = kind === 'TIME' ? tx.timeEntry : tx.expense;
+    const scope = kind === 'TIME' ? { project: { organizationId: actor.organizationId } } : { organizationId: actor.organizationId };
+    const cleared = await delegate.updateMany({ where: { ...scope, invoiceId, invoiced: true,
+      OR: rows.map(row => ({ id: row.id, updatedAt: new Date(row.updatedAt) })) }, data: { invoiceId: null, invoiced: false } });
+    if (cleared.count !== rows.length) fail(409, 'Billing claims changed before release. Review them again.');
+  }
+  const event = await recordAuditEvent(tx, { organizationId: actor.organizationId, actorType: 'USER', actorUserId: actor.id,
+    action: 'invoice.sources_released', entityId: invoiceId, metadata: { timeCount: preview.sourceCount.time,
+      expenseCount: preview.sourceCount.expense, total: preview.total, currency: preview.currency } });
+  if (!event) fail(503, 'Source release could not be saved with its audit record. Claims are retained.');
+  return tx.invoice.findFirst({ where: { id: invoiceId, organizationId: actor.organizationId } });
+}

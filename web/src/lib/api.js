@@ -878,6 +878,7 @@ export const api = {
     request(`/invoices/${id}`),
   createInvoice: (data) =>
     request('/invoices', { method: 'POST', body: data }),
+  billingTool: (name, body) => request(`/invoices/unbilled/tools/${name}`, { method: 'POST', body }).then(result => result.data),
   updateInvoice: (id, data) =>
     request(`/invoices/${id}`, { method: 'PUT', body: data }),
   deleteInvoice: (id) =>

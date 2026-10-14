@@ -251,6 +251,7 @@ export default function Invoices() {
           <p className="text-sm text-muted-foreground mt-1">Track payments and billing</p>
         </div>
         <div className="flex items-center gap-2">
+          {isAdmin && <Button variant="outline" onClick={() => navigate('/invoices/unbilled')}>Bill approved work</Button>}
           <Button variant="outline" size="sm" leftIcon={<Download className="w-4 h-4" />}
             onClick={() => exportToCSV(invoices)}>
             Export CSV

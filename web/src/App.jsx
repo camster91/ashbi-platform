@@ -74,6 +74,7 @@ const Proposals = lazy(() => import('./pages/Proposals'));
 const ProposalDetail = lazy(() => import('./pages/ProposalDetail'));
 const Contracts = lazy(() => import('./pages/Contracts'));
 const Invoices = lazy(() => import('./pages/Invoices'));
+const UnbilledInvoice = lazy(() => import('./pages/UnbilledInvoice'));
 const InvoiceDetail = lazy(() => import('./pages/InvoiceDetail'));
 const Expenses = lazy(() => import('./pages/Expenses'));
 const Pipeline = lazy(() => import('./pages/Pipeline'));
@@ -267,6 +268,7 @@ function AppRoutes() {
                   <Route path="/proposal/:id" element={<ProposalDetail />} />
                   <Route path="/contracts" element={<Contracts />} />
                   <Route path="/invoices" element={<Invoices />} />
+                  <Route path="/invoices/unbilled" element={<AdminRoute><UnbilledInvoice /></AdminRoute>} />
                   <Route path="/invoices/:id" element={<InvoiceDetail />} />
                   <Route path="/expenses" element={<Expenses />} />
                   <Route path="/pipeline" element={<Pipeline />} />

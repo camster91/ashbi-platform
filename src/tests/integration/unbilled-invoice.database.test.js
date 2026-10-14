@@ -4,8 +4,9 @@ import { randomUUID } from 'node:crypto';
 import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
-import { listUnbilledCandidates, previewUnbilledInvoice, createUnbilledInvoiceInTransaction } from '../../services/unbilled-invoice.service.js';
+import { listUnbilledCandidates, previewUnbilledInvoice, createUnbilledInvoiceInTransaction, previewUnbilledRelease, releaseUnbilledSourcesInTransaction } from '../../services/unbilled-invoice.service.js';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
+import { createWorkspaceTools } from '../../integrations/workspace-tools.js';
 
 const url = process.env.TENANT_INTEGRATION_DATABASE_URL;
 test('unbilled selection preserves canonical clients and currency, approval, pagination and tenant boundaries', {
@@ -93,9 +94,44 @@ test('unbilled selection preserves canonical clients and currency, approval, pag
     await raw.expense.update({ where: { id: expense.id }, data: { notes: 'Receipt follow-up' } });
     assert.deepEqual((await raw.invoice.findUnique({ where: { id: invoice.id } })).billingSources, invoice.billingSources, 'receipt notes do not rewrite the original billing history');
     assert.ok(await raw.auditEvent.findFirst({ where: { organizationId: orgs[0], action: 'invoice.created_from_unbilled', entityId: invoice.id } }));
+    await assert.rejects(previewUnbilledRelease(scoped, invoice.id, actors[0]), { statusCode: 409 });
+    await raw.invoice.update({ where: { id: invoice.id }, data: { status: 'VOID', voidedAt: new Date(Date.now() - 20_000), voidedFromStatus: 'DRAFT' } });
+    const release = await previewUnbilledRelease(scoped, invoice.id, actors[0]);
+    assert.equal(release.sourceCount.time, 1); assert.equal(release.sourceCount.expense, 1);
+    assert.equal(release.retainsOriginalHistory, true); assert.equal(release.reopensInvoice, false);
+    const released = await scoped.$transaction(tx => releaseUnbilledSourcesInTransaction(tx, invoice.id, release.fingerprint, actors[0]), { isolationLevel: 'Serializable' });
+    assert.ok(released.billingSourcesReleasedAt);
+    assert.deepEqual(released.billingSources, invoice.billingSources);
+    assert.equal((await raw.timeEntry.findUnique({ where: { id: sourceTime.id } })).invoiceId, null);
+    assert.equal((await raw.expense.findUnique({ where: { id: expense.id } })).invoiceId, null);
+    assert.equal((await raw.timeEntry.findUnique({ where: { id: sourceTime.id } })).reviewStatus, 'APPROVED');
+    await assert.rejects(raw.invoice.update({ where: { id: invoice.id }, data: { status: 'DRAFT' } }), /cannot be reopened/);
+    await assert.rejects(previewUnbilledRelease(scoped, invoice.id, actors[0]), { statusCode: 409 });
+    assert.ok(await raw.auditEvent.findFirst({ where: { organizationId: orgs[0], action: 'invoice.sources_released', entityId: invoice.id } }));
+    const tools = createWorkspaceTools();
+    const ctx = { prisma: scoped, user: actors[0], scopes: ['workspace:read', 'workspace:actions'] };
+    await assert.rejects(tools.call({ ...ctx, scopes: ['workspace:read'] }, 'create_unbilled_invoice_draft', {}), { code: 'TOOL_UNAVAILABLE' });
+    const currentTime = await raw.timeEntry.findUnique({ where: { id: sourceTime.id } });
+    const currentExpense = await raw.expense.findUnique({ where: { id: expense.id } });
+    const nextSelection = { ...selected, times: [{ ...selected.times[0], updatedAt: currentTime.updatedAt.toISOString() }], expenses: [{ id: expense.id, updatedAt: currentExpense.updatedAt.toISOString() }] };
+    const nextPreview = (await tools.call(ctx, 'preview_unbilled_invoice', nextSelection)).output;
+    const args = { input: { selection: nextSelection, fingerprint: nextPreview.fingerprint }, idempotencyKey: `billing-${randomUUID()}` };
+    const prepared = await tools.call(ctx, 'create_unbilled_invoice_draft', args);
+    assert.equal(prepared.action.status, 'PENDING_CONFIRMATION');
+    assert.equal((await raw.timeEntry.findUnique({ where: { id: sourceTime.id } })).invoiceId, null);
+    await assert.rejects(tools.call({ ...ctx, user: actors[1], prisma: raw }, 'confirm_action', { actionId: prepared.action.id }), { code: 'NOT_FOUND' });
+    const committed = await tools.call(ctx, 'confirm_action', { actionId: prepared.action.id });
+    assert.equal(committed.action.status, 'EXECUTED');
+    assert.equal((await tools.call(ctx, 'confirm_action', { actionId: prepared.action.id })).idempotent, true);
+    assert.equal((await tools.call(ctx, 'create_unbilled_invoice_draft', args)).action.id, prepared.action.id);
+    assert.equal(await raw.invoice.count({ where: { organizationId: orgs[0] } }), 2);
+    assert.equal((await tools.call(ctx, 'get_action', { actionId: prepared.action.id })).action.result.id, committed.action.result.id);
     await raw.user.update({ where: { id: actors[0].id }, data: { role: 'TEAM' } });
+    await assert.rejects(tools.call(ctx, 'get_action', { actionId: prepared.action.id }), { code: 'ROLE_DENIED' });
+    await assert.rejects(tools.call(ctx, 'create_unbilled_invoice_draft', args), { code: 'ROLE_DENIED' });
     await assert.rejects(listUnbilledCandidates(raw, { clientId: clients[0].id, kind: 'TIME' }, actors[0]), { statusCode: 403 });
   } finally {
+    await raw.aiBridgeAction.deleteMany({ where: { organizationId: { in: orgs } } });
     await raw.$transaction(async tx => {
       await tx.timeEntry.deleteMany({ where: { project: { organizationId: { in: orgs } } } });
       await tx.expense.deleteMany({ where: { organizationId: { in: orgs } } });
