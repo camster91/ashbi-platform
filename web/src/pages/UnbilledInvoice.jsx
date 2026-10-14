@@ -38,10 +38,14 @@ export default function UnbilledInvoice() {
       const result = await api.billingTool('preview_unbilled_release', { invoiceId: releaseId });
       name = 'release_unbilled_invoice_sources'; input = { invoiceId: releaseId, fingerprint: result.output.fingerprint };
     } else {
+      if (form.taxType !== 'NONE' && String(form.taxRate).trim() === '') throw new Error('Enter the tax percent explicitly.');
       const selected = { ...form, taxRate: Number(form.taxRate), times: [], expenses: [] };
       for (const kind of ['TIME', 'EXPENSE']) for (const row of pages[kind].items) if (selection[row.id]?.checked) {
         const source = { id: row.id, updatedAt: row.updatedAt };
-        if (kind === 'TIME') selected.times.push({ ...source, hourlyRate: Number(selection[row.id].rate) });
+        if (kind === 'TIME') {
+          if (String(selection[row.id].rate ?? '').trim() === '') throw new Error('Enter each selected hourly rate explicitly, including zero when intended.');
+          selected.times.push({ ...source, hourlyRate: Number(selection[row.id].rate) });
+        }
         else selected.expenses.push(source);
       }
       const result = await api.billingTool('preview_unbilled_invoice', selected);

@@ -45,3 +45,20 @@ it('reload can recover a receipt from the URL without creating or executing an a
   await waitFor(() => expect(screen.getByText('Open invoice')).toBeTruthy());
   expect(billingTool).toHaveBeenCalledExactlyOnceWith('get_action', { actionId: 'receipt' });
 });
+it('source release displays the retained original roster and requires a separate explicit confirmation', async () => {
+  const release = { kind: 'release_unbilled_invoice_sources', invoiceNumber: 'INV-1', currency: 'CAD', total: 50,
+    sourceCount: { time: 1, expense: 0 }, sources: [{ id: 'time', kind: 'TIME', description: 'Original approved work', date: '2026-10-14' }] };
+  billingTool.mockImplementation(async name => {
+    if (name === 'preview_unbilled_release') return { output: { fingerprint: 'b'.repeat(64) } };
+    if (name === 'release_unbilled_invoice_sources') return { action: { ...action, preview: release } };
+    if (name === 'confirm_action') return { action: { ...action, preview: release, status: 'EXECUTED', result: { id: 'invoice' } } };
+    throw new Error(`Unexpected operation ${name}`);
+  });
+  render(<MemoryRouter initialEntries={['/invoices/unbilled?release=invoice']}><UnbilledInvoice /></MemoryRouter>);
+  fireEvent.click(screen.getByText('Preview source release'));
+  await screen.findByText(/Original approved work/);
+  expect(billingTool.mock.calls.some(([name]) => name === 'confirm_action')).toBe(false);
+  fireEvent.click(screen.getByText('Confirm source release'));
+  await screen.findByText(/Sources released; original history retained/);
+  expect(billingTool.mock.calls.filter(([name]) => name === 'confirm_action')).toHaveLength(1);
+});
