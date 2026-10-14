@@ -101,8 +101,21 @@ ALTER TABLE "workspace_record_forms" ADD CONSTRAINT "workspace_record_forms_coll
 ALTER TABLE "workspace_record_forms" ADD CONSTRAINT "workspace_record_forms_authorId_organizationId_fkey" FOREIGN KEY ("authorId", "organizationId") REFERENCES "users"("id", "organizationId") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- Revision and scope invariants apply to raw writes as well as request Prisma.
+CREATE FUNCTION workspace_record_required_guard(definitions jsonb, input_values jsonb) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE f jsonb; required_value jsonb;
+BEGIN
+  FOR f IN SELECT value FROM jsonb_array_elements(definitions) WHERE value->>'required' = 'true' AND COALESCE(value->>'archived','false') <> 'true' AND value->>'type' NOT IN ('FORMULA','ROLLUP') LOOP
+    required_value := input_values->(f->>'key');
+    IF required_value IS NULL OR required_value = 'null'::jsonb OR
+      (CASE jsonb_typeof(required_value)
+        WHEN 'string' THEN (required_value #>> '{}') ~ '^[[:space:]]*$'
+        WHEN 'array' THEN jsonb_array_length(required_value) = 0
+        ELSE false END) THEN RAISE EXCEPTION 'Required record field is missing'; END IF;
+  END LOOP;
+END $$;
+
 CREATE FUNCTION workspace_collection_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE f jsonb; old_f jsonb; dependent record; relation_f jsonb; target_f jsonb;
+DECLARE f jsonb; old_f jsonb; dependent record; relation_f jsonb; target_f jsonb; record_values jsonb;
 BEGIN
   IF TG_OP = 'UPDATE' THEN
     IF (NEW.id, NEW."organizationId", NEW."authorId") IS DISTINCT FROM (OLD.id, OLD."organizationId", OLD."authorId") THEN RAISE EXCEPTION 'Collection identity cannot change'; END IF;
@@ -132,6 +145,11 @@ BEGIN
   END LOOP;
   -- A schema change cannot invalidate another collection's existing rollup.
   IF TG_OP = 'UPDATE' AND NEW.fields IS DISTINCT FROM OLD.fields THEN
+    IF EXISTS (SELECT 1 FROM jsonb_array_elements(NEW.fields) candidate WHERE candidate.value->>'required' = 'true' AND COALESCE(candidate.value->>'archived','false') <> 'true' AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(OLD.fields) previous WHERE previous.value->>'key' = candidate.value->>'key' AND previous.value->>'required' = 'true' AND COALESCE(previous.value->>'archived','false') <> 'true')) THEN
+      FOR record_values IN SELECT r.values FROM workspace_records r WHERE r."collectionId" = NEW.id AND r."organizationId" = NEW."organizationId" AND r."archivedAt" IS NULL LOOP
+        PERFORM workspace_record_required_guard(NEW.fields, record_values);
+      END LOOP;
+    END IF;
     FOR dependent IN
       SELECT c.fields AS definitions, r.value AS rollup FROM workspace_collections c CROSS JOIN LATERAL jsonb_array_elements(c.fields) r WHERE c.id <> NEW.id AND c."organizationId" = NEW."organizationId" AND r.value->>'type' = 'ROLLUP' AND COALESCE(r.value->>'archived','false') <> 'true'
       UNION ALL SELECT NEW.fields, value FROM jsonb_array_elements(NEW.fields) WHERE value->>'type' = 'ROLLUP' AND COALESCE(value->>'archived','false') <> 'true'
@@ -147,7 +165,7 @@ BEGIN
 END $$;
 CREATE TRIGGER workspace_collection_guard BEFORE INSERT OR UPDATE ON workspace_collections FOR EACH ROW EXECUTE FUNCTION workspace_collection_guard();
 
-CREATE FUNCTION workspace_record_values_guard(collection_id text, organization_id text, input_values jsonb, previous_values jsonb, full_validation boolean) RETURNS void LANGUAGE plpgsql AS $$
+CREATE FUNCTION workspace_record_values_guard(collection_id text, organization_id text, input_values jsonb, previous_values jsonb, full_validation boolean, enforce_required boolean DEFAULT false) RETURNS void LANGUAGE plpgsql AS $$
 DECLARE definitions jsonb; pair record; f jsonb; selected jsonb; identifier text; valid boolean;
 BEGIN
   SELECT fields INTO definitions FROM workspace_collections WHERE id = collection_id AND "organizationId" = organization_id;
@@ -197,6 +215,7 @@ BEGIN
       END LOOP;
     END IF;
   END LOOP;
+  IF enforce_required THEN PERFORM workspace_record_required_guard(definitions, input_values); END IF;
 END $$;
 
 CREATE FUNCTION workspace_record_guard() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -213,7 +232,7 @@ BEGIN
   IF length(btrim(NEW.title)) NOT BETWEEN 1 AND 200 THEN RAISE EXCEPTION 'Enter a record title'; END IF;
   SELECT "archivedAt" INTO parent_archived FROM workspace_collections WHERE id = NEW."collectionId" AND "organizationId" = NEW."organizationId";
   IF parent_archived IS NOT NULL AND NOT (TG_OP = 'UPDATE' AND NEW."archivedAt" IS NOT NULL AND (NEW.title, NEW.values) IS NOT DISTINCT FROM (OLD.title, OLD.values)) THEN RAISE EXCEPTION 'Collection is archived'; END IF;
-  PERFORM workspace_record_values_guard(NEW."collectionId", NEW."organizationId", NEW.values, prior_values, full_validation);
+  PERFORM workspace_record_values_guard(NEW."collectionId", NEW."organizationId", NEW.values, prior_values, full_validation, NEW."archivedAt" IS NULL);
   RETURN NEW;
 END $$;
 CREATE TRIGGER workspace_record_guard BEFORE INSERT OR UPDATE ON workspace_records FOR EACH ROW EXECUTE FUNCTION workspace_record_guard();

@@ -25,6 +25,19 @@ test('standalone records/forms enforce PostgreSQL scope, revisions, complete rol
     const foreign = await createWorkspaceCollection(createScopedPrisma(raw, orgs[1]), { name: 'Foreign records', fields: [] }, users[1]);
     const a = await createWorkspaceRecord(scoped, source.id, { title: 'A', definitionRevision: 0, values: { hours: 0, approved: false, client: [clients[0].id] } }, users[0]);
     const b = await createWorkspaceRecord(scoped, source.id, { title: 'B', definitionRevision: 0, values: { hours: 5 } }, users[0]);
+    for (const values of [{}, { hours: null }]) {
+      await assert.rejects(raw.workspaceRecord.create({ data: { organizationId: orgs[0], collectionId: source.id, authorId: users[0].id, title: 'Missing required', values } }));
+      await assert.rejects(raw.workspaceRecord.update({ where: { id: a.id }, data: { values } }));
+    }
+    assert.equal((await raw.workspaceRecord.findUnique({ where: { id: a.id } })).values.hours, 0);
+    const requiredFields = [{ key: 'flag', name: 'Flag', type: 'BOOLEAN', required: true }, { key: 'brief', name: 'Brief', type: 'TEXT', required: true }, { key: 'choices', name: 'Choices', type: 'MULTI_SELECT', options: ['Ready'], required: true }];
+    const required = await createWorkspaceCollection(scoped, { name: 'Required inputs', fields: requiredFields }, users[0]);
+    for (const values of [{ flag: null, brief: 'Valid', choices: ['Ready'] }, { flag: false, brief: '\t\n ', choices: ['Ready'] }, { flag: false, brief: 'Valid', choices: [] }]) await assert.rejects(raw.workspaceRecord.create({ data: { organizationId: orgs[0], collectionId: required.id, authorId: users[0].id, title: 'Invalid required', values } }));
+    const falsy = await raw.workspaceRecord.create({ data: { organizationId: orgs[0], collectionId: required.id, authorId: users[0].id, title: 'Valid false', values: { flag: false, brief: 'Valid', choices: ['Ready'] } } });
+    assert.equal(falsy.values.flag, false);
+    await assert.rejects(raw.workspaceCollection.update({ where: { id: source.id }, data: { fields: [...fields, { key: 'new_required', name: 'New required', type: 'TEXT', required: true }] } }));
+    const archivedMissing = await raw.workspaceRecord.create({ data: { organizationId: orgs[0], collectionId: source.id, authorId: users[0].id, title: 'Archived history', archivedAt: new Date(), values: {} } });
+    await assert.rejects(raw.workspaceRecord.update({ where: { id: archivedMissing.id }, data: { archivedAt: null } }));
     const tools = createWorkspaceTools(), ctx = { prisma: scoped, user: users[0], scopes: ['workspace:read', 'workspace:actions'] };
     const input = { collectionId: source.id, data: { title: 'Confirmed API record', definitionRevision: 0, values: { hours: 0, approved: false } } };
     const preview = (await tools.call(ctx, 'preview_create_workspace_record', input)).output;
