@@ -12,6 +12,9 @@
 let nextId = 1;
 
 const RELATIONS = {
+  workspaceCollection: { author: ['user', 'authorId'] },
+  workspaceRecord: { collection: ['workspaceCollection', 'collectionId'], author: ['user', 'authorId'] },
+  workspaceRecordForm: { collection: ['workspaceCollection', 'collectionId'], author: ['user', 'authorId'] },
   workspacePageGrant: { page: ['workspacePage', 'pageId'], user: ['user', 'userId'] },
   workspacePage: { author: ['user', 'authorId'], parent: ['workspacePage', 'parentId'] },
   projectBoard: { project: ['project', 'projectId'] },
@@ -27,7 +30,7 @@ const TERMINAL = new Set(['EXECUTED', 'FAILED', 'REJECTED', 'EXPIRED']);
 
 export function createFakeToolDb() {
   const tables = {
-    organization: [], user: [], client: [], project: [], projectBoard: [], workspacePage: [], workspacePageGrant: [], task: [], taskCollaborator: [], calendarEvent: [], chatMessage: [],
+    organization: [], user: [], client: [], project: [], projectBoard: [], workspacePage: [], workspacePageGrant: [], workspaceCollection: [], workspaceRecord: [], workspaceRecordForm: [], task: [], taskCollaborator: [], calendarEvent: [], chatMessage: [],
     slackInstallation: [], slackChannelMapping: [], aiBridgeAction: [], auditEvent: [],
     aiProviderConnection: [], aiUsageRecord: [], platformSetting: [], credential: [],
   };
@@ -49,6 +52,7 @@ export function createFakeToolDb() {
         return relation.row ? matches(relation.target, relation.row, condition) : false;
       }
       const value = row[key];
+      if (condition?.array_contains) return condition.array_contains.every(needle => (value ?? []).some(item => Object.entries(needle).every(([key, expected]) => item[key] === expected)));
       if (condition === null) return value === null || value === undefined;
       if (condition instanceof Date) return value?.getTime?.() === condition.getTime();
       if (condition && typeof condition === 'object' && !Array.isArray(condition)) {
@@ -112,7 +116,8 @@ export function createFakeToolDb() {
         if (model === 'aiBridgeAction' && rows().some((row) => row.userId === data.userId && row.idempotencyKey === data.idempotencyKey)) {
           throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
         }
-        const row = { id: `${model}-${nextId++}`, createdAt: new Date(), updatedAt: new Date(), ...structuredClone(data) };
+        const defaults = ['workspaceCollection', 'workspaceRecord', 'workspaceRecordForm'].includes(model) ? { revision: 0, schemaRevision: 0, archivedAt: null } : {};
+        const row = { id: `${model}-${nextId++}`, createdAt: new Date(), updatedAt: new Date(), ...defaults, ...structuredClone(data) };
         rows().push(row);
         return structuredClone(row);
       },

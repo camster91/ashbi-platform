@@ -4,7 +4,9 @@
 // Derived at runtime from the generated Prisma client's data model
 // (Prisma.dmmf). Prisma 7's runtime model omits `relationFromFields`, so a
 // relation's foreign-key scalar is resolved by the schema's convention: the
-// relation field `foo` is owned through the scalar `fooId`. The unit test
+// relation field `foo` is owned through the scalar `fooId`. Explicitly declared
+// id/organization composite edges also retain the companion organization key.
+// The unit test
 // src/tests/unit/tenant-proxy-bypasses.test.js parses prisma/schema.prisma and fails
 // if any `@relation(fields: [...])` in the schema disagrees with this map, so a
 // relation that breaks the convention cannot slip through unchecked.
@@ -12,12 +14,21 @@
 import prismaPkg from '@prisma/client';
 
 /**
- * @typedef {{ target: string, fk: string | null }} RelationInfo
+ * @typedef {{ target: string, fk: string | null, fkFields: string[] }} RelationInfo
  * @typedef {{ name: string, delegate: string, relations: Record<string, RelationInfo>, foreignKeys: Record<string, string> }} ModelRelations
  */
 
 /** @type {Map<string, ModelRelations> | null} */
 let cache = null;
+
+// Prisma 7 omits relationFromFields. These deliberately supported composite
+// edges bind a globally unique parent id to the same organization column the
+// request proxy stamps and filters. Arbitrary composite keys remain unsupported.
+export const COMPOSITE_TENANT_RELATIONS = Object.freeze({
+  workspacecollection: { author: ['authorId', 'organizationId'] },
+  workspacerecord: { collection: ['collectionId', 'organizationId'], author: ['authorId', 'organizationId'] },
+  workspacerecordform: { collection: ['collectionId', 'organizationId'], author: ['authorId', 'organizationId'] },
+});
 
 function delegateName(modelName) {
   return modelName.charAt(0).toLowerCase() + modelName.slice(1);
@@ -44,7 +55,9 @@ export function tenantRelationMap() {
     for (const field of model.fields) {
       if (field.kind !== 'object') continue;
       const fk = scalars.has(`${field.name}Id`) ? `${field.name}Id` : null;
-      relations[field.name] = { target: String(field.type).toLowerCase(), fk };
+      const fkFields = COMPOSITE_TENANT_RELATIONS[model.name.toLowerCase()]?.[field.name] ?? (fk ? [fk] : []);
+      if (fkFields.some(key => !scalars.has(key)) || (fkFields.length > 1 && (fkFields[0] !== fk || fkFields[1] !== 'organizationId' || !['User', 'WorkspaceCollection'].includes(field.type)))) throw new Error('Tenancy Error: unsupported composite relation');
+      relations[field.name] = { target: String(field.type).toLowerCase(), fk, fkFields };
       if (fk) foreignKeys[fk] = field.name;
     }
     map.set(model.name.toLowerCase(), { name: model.name, delegate: delegateName(model.name), relations, foreignKeys });

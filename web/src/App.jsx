@@ -67,6 +67,8 @@ const TaskViews = lazy(() => import('./pages/TaskViews'));
 const ProjectBoards = lazy(() => import('./pages/ProjectBoards'));
 const WorkspaceWiki = lazy(() => import('./pages/WorkspaceWiki'));
 const WorkspaceWikiPage = lazy(() => import('./pages/WorkspaceWikiPage'));
+const RecordCollections = lazy(() => import('./pages/RecordCollections'));
+const RecordCollection = lazy(() => import('./pages/RecordCollection'));
 const TaskFieldSettings = lazy(() => import('./pages/TaskFieldSettings'));
 const BoardTemplates = lazy(() => import('./pages/BoardTemplates'));
 const TimeTracking = lazy(() => import('./pages/TimeTracking'));
@@ -286,6 +288,8 @@ function AppRoutes() {
                   <Route path="/docs" element={<Docs />} />
                   <Route path="/wiki" element={<WorkspaceWiki />} />
                   <Route path="/wiki/:pageId" element={<WorkspaceWikiPage />} />
+                  <Route path="/collections" element={<RecordCollections />} />
+                  <Route path="/collections/:collectionId" element={<RecordCollection />} />
                   <Route path="/project-planner" element={embeddedAiEnabled ? <ProjectPlanner /> : <Navigate to="/projects" replace />} />
                   <Route path="/project-templates" element={<ProjectTemplates />} />
                                                       <Route path="/retainers" element={<AdminRoute><Retainers /></AdminRoute>} />

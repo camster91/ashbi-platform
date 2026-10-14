@@ -1,0 +1,57 @@
+# Standalone collections, computed fields, and reusable forms
+
+Implementation in progress in draft #590 on `feat/structured-records-20261014`, tracked by #565. Shared contracts, Prisma persistence, fresh staff authorization, audited services, HTTP endpoints, collection/field/record/form screens, confirmed API/MCP actions and relation-default label hydration are implemented. Full PostgreSQL/browser acceptance and normal merge remain open. This document does not claim a shipped feature or replacement readiness. Production remains held.
+
+Latest local validation: 25 record/action/task-service tests and 12 UI tests pass. Shared read-only preparation functions validate previews without performing writes. Seven domain action tools and their read-only preview tools use canonical SHA-256 fingerprints that survive JSONB key reordering and bind the actor, exact data, revisions, related collection context and resolved relation names/calculations. Execution rechecks the preview inside its serializable transaction; domain audit and receipt share that transaction. Existing `get_action`, `confirm_action` and `reject_action` provide owner-only recovery, expiry and idempotency. Fresh stored staff authorization also protects pending/terminal receipt reads. The new PostgreSQL test now exercises actual confirmed creation and replay.
+
+CI 38586490895 passed backend units and migration/schema checks but failed the new PostgreSQL journey on JSON operator precedence, and the new browser journey on an exact nested-select label. The JSON containment operands are now parenthesized and browser selects use their observed combobox labels. A fresh required run is needed; no acceptance is inferred from local mocks. Form reads resolve named default relations independently of picker pages and return unavailable labels rather than foreign names. The UI consumes those names, including during explicit form review.
+
+October 14 follow-up: corrected CI 38580751794 applied the migration and passed existing browser/full-stack journeys, but backend regressions stopped before the new database test. Route registry expectations, composite FK leading indexes, explicit tenant relation metadata and workspace export are now integrated. Composite database constraints remain intact; foreign scalar/compound parent references are tested. The affected backend suite passed 74 tests with one existing platform skip; the latest tenant/service suite passed 46 with zero failures/skips. Twelve focused UI tests, type checking, frontend build and performance budgets pass locally. The new `workspace-records.spec.ts` journey awaits disposable CI; earlier browser evidence does not cover these screens.
+
+The UI at `/collections` searches/pages shared portfolio collections. Collection detail supports typed fields, bounded nested formula controls, canonical/collection relation pickers, rollup setup, records and calculation errors, and reversible archives. Forms configure inclusion, labels, help, requirements and typed defaults; stale forms require explicit review and archived forms can be restored. Drafts pin original revisions and retain input on conflicts. Background collection archival disables open drafts without losing their contents. Mobile/keyboard/accessibility acceptance remains pending the new browser journey.
+
+Local validation on October 14: 71 contract/service/HTTP/tenant-policy/audit tests pass, changed-file ESLint passes with zero warnings, Prisma validation/generation and repository TypeScript checking pass. Route/access/OpenAPI/data-dictionary snapshots are regenerated. The earlier contract-only full backend/AI run passed 1,896 tests with zero failures and one skip; it does not cover the subsequent persistence changes. A new PostgreSQL integration test covers same-workspace composite foreign keys, raw relation/type/identity refusal, one-winner concurrent revisions, required-audit rollback, dependent rollup guards, stale forms and archived-parent refusal. CI 38580139470 found a PL/pgSQL conditional-parser error in the selection-size guard; the CASE expression is now parenthesized and requires a fresh disposable migration/integration run. No local PostgreSQL instance is available and no standalone-collection browser journey has run yet.
+
+Persistence uses `WorkspaceCollection`, `WorkspaceRecord` and `WorkspaceRecordForm` in the existing organization; it does not create projects/tasks as surrogates. `RELATION` selects either a collection or a canonical CLIENT/PROJECT/TASK/PERSON target, with up to 100 selected IDs. Shared services validate IDs against active available same-workspace records. Composite foreign keys bind collection and author ownership; database triggers retain identities, increment revisions, validate relation rosters/defaults and refuse stored computed values. Collection schema changes preserve existing input types/choices and reject invalid active data or dependent rollups. Forms pin `schemaRevision` and report `needsReview` after schema changes. Writes require the audit evidence in their transaction. Relation hydration is batched in chunks of 100 and retains only scalar rollup targets, with a 5,000-reference page budget; no partial sum is substituted when a selected row is unavailable.
+
+Session HTTP endpoints are under `/api/collections`: collection/record/form list/read/create/update, relation options and form submissions. Pagination uses stable ID cursors with page size at most 50. Archive restores the existing identity and values; restoring a record under an archived collection is rejected. CLIENT/BOT/deactivated users cannot access these routes, and mutations resolve the stored staff role rather than trusting actor metadata.
+
+Scoped API/MCP reads: `list_workspace_collections`, `get_workspace_collection`, `list_workspace_records`, `get_workspace_record`, `list_workspace_record_forms`, `get_workspace_record_form`, `list_workspace_record_relation_options`. For each action below, first call `preview_<action>` and review its exact proposal and fingerprint; call the action with that fingerprint and a new idempotency key, then explicitly confirm through `confirm_action` only after human authorization:
+
+- `create_workspace_collection`, `update_workspace_collection`
+- `create_workspace_record`, `update_workspace_record`
+- `create_workspace_record_form`, `update_workspace_record_form`, `submit_workspace_record_form`
+
+Reads require `workspace:read`; preparation/confirmation require `workspace:actions` and current active ADMIN/TEAM membership. No OAuth scope, API-key grant or production permission is expanded by these registered operations.
+
+## Intended usable workflow
+
+Staff create a standalone named collection in the existing organization, define typed fields, and create/edit/archive canonical records without manufacturing tasks or projects. Records retain revisions and archived values. Collections and relations stay inside the organization, and client/BOT access is denied unless explicitly designed and tested later. Ashbi Design and Freelance remain shared organizational views, not new tenants. Records can reference existing canonical clients/projects/tasks/people in the service layer; collection relations enable rollups.
+
+Staff configure formulas and relation rollups, view results and explicit errors in tables/record details, and save reusable staff forms. Form submissions create the same canonical records as manual/API creation, with the current schema and the same relation authorization. Scoped HTTP/MCP reads and confirmed/audited writes must use the same service and calculations. A form is not an email/webhook provider integration and creates no external notification.
+
+## Shared contract implemented so far
+
+`src/shared/record-calculations.js` validates at most 40 definitions, unique names/keys, typed expressions, active references and acyclic local dependencies. Arithmetic, comparisons, booleans, text concatenation, lazy conditional/coalesce, rounding and calendar-day differences use a bounded JSON expression tree. No JavaScript expression, property traversal, environment access, dynamic evaluation or remote fetch is supported. Expressions are limited to 100 nodes, 12 nested levels and bounded arguments/literals; output text and numeric overflow are checked. Financial invoices retain their own decimal/tax/currency rules; these general-purpose number fields are not financial ledger authority.
+
+Example quantity calculation:
+
+```json
+{"key":"total","name":"Total","type":"FORMULA","expression":{"op":"multiply","args":[{"field":"hours"},{"field":"rate"}]}}
+```
+
+Computed results return `{ value, error, type }`. Missing inputs return null with no error; division by zero, malformed inputs, overflow and incomplete relations return explicit errors. Zero, false and empty text are preserved. Conditional and coalesce branches are lazy. Formula dependencies may be declared in any order. Archived fields cannot be referenced by active calculations; stored client-supplied computed values are ignored by calculation reads.
+
+Rollups support COUNT, SUM, AVERAGE, MIN, MAX and UNIQUE over an active collection relation. Numeric aggregates require stored numeric target fields. UNIQUE returns a typed scalar list. Remote computed targets are not implemented yet; they require a cross-collection dependency graph before support can safely expand. The scoped service must supply the complete selected roster (maximum 100 records), including matching unique IDs and authorized active values. Missing, filtered, archived, unavailable or incomplete selected relations must produce `INCOMPLETE_RELATION`, never a misleading partial total. Empty relations return zero for count/sum, an empty list for unique, and null for average/min/max. Null numeric values are omitted from numeric aggregates; zero contributes to averages.
+
+`src/shared/record-inputs.js` validates stored primitive/relation input shapes and forbids unknown, computed or archived value patches. Required false/zero are valid; null, blank required text and empty required lists are rejected. Archived historical values survive ordinary edits. Definition updates retain existing keys, types, relation collections and prior choices; removal uses archive. Form definitions select active editable fields, retain collection-required fields, validate defaults, and pin an exact definition revision. Submissions reject unconfigured fields and stale form/schema revisions. Relation ID shape checks do not establish authorization: the service must verify every selected ID before storing it or returning a result.
+
+## Remaining completion evidence
+
+- PostgreSQL acceptance of the implemented migration, tenant policy and direct-write guards.
+- Broader regression acceptance of implemented service/HTTP writes, fresh authorization, relation resolution, pagination and archive behavior.
+- Usable collection/field/form builders and table/record screens, errors and recovery with scoped API/MCP parity, confirmation/audit and idempotency.
+- PostgreSQL tests plus authenticated full-stack journeys at desktop/mobile widths; required PR/main CI and normal merge.
+- Owner-held release, populated target QA, approved one-time mappings/input and team acceptance tracked separately.
+
+Document retention/restore policy remains pending and is independent of this work. No retention choice, deployment approval, live data input or source retirement is implied.

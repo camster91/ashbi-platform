@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 394 |
+| staff | 408 |
 | staff (inline) | 1 |
-| **total** | 589 |
+| **total** | 603 |
 
 ## Routes by prefix
 
@@ -370,6 +370,25 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/clients/:id/contacts` | staff | scoped |  |
 | GET | `/api/clients/:id/insights` | staff | scoped |  |
 | POST | `/api/clients/:id/notes` | staff | scoped |  |
+
+### /api/collections
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/collections` | staff | scoped |  |
+| POST | `/api/collections` | staff | scoped |  |
+| GET | `/api/collections/:collectionId` | staff | scoped |  |
+| PUT | `/api/collections/:collectionId` | staff | scoped |  |
+| GET | `/api/collections/:collectionId/forms` | staff | scoped |  |
+| POST | `/api/collections/:collectionId/forms` | staff | scoped |  |
+| GET | `/api/collections/:collectionId/forms/:formId` | staff | scoped |  |
+| PUT | `/api/collections/:collectionId/forms/:formId` | staff | scoped |  |
+| POST | `/api/collections/:collectionId/forms/:formId/submissions` | staff | scoped |  |
+| GET | `/api/collections/:collectionId/records` | staff | scoped |  |
+| POST | `/api/collections/:collectionId/records` | staff | scoped |  |
+| GET | `/api/collections/:collectionId/records/:recordId` | staff | scoped |  |
+| PUT | `/api/collections/:collectionId/records/:recordId` | staff | scoped |  |
+| GET | `/api/collections/:collectionId/relations/:fieldKey/options` | staff | scoped |  |
 
 ### /api/command-center
 

@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { createScopedPrisma, SCOPED_DELEGATE_METHODS } from '../../utils/prisma-tenant-proxy.js';
+import { createScopedPrisma, SCOPED_DELEGATE_METHODS, tenantModelPolicy } from '../../utils/prisma-tenant-proxy.js';
 import { tenantRelationMap } from '../../utils/tenant-relations.js';
 
 // A fake database: records per delegate with an organization, relation-scoped
@@ -156,16 +156,43 @@ test('the runtime relation map matches every @relation(fields: [...]) in the sch
     const fields = field && /fields:\s*\[([^\]]*)\]/.exec(field[3]);
     if (!fields) continue;
     const scalars = fields[1].split(',').map((name) => name.trim());
-    assert.equal(scalars.length, 1, `${model}.${field[1]} uses a composite foreign key the proxy cannot verify`);
-    expected.add(`${model}.${scalars[0]}->${field[1]}:${field[2].toLowerCase()}`);
+    const info = tenantRelationMap().get(model)?.relations[field[1]];
+    assert.deepEqual(info?.fkFields, scalars, `${model}.${field[1]} must match its complete foreign key`);
+    if (scalars.length > 1) {
+      assert.deepEqual(scalars, [`${field[1]}Id`, 'organizationId']);
+      const referenced = /references:\s*\[([^\]]*)\]/.exec(field[3]);
+      assert.deepEqual(referenced?.[1].split(',').map(name => name.trim()), ['id', 'organizationId']);
+      assert.ok(['User', 'WorkspaceCollection'].includes(field[2]));
+      assert.equal(tenantModelPolicy[model], 'direct');
+      assert.equal(tenantModelPolicy[field[2].toLowerCase()], 'direct');
+    }
+    expected.add(`${model}.${scalars.join('+')}->${field[1]}:${field[2].toLowerCase()}`);
   }
   const actual = new Set();
   for (const [key, meta] of tenantRelationMap()) {
-    for (const [fk, relation] of Object.entries(meta.foreignKeys)) {
-      actual.add(`${key}.${fk}->${relation}:${meta.relations[relation].target}`);
+    for (const [_fk, relation] of Object.entries(meta.foreignKeys)) {
+      const info = meta.relations[relation];
+      actual.add(`${key}.${info.fkFields.join('+')}->${relation}:${info.target}`);
     }
   }
   assert.deepEqual([...actual].sort(), [...expected].sort());
+});
+
+test('composite record parent references verify both globally unique IDs and organization ownership', async () => {
+  const writes = [], lookups = [];
+  const parent = id => ({ findFirst: async ({ where }) => { lookups.push(where); return where.id === id && where.organizationId === 'org-a' ? { id } : null; } });
+  const db = { user: parent('user-a'), workspaceCollection: parent('collection-a'), workspaceRecord: { create: async args => { writes.push(args); return { id: 'record-a' }; } } };
+  const scoped = createScopedPrisma(db, 'org-a');
+  await scoped.workspaceRecord.create({ data: { title: 'Owned', collectionId: 'collection-a', authorId: 'user-a', organizationId: 'forged' } });
+  assert.equal(writes[0].data.organizationId, 'org-a');
+  assert.deepEqual(lookups, [{ id: 'collection-a', organizationId: 'org-a' }, { id: 'user-a', organizationId: 'org-a' }]);
+  for (const data of [
+    { collectionId: 'collection-b', authorId: 'user-a' },
+    { collectionId: 'collection-a', authorId: 'user-b' },
+    { collectionId: 'collection-a', author: { connect: { id_organizationId: { id: 'user-a', organizationId: 'org-b' } } } },
+    { authorId: 'user-a', collection: { connect: { id_organizationId: { id: 'collection-a', organizationId: 'org-b' } } } },
+  ]) await assert.rejects(scoped.workspaceRecord.create({ data }), { statusCode: 404 });
+  assert.equal(writes.length, 1);
 });
 
 test('PATCH /api/bot/task/:id accepts only validated task fields', async () => {

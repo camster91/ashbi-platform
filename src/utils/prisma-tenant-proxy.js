@@ -46,7 +46,8 @@ const DIRECT_SCOPED_MODELS = new Set([
   'impersonationsession', 'breakglassgrant',
   // Expenses: the client and project are optional, so the organization is a
   // column of its own (migration 20261001130000_expense_organization).
-  'expense', 'taskcollaborator', 'projectboard', 'workspacepage', 'workspacepagegrant'
+  'expense', 'taskcollaborator', 'projectboard', 'workspacepage', 'workspacepagegrant',
+  'workspacecollection', 'workspacerecord', 'workspacerecordform'
 ]);
 
 // Evidence tables that may only ever be appended to. Request-scoped code gets
@@ -87,6 +88,15 @@ const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platfor
 // redundant organizationId is not enough: the referenced parent must belong
 // to the same organization or the graph would span tenants.
 const DIRECT_PARENT_RELATIONS = {
+  workspacecollection: [{ relation: 'author', field: 'authorId', model: 'user', delegate: 'user', required: true }],
+  workspacerecord: [
+    { relation: 'collection', field: 'collectionId', model: 'workspacecollection', delegate: 'workspaceCollection', required: true },
+    { relation: 'author', field: 'authorId', model: 'user', delegate: 'user', required: true },
+  ],
+  workspacerecordform: [
+    { relation: 'collection', field: 'collectionId', model: 'workspacecollection', delegate: 'workspaceCollection', required: true },
+    { relation: 'author', field: 'authorId', model: 'user', delegate: 'user', required: true },
+  ],
   workspacepage: [
     { relation: 'author', field: 'authorId', model: 'user', delegate: 'user', required: true },
     { relation: 'parent', field: 'parentId', model: 'workspacepage', delegate: 'workspacePage' },
@@ -375,6 +385,16 @@ export function createScopedPrisma(prisma, organizationId) {
     return { AND: [where, buildTenantWhere(TENANT_PATHS[modelKey], organizationId)] };
   }
 
+  function ownedSelector(modelKey, where) {
+    if (isPlainObject(where?.id_organizationId)) {
+      if (!['user', 'workspacecollection'].includes(modelKey) || Object.keys(where.id_organizationId).length !== 2 || typeof where.id_organizationId.id !== 'string' || typeof where.id_organizationId.organizationId !== 'string') throw new TenancyError('Unsupported composite reference', 400);
+      where = { ...where, ...where.id_organizationId };
+      delete where.id_organizationId;
+    }
+    if (where?.organizationId !== undefined && where.organizationId !== organizationId) throw new TenancyError('Referenced record is unavailable in this workspace', 404);
+    return where;
+  }
+
   /**
    * Prove that the record of `modelKey` matching `where` (a unique input)
    * belongs to this organization. Each distinct record is checked once per
@@ -384,6 +404,7 @@ export function createScopedPrisma(prisma, organizationId) {
     if (!isPlainObject(where) || Object.keys(where).length === 0) {
       throw new TenancyError(`${label} reference is not a unique record`, 400);
     }
+    where = ownedSelector(modelKey, where);
     const cacheKey = `${modelKey}:${includeDeleted ? 'any:' : ''}${JSON.stringify(where)}`;
     if (verified.has(cacheKey)) return;
     if (modelKey === 'organization') {
@@ -623,7 +644,8 @@ export function createScopedPrisma(prisma, organizationId) {
                   if (row?.[parent.relation]?.create || row?.[parent.relation]?.connectOrCreate) {
                     throw new TenancyError(`nested ${parent.relation} creation is not allowed in scoped writes`);
                   }
-                  const ownerId = row?.[parent.field] ?? row?.[parent.relation]?.connect?.id;
+                  const connected = row?.[parent.relation]?.connect;
+                  const ownerId = row?.[parent.field] ?? (connected ? ownedSelector(parent.model, connected).id : undefined);
                   if (!ownerId && creating && parent.required) {
                     throw new TenancyError(`${String(modelName)}.${parent.field} is required`, 400);
                   }

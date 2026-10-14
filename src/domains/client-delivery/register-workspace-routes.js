@@ -8,6 +8,7 @@ import portalRoutes from '../../routes/portal.routes.js';
 import onboardingRoutes from '../../routes/onboarding.routes.js';
 import noteRoutes from '../../routes/note.routes.js';
 import workspaceWikiRoutes from '../../routes/workspace-wiki.routes.js';
+import workspaceRecordsRoutes from '../../routes/workspace-records.routes.js';
 
 /**
  * Register client-delivery workspace routes: brand, time tracking and
@@ -31,4 +32,5 @@ export async function registerClientWorkspaceRoutes(fastify) {
   await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
   await fastify.register(noteRoutes, { prefix: '/api' });
   await fastify.register(workspaceWikiRoutes, { prefix: '/api/wiki' });
+  await fastify.register(workspaceRecordsRoutes, { prefix: '/api/collections' });
 }

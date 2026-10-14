@@ -116,6 +116,9 @@ export const EXPORT_ENTITIES = Object.freeze([
   { name: 'notes', model: 'Note', category: 'documents', where: (org) => ({ deletedAt: null, project: activeProject(org) }), description: 'Notes, meeting notes, wiki pages and docs' },
   { name: 'workspace_pages', model: 'WorkspacePage', category: 'documents', where: (org) => ({ organizationId: org }), description: 'Shared workspace knowledge pages including archived pages and hierarchy; independent of clients and projects' },
   { name: 'workspace_page_grants', model: 'WorkspacePageGrant', category: 'documents', where: (org) => ({ organizationId: org }), description: 'Current staff read/edit grants for restricted knowledge pages; organization-owner export only' },
+  { name: 'workspace_collections', model: 'WorkspaceCollection', category: 'documents', where: (org) => ({ organizationId: org }), description: 'Standalone collection definitions and portfolios, including archived collections' },
+  { name: 'workspace_records', model: 'WorkspaceRecord', category: 'documents', where: (org) => ({ organizationId: org }), description: 'Canonical typed record values and relations, including archived historical values' },
+  { name: 'workspace_record_forms', model: 'WorkspaceRecordForm', category: 'documents', where: (org) => ({ organizationId: org }), description: 'Reusable record forms with schema revisions and defaults, including archived forms' },
 
   // Finance
   { name: 'invoices', model: 'Invoice', category: 'finance', where: invoiceScope, omit: ['viewToken', 'draftData'], description: 'Invoices' },

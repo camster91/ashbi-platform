@@ -11,6 +11,8 @@ import { validateTaskFieldFilters } from '../services/task-field-filters.service
 import { readTeamWorkload } from '../services/team-workload.service.js';
 import { WORKSPACE_TASK_ACTIONS } from './workspace-task-actions.js';
 import { WORKSPACE_BILLING_TOOLS } from './workspace-billing-tools.js';
+import { WORKSPACE_RECORD_TOOLS, recordToolCall } from './workspace-record-tools.js';
+import { currentRecordStaff } from '../services/workspace-records.service.js';
 import { currentInvoiceAdmin } from '../services/unbilled-invoice.service.js';
 import { taskRelationLabels } from '../services/task-relation-labels.service.js';
 import { taskStageKeySchema } from '../validators/schemas.js';
@@ -71,6 +73,7 @@ export const workspaceRegistry = createToolRegistry([
   },
   ...WORKSPACE_TASK_ACTIONS,
   ...WORKSPACE_BILLING_TOOLS,
+  ...WORKSPACE_RECORD_TOOLS,
   {
     name: 'get_team_workload', description: 'Read active staff owned-task and contributor counts, and logged hours over the last seven days compared with weekly capacity. Counts can overlap; this does not forecast future availability.',
     class: 'read', roles: ['ADMIN', 'TEAM'], inputSchema: z.object({}).strict(),
@@ -167,6 +170,7 @@ export function createWorkspaceTools(options = {}) {
       }
       if (!registry.get(action.action).roles.includes(ctx.user.role)) throw new ToolError('ROLE_DENIED', 'Your role cannot access this action', { statusCode: 403 });
       if (WORKSPACE_BILLING_TOOLS.some(tool => tool.name === action.action)) await billingAdmin(ctx);
+      if (WORKSPACE_RECORD_TOOLS.some(tool => tool.name === action.action)) await recordToolCall(() => currentRecordStaff(ctx.prisma, ctx.user));
       if (name === 'get_action') return { kind: 'receipt', action: receipt(action) };
       // ownerOnly prevents a key from approving another user's proposal.
       const result = name === 'confirm_action'
@@ -176,6 +180,7 @@ export function createWorkspaceTools(options = {}) {
     }
     const tool = registry.get(name);
     if (WORKSPACE_BILLING_TOOLS.some(tool => tool.name === name)) await billingAdmin(ctx);
+    if (WORKSPACE_RECORD_TOOLS.some(tool => tool.name === name)) await recordToolCall(() => currentRecordStaff(ctx.prisma, ctx.user));
     let input = args;
     let idempotencyKey;
     if (tool.class !== 'read') {
