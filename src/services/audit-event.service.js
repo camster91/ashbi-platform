@@ -30,6 +30,7 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'workspace_record_form.submitted': { entityType: 'workspace_record', metadata: ['revision', 'collectionId', 'formId', 'formRevision'] },
   'invoice.created_from_unbilled': { entityType: 'invoice', metadata: ['clientId', 'projectId', 'timeCount', 'expenseCount', 'total', 'currency'] },
   'invoice.sources_released': { entityType: 'invoice', metadata: ['timeCount', 'expenseCount', 'total', 'currency'] },
+  'note.access_changed': { entityType: 'note', metadata: ['fromMode', 'toMode', 'memberCount'] },
   'workspace_page.access_changed': { entityType: 'workspace_page', metadata: ['fromMode', 'toMode', 'revision', 'memberCount'] },
   'workspace_page.created': { entityType: 'workspace_page', metadata: ['revision', 'parentId'] },
   'workspace_page.updated': { entityType: 'workspace_page', metadata: ['revision', 'parentId'] },

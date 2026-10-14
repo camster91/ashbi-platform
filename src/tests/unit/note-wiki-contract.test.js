@@ -35,6 +35,7 @@ test('hierarchy validation accepts same-project parents and rejects missing, sel
     ['grandchild', { id: 'grandchild', parentId: 'child', projectId: 'project-a' }],
   ]);
   const prisma = {
+    user: { findFirst: async () => ({ id: 'author', role: 'ADMIN', organizationId: 'org-a' }) },
     note: {
       findFirst: async ({ where }) => {
         const row = rows.get(where.id);
@@ -61,7 +62,7 @@ test('mentions fail closed unless every requested member is active in the tenant
   };
   assert.equal((await findAuthorizedMentionUsers(prisma, 'org-a', ['inside']))[0].id, 'inside');
   assert.equal(await findAuthorizedMentionUsers(prisma, 'org-a', ['inside', 'outside']), null);
-  assert.deepEqual(calls[0].where, { id: { in: ['inside'] }, organizationId: 'org-a', isActive: true });
+  assert.deepEqual(calls[0].where, { id: { in: ['inside'] }, organizationId: 'org-a', isActive: true, role: { in: ['ADMIN', 'TEAM'] } });
 });
 
 test('note presentation treats malformed legacy metadata as empty arrays', () => {
@@ -80,18 +81,18 @@ test('migration enforces same-project parent ownership at the database boundary'
 });
 
 test('canonical wiki API creates nested pages, audit rows, template copies, and mention notifications', async () => {
-  const rows = [{ id: 'root', title: 'Root', content: '', type: 'WIKI', tags: '[]', mentions: '[]', projectId: 'project-a', parentId: null, isTemplate: false }];
+  const rows = [{ id: 'root', title: 'Root', content: '', type: 'WIKI', tags: '[]', mentions: '[]', projectId: 'project-a', parentId: null, authorId: 'author', accessGrants: [], accessMode: 'TEAM', isTemplate: false }];
   const activities = [];
   const notifications = [];
   const prisma = {
     project: { findFirst: async ({ where }) => where.id === 'project-a' ? { id: 'project-a' } : null },
-    user: { findMany: async ({ where }) => where.id.in.map(id => ({ id, name: id })) },
+    user: { findFirst: async () => ({ id: 'author', role: 'ADMIN', organizationId: 'org-a' }), findMany: async ({ where }) => where.id.in.map(id => ({ id, name: id, role: 'TEAM', organizationId: 'org-a', isActive: true })) },
     note: {
       findMany: async () => rows,
       findFirst: async ({ where }) => rows.find(row => row.id === where.id && (!where.projectId || row.projectId === where.projectId) && (where.isTemplate === undefined || row.isTemplate === where.isTemplate)) || null,
       findUnique: async ({ where }) => rows.find(row => row.id === where.id) || null,
       create: async ({ data }) => {
-        const row = { id: `note-${rows.length}`, ...data, tags: data.tags || '[]', mentions: data.mentions || '[]', author: { id: 'author', name: 'Author' } };
+        const row = { accessMode: 'TEAM', accessGrants: [], revision: 0, accessRevision: 0, id: `note-${rows.length}`, ...data, tags: data.tags || '[]', mentions: data.mentions || '[]', author: { id: 'author', name: 'Author' } };
         rows.push(row);
         return row;
       },
@@ -137,6 +138,7 @@ test('canonical wiki API creates nested pages, audit rows, template copies, and 
 test('project note search is case-insensitive like the workspace note search', async () => {
   const queries = [];
   const prisma = {
+    user: { findFirst: async () => ({ id: 'author', role: 'ADMIN', organizationId: 'org-a' }) },
     note: {
       findMany: async args => {
         queries.push(args);
@@ -155,8 +157,8 @@ test('project note search is case-insensitive like the workspace note search', a
     const response = await app.inject({ method: 'GET', url: '/api/projects/project-a/notes?search=launch%20plan' });
     assert.equal(response.statusCode, 200, response.body);
     assert.equal(response.json()[0].title, 'Launch Plan');
-    assert.equal(queries[0].where.projectId, 'project-a');
-    assert.deepEqual(queries[0].where.OR, [
+    assert.equal(queries.at(-1).where.projectId, 'project-a');
+    assert.deepEqual(queries.at(-1).where.OR, [
       { title: { contains: 'launch plan', mode: 'insensitive' } },
       { content: { contains: 'launch plan', mode: 'insensitive' } },
     ]);

@@ -80,6 +80,7 @@ export default async function dashboardRoutes(fastify) {
         where: { status: 'PENDING' }
       }),
       request.prisma.activity.findMany({
+        where: { entityType: { not: 'NOTE' } },
         orderBy: { createdAt: 'desc' },
         take: 10,
         include: {

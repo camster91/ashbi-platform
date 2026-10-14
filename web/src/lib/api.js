@@ -531,6 +531,8 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/projects/${projectId}/notes${query ? `?${query}` : ''}`);
   },
+  getNoteAccess: (id) => request('/notes/' + encodeURIComponent(id) + '/access'),
+  saveNoteAccess: (id, data) => request('/notes/' + encodeURIComponent(id) + '/access', { method: 'PUT', body: data }),
   getNote: (id) =>
     request(`/notes/${id}`),
   getWorkspacePages: (params = {}) => request(`/wiki/pages?${new URLSearchParams(params)}`),

@@ -103,8 +103,8 @@ export function createNotifier(io, log = console) {
 /**
  * List notifications for a user with pagination and optional filtering.
  */
-export async function getNotifications(userId, { limit = 50, offset = 0, unreadOnly = false } = {}) {
-  const where = { userId };
+export async function getNotifications(userId, { limit = 50, offset = 0, unreadOnly = false, visibilityWhere = {} } = {}) {
+  const where = { userId, ...visibilityWhere };
   if (unreadOnly) {
     where.read = false;
   }
@@ -125,9 +125,9 @@ export async function getNotifications(userId, { limit = 50, offset = 0, unreadO
 /**
  * Mark a single notification as read.
  */
-export async function markAsRead(userId, notificationId) {
-  const notification = await prisma.notification.findUnique({
-    where: { id: notificationId }
+export async function markAsRead(userId, notificationId, visibilityWhere = {}) {
+  const notification = await prisma.notification.findFirst({
+    where: { id: notificationId, userId, ...visibilityWhere }
   });
 
   if (!notification) return null;
@@ -142,9 +142,9 @@ export async function markAsRead(userId, notificationId) {
 /**
  * Mark all unread notifications for a user as read.
  */
-export async function markAllAsRead(userId) {
+export async function markAllAsRead(userId, visibilityWhere = {}) {
   const result = await prisma.notification.updateMany({
-    where: { userId, read: false },
+    where: { userId, read: false, ...visibilityWhere },
     data: { read: true, readAt: new Date() }
   });
 
@@ -154,8 +154,8 @@ export async function markAllAsRead(userId) {
 /**
  * Get the count of unread notifications for a user.
  */
-export async function getUnreadCount(userId) {
+export async function getUnreadCount(userId, visibilityWhere = {}) {
   return prisma.notification.count({
-    where: { userId, read: false }
+    where: { userId, read: false, ...visibilityWhere }
   });
 }

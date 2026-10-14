@@ -32,5 +32,5 @@ export async function softDelete({ scopedPrisma, entity, recordId, organizationI
     });
 
     return { record, trashedItem };
-  });
+  }, { isolationLevel: 'Serializable' });
 }

@@ -1,0 +1,66 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import prismaPkg from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import Fastify from 'fastify';
+import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
+import { withSoftDelete } from '../../services/soft-delete.service.js';
+import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
+import noteRoutes from '../../routes/note.routes.js';
+import { authorizeNote, saveNoteAccess, prepareNoteAccess, noteNotificationWhere } from '../../services/note-access.service.js';
+import { restoreTrashedItem } from '../../services/trash-purge.service.js';
+import { createWorkspaceTools } from '../../integrations/workspace-tools.js';
+const url=process.env.TENANT_INTEGRATION_DATABASE_URL;
+test('project notes preserve inherited read/edit audiences across API/MCP, promotion, restore and revocation',{skip:!url&&'Disposable PostgreSQL is not configured',timeout:120000},async()=>{
+ const raw=new prismaPkg.PrismaClient({adapter:new PrismaPg({connectionString:url})});const orgs=['a','b'].map(k=>'note-audience-'+k+'-'+randomUUID());let app;
+ try {
+  for(const organizationId of orgs)await raw.organization.create({data:{id:organizationId,slug:organizationId,name:'Note fixture'}});
+  const make=async(role,organizationId=orgs[0])=>raw.user.create({data:{organizationId,role,name:role+' fixture',email:randomUUID()+'@e2e.example.test',password:randomUUID()}});
+  const owner=await make('TEAM'),reader=await make('TEAM'),outsider=await make('TEAM'),admin=await make('ADMIN'),foreign=await make('TEAM',orgs[1]),clientUser=await make('CLIENT');
+  const client=await raw.client.create({data:{name:'Note client',organizationId:orgs[0]}});
+  const project=await raw.project.create({data:{name:'Note project',organizationId:orgs[0],clientId:client.id}});
+  const note=await raw.note.create({data:{title:'Private brief',content:'Private words',authorId:owner.id,projectId:project.id}});
+  const child=await raw.note.create({data:{title:'Nested brief',content:'Nested words',authorId:reader.id,projectId:project.id,parentId:note.id}});
+  const hidden=await raw.note.create({data:{title:'Hidden brief',content:'Hidden words',authorId:owner.id,projectId:project.id,accessMode:'RESTRICTED'}});
+  const scoped=createScopedPrisma(withSoftDelete(raw),orgs[0]);
+  const saved=await saveNoteAccess(scoped,note.id,{revision:0,mode:'RESTRICTED',members:[{userId:reader.id,role:'READ'}]},owner);
+  assert.equal(saved.revision,1);
+  const failingAudit = new Proxy(scoped, { get(target, key) { if (key === '$transaction') return (work, options) => target.$transaction(tx => work(new Proxy(tx, { get(client, property) { if (property === 'auditEvent') return { create: async () => { throw new Error('fixture audit unavailable'); } }; return client[property]; } })), options); return target[key]; } });
+  await assert.rejects(saveNoteAccess(failingAudit,note.id,{revision:1,mode:'TEAM',members:[]},owner),{statusCode:503});
+  assert.equal((await raw.note.findUnique({where:{id:note.id}})).accessRevision,1);
+  await raw.notification.create({data:{userId:reader.id,type:'note.mentioned',title:'Private mention',message:'Review',data:{noteId:note.id}}});
+  assert.equal(await raw.notification.count({where:{userId:reader.id,...await noteNotificationWhere(scoped,reader)}}),1);
+  assert.deepEqual((await authorizeNote(scoped,child.id,reader)).permissions,{canRead:true,canEdit:false,canManage:false});
+  await assert.rejects(authorizeNote(scoped,note.id,outsider),{statusCode:404});
+  await assert.rejects(authorizeNote(createScopedPrisma(raw,orgs[1]),note.id,foreign),{statusCode:404});
+  await assert.rejects(authorizeNote(scoped,note.id,clientUser),{statusCode:403});
+  for(const members of [[{userId:foreign.id,role:'READ'}],[{userId:clientUser.id,role:'EDIT'}],[{userId:reader.id,role:null}]])await assert.rejects(raw.note.update({where:{id:note.id},data:{accessGrants:members}}));
+  await assert.rejects(saveNoteAccess(scoped,note.id,{revision:0,mode:'TEAM',members:[]},owner),{statusCode:409});
+  let actor=reader;app=Fastify();app.decorate('authenticate',async request=>{request.user=actor;request.prisma=scoped;});await app.register(noteRoutes,{prefix:'/api'});
+  let response=await app.inject({url:'/api/notes?paginated=true&limit=1'});assert.equal(response.statusCode,200,response.body);assert.equal(response.json().pagination.total,2);assert.equal(response.json().notes.length,1);assert.equal('accessGrants' in response.json().notes[0],false);
+  response=await app.inject({url:'/api/notes?search=Hidden%20words'});assert.deepEqual(response.json(),[]);
+  response=await app.inject({method:'PUT',url:'/api/notes/'+child.id,payload:{revision:0,content:'Unauthorized'}});assert.equal(response.statusCode,403,response.body);
+  response=await app.inject({method:'POST',url:'/api/projects/'+project.id+'/notes',payload:{title:'Leak mention',parentId:note.id,mentionUserIds:[outsider.id]}});assert.equal(response.statusCode,403,response.body);
+  actor=owner;response=await app.inject({method:'POST',url:'/api/projects/'+project.id+'/notes',payload:{title:'Leak mention',parentId:note.id,mentionUserIds:[outsider.id]}});assert.equal(response.statusCode,400,response.body);
+  const tools=createWorkspaceTools(),ctx={prisma:scoped,user:owner,scopes:['workspace:read','workspace:actions']};
+  const preview=await tools.call(ctx,'preview_project_note_access',{noteId:note.id,revision:1,mode:'RESTRICTED',members:[{userId:reader.id,role:'READ'}]});
+  const prepared=await tools.call(ctx,'set_project_note_access',{input:{noteId:note.id,revision:1,mode:'RESTRICTED',members:[{userId:reader.id,role:'READ'}],previewFingerprint:preview.fingerprint},idempotencyKey:randomUUID()});
+  assert.equal((await tools.call(ctx,'confirm_action',{actionId:prepared.action.id})).action.status,'EXECUTED');assert.equal((await tools.call(ctx,'confirm_action',{actionId:prepared.action.id})).idempotent,true);
+  assert.ok(await raw.auditEvent.findFirst({where:{organizationId:orgs[0],entityId:note.id,action:'note.access_changed'}}));
+  const toolNotes=await tools.call({...ctx,user:reader},'list_notes',{limit:50});assert.equal(toolNotes.items.length,2);assert.ok(!toolNotes.items.some(row=>row.id===hidden.id));
+  // A parent audience change invalidates a descendant preview even when its own
+  // access revision has not changed.
+  const observed=await raw.note.findUnique({where:{id:note.id}});await raw.note.update({where:{id:note.id},data:{accessGrants:[{userId:reader.id,role:'EDIT'}]}});
+  const childInput={revision:0,mode:'RESTRICTED',members:[]};const before=await prepareNoteAccess(scoped,child.id,childInput,reader);
+  await raw.note.update({where:{id:note.id},data:{accessGrants:[{userId:reader.id,role:'READ'}]}});await assert.rejects(prepareNoteAccess(scoped,child.id,childInput,reader),{statusCode:403});assert.ok(before.fingerprint);assert.ok(observed);
+  response=await app.inject({method:'DELETE',url:'/api/notes/'+note.id});assert.equal(response.statusCode,200,response.body);const trashId=response.json().trashId;
+  const promoted=await raw.note.findUnique({where:{id:child.id}});assert.equal(promoted.parentId,null);assert.ok(promoted.audienceBarrier.readUserIds.includes(reader.id));assert.ok(!promoted.audienceBarrier.editUserIds.includes(reader.id));assert.ok(!promoted.audienceBarrier.readUserIds.includes(admin.id));
+  assert.equal((await authorizeNote(scoped,child.id,reader)).permissions.canEdit,false);await assert.rejects(authorizeNote(scoped,child.id,outsider),{statusCode:404});
+  assert.equal((await authorizeNote(scoped,child.id,admin)).permissions.canRead,true);await raw.user.update({where:{id:admin.id},data:{role:'TEAM'}});await assert.rejects(authorizeNote(scoped,child.id,admin),{statusCode:404});
+  await assert.rejects(restoreTrashedItem({scopedPrisma:scoped,rawPrisma:raw,trashId,actor:reader}),{statusCode:403});
+  await restoreTrashedItem({scopedPrisma:scoped,rawPrisma:raw,trashId,actor:owner});await assert.rejects(authorizeNote(scoped,note.id,outsider),{statusCode:404});
+  await raw.user.update({where:{id:reader.id},data:{isActive:false}});assert.equal(await raw.notification.count({where:{userId:reader.id,...await noteNotificationWhere(scoped,reader)}}),0);await assert.rejects(authorizeNote(scoped,child.id,reader),{statusCode:403});
+  const stored=await raw.note.findUnique({where:{id:note.id}});assert.equal(stored.content,'Private words');
+ }finally{if(app)await app.close();for(const organizationId of orgs){await purgeFixtureAuditEvents(raw,organizationId);await raw.organization.deleteMany({where:{id:organizationId}});}await raw.$disconnect();}
+});

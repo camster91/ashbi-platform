@@ -1,3 +1,4 @@
+import NoteAudience from '../components/NoteAudience';
 import { useState, useEffect } from 'react';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -607,13 +608,13 @@ function NoteCard({
           {note.title}
         </button>
         <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button type="button" onClick={onPin} disabled={editing} aria-label={`${note.isPinned ? 'Unpin' : 'Pin'} ${note.title}`} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title={note.isPinned ? 'Unpin' : 'Pin'}>
+          <button type="button" onClick={onPin} disabled={editing || note.permissions?.canEdit === false} aria-label={`${note.isPinned ? 'Unpin' : 'Pin'} ${note.title}`} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title={note.isPinned ? 'Unpin' : 'Pin'}>
             {note.isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
           </button>
-          <button type="button" onClick={onEdit} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Edit ${note.title}`}>
+          <button type="button" disabled={note.permissions?.canEdit === false} onClick={onEdit} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Edit ${note.title}`}>
             <Edit2 className="w-3.5 h-3.5" />
           </button>
-          <button type="button" onClick={onDelete} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-destructive rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Delete ${note.title}`}>
+          <button type="button" disabled={note.permissions?.canManage === false} onClick={onDelete} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-destructive rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Delete ${note.title}`}>
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -626,6 +627,8 @@ function NoteCard({
         {note.tags?.map(tag => (
           <span key={tag} className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{tag}</span>
         ))}
+        {note.permissions?.canEdit === false && <span className="text-xs text-muted-foreground">Read only</span>}
+        {note.accessMode === 'RESTRICTED' && <span className="text-xs text-muted-foreground">Restricted</span>}
         {note.isTemplate && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">Template</span>}
       </div>
 
@@ -633,6 +636,7 @@ function NoteCard({
         {note.author?.name} · {new Date(note.updatedAt).toLocaleDateString('en-CA')}
       </p>
 
+      {expanded && note.permissions?.canManage && !editing && <NoteAudience noteId={note.id} />}
       {expanded && (
         editing ? (
           <form onSubmit={onUpdate} className="mt-3 space-y-2">
@@ -667,7 +671,7 @@ function NoteCard({
                 <label htmlFor={`note-parent-${note.id}`} className="block text-xs font-medium mb-1">Parent document</label>
                 <select id={`note-parent-${note.id}`} value={editForm.parentId || ''} onChange={(e) => setEditForm({ ...editForm, parentId: e.target.value })} className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm">
                   <option value="">Top level</option>
-                  {projectNotes.filter(candidate => candidate.id !== note.id && !candidate.isTemplate).map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}
+                  {projectNotes.filter(candidate => candidate.id !== note.id && !candidate.isTemplate && candidate.permissions?.canEdit !== false).map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}
                 </select>
               </div>
               <label className="flex items-center gap-2 text-sm self-end py-1.5">

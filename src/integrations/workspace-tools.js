@@ -1,3 +1,5 @@
+import { WORKSPACE_NOTE_TOOLS } from './workspace-note-tools.js';
+import { visibleNoteIds } from '../services/note-access.service.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { BUILTIN_TOOLS, createToolRegistry, ToolError } from '../ai/tools/registry.js';
@@ -65,6 +67,7 @@ export const workspaceRegistry = createToolRegistry([
     run: ({ prisma, user, input }) => wikiToolCall(() => readWorkspacePage(prisma, input.pageId, user, input.includeArchived)),
   },
   ...WORKSPACE_WIKI_ACTIONS,
+  ...WORKSPACE_NOTE_TOOLS,
   {
     name: 'list_project_boards', description: 'Page through a canonical project’s default and additional boards. Archived boards are omitted unless requested; fields and billing remain shared with the project.', class: 'read', roles: ['ADMIN', 'TEAM'],
     inputSchema: pageSchema.extend({ projectId: z.string().min(1).max(50), includeArchived: z.boolean().default(false) }),
@@ -90,7 +93,7 @@ export const workspaceRegistry = createToolRegistry([
     pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_notes', 'Page through internal project documents and notes. Optionally filter by portfolio.',
     'note', { id: true, title: true, content: true, type: true, projectId: true, revision: true, updatedAt: true },
-    (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) } }),
+    async (user, input, prisma) => ({ id: { in: await visibleNoteIds(prisma, user, { project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) } }) } }),
     pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_time_entries', 'Page through canonical time entries. Team members see their own entries; admins see the workspace. Optionally filter by portfolio.',
     'timeEntry', { id: true, projectId: true, taskId: true, userId: true, date: true, duration: true, billable: true, invoiced: true, reviewStatus: true },
