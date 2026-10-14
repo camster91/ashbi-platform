@@ -110,18 +110,24 @@ export async function readWorkspaceCollection(prisma, id, actor, includeArchived
   return collectionFor(prisma, id, actor, includeArchived);
 }
 export async function createWorkspaceCollection(prisma, input, actor) { return txWrite(prisma, tx => createWorkspaceCollectionInTransaction(tx, input, actor)); }
-export async function createWorkspaceCollectionInTransaction(tx, input, actor) {
+export async function prepareWorkspaceCollectionCreate(tx, input, actor) {
   actor = await currentRecordStaff(tx, actor);
   const data = parse(collectionCreateSchema, input);
   const catalog = await catalogFor(tx, data.fields, actor);
   validateRecordDefinitions(data.fields, catalog);
   for (const field of data.fields.filter(field => field.type === 'RELATION' && field.collectionId)) await collectionFor(tx, field.collectionId, actor);
+  return { actor, data };
+}
+export async function createWorkspaceCollectionInTransaction(tx, input, actor) {
+  const prepared = await prepareWorkspaceCollectionCreate(tx, input, actor);
+  actor = prepared.actor;
+  const { data } = prepared;
   const collection = await tx.workspaceCollection.create({ data: { ...data, organizationId: actor.organizationId, authorId: actor.id } });
   await audit(tx, actor, collection, 'workspace_collection.created', { schemaRevision: collection.schemaRevision });
   return collection;
 }
 export async function updateWorkspaceCollection(prisma, id, input, actor) { return txWrite(prisma, tx => updateWorkspaceCollectionInTransaction(tx, id, input, actor)); }
-export async function updateWorkspaceCollectionInTransaction(tx, id, input, actor) {
+export async function prepareWorkspaceCollectionUpdate(tx, id, input, actor) {
   actor = await currentRecordStaff(tx, actor);
   const { revision, archived, ...changes } = parse(collectionUpdateSchema, input);
   const current = await collectionFor(tx, id, actor, true);
@@ -153,6 +159,12 @@ export async function updateWorkspaceCollectionInTransaction(tx, id, input, acto
       cursor = rows.length === 100 ? rows.at(-1).id : null;
     } while (cursor);
   }
+  return { actor, current, revision, archived, changes };
+}
+export async function updateWorkspaceCollectionInTransaction(tx, id, input, actor) {
+  const prepared = await prepareWorkspaceCollectionUpdate(tx, id, input, actor);
+  actor = prepared.actor;
+  const { revision, archived, changes } = prepared;
   const changed = await tx.workspaceCollection.updateMany({ where: { id, organizationId: actor.organizationId, revision }, data: { ...changes, ...(archived !== undefined ? { archivedAt: archived ? new Date() : null } : {}), revision: { increment: 1 }, ...(changes.fields ? { schemaRevision: { increment: 1 } } : {}) } });
   if (changed.count !== 1) fail(409, 'Collection changed. Reload before saving.');
   const saved = await collectionFor(tx, id, actor, true);
@@ -175,7 +187,7 @@ export async function readWorkspaceRecord(prisma, collectionId, recordId, actor,
   return (await decorateRecords(prisma, collection, [record], actor))[0];
 }
 export async function createWorkspaceRecord(prisma, collectionId, input, actor) { return txWrite(prisma, tx => createWorkspaceRecordInTransaction(tx, collectionId, input, actor)); }
-export async function createWorkspaceRecordInTransaction(tx, collectionId, input, actor) {
+export async function prepareWorkspaceRecordCreate(tx, collectionId, input, actor) {
   actor = await currentRecordStaff(tx, actor);
   const data = parse(recordCreateSchema, input);
   const collection = await collectionFor(tx, collectionId, actor);
@@ -183,12 +195,18 @@ export async function createWorkspaceRecordInTransaction(tx, collectionId, input
   const catalog = await catalogFor(tx, collection.fields, actor, collection);
   const values = recordValuePatch(collection.fields, {}, data.values, catalog);
   await validateRelations(tx, collection.fields, values, Object.keys(values), actor);
+  return { actor, data, collection, values };
+}
+export async function createWorkspaceRecordInTransaction(tx, collectionId, input, actor) {
+  const prepared = await prepareWorkspaceRecordCreate(tx, collectionId, input, actor);
+  actor = prepared.actor;
+  const { data, collection, values } = prepared;
   const record = await tx.workspaceRecord.create({ data: { collectionId, organizationId: actor.organizationId, authorId: actor.id, title: data.title, values } });
   await audit(tx, actor, record, 'workspace_record.created', { collectionId });
   return (await decorateRecords(tx, collection, [record], actor))[0];
 }
 export async function updateWorkspaceRecord(prisma, collectionId, recordId, input, actor) { return txWrite(prisma, tx => updateWorkspaceRecordInTransaction(tx, collectionId, recordId, input, actor)); }
-export async function updateWorkspaceRecordInTransaction(tx, collectionId, recordId, input, actor) {
+export async function prepareWorkspaceRecordUpdate(tx, collectionId, recordId, input, actor) {
   actor = await currentRecordStaff(tx, actor);
   const { revision, definitionRevision, archived, values: patch, ...changes } = parse(recordUpdateSchema, input);
   const collection = await collectionFor(tx, collectionId, actor, archived === true && patch === undefined && !changes.title);
@@ -200,6 +218,12 @@ export async function updateWorkspaceRecordInTransaction(tx, collectionId, recor
   const catalog = await catalogFor(tx, collection.fields, actor, collection);
   const values = archived === true && patch === undefined ? current.values : recordValuePatch(collection.fields, current.values, patch ?? {}, catalog);
   await validateRelations(tx, collection.fields, values, archived === false ? collection.fields.filter(field => field.type === 'RELATION' && !field.archived).map(field => field.key) : Object.keys(patch ?? {}), actor);
+  return { actor, current, collection, revision, archived, patch, changes, values };
+}
+export async function updateWorkspaceRecordInTransaction(tx, collectionId, recordId, input, actor) {
+  const prepared = await prepareWorkspaceRecordUpdate(tx, collectionId, recordId, input, actor);
+  actor = prepared.actor;
+  const { collection, revision, archived, patch, changes, values } = prepared;
   const changed = await tx.workspaceRecord.updateMany({ where: { id: recordId, collectionId, organizationId: actor.organizationId, revision }, data: { ...changes, ...(patch ? { values } : {}), ...(archived !== undefined ? { archivedAt: archived ? new Date() : null } : {}), revision: { increment: 1 } } });
   if (changed.count !== 1) fail(409, 'Record changed. Reload before saving.');
   const saved = await tx.workspaceRecord.findFirst({ where: { id: recordId, collectionId, organizationId: actor.organizationId } });
@@ -221,29 +245,35 @@ export async function listWorkspaceRecordForms(prisma, collectionId, options, ac
   const opts = pageOptions(options);
   const collection = await collectionFor(prisma, collectionId, actor, opts.includeArchived);
   const rows = await prisma.workspaceRecordForm.findMany({ where: { collectionId, organizationId: actor.organizationId, ...(opts.includeArchived ? {} : { archivedAt: null }), ...(opts.after ? { id: { gt: opts.after } } : {}), ...(opts.search ? { configuration: { path: ['name'], string_contains: opts.search } } : {}) }, orderBy: { id: 'asc' }, take: opts.limit + 1 });
-  return { items: rows.slice(0, opts.limit).map(row => ({ ...row, needsReview: row.configuration.definitionRevision !== collection.schemaRevision })), nextCursor: rows.length > opts.limit ? rows[opts.limit - 1].id : null };
+  return { items: await decorateRecordForms(prisma, collection, rows.slice(0, opts.limit), actor), nextCursor: rows.length > opts.limit ? rows[opts.limit - 1].id : null };
 }
 export async function readWorkspaceRecordForm(prisma, collectionId, formId, actor, includeArchived = false) {
   actor = await currentRecordStaff(prisma, actor);
   const collection = await collectionFor(prisma, collectionId, actor, includeArchived);
   const form = await prisma.workspaceRecordForm.findFirst({ where: { id: formId, collectionId, organizationId: actor.organizationId, ...(includeArchived ? {} : { archivedAt: null }) } });
   if (!form) fail(404, 'Record form not found');
-  return { ...form, needsReview: form.configuration.definitionRevision !== collection.schemaRevision };
+  return (await decorateRecordForms(prisma, collection, [form], actor))[0];
 }
 export async function createWorkspaceRecordForm(prisma, collectionId, input, actor) { return txWrite(prisma, tx => createWorkspaceRecordFormInTransaction(tx, collectionId, input, actor)); }
-export async function createWorkspaceRecordFormInTransaction(tx, collectionId, input, actor) {
+export async function prepareWorkspaceRecordFormCreate(tx, collectionId, input, actor) {
   actor = await currentRecordStaff(tx, actor);
   const { configuration } = parse(recordFormCreateSchema, input);
   const collection = await collectionFor(tx, collectionId, actor);
   validateRecordForm(configuration, collection.fields, collection.schemaRevision, await catalogFor(tx, collection.fields, actor, collection));
   const defaults = Object.fromEntries(configuration.fields.filter(item => own(item, 'defaultValue')).map(item => [item.key, item.defaultValue]));
   await validateRelations(tx, collection.fields, defaults, Object.keys(defaults), actor);
+  return { actor, collection, configuration };
+}
+export async function createWorkspaceRecordFormInTransaction(tx, collectionId, input, actor) {
+  const prepared = await prepareWorkspaceRecordFormCreate(tx, collectionId, input, actor);
+  actor = prepared.actor;
+  const { configuration } = prepared;
   const form = await tx.workspaceRecordForm.create({ data: { collectionId, organizationId: actor.organizationId, authorId: actor.id, configuration } });
   await audit(tx, actor, form, 'workspace_record_form.created', { collectionId });
   return { ...form, needsReview: false };
 }
 export async function updateWorkspaceRecordForm(prisma, collectionId, formId, input, actor) { return txWrite(prisma, tx => updateWorkspaceRecordFormInTransaction(tx, collectionId, formId, input, actor)); }
-export async function updateWorkspaceRecordFormInTransaction(tx, collectionId, formId, input, actor) {
+export async function prepareWorkspaceRecordFormUpdate(tx, collectionId, formId, input, actor) {
   actor = await currentRecordStaff(tx, actor);
   const { revision, configuration, archived } = parse(recordFormUpdateSchema, input);
   const collection = await collectionFor(tx, collectionId, actor, archived === true && !configuration);
@@ -256,6 +286,12 @@ export async function updateWorkspaceRecordFormInTransaction(tx, collectionId, f
     const defaults = Object.fromEntries(configuration.fields.filter(item => own(item, 'defaultValue')).map(item => [item.key, item.defaultValue]));
     await validateRelations(tx, collection.fields, defaults, Object.keys(defaults), actor);
   }
+  return { actor, current, collection, revision, configuration, archived };
+}
+export async function updateWorkspaceRecordFormInTransaction(tx, collectionId, formId, input, actor) {
+  const prepared = await prepareWorkspaceRecordFormUpdate(tx, collectionId, formId, input, actor);
+  actor = prepared.actor;
+  const { collection, revision, configuration, archived } = prepared;
   const changed = await tx.workspaceRecordForm.updateMany({ where: { id: formId, collectionId, organizationId: actor.organizationId, revision }, data: { ...(configuration ? { configuration } : {}), ...(archived !== undefined ? { archivedAt: archived ? new Date() : null } : {}), revision: { increment: 1 } } });
   if (changed.count !== 1) fail(409, 'Form changed. Reload before saving.');
   const saved = await tx.workspaceRecordForm.findFirst({ where: { id: formId, collectionId, organizationId: actor.organizationId } });
@@ -263,7 +299,7 @@ export async function updateWorkspaceRecordFormInTransaction(tx, collectionId, f
   return { ...saved, needsReview: saved.configuration.definitionRevision !== collection.schemaRevision };
 }
 export async function submitWorkspaceRecordForm(prisma, collectionId, formId, input, actor) { return txWrite(prisma, tx => submitWorkspaceRecordFormInTransaction(tx, collectionId, formId, input, actor)); }
-export async function submitWorkspaceRecordFormInTransaction(tx, collectionId, formId, input, actor) {
+export async function prepareWorkspaceRecordFormSubmit(tx, collectionId, formId, input, actor) {
   actor = await currentRecordStaff(tx, actor);
   const data = parse(recordFormSubmitSchema, input);
   const collection = await collectionFor(tx, collectionId, actor);
@@ -271,7 +307,31 @@ export async function submitWorkspaceRecordFormInTransaction(tx, collectionId, f
   if (!form) fail(404, 'Record form not found');
   if (form.revision !== data.revision || data.definitionRevision !== collection.schemaRevision || form.configuration.definitionRevision !== collection.schemaRevision) fail(409, 'Form or collection fields changed. Review the form before submitting.');
   const values = recordFormSubmission(form.configuration, collection.fields, collection.schemaRevision, data.values, await catalogFor(tx, collection.fields, actor, collection));
+  await validateRelations(tx, collection.fields, values, Object.keys(values), actor);
+  return { actor, collection, form, data, values };
+}
+export async function submitWorkspaceRecordFormInTransaction(tx, collectionId, formId, input, actor) {
+  const prepared = await prepareWorkspaceRecordFormSubmit(tx, collectionId, formId, input, actor);
+  actor = prepared.actor;
+  const { form, data, values } = prepared;
   const record = await createWorkspaceRecordInTransaction(tx, collectionId, { title: data.title, definitionRevision: data.definitionRevision, values }, actor);
   await audit(tx, actor, record, 'workspace_record_form.submitted', { collectionId, formId, formRevision: form.revision });
   return record;
+}
+
+export async function previewWorkspaceRecordValues(prisma, collection, values, actor) {
+  return (await decorateRecords(prisma, collection, [{ values }], actor))[0];
+}
+
+function formDefaults(configuration) {
+  return Object.fromEntries(configuration.fields.filter(item => own(item, 'defaultValue')).map(item => [item.key, item.defaultValue]));
+}
+async function decorateRecordForms(prisma, collection, forms, actor) {
+  const defaults = await decorateRecords(prisma, collection, forms.map(form => ({ values: formDefaults(form.configuration) })), actor);
+  return forms.map((form, index) => ({ ...form, needsReview: form.configuration.definitionRevision !== collection.schemaRevision, defaultRelations: defaults[index].relations }));
+}
+export async function recordDefinitionTargets(prisma, fields, actor) {
+  const ids = [...new Set(fields.filter(field => field.type === 'RELATION' && field.collectionId).map(field => field.collectionId))];
+  if (!ids.length) return [];
+  return prisma.workspaceCollection.findMany({ where: { id: { in: ids }, organizationId: actor.organizationId }, select: { id: true, name: true, fields: true, revision: true, schemaRevision: true, archivedAt: true }, orderBy: { id: 'asc' }, take: 40 });
 }

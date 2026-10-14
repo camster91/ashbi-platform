@@ -112,7 +112,7 @@ BEGIN
     FOR old_f IN SELECT value FROM jsonb_array_elements(OLD.fields) LOOP
       SELECT value INTO f FROM jsonb_array_elements(NEW.fields) WHERE value->>'key' = old_f->>'key';
       IF f IS NULL OR (f->>'type', f->>'target', f->>'collectionId') IS DISTINCT FROM (old_f->>'type', old_f->>'target', old_f->>'collectionId') THEN RAISE EXCEPTION 'Archive fields instead of reinterpreting historical values'; END IF;
-      IF old_f ? 'options' AND NOT COALESCE(f->'options' @> old_f->'options', false) THEN RAISE EXCEPTION 'Existing choices must remain'; END IF;
+      IF old_f ? 'options' AND NOT COALESCE((f->'options') @> (old_f->'options'), false) THEN RAISE EXCEPTION 'Existing choices must remain'; END IF;
     END LOOP;
   ELSE NEW.revision := 0; NEW."schemaRevision" := 0;
   END IF;

@@ -6,6 +6,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 import { createWorkspaceCollection, updateWorkspaceCollection, createWorkspaceRecord, createWorkspaceRecordInTransaction, updateWorkspaceRecord, readWorkspaceRecord, createWorkspaceRecordForm, submitWorkspaceRecordForm, listWorkspaceRecordForms } from '../../services/workspace-records.service.js';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
+import { createWorkspaceTools } from '../../integrations/workspace-tools.js';
 
 const url = process.env.TENANT_INTEGRATION_DATABASE_URL;
 test('standalone records/forms enforce PostgreSQL scope, revisions, complete rollups and atomic audit writes', { skip: !url && 'Disposable database is not configured', timeout: 150_000 }, async () => {
@@ -24,6 +25,15 @@ test('standalone records/forms enforce PostgreSQL scope, revisions, complete rol
     const foreign = await createWorkspaceCollection(createScopedPrisma(raw, orgs[1]), { name: 'Foreign records', fields: [] }, users[1]);
     const a = await createWorkspaceRecord(scoped, source.id, { title: 'A', definitionRevision: 0, values: { hours: 0, approved: false, client: [clients[0].id] } }, users[0]);
     const b = await createWorkspaceRecord(scoped, source.id, { title: 'B', definitionRevision: 0, values: { hours: 5 } }, users[0]);
+    const tools = createWorkspaceTools(), ctx = { prisma: scoped, user: users[0], scopes: ['workspace:read', 'workspace:actions'] };
+    const input = { collectionId: source.id, data: { title: 'Confirmed API record', definitionRevision: 0, values: { hours: 0, approved: false } } };
+    const preview = (await tools.call(ctx, 'preview_create_workspace_record', input)).output;
+    const action = await tools.call(ctx, 'create_workspace_record', { input: { ...input, fingerprint: preview.fingerprint }, idempotencyKey: `records-${randomUUID()}` });
+    assert.equal(await raw.workspaceRecord.count({ where: { organizationId: orgs[0], title: input.data.title } }), 0);
+    const receipt = await tools.call(ctx, 'confirm_action', { actionId: action.action.id });
+    assert.equal(receipt.action.status, 'EXECUTED');
+    assert.equal((await tools.call(ctx, 'confirm_action', { actionId: action.action.id })).idempotent, true);
+    assert.equal(await raw.workspaceRecord.count({ where: { organizationId: orgs[0], title: input.data.title } }), 1);
     await assert.rejects(raw.workspaceRecord.create({ data: { organizationId: orgs[0], collectionId: foreign.id, authorId: users[0].id, title: 'Wrong parent' } }));
     await assert.rejects(raw.workspaceRecord.create({ data: { organizationId: orgs[0], collectionId: source.id, authorId: users[1].id, title: 'Wrong author', values: { hours: 1 } } }));
     await assert.rejects(raw.workspaceRecord.create({ data: { organizationId: orgs[0], collectionId: source.id, authorId: users[0].id, title: 'Foreign relation', values: { hours: 1, client: [clients[1].id] } } }));
@@ -73,6 +83,7 @@ test('standalone records/forms enforce PostgreSQL scope, revisions, complete rol
     await raw.user.update({ where: { id: users[0].id }, data: { role: 'CLIENT' } });
     await assert.rejects(readWorkspaceRecord(scoped, summary.id, total.id, { ...users[0], role: 'ADMIN' }), { statusCode: 403 });
   } finally {
+    await raw.aiBridgeAction.deleteMany({ where: { organizationId: { in: orgs } } });
     await raw.workspaceRecordForm.deleteMany({ where: { organizationId: { in: orgs } } });
     await raw.workspaceRecord.deleteMany({ where: { organizationId: { in: orgs } } });
     await raw.workspaceCollection.deleteMany({ where: { organizationId: { in: orgs } } });

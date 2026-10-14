@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import workspaceRecordsRoutes from '../../routes/workspace-records.routes.js';
-import { createWorkspaceCollection, updateWorkspaceCollection, listWorkspaceCollections, createWorkspaceRecord, updateWorkspaceRecord, readWorkspaceRecord, listWorkspaceRecords, createWorkspaceRecordForm, updateWorkspaceRecordForm, submitWorkspaceRecordForm, recordRelationOptions } from '../../services/workspace-records.service.js';
+import { createWorkspaceCollection, updateWorkspaceCollection, listWorkspaceCollections, createWorkspaceRecord, updateWorkspaceRecord, readWorkspaceRecord, listWorkspaceRecords, createWorkspaceRecordForm, updateWorkspaceRecordForm, submitWorkspaceRecordForm, listWorkspaceRecordForms, recordRelationOptions } from '../../services/workspace-records.service.js';
 
 function fixture() {
   const state = { user: [{ id: 'u1', organizationId: 'o1', role: 'TEAM', isActive: true }], workspaceCollection: [], workspaceRecord: [], workspaceRecordForm: [], auditEvent: [], client: [{ id: 'c1', organizationId: 'o1', name: 'Canonical client', deletedAt: null }, { id: 'c2', organizationId: 'o2', name: 'Foreign client', deletedAt: null }] };
@@ -179,6 +179,14 @@ test('HTTP routes validate bodies/revisions and enforce fresh staff authorizatio
 test('malformed relation definitions are refused before reaching Prisma relation queries', async () => {
   const f = fixture();
   await assert.rejects(collection(f, [{ key: 'bad', name: 'Bad', type: 'RELATION', collectionId: { id: 'foreign' } }]), { statusCode: 400 });
+});
+
+test('form reads hydrate exact default relation names and label unavailable records without leaking foreign names', async () => {
+  const f = fixture(), col = await collection(f);
+  await createWorkspaceRecordForm(f.prisma, col.id, { configuration: { ...formConfig(), fields: [...formConfig().fields, { key: 'client', required: false, defaultValue: ['c1'] }] } }, f.actor);
+  assert.deepEqual((await listWorkspaceRecordForms(f.prisma, col.id, {}, f.actor)).items[0].defaultRelations.client, [{ id: 'c1', name: 'Canonical client', available: true }]);
+  f.state.client[0].organizationId = 'o2';
+  assert.deepEqual((await listWorkspaceRecordForms(f.prisma, col.id, {}, f.actor)).items[0].defaultRelations.client, [{ id: 'c1', name: 'Unavailable record', available: false }]);
 });
 
 test('page rollups batch more than 100 distinct targets without substituting partial totals', async () => {

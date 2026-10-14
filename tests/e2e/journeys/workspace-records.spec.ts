@@ -9,7 +9,7 @@ test('standalone typed records, formulas and reusable forms persist through real
   await page.goto('/collections');
   await page.getByText('New collection', { exact: true }).click();
   await page.getByLabel('Collection name', { exact: true }).fill(name);
-  await page.getByLabel('Work portfolio', { exact: true }).selectOption('FREELANCE');
+  await page.getByRole('combobox', { name: /^Work portfolio/ }).selectOption('FREELANCE');
   await page.getByRole('button', { name: 'Create collection', exact: true }).click();
   await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
   const collectionId = page.url().split('/').at(-1);
@@ -17,12 +17,12 @@ test('standalone typed records, formulas and reusable forms persist through real
   for (const [fieldName, type] of [['Hours', 'NUMBER'], ['Approved', 'BOOLEAN'], ['Total', 'FORMULA']]) {
     await page.getByRole('button', { name: 'Add field', exact: true }).click();
     await page.getByLabel('Field name', { exact: true }).fill(fieldName);
-    await page.getByLabel('Field type', { exact: true }).selectOption(type);
+    await page.getByRole('combobox', { name: /^Field type/ }).selectOption(type);
     if (type === 'NUMBER') await page.getByLabel('Require field', { exact: true }).check();
     if (type === 'FORMULA') {
-      await page.getByLabel('Formula type', { exact: true }).selectOption('multiply');
-      await page.getByLabel('Formula operand 1 type', { exact: true }).selectOption('field');
-      await page.getByLabel('Formula operand 1 field', { exact: true }).selectOption({ label: 'Hours' });
+      await page.getByRole('combobox', { name: /^Formula type/ }).selectOption('multiply');
+      await page.getByRole('combobox', { name: /^Formula operand 1 type/ }).selectOption('field');
+      await page.getByRole('combobox', { name: /^Formula operand 1 field/ }).selectOption({ label: 'Hours' });
       await page.getByLabel('Formula operand 2 number', { exact: true }).fill('50');
     }
   }
@@ -34,7 +34,7 @@ test('standalone typed records, formulas and reusable forms persist through real
   await page.getByRole('button', { name: 'New record', exact: true }).click();
   await page.getByLabel('Record title', { exact: true }).fill('Zero estimate');
   await page.getByLabel('Hours (required)', { exact: true }).fill('0');
-  await page.getByLabel('Approved', { exact: true }).selectOption('false');
+  await page.getByRole('combobox', { name: /^Approved/ }).selectOption('false');
   await page.getByRole('button', { name: 'Save record', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Edit Zero estimate', exact: true })).toBeVisible();
   let rows = await json(await api.get(`/api/collections/${collectionId}/records`));
