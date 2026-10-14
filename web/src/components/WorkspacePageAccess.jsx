@@ -31,7 +31,7 @@ export default function WorkspacePageAccess({ pageId }) {
         <button className="min-h-11 rounded bg-primary text-primary-foreground px-3" disabled={!draft}>Save page access</button>
       </fieldset>
     </form>
-    {save.isError && <div role="alert">{save.error.message} Your access draft is retained. <button className="min-h-11 underline" onClick={async () => { try { const current = await api.getWorkspacePageAccess(pageId); cache.setQueryData(['workspacePageAccess', pageId], current); setDraft(null); save.reset(); setReloadError(''); } catch { setReloadError('Access could not be reloaded. Your draft is retained.'); } }}>Reload access and discard draft</button></div>}
+    {save.isError && <div role="alert">{save.error.data?.message || save.error.message} Your access draft is retained. <button className="min-h-11 underline" onClick={async () => { try { const current = await api.getWorkspacePageAccess(pageId); cache.setQueryData(['workspacePageAccess', pageId], current); setDraft(null); save.reset(); setReloadError(''); } catch { setReloadError('Access could not be reloaded. Your draft is retained.'); } }}>Reload access and discard draft</button></div>}
     {reloadError && <p role="alert">{reloadError}</p>}
   </section>;
 }
