@@ -223,6 +223,11 @@ jobs:
         env:
           CI: true
           HUB_BASE: http://localhost:3001
+      - name: Collect failing test-stack API diagnostics
+        if: failure()
+        run: |
+          mkdir -p test-results/stack
+          docker compose -p ashbi-e2e -f tests/e2e/docker-compose.test.yml logs --no-color --tail 12000 hub > test-results/stack/hub-diagnostics.log
       - name: Upload E2E output
         if: always()
         uses: actions/upload-artifact@v4

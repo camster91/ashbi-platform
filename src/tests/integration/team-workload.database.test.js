@@ -15,7 +15,7 @@ test('database workload preserves full counts, contributor roles, capacity hours
     const users = [], projects = [];
     for (const organizationId of orgs) {
       await raw.organization.create({ data: { id: organizationId, slug: organizationId, name: 'Workload fixture' } });
-      users.push(await raw.user.create({ data: { organizationId, email: `${randomUUID()}@e2e.example.test`, name: 'Owner', password: randomUUID(), role: 'TEAM', capacity: 40 } }));
+      users.push(await raw.user.create({ data: { organizationId, email: `${randomUUID()}@e2e.example.test`, name: 'Owner', password: randomUUID(), role: 'TEAM', capacity: 50 } }));
       const client = await raw.client.create({ data: { organizationId, name: 'Canonical client' } });
       projects.push(await raw.project.create({ data: { organizationId, clientId: client.id, name: 'Workload project' } }));
     }
@@ -37,7 +37,7 @@ test('database workload preserves full counts, contributor roles, capacity hours
       assert.equal(rows.length, 2);
       const owner = rows.find(row => row.id === users[0].id);
       assert.equal(owner.activeTasks, 125); assert.equal(owner.contributedTasks, 0);
-      assert.equal(owner.weeklyHours, 50); assert.equal(owner.utilizationPercent, 125);
+      assert.equal(owner.weeklyHours, 50); assert.equal(owner.weeklyCapacityHours, 20); assert.equal(owner.utilizationPercent, 250);
       const contributor = rows.find(row => row.id === helper.id);
       assert.equal(contributor.contributedTasks, 125); assert.equal(contributor.activeTasks, 0);
       assert.equal(contributor.utilizationPercent, null);

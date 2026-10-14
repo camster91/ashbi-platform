@@ -533,7 +533,7 @@ export const requestAccessSchema = z.object({
 export const updateProfileSchema = z.object({
   name: userName.optional(),
   skills: z.array(z.string().max(50)).max(20).optional(),
-  capacity: z.number().int().min(1).max(168).optional(), // hours per week
+  capacity: z.number().int().min(0).max(200).optional(), // percent; 100 represents 40 hours per week
 });
 
 // ── Approval schemas ──────────────────────────────────────────────────────

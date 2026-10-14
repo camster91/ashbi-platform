@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import noteRoutes from '../../routes/note.routes.js';
 import timeRoutes from '../../routes/time.routes.js';
 import { createWorkspaceTools } from '../../integrations/workspace-tools.js';
+import { withSoftDelete } from '../../services/soft-delete.service.js';
 
 async function handlers(registrar, db) {
   const routes = {};
@@ -71,4 +72,16 @@ test('time summary aggregates beyond the read cap without loading time history',
   assert.equal(result.byUser[0].totalMinutes, 3030);
   assert.equal(calls.length, 3);
   assert.ok(calls.every(call => call.where.project.portfolio === 'FREELANCE'));
+});
+
+test('historical summaries retain archived project labels without disabling soft-delete filtering', async () => {
+  const raw = { timeEntry: { groupBy: async ({ by }) => by[0] === 'projectId' ? [{ projectId: 'archived', _sum: { duration: 60 }, _count: { _all: 1 } }] : [] },
+    project: { findMany: async ({ where }) => where.deletedAt?.not === null ? [{ id: 'archived', name: 'Archived client project' }] : [] },
+    user: { findMany: async () => [] } };
+  const db = withSoftDelete(raw);
+  const routes = await handlers(timeRoutes, db);
+  const result = await routes['GET /time-entries/summary']({ query: {}, user: { id: 'member', role: 'TEAM' }, prisma: db }, reply);
+  assert.equal(result.byProject[0].project.name, 'Archived client project');
+  assert.equal(result.totalMinutes, 60);
+  assert.deepEqual(await db.project.findMany({}), [], 'ordinary reads still exclude archived projects');
 });
