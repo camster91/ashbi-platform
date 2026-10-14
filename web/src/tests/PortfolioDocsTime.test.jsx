@@ -37,11 +37,11 @@ it('restores the timesheet portfolio from the URL and refetches all work', async
 });
 it('keeps later canonical projects available in the filtered document creation picker', async () => {
   api.getAllNotes.mockResolvedValue({ notes: [], pagination: { page: 1, pages: 0 } });
-  api.getProjects.mockImplementation(async ({ page }) => ({ projects: [{ id: `p${page}`, name: `Project ${page}` }], pagination: { page, pages: 2 } }));
+  api.getProjects.mockImplementation(async ({ offset, limit }) => ({ projects: Array.from({ length: Math.min(limit, 101 - offset) }, (_, index) => ({ id: `p${offset + index + 1}`, name: `Project ${offset + index + 1}` })), total: 101, limit, offset }));
   setup(<Docs />, '/docs?portfolio=FREELANCE&create=true');
   await screen.findByRole('option', { name: 'Project 1 —' }, { timeout: 5000 });
   expect(screen.getByLabelText('Work portfolio')).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: 'Load more projects' }));
-  expect(await screen.findByRole('option', { name: 'Project 2 —' }, { timeout: 5000 })).toBeInTheDocument();
-  expect(api.getProjects).toHaveBeenLastCalledWith({ portfolio: 'FREELANCE', page: 2, limit: 100 });
+  expect(await screen.findByRole('option', { name: 'Project 101 —' }, { timeout: 5000 })).toBeInTheDocument();
+  expect(api.getProjects).toHaveBeenLastCalledWith({ portfolio: 'FREELANCE', offset: 100, limit: 100 });
 });
