@@ -38,8 +38,9 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
     timeoutMs: 5000,
     run: async ({ prisma, user, input }) => {
       await preflight({ prisma, user, input });
+      const criteria = await where(user, input, prisma);
       const rows = await prisma[model].findMany({
-        where: { ...await where(user, input, prisma), ...(input.after ? { id: { gt: input.after } } : {}) },
+        where: input.after ? { AND: [criteria, { id: { gt: input.after } }] } : criteria,
         select, orderBy: { id: 'asc' }, take: input.limit + 1,
       });
       const items = await decorate(rows.slice(0, input.limit), { prisma, user, input });

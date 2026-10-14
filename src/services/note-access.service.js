@@ -150,7 +150,7 @@ export async function prepareNoteAccess(prisma, id, input, actor) {
 
 export async function noteNotificationWhere(prisma, actor) {
   const candidates = await prisma.notification.findMany({ where: { userId: actor.id, type: 'note.mentioned' }, select: { id: true, data: true } });
-  if (!candidates.length) return {};
+  if (!candidates.some(row => typeof row.data?.noteId === 'string')) return { type: { not: 'note.mentioned' } };
   let access;
   try { access = await noteAccessContext(prisma, actor); }
   catch (error) { if (error.statusCode === 403) return { type: { not: 'note.mentioned' } }; throw error; }

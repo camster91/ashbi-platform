@@ -1,3 +1,4 @@
+import { noteNotificationWhere } from '../services/note-access.service.js';
 // Dashboard stats — single endpoint for the command center
 
 import { mrrSummary, retainerMonthlyCharge } from '../utils/retainer-money.js';
@@ -8,6 +9,7 @@ export default async function dashboardRoutes(fastify) {
   fastify.get('/stats', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
+    const notificationVisibility = await noteNotificationWhere(request.prisma, request.user);
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfWeek = new Date(startOfDay);
@@ -96,7 +98,8 @@ export default async function dashboardRoutes(fastify) {
       request.prisma.notification.findMany({
         where: {
           userId: request.user.id,
-          read: false
+          read: false,
+          ...notificationVisibility
         },
         orderBy: { createdAt: 'desc' },
         take: 20

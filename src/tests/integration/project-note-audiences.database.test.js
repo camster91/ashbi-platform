@@ -50,10 +50,10 @@ test('project notes preserve inherited read/edit audiences across API/MCP, promo
   actor=owner;response=await app.inject({method:'POST',url:'/api/projects/'+project.id+'/notes',payload:{title:'Leak mention',parentId:note.id,mentionUserIds:[outsider.id]}});assert.equal(response.statusCode,400,response.body);
   const tools=createWorkspaceTools(),ctx={prisma:scoped,user:owner,scopes:['workspace:read','workspace:actions']};
   const preview=await tools.call(ctx,'preview_project_note_access',{noteId:note.id,revision:1,mode:'RESTRICTED',members:[{userId:reader.id,role:'READ'}]});
-  const prepared=await tools.call(ctx,'set_project_note_access',{input:{noteId:note.id,revision:1,mode:'RESTRICTED',members:[{userId:reader.id,role:'READ'}],previewFingerprint:preview.fingerprint},idempotencyKey:randomUUID()});
+  const prepared=await tools.call(ctx,'set_project_note_access',{input:{noteId:note.id,revision:1,mode:'RESTRICTED',members:[{userId:reader.id,role:'READ'}],previewFingerprint:preview.output.fingerprint},idempotencyKey:randomUUID()});
   assert.equal((await tools.call(ctx,'confirm_action',{actionId:prepared.action.id})).action.status,'EXECUTED');assert.equal((await tools.call(ctx,'confirm_action',{actionId:prepared.action.id})).idempotent,true);
   assert.ok(await raw.auditEvent.findFirst({where:{organizationId:orgs[0],entityId:note.id,action:'note.access_changed'}}));
-  const toolNotes=await tools.call({...ctx,user:reader},'list_notes',{limit:50});assert.equal(toolNotes.items.length,2);assert.ok(!toolNotes.items.some(row=>row.id===hidden.id));
+  const toolNotes=await tools.call({...ctx,user:reader},'list_notes',{limit:50});assert.equal(toolNotes.output.items.length,2);assert.ok(!toolNotes.output.items.some(row=>row.id===hidden.id));const firstPage=await tools.call({...ctx,user:reader},'list_notes',{limit:1});const laterPage=await tools.call({...ctx,user:reader},'list_notes',{limit:50,after:firstPage.output.items[0].id});assert.ok(!laterPage.output.items.some(row=>row.id===hidden.id));assert.equal(laterPage.output.items.length,1);
   // A parent audience change invalidates a descendant preview even when its own
   // access revision has not changed.
   const observed=await raw.note.findUnique({where:{id:note.id}});await raw.note.update({where:{id:note.id},data:{accessGrants:[{userId:reader.id,role:'EDIT'}]}});
