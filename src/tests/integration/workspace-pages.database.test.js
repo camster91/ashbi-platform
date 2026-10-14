@@ -57,6 +57,15 @@ test('project-independent knowledge preserves hierarchy, tenant scope, revisions
     assert.equal(graphRace.filter(result => result.status === 'fulfilled').length, 1);
     const current = await raw.workspacePage.findMany({ where: { id: { in: [root.id, other.id] } } });
     assert.ok(!current.every(page => page.parentId), 'concurrent moves cannot create a cycle');
+    const archivedParent = await createWorkspacePage(a, { title: 'Archive restore parent' }, actors[0]);
+    const archivedChild = await createWorkspacePage(a, { title: 'Archived child', parentId: archivedParent.id }, actors[0]);
+    await raw.workspacePage.update({ where: { id: archivedChild.id }, data: { archivedAt: new Date() } });
+    await raw.workspacePage.update({ where: { id: archivedParent.id }, data: { archivedAt: new Date() } });
+    await assert.rejects(raw.workspacePage.update({ where: { id: archivedChild.id }, data: { archivedAt: null } }), /parent is archived/);
+    assert.ok((await raw.workspacePage.findUnique({ where: { id: archivedChild.id } })).archivedAt);
+    await raw.workspacePage.update({ where: { id: archivedParent.id }, data: { archivedAt: null } });
+    await raw.workspacePage.update({ where: { id: archivedChild.id }, data: { archivedAt: null } });
+    assert.equal((await raw.workspacePage.findUnique({ where: { id: archivedChild.id } })).archivedAt, null);
     await raw.user.update({ where: { id: actors[0].id }, data: { isActive: false } });
     await assert.rejects(readWorkspacePage(a, root.id, actors[0], true), { statusCode: 403 });
   } finally {

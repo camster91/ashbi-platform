@@ -20,7 +20,7 @@ import { readTaskCollaborators, saveTaskCollaborators } from '../services/task-c
 import { taskCollaboratorsSchema } from '../validators/schemas.js';
 import { taskParticipationWhere } from '../shared/task-participation.js';
 import { taskRelationLabels } from '../services/task-relation-labels.service.js';
-import { activeTaskBoard, taskBoardWhere } from '../services/task-board-scope.js';
+import { activeTaskBoard, normalizeTaskBoardId, taskBoardWhere } from '../services/task-board-scope.js';
 import { moveTaskBoard } from '../services/project-boards.service.js';
 import { taskBoardMoveSchema, projectBoardFilterSchema } from '../validators/schemas.js';
 
@@ -781,8 +781,9 @@ export default async function taskRoutes(fastify) {
     preHandler: [validateBody(taskCreateQuickSchema)],
   }, async (request, reply) => {
     const { projectId } = request.params;
-    const { title, assigneeId, priority = 'NORMAL', status = 'PENDING', stageKey, boardId } = request.body;
-    if (boardId && !['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    const { title, assigneeId, priority = 'NORMAL', status = 'PENDING', stageKey, boardId: requestedBoardId } = request.body;
+    if (requestedBoardId && !['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    const boardId = normalizeTaskBoardId(requestedBoardId);
     await activeTaskBoard(request.prisma, projectId, boardId, request.user?.organizationId);
 
     const referenceProblem = await taskReferenceProblem(request.prisma, { assigneeId });

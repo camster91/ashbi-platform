@@ -142,9 +142,9 @@ export default function Notes({ projectId }) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {notes.map((note) => (
+            <div key={note.id}>
             <button
               type="button"
-              key={note.id}
               onClick={() => { updateMutation.reset(); setSelectedNote(note); }}
               aria-label={`Open note ${note.title}`}
               aria-pressed={selectedNote?.id === note.id}
@@ -178,6 +178,10 @@ export default function Notes({ projectId }) {
                 </div>
               )}
             </button>
+            <button type="button" onClick={() => pinMutation.mutate(note.id)} disabled={selectedNote?.id === note.id || pinMutation.isPending} aria-label={`${note.isPinned ? 'Unpin' : 'Pin'} ${note.title}`} className="min-h-11 px-3 text-warning disabled:opacity-50">
+              {note.isPinned ? 'Unpin' : 'Pin'}
+            </button>
+            </div>
           ))}
         </div>
       )}
@@ -200,7 +204,6 @@ export default function Notes({ projectId }) {
           saveError={updateMutation.error}
           onReload={note => { setSelectedNote(note); updateMutation.reset(); }}
           onDelete={() => deleteMutation.mutate({ id: selectedNote.id, title: selectedNote.title })}
-          onPin={() => pinMutation.mutate(selectedNote.id)}
           onClose={() => setSelectedNote(null)}
           isLoading={updateMutation.isPending}
           isDeleting={deleteMutation.isPending}
@@ -211,7 +214,7 @@ export default function Notes({ projectId }) {
   );
 }
 
-function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDeleting = false, deleteError, saveError, onReload }) {
+function NoteEditor({ note, onSave, onDelete, onClose, isLoading, isDeleting = false, deleteError, saveError, onReload }) {
   const [formData, setFormData] = useState({
     title: note?.title || '',
     content: note?.content || '',
@@ -330,13 +333,6 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
           <div>
             {note && (
               <>
-                <button
-                  type="button"
-                  onClick={onPin}
-                  className="text-warning hover:text-warning/80 mr-4"
-                >
-                  {note.isPinned ? 'Unpin' : 'Pin'}
-                </button>
                 <button
                   type="button"
                   onClick={() => setShowDeleteConfirm(true)}
