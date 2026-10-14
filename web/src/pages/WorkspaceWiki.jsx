@@ -23,7 +23,7 @@ export default function WorkspaceWiki() {
       <h2 className="font-semibold">Create {parentId ? 'nested' : 'top-level'} page</h2>
       {parentId && <div>{parent.isError ? <QueryErrorState error={parent.error} message="Parent page could not be loaded" onRetry={parent.refetch} /> : <p>Parent: {parent.data?.title || 'Loading…'}</p>}<button type="button" className="min-h-11 underline" onClick={() => param('parent', '')}>Create at top level instead</button></div>}
       <label className="block">Page title<input className={control} required maxLength={200} value={title} onChange={event => setTitle(event.target.value)} /></label>
-      <label className="block">Page content<textarea className={`${control} py-3 min-h-40 font-mono`} maxLength={50000} value={content} onChange={event => setContent(event.target.value)} /></label>
+      <div><label className="block" htmlFor="wiki-create-content">Page content</label><textarea id="wiki-create-content" className={`${control} py-3 min-h-40 font-mono`} maxLength={50000} value={content} onChange={event => setContent(event.target.value)} /></div>
       <button className="min-h-11 rounded bg-primary text-primary-foreground px-3" disabled={create.isPending || !title.trim() || (parentId && (!parent.data || parent.data.archivedAt))}>Create page</button>
       {create.isError && <p role="alert">{create.error.message} Your draft is retained.</p>}
     </form>
