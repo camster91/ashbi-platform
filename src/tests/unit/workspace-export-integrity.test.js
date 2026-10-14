@@ -20,6 +20,24 @@ test('workspace export manifest is stable when record object keys are reordered'
   assert.deepEqual(buildWorkspaceExportManifest(records), buildWorkspaceExportManifest(reordered));
 });
 
+test('workspace export manifest verifies after dates and JSON values are serialized', () => {
+  const datedRecords = {
+    ...records,
+    clients: [{ ...records.clients[0], createdAt: new Date('2026-10-14T12:34:56.789Z'), ignored: undefined }],
+    projects: [{ ...records.projects[0], budget: { toJSON: () => '123.45' }, completedAt: null }],
+    tasks: [{ ...records.tasks[0], properties: { nested: [new Date('2026-10-14T00:00:00.000Z'), undefined] } }],
+  };
+  const payload = JSON.parse(JSON.stringify({
+    format: 'ashbi-workspace-export', version: 2,
+    records: datedRecords, manifest: buildWorkspaceExportManifest(datedRecords),
+  }));
+
+  assert.deepEqual(buildWorkspaceExportManifest(datedRecords), buildWorkspaceExportManifest(payload.records));
+  assert.equal(verifyWorkspaceExport(payload).valid, true);
+  payload.records.clients[0].createdAt = '2026-10-15T12:34:56.789Z';
+  assert.deepEqual(verifyWorkspaceExport(payload).findings, [{ code: 'MANIFEST_MISMATCH', collection: 'clients' }]);
+});
+
 test('workspace export verification rejects an invalid project client reference', () => {
   const manifest = buildWorkspaceExportManifest(records);
   const result = verifyWorkspaceExport({
