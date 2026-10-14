@@ -712,7 +712,7 @@ export default function Settings() {
   const queryClient = useQueryClient();
 
   // Profile form
-  const [profile, setProfile] = useState({ name: '', skills: '', capacity: 40 });
+  const [profile, setProfile] = useState({ name: '', skills: '', capacity: 100 });
   const [profileSaved, setProfileSaved] = useState(false);
 
   // Password form
@@ -726,7 +726,7 @@ export default function Settings() {
       setProfile({
         name: user.name || '',
         skills: (user.skills || []).join(', '),
-        capacity: user.capacity || 40,
+        capacity: user.capacity ?? 100,
       });
     }
   }, [user]);
@@ -790,7 +790,7 @@ export default function Settings() {
       </div>
 
       {/* Profile */}
-      <Section icon={User} title="Profile" description="Update your name, skills, and weekly capacity">
+      <Section icon={User} title="Profile" description="Update your name, skills, and capacity percentage">
         <form onSubmit={handleProfileSave} className="space-y-4">
           <div>
             <label htmlFor="settings-profile-name" className="block text-sm font-medium mb-1">Full Name</label>
@@ -829,16 +829,18 @@ export default function Settings() {
             <p id="settings-profile-skills-help" className="text-xs text-muted-foreground mt-1">Comma-separated. Used for AI task assignment.</p>
           </div>
           <div>
-            <label htmlFor="settings-profile-capacity" className="block text-sm font-medium mb-1">Weekly Capacity (hours)</label>
+            <label htmlFor="settings-profile-capacity" className="block text-sm font-medium mb-1">Capacity (%)</label>
             <input
               id="settings-profile-capacity"
+              aria-describedby="settings-profile-capacity-help"
               type="number"
-              min="1"
-              max="80"
+              min="0"
+              max="200"
               value={profile.capacity}
               onChange={(e) => setProfile({ ...profile, capacity: e.target.value })}
               className="w-32 px-3 py-2 rounded-lg border border-border bg-background text-sm"
             />
+            <p id="settings-profile-capacity-help" className="text-xs text-muted-foreground mt-1">100% represents 40 hours per week; 50% represents 20 hours.</p>
           </div>
           <div className="flex items-center gap-3">
             <Button type="submit" loading={profileMutation.isPending} leftIcon={<Save className="w-4 h-4" />}>
