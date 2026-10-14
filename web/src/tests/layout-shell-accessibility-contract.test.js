@@ -15,7 +15,7 @@ describe('layout shell accessibility contract', () => {
 
   it('keeps header and mobile controls named and touch-sized', () => {
     expect(source).toContain('aria-label={isDark ? \'Switch to light mode\' : \'Switch to dark mode\'}');
-    expect(source).toContain('aria-label="Open more navigation options"');
+    expect(source).toContain('aria-label="Open Settings navigation options"');
     expect(source).toContain('aria-label="Dismiss install banner"');
   });
 

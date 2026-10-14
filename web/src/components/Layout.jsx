@@ -26,7 +26,6 @@ import {
   TrendingUp,
   PanelLeftClose,
   PanelLeftOpen,
-  MoreHorizontal,
   ChevronDown,
   ChevronUp,
   Sparkles,
@@ -172,66 +171,67 @@ export default function Layout({ children }) {
     p => !['LAUNCHED', 'CANCELLED'].includes(p.status)
   ).length || 0;
 
-  // Track which sections are expanded
-  const [expandedSections, setExpandedSections] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('nav-expanded') || '{}');
-    } catch { return {}; }
-  });
-
-  const toggleSection = (key) => {
-    setExpandedSections(prev => {
-      const next = { ...prev, [key]: !prev[key] };
-      localStorage.setItem('nav-expanded', JSON.stringify(next));
-      return next;
-    });
+  // Opening a route reveals its area. Manual expansion lasts until navigation.
+  const [expandedSections, setExpandedSections] = useState({});
+  useEffect(() => { setExpandedSections({}); }, [location.pathname]);
+  const toggleSection = (key, shown) => {
+    setExpandedSections(prev => ({ ...prev, [key]: !shown }));
   };
 
-  // Core nav — always visible, no section header
-  const coreNav = [
+  // One navigation taxonomy for desktop and mobile. Role filtering only
+  // controls discoverability; existing route/API authorization remains authoritative.
+  const workNav = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true },
     { name: 'Daily Queue', href: '/queue', icon: ListTodo },
-    { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
-    ...(embeddedAiEnabled ? [{ name: 'Chat', href: '/chat', icon: MessageSquare }] : []),
     { name: 'Projects', href: '/projects', icon: FolderOpen, id: 'projects-link' },
-    { name: 'Clients', href: '/clients', icon: Users, id: 'clients-link' },
-    { name: 'Invoices', href: '/invoices', icon: Receipt },
+    { name: 'Schedule', href: '/schedule', icon: Calendar },
+    ...(isAdmin ? [
+      { name: 'Timesheets', href: '/timesheets', icon: Clock },
+      { name: 'Approvals', href: '/approvals', icon: ListChecks },
+    ] : []),
+    ...(embeddedAiEnabled ? [{ name: 'Project Planner', href: '/project-planner', icon: LayoutTemplate }] : []),
   ];
-  
-
-  // Finance & Docs — collapsible section
-  const financeNav = [
+  const clientsNav = [
+    { name: 'Clients', href: '/clients', icon: Users, id: 'clients-link' },
+    { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
     { name: 'Pipeline', href: '/pipeline', icon: Filter },
+    ...(embeddedAiEnabled ? [{ name: 'Chat', href: '/chat', icon: MessageSquare }] : []),
+  ];
+  const knowledgeNav = [
+    { name: 'Docs', href: '/docs', icon: BookOpen },
+    { name: 'Workspace wiki', href: '/wiki', icon: BookOpen },
+    { name: 'Collections', href: '/collections', icon: Folders },
+    { name: 'Assets', href: '/assets', icon: Image },
+    { name: 'Templates', href: '/project-templates', icon: Folders },
+    ...(embeddedAiEnabled ? [{ name: 'Semantic Search', href: '/semantic-search', icon: Search }] : []),
+  ];
+  const financeNav = [
+    { name: 'Invoices', href: '/invoices', icon: Receipt },
     { name: 'Proposals', href: '/proposals', icon: FileText, id: 'proposals-link' },
     { name: 'Estimates', href: '/estimates', icon: ClipboardList },
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
-    { name: 'Schedule', href: '/schedule', icon: Calendar },
-    { name: 'Docs', href: '/docs', icon: BookOpen },
-    { name: 'Workspace wiki', href: '/wiki', icon: BookOpen },
-    { name: 'Collections', href: '/collections', icon: Folders },
+    ...(isAdmin ? [
+      { name: 'Retainers', href: '/retainers', icon: Repeat },
+      { name: 'Invoice Chaser', href: '/invoice-chaser', icon: Send },
+      { name: 'Rate Cards', href: '/rate-cards', icon: CreditCard },
+    ] : []),
   ];
-
-  // Tools — staff workflows that were route-registered but easy to miss
-  const toolsNav = [
-    { name: 'Assets', href: '/assets', icon: Image },
-    ...(embeddedAiEnabled ? [{ name: 'Project Planner', href: '/project-planner', icon: LayoutTemplate }] : []),
-    { name: 'Templates', href: '/project-templates', icon: Folders },
-    ...(embeddedAiEnabled ? [{ name: 'Semantic Search', href: '/semantic-search', icon: Search }] : []),
-  ];
-
-  // Admin — collapsible section, only visible to admins
-  const adminNav = isAdmin ? [
-    { name: 'Approvals', href: '/approvals', icon: ListChecks },
-    { name: 'Retainers', href: '/retainers', icon: Repeat },
-    { name: 'Invoice Chaser', href: '/invoice-chaser', icon: Send },
-    { name: 'Team', href: '/team', icon: UserCog },
-    { name: 'Timesheets', href: '/timesheets', icon: Clock },
-    { name: 'Rate Cards', href: '/rate-cards', icon: CreditCard },
-    { name: 'Credentials', href: '/credentials', icon: Key },
+  const settingsNav = [
+    ...(isAdmin ? [
+      { name: 'Team', href: '/team', icon: UserCog },
+      { name: 'Credentials', href: '/credentials', icon: Key },
+    ] : []),
     { name: 'Settings', href: '/settings', icon: Settings },
-    { name: 'Trash', href: '/trash', icon: X },
-  ] : [];
+    ...(isAdmin ? [{ name: 'Trash', href: '/trash', icon: X }] : []),
+  ];
+  const navSections = [
+    { key: 'work', label: 'Work', icon: FolderOpen, items: workNav },
+    { key: 'clients', label: 'Clients', icon: Users, items: clientsNav },
+    { key: 'knowledge', label: 'Knowledge', icon: BookOpen, items: knowledgeNav },
+    { key: 'finance', label: 'Finance', icon: Receipt, items: financeNav },
+    { key: 'settings', label: 'Settings', icon: Settings, items: settingsNav },
+  ];
 
   // NOTE: a SECOND Cmd+K handler used to live here that focused the first
   // <input type="text">. It raced the QuickAdd handler at the top of this
@@ -254,11 +254,13 @@ export default function Layout({ children }) {
     });
   };
 
+  const isNavItemActive = (item) => location.pathname === item.href
+    || (!item.exact && location.pathname.startsWith(`${item.href}/`))
+    || (item.href === '/projects' && location.pathname.startsWith('/project/'));
+
   function renderNavItems(items) {
     return items.map((item) => {
-      const isActive = item.exact
-        ? location.pathname === item.href
-        : location.pathname.startsWith(item.href) && item.href !== '/';
+      const isActive = isNavItemActive(item);
       const badge = item.badge;
       return (
         <Link
@@ -268,6 +270,7 @@ export default function Layout({ children }) {
           title={sidebarCollapsed ? item.name : undefined}
           aria-label={sidebarCollapsed ? item.name : undefined}
           id={item.id}
+          aria-current={isActive ? 'page' : undefined}
           className={cn(
             'flex min-h-11 items-center text-sm font-medium rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
             sidebarCollapsed ? 'px-2.5 py-2 justify-center' : 'px-3 py-1.5',
@@ -303,31 +306,39 @@ export default function Layout({ children }) {
     });
   }
 
-  function renderCollapsibleSection(key, label, items) {
+  function renderCollapsibleSection(key, label, items, Icon) {
     const isExpanded = expandedSections[key];
-    const hasActiveChild = items.some(item =>
-      item.exact ? location.pathname === item.href : location.pathname.startsWith(item.href) && item.href !== '/'
-    );
-    const show = isExpanded || hasActiveChild;
+    const hasActiveChild = items.some(isNavItemActive);
+    const show = isExpanded ?? hasActiveChild;
 
     if (sidebarCollapsed) {
-      // In collapsed mode: show all items as icons (no section headers)
-      return <div className="space-y-0.5">{renderNavItems(items)}</div>;
+      // Keep the compact rail to five areas rather than dozens of icons.
+      return <button type="button" title={label} aria-label={`Open ${label}`} aria-expanded={false}
+        onClick={() => {
+          setSidebarCollapsed(false);
+          try { localStorage.setItem('sidebar-collapsed', 'false'); } catch { /* optional preference */ }
+          setExpandedSections(prev => ({ ...prev, [key]: true }));
+        }}
+        className={cn('w-full min-h-11 flex items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white', hasActiveChild ? 'text-brand-lime bg-brand-lime/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
+        <Icon className="w-5 h-5" aria-hidden="true" />
+      </button>;
     }
 
     return (
       <div className="space-y-0.5">
         <button
           type="button"
-          onClick={() => toggleSection(key)}
+          onClick={() => toggleSection(key, show)}
           aria-expanded={show}
+          aria-controls={`nav-area-${key}`}
           aria-label={`${show ? 'Collapse' : 'Expand'} ${label}`}
           className="w-full min-h-11 flex items-center px-3 py-1.5 text-xs font-semibold text-white/70 uppercase tracking-wider hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
         >
+          <Icon className="w-4 h-4 mr-2" aria-hidden="true" />
           <ChevronRight className={cn('w-3 h-3 mr-1 transition-transform duration-150', show && 'rotate-90')} />
           {label}
         </button>
-        {show && <div className="space-y-0.5 pl-1">{renderNavItems(items)}</div>}
+        {show && <div id={`nav-area-${key}`} className="space-y-0.5 pl-1">{renderNavItems(items)}</div>}
       </div>
     );
   }
@@ -405,17 +416,12 @@ export default function Layout({ children }) {
           </div>
 
           {/* Navigation */}
-          <nav className={cn('flex-1 py-3 space-y-1 overflow-y-auto', sidebarCollapsed ? 'px-1.5' : 'px-3')}>
-            {/* Core — always visible */}
-            <div className="space-y-0.5 pb-2">
-              {renderNavItems(coreNav)}
-            </div>
-
-            <div className="border-t border-white/10 pt-2 space-y-1">
-              {renderCollapsibleSection('finance', 'Finance & Docs', financeNav)}
-              {renderCollapsibleSection('tools', 'Tools', toolsNav)}
-              {adminNav.length > 0 && renderCollapsibleSection('admin', 'Admin', adminNav)}
-            </div>
+          <nav aria-label="Workspace navigation" className={cn('flex-1 py-3 space-y-1 overflow-y-auto', sidebarCollapsed ? 'px-1.5' : 'px-3')}>
+            {navSections.map(section => (
+              <div key={section.key}>
+                {renderCollapsibleSection(section.key, section.label, section.items, section.icon)}
+              </div>
+            ))}
 
             {/* Quick action */}
             <div className="pt-2 border-t border-white/10">
@@ -637,15 +643,13 @@ export default function Layout({ children }) {
       {/* Mobile bottom nav with More menu */}
       <nav className="fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border/60 flex lg:hidden safe-area-inset-bottom shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]" role="navigation" aria-label="Mobile navigation">
         {[
-          { href: '/dashboard', icon: LayoutDashboard, label: 'Home', exact: true },
-          { href: '/inbox', icon: Inbox, label: 'Inbox', badge: stats?.needsResponse },
-          { href: '/projects', icon: FolderOpen, label: 'Projects' },
-          { href: '/invoices', icon: Receipt, label: 'Invoices' },
-          { href: '#more', icon: MoreHorizontal, label: 'More', isMore: true },
+          { href: '/dashboard', icon: LayoutDashboard, label: 'Work', activeItems: workNav },
+          { href: '/clients', icon: Users, label: 'Clients', badge: stats?.needsResponse, activeItems: clientsNav },
+          { href: '/docs', icon: BookOpen, label: 'Knowledge', activeItems: knowledgeNav },
+          { href: '/invoices', icon: Receipt, label: 'Finance', activeItems: financeNav },
+          { href: '#more', icon: Settings, label: 'Settings', isMore: true },
         ].map((item) => {
-          const isActive = item.exact
-            ? location.pathname === item.href
-            : location.pathname.startsWith(item.href) && item.href !== '/';
+          const isActive = item.activeItems?.some(isNavItemActive) ?? false;
 
           if (item.isMore) {
             return (
@@ -655,14 +659,14 @@ export default function Layout({ children }) {
                   onClick={() => setMoreMenuOpen(!moreMenuOpen)}
                   className={cn(
                     'w-full min-h-11 flex flex-col items-center justify-center py-2.5 text-xs transition-all active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-                    moreMenuOpen ? 'text-primary' : 'text-muted-foreground'
+                    moreMenuOpen || settingsNav.some(isNavItemActive) ? 'text-primary' : 'text-muted-foreground'
                   )}
                   aria-expanded={moreMenuOpen}
                   aria-haspopup="true"
-                  aria-label="Open more navigation options"
+                  aria-label="Open Settings navigation options"
                 >
-                  <MoreHorizontal className="w-5 h-5 mb-0.5" />
-                  <span className="text-[10px] font-medium uppercase tracking-tighter">More</span>
+                  <Settings className="w-5 h-5 mb-0.5" />
+                  <span className="text-[10px] font-medium uppercase tracking-tighter">Settings</span>
                 </button>
 
                 {/* More menu dropdown */}
@@ -701,78 +705,23 @@ export default function Layout({ children }) {
                         ))}
                       </div>
 
-                      {/* Finance & Docs */}
-                      <div className="px-4 py-3 border-t border-border/40">
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Finance & Docs</p>
-                      </div>
-                      <div className="py-2">
-                        {financeNav.map((item) => (
-                          <Link
-                            key={item.name}
-                            to={item.href}
-                            onClick={() => setMoreMenuOpen(false)}
-                            className="min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            role="menuitem"
-                          >
-                            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-                              <item.icon className="w-4 h-4 text-muted-foreground" />
-                            </div>
-                            <span className="font-medium text-foreground">{item.name}</span>
-                          </Link>
-                        ))}
-                      </div>
-
-                      {/* Tools */}
-                      <div className="px-4 py-3 border-t border-border/40">
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Tools</p>
-                      </div>
-                      <div className="py-2">
-                        {toolsNav.map((item) => (
-                          <Link
-                            key={item.name}
-                            to={item.href}
-                            onClick={() => setMoreMenuOpen(false)}
-                            className="min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            role="menuitem"
-                          >
-                            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-                              <item.icon className="w-4 h-4 text-muted-foreground" />
-                            </div>
-                            <span className="font-medium text-foreground">{item.name}</span>
-                          </Link>
-                        ))}
-                      </div>
-
-                      {/* Admin */}
-                      {adminNav.length > 0 && (
-                        <>
+                      {navSections.map(section => (
+                        <div key={section.key}>
                           <div className="px-4 py-3 border-t border-border/40">
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Admin</p>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{section.label}</p>
                           </div>
                           <div className="py-2">
-                            {adminNav.map((item) => (
-                              <Link
-                                key={item.name}
-                                to={item.href}
-                                onClick={() => setMoreMenuOpen(false)}
-                                className={cn(
-                                  'min-h-11 flex items-center gap-4 px-5 py-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                                  location.pathname === item.href ? 'bg-primary/5 text-primary' : 'hover:bg-primary/5'
-                                )}
-                                role="menuitem"
-                              >
-                                <div className={cn(
-                                  "w-8 h-8 rounded-lg flex items-center justify-center",
-                                  location.pathname === item.href ? "bg-primary/10" : "bg-muted"
-                                )}>
-                                  <item.icon className="w-4 h-4" />
-                                </div>
+                            {section.items.map(item => (
+                              <Link key={item.href} to={item.href} onClick={() => setMoreMenuOpen(false)}
+                                className="min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                role="menuitem">
+                                <item.icon className="w-4 h-4" aria-hidden="true" />
                                 <span className="font-medium">{item.name}</span>
                               </Link>
                             ))}
                           </div>
-                        </>
-                      )}
+                        </div>
+                      ))}
 
                       {/* Theme & Settings */}
                       <div className="border-t border-border/40 py-2 bg-muted/30">
@@ -788,17 +737,6 @@ export default function Layout({ children }) {
                           </div>
                           <span className="font-medium">{isDark ? 'Light Mode' : 'Dark Mode'}</span>
                         </button>
-                        <Link
-                          to="/settings"
-                          onClick={() => setMoreMenuOpen(false)}
-                           className="min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          role="menuitem"
-                        >
-                          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-                            <Settings className="w-4 h-4 text-muted-foreground" />
-                          </div>
-                          <span className="font-medium">Settings</span>
-                        </Link>
                          <button
                            type="button"
                            aria-label="Log out"
