@@ -43,3 +43,8 @@ export function firstRecurrenceOnOrAfter(rule, today) {
   yesterday.setUTCDate(yesterday.getUTCDate() - 1);
   return recurrenceAfter(rule, textOf(yesterday));
 }
+
+export function completionRepeatDate(rule, completedAt) {
+  const completedDate = dateInZone(completedAt, rule.timeZone);
+  return recurrenceAfter({ ...rule, startDate: completedDate }, completedDate);
+}

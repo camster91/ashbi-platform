@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 383 |
+| staff | 394 |
 | staff (inline) | 1 |
-| **total** | 577 |
+| **total** | 588 |
 
 ## Routes by prefix
 
@@ -707,6 +707,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | PUT | `/api/projects/:id` | staff | scoped |  |
 | POST | `/api/projects/:id/ai-plan` | staff | scoped |  |
 | PATCH | `/api/projects/:id/attachments/client-visibility` | staff | scoped |  |
+| GET | `/api/projects/:id/boards` | staff | scoped |  |
+| POST | `/api/projects/:id/boards` | staff | scoped |  |
+| PUT | `/api/projects/:id/boards/:boardId` | staff | scoped |  |
 | GET | `/api/projects/:id/budget` | staff | scoped |  |
 | GET | `/api/projects/:id/communications` | staff | scoped |  |
 | GET | `/api/projects/:id/communications/:communicationId` | staff | scoped |  |
@@ -915,6 +918,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | DELETE | `/api/tasks/:id` | staff | scoped |  |
 | GET | `/api/tasks/:id` | staff | scoped |  |
 | PUT | `/api/tasks/:id` | staff | scoped |  |
+| PUT | `/api/tasks/:id/board` | staff | scoped |  |
 | GET | `/api/tasks/:id/breadcrumbs` | staff | scoped |  |
 | GET | `/api/tasks/:id/collaborators` | staff | scoped |  |
 | PUT | `/api/tasks/:id/collaborators` | staff | scoped |  |
@@ -1035,6 +1039,18 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/webhooks/email/status` | public | exempt | health: Static liveness response for the email webhook; reads no data. |
 | POST | `/api/webhooks/email/test` | staff | exempt | Admin only; runs the email pipeline inside the admin's organization via runTenantJob. |
 | POST | `/api/webhooks/stripe` | public | exempt | signed webhook: Stripe-Signature verified in the handler. |
+
+### /api/wiki
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/wiki/pages` | staff | scoped |  |
+| POST | `/api/wiki/pages` | staff | scoped |  |
+| GET | `/api/wiki/pages/:id` | staff | scoped |  |
+| PUT | `/api/wiki/pages/:id` | staff | scoped |  |
+| GET | `/api/wiki/pages/:id/access` | staff | scoped |  |
+| PUT | `/api/wiki/pages/:id/access` | staff | scoped |  |
+| GET | `/api/wiki/pages/:id/access/options` | staff | scoped |  |
 
 ### /api/work-queue
 

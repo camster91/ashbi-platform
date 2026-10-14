@@ -32,6 +32,9 @@ model Organization {
   // Relations
   users              User[]
   taskCollaborations TaskCollaborator[]
+  projectBoards      ProjectBoard[]
+  workspacePages     WorkspacePage[]
+  workspacePageGrants WorkspacePageGrant[]
   clients            Client[]
   projects           Project[]
   formDrafts         FormDraft[]
@@ -128,6 +131,8 @@ model User {
   chatMessages       ChatMessage[]       @relation("ChatAuthor")
   chatReactions      ChatReaction[]
   notes              Note[]              @relation("NoteAuthor")
+  workspacePages     WorkspacePage[]      @relation("WorkspacePageAuthor")
+  workspacePageGrants WorkspacePageGrant[]
   timeEntries        TimeEntry[]
   attachments        Attachment[]
   activities         Activity[]
@@ -320,6 +325,7 @@ model Project {
   client         Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
   threads        Thread[]
   tasks          Task[]
+  boards         ProjectBoard[]
   chatMessages   ChatMessage[]
   notes          Note[]
   milestones     Milestone[]
@@ -384,12 +390,17 @@ model Task {
   startDate      DateTime?
   dueDate        DateTime?
   completedAt    DateTime?
+  recurrenceFirstCompletedAt DateTime?
+  recurrenceCompletionProcessedAt DateTime?
+  recurrenceCompletionSourceId String? @unique
   sourceThreadId String?
   blockedBy      String?
   aiGenerated    Boolean   @default(false)
   position       Int       @default(0) // For Kanban board ordering
   projectId      String
   assigneeId     String?
+  boardId        String?
+  boardMembershipRevision Int @default(0)
   milestoneId    String?
   dependsOnId    String? // Task dependency — this task depends on another
   createdAt      DateTime  @default(now())
@@ -399,6 +410,7 @@ model Task {
 
   // Relations
   project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  board        ProjectBoard? @relation(fields: [boardId], references: [id], onDelete: Restrict)
   assignee     User?         @relation("TaskAssignee", fields: [assigneeId], references: [id])
   milestone    Milestone?    @relation("MilestoneTasks", fields: [milestoneId], references: [id])
   comments     TaskComment[]
@@ -422,6 +434,8 @@ model Task {
   @@index([dependsOnId])
   @@index([assigneeId])
   @@index([projectId, status])
+  @@index([boardId, status])
+  @@index([status, recurrenceCompletionProcessedAt, id])
   @@index([milestoneId])
   @@unique([recurrenceSourceId, recurrenceScheduledDate])
   @@index([recurrenceNextDate])
@@ -675,8 +689,53 @@ model ChatReaction {
   @@map("chat_reactions")
 }
 
+model WorkspacePage {
+  id             String @id @default(cuid())
+  organizationId String
+  authorId       String
+  parentId       String?
+  title          String
+  content        String @default("")
+  revision       Int @default(0)
+  accessMode     String @default("TEAM")
+  accessRevision Int @default(0)
+  archivedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  author User @relation("WorkspacePageAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  parent WorkspacePage? @relation("WorkspacePageHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children WorkspacePage[] @relation("WorkspacePageHierarchy")
+  grants WorkspacePageGrant[]
+
+  @@index([organizationId])
+  @@index([organizationId, archivedAt, id])
+  @@index([authorId])
+  @@index([parentId])
+  @@map("workspace_pages")
+}
+
+model WorkspacePageGrant {
+  id             String @id @default(cuid())
+  organizationId String
+  pageId         String
+  userId         String
+  role           String
+  createdAt      DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  page WorkspacePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([pageId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@map("workspace_page_grants")
+}
+
 model Note {
   id         String    @id @default(cuid())
+  revision   Int       @default(0)
   title      String
   content    String // Plain-text Markdown; clients must never render it as trusted HTML
   type       String    @default("NOTE") // NOTE, MEETING_NOTES, WIKI, DOC
@@ -825,6 +884,28 @@ model Activity {
   @@index([userId, createdAt])
   @@index([entityType, entityId])
   @@map("activities")
+}
+
+model ProjectBoard {
+  id             String @id @default(cuid())
+  organizationId String
+  projectId      String
+  name           String
+  description    String @default("")
+  taskStages     Json @default("[]")
+  taskViews      Json @default("[]")
+  stageRevision  Int @default(0)
+  viewsRevision  Int @default(0)
+  revision       Int @default(0)
+  archivedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project        Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks          Task[]
+  @@index([organizationId])
+  @@index([projectId, archivedAt, id])
+  @@map("project_boards")
 }
 
 model TaskCollaborator {

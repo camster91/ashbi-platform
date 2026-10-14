@@ -8,7 +8,7 @@
 // request-access endpoint signs into the emailed link.
 
 import crypto from 'node:crypto';
-import { expect, type APIRequestContext, type APIResponse, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type APIResponse, type BrowserContext, type Page } from '@playwright/test';
 // Plain ESM helper shared with the Vitest smoke.
 import { findPortalPrincipal } from '../helpers/db.mjs';
 
@@ -27,13 +27,35 @@ export async function json<T = any>(response: APIResponse, expectedStatus = 200)
   return (text ? JSON.parse(text) : null) as T;
 }
 
-/** Sign in through the real login form; the page's context then holds the admin session cookie. */
+// The serial feature journeys share a disposable server. Reuse its real UI
+// session in memory rather than spending a new login request for every feature.
+// Each new context still checks the current authenticated principal; expired or
+// revoked sessions must sign in through the form again. Never persist cookies.
+let adminCookies: Awaited<ReturnType<BrowserContext['cookies']>> | null = null;
+
+/** Establish a real UI session, or reuse it after checking the current user. */
 export async function loginAdminThroughUi(page: Page): Promise<void> {
+  if (adminCookies) {
+    await page.context().addCookies(adminCookies);
+    const current = await page.request.get('/api/auth/me');
+    if (current.ok()) {
+      const user = await current.json();
+      expect(user.email).toBe(ADMIN_EMAIL);
+      expect(user.role).toBe('ADMIN');
+      await page.goto('/dashboard');
+      await expect(page).toHaveURL(/\/dashboard/);
+      return;
+    }
+    expect(current.status(), 'Cached QA session must fail explicitly when revoked').toBe(401);
+    adminCookies = null;
+    await page.context().clearCookies();
+  }
   await page.goto('/login');
   await page.getByPlaceholder(/email/i).fill(ADMIN_EMAIL);
   await page.getByPlaceholder(/password/i).fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page).toHaveURL(/\/dashboard/);
+  adminCookies = await page.context().cookies();
 }
 
 /** Sign in over HTTP only (for setup that does not exercise the UI). */

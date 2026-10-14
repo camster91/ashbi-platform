@@ -28,6 +28,8 @@ export function sortViewTasks(tasks, sort) {
 export default function TaskViews() {
   const { projectId } = useParams();
   const [params, setParams] = useSearchParams();
+  const boardId = params.get('board') && params.get('board') !== 'DEFAULT' ? params.get('board') : undefined;
+  const viewQueryKey = ['taskViews', projectId, ...(boardId ? [boardId] : [])];
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({});
   const [search, setSearch] = useState('');
@@ -38,7 +40,7 @@ export default function TaskViews() {
   const [fieldFiltersDirty, setFieldFiltersDirty] = useState(false);
   const [name, setName] = useState('');
   const [saveError, setSaveError] = useState('');
-  const configQuery = useQuery({ queryKey: ['taskViews', projectId], queryFn: () => api.getTaskViews(projectId) });
+  const configQuery = useQuery({ queryKey: viewQueryKey, queryFn: () => boardId ? api.getTaskViews(projectId, boardId) : api.getTaskViews(projectId) });
   const config = configQuery.data;
   const selected = config?.views.find(view => view.key === params.get('view'));
   useEffect(() => {
@@ -51,7 +53,8 @@ export default function TaskViews() {
     const timeout = setTimeout(() => setSearch(filters.search?.trim() || ''), 300);
     return () => clearTimeout(timeout);
   }, [filters.search]);
-  const queryFilters = { ...filters, search };
+  const relationField = grouping.startsWith('FIELD:') ? config?.fields?.find(field => field.key === grouping.slice(6) && !field.archived && field.type === 'RELATION')?.key : undefined;
+  const queryFilters = { ...filters, search, boardId: boardId || 'DEFAULT', ...(relationField ? { relationField } : {}) };
   const tasksQuery = useQuery({
     queryKey: ['taskViewRows', projectId, queryFilters], enabled: Boolean(config),
     queryFn: async () => {
@@ -69,9 +72,9 @@ export default function TaskViews() {
     },
   });
   const save = useMutation({
-    mutationFn: ({ views }) => api.saveTaskViews(projectId, { revision: config.revision, views }),
+    mutationFn: ({ views }) => boardId ? api.saveTaskViews(projectId, { revision: config.revision, views }, boardId) : api.saveTaskViews(projectId, { revision: config.revision, views }),
     onSuccess: (saved, { selectedKey }) => {
-      queryClient.setQueryData(['taskViews', projectId], saved);
+      queryClient.setQueryData(viewQueryKey, saved);
       const next = new URLSearchParams(params);
       if (selectedKey) next.set('view', selectedKey); else next.delete('view');
       setParams(next); setSaveError('');
@@ -107,7 +110,7 @@ export default function TaskViews() {
         onChange={event => { const next = new URLSearchParams(params); if (event.target.value) next.set('view', event.target.value); else next.delete('view'); setParams(next); }}>
         <option value="">All tasks</option>{config.views.map(view => <option key={view.key} value={view.key}>{view.name}</option>)}
       </select></label>
-      <Link to={`/project/${projectId}/kanban`} className={`${controlClass} inline-flex items-center text-primary`}>Open task board</Link>
+      <Link to={`/project/${projectId}/kanban${boardId ? `?board=${encodeURIComponent(boardId)}` : ''}`} className={`${controlClass} inline-flex items-center text-primary`}>Open task board</Link>
       <Link to={`/project/${projectId}/fields`} className={`${controlClass} inline-flex items-center text-primary`}>Configure task fields</Link>
       <Link to={`/project/${projectId}/templates`} className={`${controlClass} inline-flex items-center text-primary`}>Board templates</Link>
     </div>
@@ -127,7 +130,8 @@ export default function TaskViews() {
         <option value="PRIORITY">Priority</option><option value="DUE_DATE">Due date</option><option value="TITLE">Title</option>
       </select></label>
       <label className="text-sm">Layout<select aria-label="Task view layout" className={`block ${controlClass}`} value={layout} onChange={event => setLayout(event.target.value)}><option value="TABLE">Table</option><option value="BOARD">Board</option><option value="CALENDAR">Calendar</option><option value="GALLERY">Gallery</option></select></label>
-      <label className="text-sm min-w-0 max-w-full">Grouping<select aria-label="Task view grouping" className={`block ${controlClass}`} disabled={!['TABLE', 'GALLERY'].includes(layout)} value={grouping} onChange={event => setGrouping(event.target.value)}><option value="NONE">No grouping</option><option value="STATUS">Status</option><option value="PRIORITY">Priority</option><option value="STAGE">Stage</option>{fields.filter(field => !field.archived && field.type !== 'RELATION').map(field => <option key={field.key} value={`FIELD:${field.key}`}>{field.name}</option>)}{group.by === 'FIELD' && !fields.some(field => field.key === group.fieldKey && !field.archived && field.type !== 'RELATION') && <option value={grouping}>Unavailable field — clear grouping</option>}</select></label>
+      <label className="text-sm min-w-0 max-w-full">Grouping<select aria-label="Task view grouping" className={`block ${controlClass}`} disabled={!['TABLE', 'GALLERY'].includes(layout)} value={grouping} onChange={event => setGrouping(event.target.value)}><option value="NONE">No grouping</option><option value="STATUS">Status</option><option value="PRIORITY">Priority</option><option value="STAGE">Stage</option>{fields.filter(field => !field.archived).map(field => <option key={field.key} value={`FIELD:${field.key}`}>{field.name}</option>)}{group.by === 'FIELD' && !fields.some(field => field.key === group.fieldKey && !field.archived) && <option value={grouping}>Unavailable field — clear grouping</option>}</select></label>
+      {group.by === 'FIELD' && !fields.some(field => field.key === group.fieldKey && !field.archived) && <button type="button" className="min-h-11 text-primary underline" onClick={() => setGrouping('NONE')}>Clear unavailable grouping</button>}
     </fieldset>
     <TaskFieldFilters projectId={projectId} fields={fields} value={filters.fieldFilters} onDirtyChange={setFieldFiltersDirty} disabled={save.isPending} onChange={fieldFilters => setFilters(current => { const next = { ...current }; if (fieldFilters.length) next.fieldFilters = fieldFilters; else delete next.fieldFilters; return next; })} />
     {(fields.some(field => !field.archived) || columnKeys.length > 0) && <fieldset className="min-w-0 rounded border border-border p-3" disabled={save.isPending}>
@@ -157,7 +161,7 @@ export default function TaskViews() {
         <thead><tr>{['Task', 'Status', 'Priority', 'Assignee', 'Due date'].map(label => <th key={label} className="text-left border-b border-border p-3">{label}</th>)}{columns.map(field => <th key={field.key} className="text-left border-b border-border p-3">{field.name}</th>)}</tr></thead>
         {groups.map(section => <tbody key={section.key}>{grouping !== 'NONE' && <tr><th scope="rowgroup" colSpan={5 + columns.length} className="p-3 text-left bg-muted">{section.label} ({section.tasks.length})</th></tr>}{section.tasks.map(task => <tr key={task.id}><td className="border-b border-border p-3"><Link className="text-primary" to={`/task/${task.id}`}>{task.title}</Link></td>
           <td className="p-3 border-b border-border">{text(task.status)}</td><td className="p-3 border-b border-border">{TASK_PRIORITY_LABELS[task.priority] || task.priority}</td>
-          <td className="p-3 border-b border-border">{task.assignee?.name || 'Unassigned'}</td><td className="p-3 border-b border-border whitespace-nowrap">{task.dueDate ? formatDate(task.dueDate, { dateOnly: true }) : 'No date'}</td>{columns.map(field => <td key={field.key} className="p-3 border-b border-border"><TaskFieldCell field={field} value={task.fieldValues?.[field.key]} /></td>)}</tr>)}</tbody>)}
+          <td className="p-3 border-b border-border">{task.assignee?.name || 'Unassigned'}</td><td className="p-3 border-b border-border whitespace-nowrap">{task.dueDate ? formatDate(task.dueDate, { dateOnly: true }) : 'No date'}</td>{columns.map(field => <td key={field.key} className="p-3 border-b border-border"><TaskFieldCell field={field} value={task.fieldValues?.[field.key]} relation={task.fieldRelations?.[field.key]} /></td>)}</tr>)}</tbody>)}
       </table></div>}
   </div>;
 }

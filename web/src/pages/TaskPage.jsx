@@ -34,6 +34,7 @@ import QueryErrorState from '../components/QueryErrorState';
 import TaskRecurrence from '../components/TaskRecurrence';
 import TaskCustomFields from '../components/TaskCustomFields';
 import TaskCollaborators from '../components/TaskCollaborators';
+import TaskBoardMembership from '../components/TaskBoardMembership';
 
 // Breadcrumbs component
 function Breadcrumbs({ taskId }) {
@@ -628,6 +629,7 @@ export default function TaskPage() {
       <TaskRecurrence key={task.id} task={task} />
       <TaskCustomFields key={`fields-${task.id}`} taskId={task.id} />
       <TaskCollaborators key={`collaborators-${task.id}`} taskId={task.id} />
+      {Number.isInteger(task.boardMembershipRevision) && <TaskBoardMembership key={`board-${task.id}`} task={task} />}
 
       {/* Content editor */}
       <div className="min-h-[300px]">

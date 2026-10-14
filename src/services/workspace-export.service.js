@@ -100,6 +100,7 @@ export const EXPORT_ENTITIES = Object.freeze([
 
   // Projects and work
   { name: 'projects', model: 'Project', category: 'projects', where: activeProject, omit: ['viewToken', 'draftData'], description: 'Projects' },
+  { name: 'project_boards', model: 'ProjectBoard', category: 'projects', where: (org) => ({ organizationId: org, project: activeProject(org) }), description: 'Additional project boards, including archived workflow metadata' },
   { name: 'project_contexts', model: 'ProjectContext', category: 'projects', where: (org) => ({ project: activeProject(org) }), description: 'Project running context and notes' },
   { name: 'milestones', model: 'Milestone', category: 'projects', where: (org) => ({ deletedAt: null, project: activeProject(org) }), description: 'Project milestones' },
   { name: 'tasks', model: 'Task', category: 'projects', where: activeTask, description: 'Tasks and task pages' },
@@ -113,6 +114,8 @@ export const EXPORT_ENTITIES = Object.freeze([
 
   // Documents and wiki
   { name: 'notes', model: 'Note', category: 'documents', where: (org) => ({ deletedAt: null, project: activeProject(org) }), description: 'Notes, meeting notes, wiki pages and docs' },
+  { name: 'workspace_pages', model: 'WorkspacePage', category: 'documents', where: (org) => ({ organizationId: org }), description: 'Shared workspace knowledge pages including archived pages and hierarchy; independent of clients and projects' },
+  { name: 'workspace_page_grants', model: 'WorkspacePageGrant', category: 'documents', where: (org) => ({ organizationId: org }), description: 'Current staff read/edit grants for restricted knowledge pages; organization-owner export only' },
 
   // Finance
   { name: 'invoices', model: 'Invoice', category: 'finance', where: invoiceScope, omit: ['viewToken', 'draftData'], description: 'Invoices' },

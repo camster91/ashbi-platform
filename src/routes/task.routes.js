@@ -19,6 +19,10 @@ import { validateTaskFieldFilters } from '../services/task-field-filters.service
 import { readTaskCollaborators, saveTaskCollaborators } from '../services/task-collaborators.service.js';
 import { taskCollaboratorsSchema } from '../validators/schemas.js';
 import { taskParticipationWhere } from '../shared/task-participation.js';
+import { taskRelationLabels } from '../services/task-relation-labels.service.js';
+import { activeTaskBoard, normalizeTaskBoardId, taskBoardWhere } from '../services/task-board-scope.js';
+import { moveTaskBoard } from '../services/project-boards.service.js';
+import { taskBoardMoveSchema, projectBoardFilterSchema } from '../validators/schemas.js';
 
 /**
  * Why a task's assignee or dependency reference is unacceptable, or null.
@@ -69,11 +73,19 @@ export default async function taskRoutes(fastify) {
       return reply.status(400).send({ error: 'Invalid portfolio filter' });
     }
     const { status, priority, category, projectId, assigneeId, tags, page: pageParam = '1', limit: limitParam = '50' } = request.query;
+    const relationField = request.query.relationField;
+    const boardId = request.query.boardId;
+    if (!projectBoardFilterSchema.safeParse(boardId).success || (boardId && !projectId)) return reply.status(400).send({ error: 'Choose a project and valid board' });
+    if (boardId && !['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    if (boardId) await activeTaskBoard(request.prisma, projectId, boardId, request.user.organizationId);
+    if (!taskStageKeySchema.optional().safeParse(relationField).success) return reply.status(400).send({ error: 'Invalid relation field' });
+    if (relationField && !projectId) return reply.status(400).send({ error: 'Choose a project for related-record labels' });
 
     const page = parseInt(pageParam);
     const limit = parseInt(limitParam);
 
     const where = {};
+    if (boardId) Object.assign(where, taskBoardWhere(boardId));
     const extraFilters = taskViewFiltersSchema.safeParse({ search: request.query.search, stageKey: request.query.stageKey, fieldFilters: request.query.fieldFilters });
     if (!extraFilters.success) return reply.status(400).send({ error: 'Invalid task filters' });
     await validateTaskFieldFilters(request.prisma, projectId, extraFilters.data.fieldFilters);
@@ -118,10 +130,13 @@ export default async function taskRoutes(fastify) {
     ]);
 
     return {
-      tasks,
+      tasks: await taskRelationLabels(request.prisma, projectId, relationField, tasks, request.user),
       pagination: { page, limit, total, pages: Math.ceil(total / limit) }
     };
   });
+
+  // Get my tasks (current user)
+  fastify.put('/:id/board', { onRequest: [fastify.authenticate], preHandler: [validateBody(taskBoardMoveSchema)] }, async request => moveTaskBoard(request.prisma, request.params.id, request.body, request.user));
 
   // Get my tasks (current user)
   fastify.get('/my', {
@@ -427,7 +442,7 @@ export default async function taskRoutes(fastify) {
 
     const parentTask = await request.prisma.task.findUnique({
       where: { id },
-      select: { projectId: true }
+      select: { projectId: true, boardId: true }
     });
 
     if (!parentTask) {
@@ -442,6 +457,7 @@ export default async function taskRoutes(fastify) {
         isPage: true,
         parentId: id,
         projectId: parentTask.projectId,
+        ...(parentTask.boardId ? { boardId: parentTask.boardId } : {}),
         assigneeId: request.user.id,
         status: 'PENDING'
       },
@@ -695,12 +711,15 @@ export default async function taskRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const { projectId } = request.params;
-
+    const boardId = request.query?.boardId;
+    if (boardId && !['ADMIN', 'TEAM'].includes(request.user.role)) throw Object.assign(new Error('Team access required'), { statusCode: 403 });
+    if (!projectBoardFilterSchema.safeParse(boardId).success) throw Object.assign(new Error('Invalid board'), { statusCode: 400 });
+    await activeTaskBoard(request.prisma, projectId, boardId, request.user?.organizationId);
     const rows = [];
     let page;
     do {
       page = await request.prisma.task.findMany({
-        where: { projectId },
+        where: { projectId, ...taskBoardWhere(boardId) },
         include: { assignee: { select: { id: true, name: true, email: true } } },
         orderBy: [{ dueDate: 'asc' }, { id: 'asc' }], take: 100, skip: rows.length,
       });
@@ -731,9 +750,9 @@ export default async function taskRoutes(fastify) {
 
     if (stageKey) {
       return withStageTransaction(request.prisma, async tx => {
-        const current = await tx.task.findFirst({ where: { id }, select: { projectId: true } });
+        const current = await tx.task.findFirst({ where: { id }, select: { projectId: true, boardId: true } });
         if (!current) throw Object.assign(new Error('Task not found'), { statusCode: 404 });
-        const stage = await resolveTaskStage(tx, current.projectId, stageKey);
+        const stage = await resolveTaskStage(tx, current.projectId, stageKey, current.boardId);
         return tx.task.update({ where: { id }, data: {
           stageKey, status: stage.status, completedAt: stage.status === 'COMPLETED' ? new Date() : null,
         }, include: { assignee: { select: { id: true, name: true, email: true } }, project: { select: { id: true, name: true } } } });
@@ -762,15 +781,18 @@ export default async function taskRoutes(fastify) {
     preHandler: [validateBody(taskCreateQuickSchema)],
   }, async (request, reply) => {
     const { projectId } = request.params;
-    const { title, assigneeId, priority = 'NORMAL', status = 'PENDING', stageKey } = request.body;
+    const { title, assigneeId, priority = 'NORMAL', status = 'PENDING', stageKey, boardId: requestedBoardId } = request.body;
+    if (requestedBoardId && !['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    const boardId = normalizeTaskBoardId(requestedBoardId);
+    await activeTaskBoard(request.prisma, projectId, boardId, request.user?.organizationId);
 
     const referenceProblem = await taskReferenceProblem(request.prisma, { assigneeId });
     if (referenceProblem) return reply.status(400).send({ error: referenceProblem });
 
     if (stageKey) {
       const task = await withStageTransaction(request.prisma, async tx => {
-        const stage = await resolveTaskStage(tx, projectId, stageKey);
-        return tx.task.create({ data: { projectId, title, description: '', status: stage.status, stageKey, priority, assigneeId,
+        const stage = await resolveTaskStage(tx, projectId, stageKey, boardId);
+        return tx.task.create({ data: { projectId, ...(boardId ? { boardId } : {}), title, description: '', status: stage.status, stageKey, priority, assigneeId,
           startDate: new Date(), completedAt: stage.status === 'COMPLETED' ? new Date() : null },
         include: { assignee: { select: { id: true, name: true, email: true } } } });
       });
@@ -780,6 +802,7 @@ export default async function taskRoutes(fastify) {
     const task = await request.prisma.task.create({
       data: {
         projectId,
+        ...(boardId ? { boardId } : {}),
         title,
         description: '',
         status,

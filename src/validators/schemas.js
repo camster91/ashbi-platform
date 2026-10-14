@@ -158,6 +158,7 @@ export const projectTaskViewsSchema = z.object({
 }).strict().refine(({ views }) => ['key', 'name'].every(field => new Set(views.map(view => view[field].toLowerCase())).size === views.length),
 { message: 'View keys and names must be unique' });
 export const taskRecurrenceRuleSchema = z.object({
+  trigger: z.enum(['CALENDAR', 'AFTER_COMPLETION']).optional(),
   frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY']),
   interval: z.number().int().min(1).max(365),
   startDate: z.string().refine(isRecurrenceDate, 'Enter a valid calendar date (2000–2099)'),
@@ -177,6 +178,11 @@ export const projectTaskStagesSchema = z.object({
     if (new Set(values).size !== values.length) ctx.addIssue({ code: 'custom', path: ['stages'], message: `Stage ${field}s must be unique` });
   }
 });
+export const projectBoardFilterSchema = z.union([z.literal('DEFAULT'), cuidId]).optional();
+export const projectBoardCreateSchema = z.object({ name: z.string().trim().min(1).max(80), description: z.string().max(2000).optional() }).strict();
+export const projectBoardUpdateSchema = z.object({ revision: z.number().int().min(0), name: z.string().trim().min(1).max(80).optional(), description: z.string().max(2000).optional(), archived: z.boolean().optional() }).strict().refine(input => input.name !== undefined || input.description !== undefined || input.archived !== undefined);
+export const taskBoardMoveSchema = z.object({ projectId: cuidId, revision: z.number().int().min(0), boardId: cuidId.nullable(), stageKey: taskStageKeySchema.optional() }).strict();
+
 export const createProjectSchema = z.object({
   portfolio: portfolioSchema.nullable().optional(),
   name: z.string().min(1).max(200),
@@ -1208,6 +1214,7 @@ export const taskDependencyCreateSchema = z.object({
 });
 
 export const taskCreateQuickSchema = z.object({
+  boardId: cuidId.nullable().optional(),
   stageKey: taskStageKeySchema.optional(),
   title: z.string().min(1).max(500),
   assigneeId: cuidId.optional(),
@@ -2015,6 +2022,7 @@ export const noteProjectCreateSchema = z.object({
 });
 
 export const noteUpdateV2Schema = z.object({
+  revision: z.number().int().min(0),
   title: z.string().trim().min(1).max(200).optional(),
   content: z.string().max(50_000).optional(),
   type: z.enum(['NOTE', 'MEETING_NOTES', 'WIKI', 'DOC']).optional(),
@@ -2030,6 +2038,14 @@ export const noteFromTemplateSchema = z.object({
   parentId: cuidId.nullable().optional(),
   mentionUserIds: z.array(cuidId).max(50).default([]),
 });
+
+export const workspacePageCreateSchema = z.object({ title: z.string().trim().min(1).max(200), content: z.string().max(50_000).default(''), parentId: cuidId.nullable().default(null), accessMode: z.enum(['TEAM', 'RESTRICTED']).default('TEAM') }).strict();
+export const workspacePageAccessSchema = z.object({ revision: z.number().int().min(0), mode: z.enum(['TEAM', 'RESTRICTED']), members: z.array(z.object({ userId: cuidId, role: z.enum(['READ', 'EDIT']) }).strict()).max(100).refine(rows => new Set(rows.map(row => row.userId)).size === rows.length) }).strict().refine(input => input.mode === 'RESTRICTED' || input.members.length === 0, { message: 'Shared team pages use no individual grants.' });
+export const workspacePageUpdateSchema = z.object({ revision: z.number().int().min(0), title: z.string().trim().min(1).max(200).optional(), content: z.string().max(50_000).optional(), parentId: cuidId.nullable().optional(), archived: z.boolean().optional() }).strict().refine(input => ['title', 'content', 'parentId', 'archived'].some(key => input[key] !== undefined), { message: 'Choose a page change.' });
+export const workspacePageListSchema = z.object({ limit: z.coerce.number().int().min(1).max(50).default(25), after: z.string().min(1).max(80).optional(), search: z.string().trim().max(200).default(''), includeArchived: z.enum(['true', 'false']).default('false'), parentId: cuidId.or(z.literal('ROOT')).optional() }).strict();
+export const workspacePageReadQuerySchema = z.object({ includeArchived: z.enum(['true', 'false']).default('false') }).strict();
+export const workspacePageParamsSchema = z.object({ id: cuidId }).strict();
+export const workspacePageAccessOptionsSchema = z.object({ search: z.string().trim().max(200).default(''), after: cuidId.optional(), limit: z.coerce.number().int().min(1).max(50).default(25) }).strict();
 
 export const onboardingTaskActionSchema = z.object({
   taskId: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/),

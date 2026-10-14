@@ -1,3 +1,5 @@
+import { activeTaskBoard, taskBoardWhere } from './task-board-scope.js';
+
 function fail(statusCode, message) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -15,7 +17,13 @@ export async function withStageTransaction(prisma, work, conflictMessage = 'Boar
   }
 }
 
-export async function resolveTaskStage(prisma, projectId, key) {
+export async function resolveTaskStage(prisma, projectId, key, boardId) {
+  const board = await activeTaskBoard(prisma, projectId, boardId);
+  if (board) {
+    const stage = Array.isArray(board.taskStages) && board.taskStages.find(item => item.key === key);
+    if (!stage) fail(400, 'Stage is unavailable in this board. Reload the board.');
+    return stage;
+  }
   const project = await prisma.project.findFirst({ where: { id: projectId }, select: { taskStages: true } });
   if (!project) fail(404, 'Project not found');
   const stage = Array.isArray(project.taskStages) && project.taskStages.find(item => item.key === key);
@@ -23,14 +31,16 @@ export async function resolveTaskStage(prisma, projectId, key) {
   return stage;
 }
 
-export async function saveTaskStages(prisma, projectId, { revision, stages }) {
+export async function saveTaskStages(prisma, projectId, { revision, stages }, boardId) {
   return withStageTransaction(prisma, async tx => {
     const project = await tx.project.findFirst({ where: { id: projectId }, select: { id: true, boardRevision: true, taskStages: true } });
     if (!project) fail(404, 'Project not found');
-    if (project.boardRevision !== revision) fail(409, 'Board changed since you opened settings. Reload and try again.');
+    const board = await activeTaskBoard(tx, projectId, boardId);
+    if ((board?.stageRevision ?? project.boardRevision) !== revision) fail(409, 'Board changed since you opened settings. Reload and try again.');
     const retained = stages.map(stage => stage.key);
-    const occupied = await tx.task.count({ where: { projectId, stageKey: { not: null, notIn: retained } } });
+    const occupied = await tx.task.count({ where: { projectId, ...taskBoardWhere(boardId), stageKey: { not: null, notIn: retained } } });
     if (occupied) fail(409, 'Move tasks out of removed stages before saving.');
+    if (board) return tx.projectBoard.update({ where: { id: board.id }, data: { taskStages: stages, stageRevision: { increment: 1 } }, select: { id: true, taskStages: true, stageRevision: true } });
     return tx.project.update({ where: { id: projectId }, data: { taskStages: stages, boardRevision: { increment: 1 } },
       select: { id: true, taskStages: true, boardRevision: true } });
   });

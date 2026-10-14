@@ -30,6 +30,8 @@ import { projectTaskFieldsSchema } from '../validators/schemas.js';
 import { readTaskFieldDefinitions, saveTaskFieldDefinitions, projectTaskFieldOptions } from '../services/task-fields.service.js';
 import { boardTemplateSaveSchema, boardTemplateArchiveSchema, boardTemplateProjectSchema } from '../validators/schemas.js';
 import { saveBoardTemplate, listBoardTemplates, archiveBoardTemplate, projectFromBoardTemplate } from '../services/board-templates.service.js';
+import { listProjectBoards, createProjectBoard, updateProjectBoard } from '../services/project-boards.service.js';
+import { projectBoardFilterSchema, projectBoardCreateSchema, projectBoardUpdateSchema } from '../validators/schemas.js';
 
 /**
  * Check that a project's client and default owner belong to the caller's
@@ -88,18 +90,30 @@ export default async function projectRoutes(fastify) {
   });
   fastify.get('/:id/task-views', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
-    return readTaskViews(request.prisma, request.params.id);
+    if (!projectBoardFilterSchema.safeParse(request.query?.boardId).success) return reply.status(400).send({ error: 'Invalid board' });
+    return readTaskViews(request.prisma, request.params.id, request.query?.boardId);
   });
   fastify.put('/:id/task-views', { onRequest: [fastify.authenticate], preHandler: [validateBody(projectTaskViewsSchema)] }, async (request, reply) => {
     if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
-    return saveTaskViews(request.prisma, request.params.id, request.body);
+    if (!projectBoardFilterSchema.safeParse(request.query?.boardId).success) return reply.status(400).send({ error: 'Invalid board' });
+    return saveTaskViews(request.prisma, request.params.id, request.body, request.query?.boardId);
   });
   fastify.put('/:id/task-stages', {
     onRequest: [fastify.authenticate],
     preHandler: [validateBody(projectTaskStagesSchema)],
   }, async (request, reply) => {
     if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
-    return saveTaskStages(request.prisma, request.params.id, request.body);
+    if (!projectBoardFilterSchema.safeParse(request.query?.boardId).success) return reply.status(400).send({ error: 'Invalid board' });
+    return saveTaskStages(request.prisma, request.params.id, request.body, request.query?.boardId);
+  });
+  fastify.get('/:id/boards', { onRequest: [fastify.authenticate] }, async request => {
+    return listProjectBoards(request.prisma, request.params.id, { limit: Number(request.query.limit ?? 25), after: request.query.after, includeArchived: request.query.includeArchived === 'true' }, request.user);
+  });
+  fastify.post('/:id/boards', { onRequest: [fastify.authenticate], preHandler: [validateBody(projectBoardCreateSchema)] }, async (request, reply) => {
+    return reply.status(201).send(await createProjectBoard(request.prisma, request.params.id, request.body, request.user));
+  });
+  fastify.put('/:id/boards/:boardId', { onRequest: [fastify.authenticate], preHandler: [validateBody(projectBoardUpdateSchema)] }, async request => {
+    return updateProjectBoard(request.prisma, request.params.id, request.params.boardId, request.body, request.user);
   });
   // List all projects
   fastify.get('/', {

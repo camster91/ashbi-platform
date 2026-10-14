@@ -9,13 +9,23 @@ import { taskViewWhere } from '../shared/task-view-filters.js';
 import { financialPortfolioWhere, invoicePortfolioWhere } from '../shared/financial-portfolio.js';
 import { validateTaskFieldFilters } from '../services/task-field-filters.service.js';
 import { readTeamWorkload } from '../services/team-workload.service.js';
+import { WORKSPACE_TASK_ACTIONS } from './workspace-task-actions.js';
+import { taskRelationLabels } from '../services/task-relation-labels.service.js';
+import { taskStageKeySchema } from '../validators/schemas.js';
+import { projectBoardFilterSchema } from '../validators/schemas.js';
+import { listProjectBoards } from '../services/project-boards.service.js';
+import { activeTaskBoard, taskBoardWhere } from '../services/task-board-scope.js';
+import { listWorkspacePages, readWorkspacePage } from '../services/workspace-pages.service.js';
+import { WORKSPACE_WIKI_ACTIONS } from './workspace-wiki-actions.js';
+import { readWorkspacePageAccess } from '../services/workspace-page-access.service.js';
+import { wikiToolCall } from './workspace-wiki-tool-errors.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
   after: z.string().min(1).max(50).optional(),
 }).strict();
 
-function listTool(name, description, model, select, where, inputSchema = pageSchema, preflight = async () => {}) {
+function listTool(name, description, model, select, where, inputSchema = pageSchema, preflight = async () => {}, decorate = async rows => rows) {
   return {
     name, description, class: 'read', roles: ['ADMIN', 'TEAM'], inputSchema,
     resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
@@ -26,13 +36,38 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
         where: { ...await where(user, input, prisma), ...(input.after ? { id: { gt: input.after } } : {}) },
         select, orderBy: { id: 'asc' }, take: input.limit + 1,
       });
-      const items = rows.slice(0, input.limit);
+      const items = await decorate(rows.slice(0, input.limit), { prisma, user, input });
       return { items, nextCursor: rows.length > input.limit ? items.at(-1).id : null };
     },
   };
 }
 
 export const workspaceRegistry = createToolRegistry([
+  {
+    name: 'get_workspace_page_access', description: 'Read current page audience, staff grants and observed access revision. Only the page owner or organization administrator may inspect this roster; parent restrictions still apply.', class: 'read', roles: ['ADMIN', 'TEAM'], timeoutMs: 5000,
+    inputSchema: z.object({ pageId: z.string().min(1).max(80) }).strict(), resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
+    run: ({ prisma, user, input }) => wikiToolCall(() => readWorkspacePageAccess(prisma, input.pageId, user)),
+  },
+  {
+    name: 'list_workspace_pages', description: 'Read shared team knowledge metadata, independent of clients and projects. Search title/content and page with nextCursor; archived pages are optional.', class: 'read', roles: ['ADMIN', 'TEAM'], timeoutMs: 5000,
+    inputSchema: pageSchema.extend({ search: z.string().max(200).default(''), includeArchived: z.boolean().default(false), parentId: z.string().min(1).max(80).optional() }),
+    resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
+    run: ({ prisma, user, input }) => wikiToolCall(() => listWorkspacePages(prisma, input, user)),
+  },
+  {
+    name: 'get_workspace_page', description: 'Read one shared team knowledge page and its observed revision. Archived content requires includeArchived=true; no client portal access is granted.', class: 'read', roles: ['ADMIN', 'TEAM'], timeoutMs: 5000,
+    inputSchema: z.object({ pageId: z.string().min(1).max(80), includeArchived: z.boolean().default(false) }).strict(),
+    resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
+    run: ({ prisma, user, input }) => wikiToolCall(() => readWorkspacePage(prisma, input.pageId, user, input.includeArchived)),
+  },
+  ...WORKSPACE_WIKI_ACTIONS,
+  {
+    name: 'list_project_boards', description: 'Page through a canonical project’s default and additional boards. Archived boards are omitted unless requested; fields and billing remain shared with the project.', class: 'read', roles: ['ADMIN', 'TEAM'],
+    inputSchema: pageSchema.extend({ projectId: z.string().min(1).max(50), includeArchived: z.boolean().default(false) }),
+    resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }), timeoutMs: 5000,
+    run: ({ prisma, user, input }) => listProjectBoards(prisma, input.projectId, input, user),
+  },
+  ...WORKSPACE_TASK_ACTIONS,
   {
     name: 'get_team_workload', description: 'Read active staff owned-task and contributor counts, and logged hours over the last seven days compared with weekly capacity. Counts can overlap; this does not forecast future availability.',
     class: 'read', roles: ['ADMIN', 'TEAM'], inputSchema: z.object({}).strict(),
@@ -48,7 +83,7 @@ export const workspaceRegistry = createToolRegistry([
     (user, input) => ({ organizationId: user.organizationId, ...financialPortfolioWhere(input.portfolio) }),
     pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_notes', 'Page through internal project documents and notes. Optionally filter by portfolio.',
-    'note', { id: true, title: true, content: true, type: true, projectId: true, updatedAt: true },
+    'note', { id: true, title: true, content: true, type: true, projectId: true, revision: true, updatedAt: true },
     (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) } }),
     pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_time_entries', 'Page through canonical time entries. Team members see their own entries; admins see the workspace. Optionally filter by portfolio.',
@@ -65,12 +100,13 @@ export const workspaceRegistry = createToolRegistry([
     pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_clients', 'Page through workspace clients. Returns business identity, never credentials.',
     'client', { id: true, name: true, status: true, domain: true }, user => ({ organizationId: user.organizationId })),
-  listTool('list_tasks', 'Page through workspace tasks, including unassigned work. Filter by projectId, status, priority, stageKey or search to reproduce a saved project view.',
-    'task', { id: true, title: true, projectId: true, status: true, stageKey: true, priority: true, dueDate: true, fieldValues: true, fieldValuesRevision: true, assigneeId: true, collaboratorsRevision: true, collaborators: { select: { userId: true, user: { select: { name: true, isActive: true } } } },
-      recurrenceRule: true, recurrenceNextDate: true, recurrenceRevision: true, recurrenceSourceId: true, recurrenceScheduledDate: true },
-    (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }, ...taskViewWhere(input) }),
-    pageSchema.extend({ portfolio: portfolioFilterSchema, projectId: z.string().min(1).max(50).optional(), ...taskViewFiltersSchema.shape }),
-    ({ prisma, user, input }) => validateTaskFieldFilters(prisma, input.projectId, input.fieldFilters, user.organizationId)),
+  listTool('list_tasks', 'Page through workspace tasks, including unassigned work. Filter by projectId, status, priority, stageKey or search to reproduce a saved project view. With projectId, relationField resolves authorized names for one active relation field.',
+    'task', { id: true, title: true, projectId: true, boardId: true, boardMembershipRevision: true, status: true, stageKey: true, priority: true, dueDate: true, fieldValues: true, fieldValuesRevision: true, assigneeId: true, collaboratorsRevision: true, collaborators: { select: { userId: true, user: { select: { name: true, isActive: true } } } },
+      recurrenceRule: true, recurrenceNextDate: true, recurrenceRevision: true, recurrenceSourceId: true, recurrenceScheduledDate: true, recurrenceCompletionSourceId: true, recurrenceFirstCompletedAt: true, recurrenceCompletionProcessedAt: true },
+    (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }, ...(input.boardId ? taskBoardWhere(input.boardId) : {}), ...taskViewWhere(input) }),
+    pageSchema.extend({ portfolio: portfolioFilterSchema, projectId: z.string().min(1).max(50).optional(), boardId: projectBoardFilterSchema, relationField: taskStageKeySchema.optional(), ...taskViewFiltersSchema.shape }).refine(input => (!input.relationField && !input.boardId) || Boolean(input.projectId), { message: 'Choose a project for board or related-record reads' }),
+    async ({ prisma, user, input }) => { await validateTaskFieldFilters(prisma, input.projectId, input.fieldFilters, user.organizationId); if (input.boardId) await activeTaskBoard(prisma, input.projectId, input.boardId, user.organizationId); },
+    (rows, { prisma, user, input }) => taskRelationLabels(prisma, input.projectId, input.relationField, rows, user)),
   ...BUILTIN_TOOLS.filter(tool => ['list_my_tasks', 'get_project_summary', 'create_task', 'create_calendar_event'].includes(tool.name)),
 ]);
 

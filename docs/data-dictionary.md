@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-108 models, 0 enums, 54 tenant-scoped, 13 soft-deletable.
+111 models, 0 enums, 57 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -74,16 +74,17 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [MarkupImportRecord](#model-markupimportrecord) | `markup_import_records` | yes | no | 22 |
 | [Message](#model-message) | `messages` | no | no | 15 |
 | [Milestone](#model-milestone) | `milestones` | no | yes | 13 |
-| [Note](#model-note) | `notes` | no | yes | 18 |
+| [Note](#model-note) | `notes` | no | yes | 19 |
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 63 |
+| [Organization](#model-organization) | `organizations` | no | no | 66 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
 | [PlatformSetting](#model-platformsetting) | `platform_settings` | no | no | 5 |
-| [Project](#model-project) | `projects` | yes | yes | 60 |
+| [Project](#model-project) | `projects` | yes | yes | 61 |
+| [ProjectBoard](#model-projectboard) | `project_boards` | yes | no | 16 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
 | [ProjectTemplate](#model-projecttemplate) | `project_templates` | yes | no | 12 |
@@ -109,7 +110,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [SlackInstallation](#model-slackinstallation) | `slack_installations` | yes | no | 15 |
 | [Snippet](#model-snippet) | `snippets` | no | no | 13 |
 | [SupportHourEntry](#model-supporthourentry) | `support_hours` | yes | no | 12 |
-| [Task](#model-task) | `tasks` | no | yes | 49 |
+| [Task](#model-task) | `tasks` | no | yes | 55 |
 | [TaskCollaborator](#model-taskcollaborator) | `task_collaborators` | yes | no | 8 |
 | [TaskComment](#model-taskcomment) | `task_comments` | no | no | 9 |
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
@@ -119,7 +120,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [TimeSession](#model-timesession) | `time_sessions` | no | no | 16 |
 | [TrashedItem](#model-trasheditem) | `trashed_items` | yes | yes | 9 |
 | [UnmatchedEmail](#model-unmatchedemail) | `unmatched_emails` | yes | no | 16 |
-| [User](#model-user) | `users` | yes | no | 53 |
+| [User](#model-user) | `users` | yes | no | 55 |
 | [WPAlert](#model-wpalert) | `wp_alerts` | yes | no | 9 |
 | [WPBackup](#model-wpbackup) | `wp_backups` | yes | no | 15 |
 | [WPBridgeNonce](#model-wpbridgenonce) | `wp_bridge_nonces` | yes | no | 7 |
@@ -128,6 +129,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [WPReport](#model-wpreport) | `wp_reports` | yes | no | 14 |
 | [WPSite](#model-wpsite) | `wp_sites` | yes | no | 32 |
 | [WeeklyDigest](#model-weeklydigest) | `weekly_digests` | yes | no | 14 |
+| [WorkspacePage](#model-workspacepage) | `workspace_pages` | yes | no | 17 |
+| [WorkspacePageGrant](#model-workspacepagegrant) | `workspace_page_grants` | yes | no | 9 |
 
 ## Models
 
@@ -1597,6 +1600,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `id` | String | id, required | `cuid()` |  |  |
+| `revision` | Int | required | `0` |  |  |
 | `title` | String | required |  |  |  |
 | `content` | String | required |  |  | Plain-text Markdown; clients must never render it as trusted HTML |
 | `type` | String | required | `"NOTE"` |  | NOTE, MEETING_NOTES, WIKI, DOC |
@@ -1706,6 +1710,9 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `users` | User[] | list, required |  | → User |  |
 | `taskCollaborations` | TaskCollaborator[] | list, required |  | → TaskCollaborator |  |
+| `projectBoards` | ProjectBoard[] | list, required |  | → ProjectBoard |  |
+| `workspacePages` | WorkspacePage[] | list, required |  | → WorkspacePage |  |
+| `workspacePageGrants` | WorkspacePageGrant[] | list, required |  | → WorkspacePageGrant |  |
 | `clients` | Client[] | list, required |  | → Client |  |
 | `projects` | Project[] | list, required |  | → Project |  |
 | `formDrafts` | FormDraft[] | list, required |  | → FormDraft |  |
@@ -1893,6 +1900,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `client` | Client | required |  | → Client, via (clientId) → (id), onDelete Cascade |  |
 | `threads` | Thread[] | list, required |  | → Thread |  |
 | `tasks` | Task[] | list, required |  | → Task |  |
+| `boards` | ProjectBoard[] | list, required |  | → ProjectBoard |  |
 | `chatMessages` | ChatMessage[] | list, required |  | → ChatMessage |  |
 | `notes` | Note[] | list, required |  | → Note |  |
 | `milestones` | Milestone[] | list, required |  | → Milestone |  |
@@ -1916,6 +1924,34 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `loomImportRecords` | LoomImportRecord[] | list, required |  | → LoomImportRecord |  |
 | `markupImportRecords` | MarkupImportRecord[] | list, required |  | → MarkupImportRecord |  |
 | `reviewSessions` | ReviewSession[] | list, required |  | → ReviewSession |  |
+
+### Model ProjectBoard
+
+- Table: `project_boards`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([organizationId])`
+  - `@@index([projectId, archivedAt, id])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `projectId` | String | required |  |  |  |
+| `name` | String | required |  |  |  |
+| `description` | String | required | `""` |  |  |
+| `taskStages` | Json | required | `"[]"` |  |  |
+| `taskViews` | Json | required | `"[]"` |  |  |
+| `stageRevision` | Int | required | `0` |  |  |
+| `viewsRevision` | Int | required | `0` |  |  |
+| `revision` | Int | required | `0` |  |  |
+| `archivedAt` | DateTime | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `project` | Project | required |  | → Project, via (projectId) → (id), onDelete Cascade |  |
+| `tasks` | Task[] | list, required |  | → Task |  |
 
 ### Model ProjectCommunication
 
@@ -2611,6 +2647,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([dependsOnId])`
   - `@@index([assigneeId])`
   - `@@index([projectId, status])`
+  - `@@index([boardId, status])`
+  - `@@index([status, recurrenceCompletionProcessedAt, id])`
   - `@@index([milestoneId])`
   - `@@unique([recurrenceSourceId, recurrenceScheduledDate])`
   - `@@index([recurrenceNextDate])`
@@ -2644,18 +2682,24 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `startDate` | DateTime | optional |  |  |  |
 | `dueDate` | DateTime | optional |  |  |  |
 | `completedAt` | DateTime | optional |  |  |  |
+| `recurrenceFirstCompletedAt` | DateTime | optional |  |  |  |
+| `recurrenceCompletionProcessedAt` | DateTime | optional |  |  |  |
+| `recurrenceCompletionSourceId` | String | unique, optional |  |  |  |
 | `sourceThreadId` | String | optional |  |  |  |
 | `blockedBy` | String | optional |  |  |  |
 | `aiGenerated` | Boolean | required | `false` |  |  |
 | `position` | Int | required | `0` |  | For Kanban board ordering |
 | `projectId` | String | required |  |  |  |
 | `assigneeId` | String | optional |  |  |  |
+| `boardId` | String | optional |  |  |  |
+| `boardMembershipRevision` | Int | required | `0` |  |  |
 | `milestoneId` | String | optional |  |  |  |
 | `dependsOnId` | String | optional |  |  | Task dependency — this task depends on another |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `deletedAt` | DateTime | optional |  |  |  |
 | `project` | Project | required |  | → Project, via (projectId) → (id), onDelete Cascade |  |
+| `board` | ProjectBoard | optional |  | → ProjectBoard, via (boardId) → (id), onDelete Restrict |  |
 | `assignee` | User | optional |  | → User, via (assigneeId) → (id), "TaskAssignee" |  |
 | `milestone` | Milestone | optional |  | → Milestone, via (milestoneId) → (id), "MilestoneTasks" |  |
 | `comments` | TaskComment[] | list, required |  | → TaskComment |  |
@@ -2962,6 +3006,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `chatMessages` | ChatMessage[] | list, required |  | → ChatMessage, "ChatAuthor" |  |
 | `chatReactions` | ChatReaction[] | list, required |  | → ChatReaction |  |
 | `notes` | Note[] | list, required |  | → Note, "NoteAuthor" |  |
+| `workspacePages` | WorkspacePage[] | list, required |  | → WorkspacePage, "WorkspacePageAuthor" |  |
+| `workspacePageGrants` | WorkspacePageGrant[] | list, required |  | → WorkspacePageGrant |  |
 | `timeEntries` | TimeEntry[] | list, required |  | → TimeEntry |  |
 | `attachments` | Attachment[] | list, required |  | → Attachment |  |
 | `activities` | Activity[] | list, required |  | → Activity |  |
@@ -3204,6 +3250,59 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `clientHealthSummary` | String | required | `"{}"` |  | JSON: per-client health scores |
 | `fullDigest` | String | required |  |  | Full AI-generated digest text |
 | `createdAt` | DateTime | required | `now()` |  |  |
+
+### Model WorkspacePage
+
+- Table: `workspace_pages`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([organizationId])`
+  - `@@index([organizationId, archivedAt, id])`
+  - `@@index([authorId])`
+  - `@@index([parentId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `authorId` | String | required |  |  |  |
+| `parentId` | String | optional |  |  |  |
+| `title` | String | required |  |  |  |
+| `content` | String | required | `""` |  |  |
+| `revision` | Int | required | `0` |  |  |
+| `accessMode` | String | required | `"TEAM"` |  |  |
+| `accessRevision` | Int | required | `0` |  |  |
+| `archivedAt` | DateTime | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `author` | User | required |  | → User, via (authorId) → (id), onDelete Restrict, "WorkspacePageAuthor" |  |
+| `parent` | WorkspacePage | optional |  | → WorkspacePage, via (parentId) → (id), onDelete Restrict, "WorkspacePageHierarchy" |  |
+| `children` | WorkspacePage[] | list, required |  | → WorkspacePage, "WorkspacePageHierarchy" |  |
+| `grants` | WorkspacePageGrant[] | list, required |  | → WorkspacePageGrant |  |
+
+### Model WorkspacePageGrant
+
+- Table: `workspace_page_grants`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([pageId, userId])`
+  - `@@index([organizationId])`
+  - `@@index([userId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `pageId` | String | required |  |  |  |
+| `userId` | String | required |  |  |  |
+| `role` | String | required |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `page` | WorkspacePage | required |  | → WorkspacePage, via (pageId) → (id), onDelete Cascade |  |
+| `user` | User | required |  | → User, via (userId) → (id), onDelete Restrict |  |
 
 ## Enums
 

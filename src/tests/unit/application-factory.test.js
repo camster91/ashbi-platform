@@ -318,6 +318,7 @@ const DOMAIN_REGISTRARS = [
       ['portal', '/api/portal'],
       ['onboarding', '/api/onboarding'],
       ['note', '/api'],
+      ['workspace-wiki', '/api/wiki'],
     ],
   },
 ];
@@ -376,7 +377,7 @@ test('every domain-registered route module has exactly one owner', () => {
   // media review staff and share-link APIs (#417), the domain event
   // outbox admin API (#412), and support impersonation / break-glass
   // recovery (#416), and the daily operator queue (#461).
-  assert.equal(owners.size, 78); // Includes workspace API/MCP and its scoped OAuth server.
+  assert.equal(owners.size, 79); // Includes workspace API/MCP, scoped OAuth and project-independent knowledge.
 });
 
 test('route modules stay encapsulated so cross-domain registration order cannot leak hooks', () => {

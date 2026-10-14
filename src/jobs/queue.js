@@ -337,6 +337,7 @@ export async function setupRecurringJobs() {
   const scheduledJobs = [
     ['recurring-invoices-hourly', { every: 60 * 60 * 1000 }, 'recurring-invoices'],
     ['recurring-tasks-hourly', { every: 60 * 60 * 1000 }, 'recurring-tasks'],
+    ['completion-repeats-minute', { every: 60 * 1000 }, 'completion-repeats'],
     ['overdue-invoices-hourly', { every: 60 * 60 * 1000 }, 'overdue-invoices'],
     ['trash-purge-daily-toronto', { pattern: '0 4 * * *', tz: 'America/Toronto' }, 'trash-purge'],
     // Unsent chat uploads older than 24 hours (docs/chat-media.md).

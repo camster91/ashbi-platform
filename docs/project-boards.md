@@ -1,0 +1,11 @@
+# Additional boards within canonical projects
+
+The implementation in progress adds ProjectBoard metadata and explicit task membership without creating another client, project, organization or billing identity. Existing tasks keep boardId null and remain in the original project board. That default board keeps the existing Project stage/view fields as its single authoritative configuration; additional boards own their stage and saved-view configuration. Field definitions remain canonical to the project and shared across its boards.
+
+Additional board metadata has an independent revision, reversible archive, bounded cursor pagination and explicit staff/tenant/project checks. Empty board creation copies the project's current stages but creates no task, participant or financial record. Board names need not be unique; ids preserve distinct identities. Archive preserves existing tasks and metadata, while database guards deny new membership in an archived board and reject cross-project/organization edges. Hard deletion cannot orphan board tasks into the default board.
+
+The API and UI now support board creation, archive/restore, scoped table/board/calendar/gallery views, independent stages and saved views, and task moves using the observed membership revision. A move without a destination stage keeps lifecycle status and clears the previous stage assignment. Children retain their own membership when a parent moves; newly created children inherit their parent's board. Recurring copies retain membership and generation pauses while their source board is archived.
+
+Workspace tools expose board listing and scoped task reads. The confirmed set_task_board action previews the destination and any explicit lifecycle stage, rechecks active staff and membership at confirmation, and commits the move with its receipt and audit event in one serializable transaction. Read-only connections cannot prepare writes.
+
+Local backend, component and build checks passed during development. PostgreSQL migration/guard acceptance and browser journeys require CI evidence for the final commit; independent review and target acceptance remain pending. Production remains held; no board migration or data reassignment has run in production.

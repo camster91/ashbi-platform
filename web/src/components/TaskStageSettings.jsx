@@ -10,15 +10,17 @@ const defaults = [
   { key: 'done', name: 'Done', status: 'COMPLETED' },
 ];
 
-export default function TaskStageSettings({ project, onClose }) {
+export default function TaskStageSettings({ project, boardId, onClose }) {
   const queryClient = useQueryClient();
   const [stages, setStages] = useState(project.taskStages?.length ? project.taskStages : defaults);
   const [error, setError] = useState('');
   const save = useMutation({
-    mutationFn: () => api.saveTaskStages(project.id, { stages, revision: project.boardRevision ?? 0 }),
+    mutationFn: () => boardId ? api.saveTaskStages(project.id, { stages, revision: project.boardRevision ?? 0 }, boardId) : api.saveTaskStages(project.id, { stages, revision: project.boardRevision ?? 0 }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['project', project.id] });
       queryClient.invalidateQueries({ queryKey: ['kanban', project.id] });
+      queryClient.invalidateQueries({ queryKey: ['taskViews', project.id] });
+      queryClient.invalidateQueries({ queryKey: ['projectBoardSettings', project.id] });
       onClose();
     },
     onError: err => setError(err.data?.message || err.message || 'Stages could not be saved.'),

@@ -11,6 +11,15 @@ function setup(task = {}) {
   return render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><TaskRecurrence task={{ id: 't1', recurrenceRevision: 4, ...task }} /></MemoryRouter></QueryClientProvider>);
 }
 describe('task recurrence', () => {
+  it('offers completion intervals without a calendar due-date anchor', async () => {
+    setup({ recurrenceRule: rule });
+    fireEvent.click(screen.getByRole('button', { name: 'Configure recurrence' }));
+    fireEvent.change(screen.getByLabelText('Repeat trigger'), { target: { value: 'AFTER_COMPLETION' } });
+    expect(screen.queryByLabelText('First repeat due date')).not.toBeInTheDocument();
+    expect(screen.getByText(/Reopening the same task does not create another copy/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save recurrence' }));
+    await waitFor(() => expect(api.saveTaskRecurrence).toHaveBeenCalledWith('t1', { revision: 4, rule: { ...rule, trigger: 'AFTER_COMPLETION' } }));
+  });
   it('saves an explicit calendar schedule and observed revision', async () => {
     setup({ recurrenceRule: rule });
     fireEvent.click(screen.getByRole('button', { name: 'Configure recurrence' }));

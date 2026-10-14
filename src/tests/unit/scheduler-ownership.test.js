@@ -38,12 +38,12 @@ test('scheduler bootstrap uses stable IDs and timezone-aware business schedules'
   await setupRecurringJobs();
   await setupRecurringJobs();
 
-  assert.equal(calls.length, 18);
-  const firstPass = calls.slice(0, 9);
-  const secondPass = calls.slice(9);
+  assert.equal(calls.length, 20);
+  const firstPass = calls.slice(0, 10);
+  const secondPass = calls.slice(10);
   assert.deepEqual(secondPass, firstPass);
   assert.equal(lockedCleanupAttempts, 2);
-  assert.equal(new Set(firstPass.map(({ queue, id }) => `${queue}:${id}`)).size, 9);
+  assert.equal(new Set(firstPass.map(({ queue, id }) => `${queue}:${id}`)).size, 10);
   assert.ok(removedSchedulers.includes('fleet-digest-daily-toronto'), 'retired fleet digest schedule is removed');
 
   const names = firstPass.map(({ template }) => template.name);
@@ -53,11 +53,15 @@ test('scheduler bootstrap uses stable IDs and timezone-aware business schedules'
     'generate-weekly-digest',
     'recurring-invoices',
     'recurring-tasks',
+    'completion-repeats',
     'overdue-invoices',
     'trash-purge',
     'chat-upload-cleanup',
     'dispatch-domain-events',
   ]);
+  const completion = firstPass.find(({ template }) => template.name === 'completion-repeats');
+  assert.equal(completion.id, 'completion-repeats-minute');
+  assert.deepEqual(completion.repeat, { every: 60_000 });
   const businessSchedules = firstPass.filter(({ queue }) => queue !== domainEventsQueue.name);
   for (const call of businessSchedules) {
     assert.equal(call.template.opts.attempts, 3);

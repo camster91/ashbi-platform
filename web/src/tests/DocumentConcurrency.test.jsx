@@ -1,0 +1,34 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
+import { expect, it, vi } from 'vitest';
+import Docs from '../pages/Docs';
+import { api } from '../lib/api';
+vi.mock('../hooks/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+vi.mock('../lib/api', () => ({ api: { getAllNotes: vi.fn(), getProjects: vi.fn(async () => ({ projects: [], pagination: { pages: 0 } })), getTeam: vi.fn(async () => []), getNoteTemplates: vi.fn(async () => []), updateNote: vi.fn(), getNote: vi.fn() } }));
+
+it('keeps the observed document revision through refetch and failed save, then reloads explicitly', async () => {
+  let note = { id: 'note', projectId: 'project', revision: 3, title: 'Team guide', content: 'Original', type: 'DOC', tags: [], mentions: [], updatedAt: '2026-10-14', project: { id: 'project', name: 'Project' } };
+  api.getAllNotes.mockImplementation(async () => ({ notes: [note], pagination: { page: 1, pages: 1 } }));
+  api.updateNote.mockRejectedValue(new Error('Document changed since you started editing'));
+  api.getNote.mockRejectedValueOnce(new Error('Offline')).mockImplementation(async () => note);
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={cache}><MemoryRouter initialEntries={['/docs']}><Docs /></MemoryRouter></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit Team guide' }));
+  fireEvent.change(screen.getByLabelText('Edit Team guide content'), { target: { value: 'My local draft' } });
+  note = { ...note, revision: 4, content: 'Teammate update' };
+  await cache.invalidateQueries({ queryKey: ['all-notes'] });
+  fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+  await screen.findByText(/Document changed since you started editing/);
+  expect(api.updateNote).toHaveBeenCalledWith('note', expect.objectContaining({ revision: 3, content: 'My local draft' }));
+  expect(screen.getByLabelText('Edit Team guide content')).toHaveValue('My local draft');
+  fireEvent.click(screen.getByRole('button', { name: 'Reload document and discard draft' }));
+  await screen.findByText('The document could not be reloaded. Your draft is still retained.');
+  expect(screen.getByLabelText('Edit Team guide content')).toHaveValue('My local draft');
+  fireEvent.click(screen.getByRole('button', { name: 'Reload document and discard draft' }));
+  await waitFor(() => expect(screen.getByLabelText('Edit Team guide content')).toHaveValue('Teammate update'));
+  api.updateNote.mockResolvedValue(note);
+  fireEvent.change(screen.getByLabelText('Edit Team guide content'), { target: { value: 'Reviewed merge' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+  await waitFor(() => expect(api.updateNote).toHaveBeenLastCalledWith('note', expect.objectContaining({ revision: 4, content: 'Reviewed merge' })));
+});
