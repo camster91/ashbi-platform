@@ -30,4 +30,8 @@ test('profile capacity preserves zero and percentage values and rejects invalid 
   assert.equal(writes, 4);
   const response = await app.inject({ method: 'PUT', url: '/me', payload: { name: 'Staff' } });
   assert.equal(response.json().capacity, 200);
+  const withSkills = await app.inject({ method: 'PUT', url: '/me', payload: { capacity: 50, skills: ['design', 'development'] } });
+  assert.equal(withSkills.statusCode, 200);
+  assert.equal(stored.skills, '["design","development"]');
+  assert.equal(stored.capacity, 50);
 });

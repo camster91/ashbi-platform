@@ -6955,8 +6955,8 @@
       "UpdateProfile": {
         "properties": {
           "capacity": {
-            "maximum": 168,
-            "minimum": 1,
+            "maximum": 200,
+            "minimum": 0,
             "type": "integer"
           },
           "name": {
