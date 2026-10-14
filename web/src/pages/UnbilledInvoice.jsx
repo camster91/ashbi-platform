@@ -73,7 +73,10 @@ export default function UnbilledInvoice() {
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {!releaseId && <Card className="p-4 space-y-4">
       <fieldset disabled={busy || Boolean(pending)} className="space-y-3">
-        <label className="block">Find client<input className={field} value={search} onChange={event => setSearch(event.target.value)} /></label>
+        <label className="block">Find client<input className={field} value={search} onChange={event => {
+          setSearch(event.target.value);
+          if (form.clientId) { change({ clientId: '' }); setLoaded(false); setSelection({}); }
+        }} /></label>
         {(clients.isError || searched.isError) && <p role="alert">Clients could not be loaded. <Button onClick={() => { clients.refetch(); searched.refetch(); }}>Retry clients</Button></p>}
         <label className="block">Client<select className={field} value={form.clientId} onChange={event => { change({ clientId: event.target.value }); setLoaded(false); setSelection({}); setPages({ TIME: { items: [], nextCursor: null }, EXPENSE: { items: [], nextCursor: null } }); }}><option value="">Choose client</option>{options?.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
         <label className="block">Invoice title<input required maxLength={200} className={field} value={form.title} onChange={event => change({ title: event.target.value })} /></label>

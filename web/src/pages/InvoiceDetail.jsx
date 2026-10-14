@@ -461,6 +461,20 @@ export default function InvoiceDetail() {
       </div>
 
       {/* Alert: Overdue */}
+      {isAdmin && invoice.billingSources && <Card className="p-4 [overflow-wrap:anywhere]">
+        <details>
+          <summary className="min-h-11 flex items-center cursor-pointer font-semibold">Original billed work</summary>
+          <div className="space-y-3 pt-3">
+            <p>Original draft: {fmt(invoice.billingSources.totals?.total, invoice.billingSources.currency)} · {invoice.billingSources.taxType} {invoice.billingSources.taxRate}%</p>
+            <p>{invoice.billingSourcesReleasedAt ? `Sources released ${formatDate(invoice.billingSourcesReleasedAt)}. Original history is retained.` : 'Sources remain reserved for this invoice.'}</p>
+            <p className="text-sm text-muted-foreground">Later invoice edits do not replace this original source record.</p>
+            {invoice.billingSources.lineItems?.map(line => <div key={`${line.source.kind}:${line.source.id}`} className="border-t border-border pt-3 space-y-1">
+              <p>{line.description} · {line.quantity} × {fmt(line.unitPrice, invoice.billingSources.currency)} · {fmt(line.total, invoice.billingSources.currency)}</p>
+              <p className="text-sm">{line.source.kind}: {line.source.id} · {line.source.project?.name || 'Client expense'} · {line.source.user?.name || ''} · {formatDate(line.source.date)}</p>
+            </div>)}
+          </div>
+        </details>
+      </Card>}
       {invoice.isOverdue && (
         <div className="flex items-center gap-3 p-4 bg-destructive/5 border border-destructive/30 rounded-lg">
           <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0" />

@@ -46,6 +46,9 @@ test('approved work becomes one confirmed draft, survives receipt recovery and r
   await expect(page.getByRole('link', { name: 'Open invoice' })).toHaveAttribute('href', invoicePath!);
   const replay = await json(await api.post('/api/invoices/unbilled/tools/confirm_action', { data: { actionId } }));
   expect(replay.data.idempotent).toBe(true); expect(replay.data.action.result.id).toBe(invoiceId);
+  await page.goto(`/invoices/${invoiceId}`);
+  await page.getByText('Original billed work', { exact: true }).click();
+  await expect(page.getByText(`TIME: ${time.id}`, { exact: false })).toBeVisible();
   await json(await api.delete(`/api/invoices/${invoiceId}`));
   const tooSoon = await api.post('/api/invoices/unbilled/tools/preview_unbilled_release', { data: { invoiceId } });
   expect(tooSoon.status()).toBe(409);
@@ -59,6 +62,9 @@ test('approved work becomes one confirmed draft, survives receipt recovery and r
   const released = await json(await api.get(`/api/invoices/${invoiceId}`));
   expect(released.status).toBe('VOID'); expect(released.billingSourcesReleasedAt).toBeTruthy();
   expect(released.billingSources).toEqual(invoice.billingSources);
+  await page.getByRole('link', { name: 'Open invoice' }).click();
+  await page.getByText('Original billed work', { exact: true }).click();
+  await expect(page.getByText(/Sources released.*Original history is retained/)).toBeVisible();
   const candidates = await json(await api.post('/api/invoices/unbilled/tools/list_unbilled_candidates', { data: { clientId: client.id, kind: 'TIME' } }));
   expect(candidates.data.output.items.map((row: any) => row.id)).toContain(time.id);
 });
