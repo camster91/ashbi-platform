@@ -55,12 +55,12 @@ test('project lists apply portfolio before pagination and count; invalid input n
   assert.equal(queries.length, 0);
 });
 
-test('task portfolio filters retain assignment restrictions for team users', async () => {
+test('task portfolio filters retain explicit participation restrictions for team users', async () => {
   let counted;
   const routes = await routesFor(taskRoutes);
   await routes['GET /']({ query: { portfolio: 'ASHBI_DESIGN' }, user: { role: 'TEAM', id: 'member-1' },
-    prisma: { task: { count: async ({ where }) => { if (!where.AND) counted = where; return 0; }, findMany: async () => [] } } }, reply());
-  assert.deepEqual(counted, { project: { portfolio: 'ASHBI_DESIGN' }, assigneeId: 'member-1' });
+    prisma: { task: { count: async ({ where }) => { if (where.AND?.length === 1) counted = where; return 0; }, findMany: async () => [] } } }, reply());
+  assert.deepEqual(counted, { project: { portfolio: 'ASHBI_DESIGN' }, AND: [{ OR: [{ assigneeId: 'member-1' }, { collaborators: { some: { userId: 'member-1' } } }] }] });
 });
 
 test('workspace project and task reads keep tenant filters alongside portfolio and reject invalid values', async () => {

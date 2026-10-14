@@ -27,7 +27,7 @@ import { saveTaskStages } from '../services/task-stages.service.js';
 import { projectTaskViewsSchema } from '../validators/schemas.js';
 import { readTaskViews, saveTaskViews } from '../services/task-views.service.js';
 import { projectTaskFieldsSchema } from '../validators/schemas.js';
-import { readTaskFieldDefinitions, saveTaskFieldDefinitions } from '../services/task-fields.service.js';
+import { readTaskFieldDefinitions, saveTaskFieldDefinitions, projectTaskFieldOptions } from '../services/task-fields.service.js';
 import { boardTemplateSaveSchema, boardTemplateArchiveSchema, boardTemplateProjectSchema } from '../validators/schemas.js';
 import { saveBoardTemplate, listBoardTemplates, archiveBoardTemplate, projectFromBoardTemplate } from '../services/board-templates.service.js';
 
@@ -75,6 +75,12 @@ export default async function projectRoutes(fastify) {
   fastify.get('/:id/task-fields', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
     return readTaskFieldDefinitions(request.prisma, request.params.id);
+  });
+  fastify.get('/:id/task-fields/:key/options', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
+    const search = request.query.search ?? '';
+    if (typeof search !== 'string' || search.length > 100) return reply.status(400).send({ error: 'Search must be at most 100 characters' });
+    return projectTaskFieldOptions(request.prisma, request.params.id, request.params.key, search);
   });
   fastify.put('/:id/task-fields', { onRequest: [fastify.authenticate], preHandler: [validateBody(projectTaskFieldsSchema)] }, async (request, reply) => {
     if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });

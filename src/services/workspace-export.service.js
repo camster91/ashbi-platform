@@ -103,6 +103,7 @@ export const EXPORT_ENTITIES = Object.freeze([
   { name: 'project_contexts', model: 'ProjectContext', category: 'projects', where: (org) => ({ project: activeProject(org) }), description: 'Project running context and notes' },
   { name: 'milestones', model: 'Milestone', category: 'projects', where: (org) => ({ deletedAt: null, project: activeProject(org) }), description: 'Project milestones' },
   { name: 'tasks', model: 'Task', category: 'projects', where: activeTask, description: 'Tasks and task pages' },
+  { name: 'task_collaborators', model: 'TaskCollaborator', category: 'projects', where: (org) => ({ organizationId: org, task: activeTask(org), user: orgUser(org) }), description: 'Task staff contributors, retaining join dates and the separate accountable owner' },
   { name: 'task_comments', model: 'TaskComment', category: 'projects', where: (org) => ({ task: activeTask(org) }), description: 'Task comments' },
   { name: 'revision_rounds', model: 'RevisionRound', category: 'projects', where: (org) => ({ project: activeProject(org) }), description: 'Revision rounds' },
   { name: 'approvals', model: 'Approval', category: 'projects', where: (org) => ({ project: activeProject(org) }), description: 'Approval queue items of projects' },

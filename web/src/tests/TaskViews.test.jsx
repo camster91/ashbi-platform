@@ -13,10 +13,26 @@ vi.mock('../lib/api', () => ({ api: {
   saveTaskViews: vi.fn(async (_id, data) => { config = { ...config, views: data.views, revision: data.revision + 1 }; return config; }),
 } }));
 function setup(initial = '/project/p1/views') {
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[initial]}><Routes><Route path="/project/:projectId/views" element={<TaskViews />} /></Routes></MemoryRouter></QueryClientProvider>);
+  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[initial]}><Routes><Route path="/project/:projectId/views" element={<TaskViews />} /></Routes></MemoryRouter></QueryClientProvider>);
 }
 beforeEach(() => { config = { projectId: 'p1', projectName: 'Agency project', views: [], revision: 0, stages: [] }; vi.clearAllMocks(); });
 describe('saved task views', () => {
+  it('saves a grouped gallery and restores it from the selected-view URL', async () => {
+    const first = setup();
+    await screen.findByRole('table');
+    fireEvent.change(screen.getByLabelText('Task view layout'), { target: { value: 'GALLERY' } });
+    fireEvent.change(screen.getByLabelText('Task view grouping'), { target: { value: 'STATUS' } });
+    expect(screen.getByRole('region', { name: 'Task gallery' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Task view name'), { target: { value: 'Gallery by status' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save as new view' }));
+    await waitFor(() => expect(config.views[0]?.grouping).toEqual({ by: 'STATUS' }));
+    expect(config.views[0].layout).toBe('GALLERY');
+    first.unmount();
+    setup(`/project/p1/views?view=${config.views[0].key}`);
+    await screen.findByRole('region', { name: 'Task gallery' });
+    expect(screen.getByLabelText('Task view grouping')).toHaveValue('STATUS');
+    expect(await screen.findByRole('heading', { name: 'review (1)' })).toBeInTheDocument();
+  });
   it('saves a filtered layout, retains the selected view and allows deletion without deleting tasks', async () => {
     setup();
     await screen.findByRole('table');

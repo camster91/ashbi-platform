@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 380 |
+| staff | 383 |
 | staff (inline) | 1 |
-| **total** | 574 |
+| **total** | 577 |
 
 ## Routes by prefix
 
@@ -717,6 +717,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/projects/:id/plan/refresh` | staff | scoped |  |
 | GET | `/api/projects/:id/task-fields` | staff | scoped |  |
 | PUT | `/api/projects/:id/task-fields` | staff | scoped |  |
+| GET | `/api/projects/:id/task-fields/:key/options` | staff | scoped |  |
 | PUT | `/api/projects/:id/task-stages` | staff | scoped |  |
 | GET | `/api/projects/:id/task-views` | staff | scoped |  |
 | PUT | `/api/projects/:id/task-views` | staff | scoped |  |
@@ -915,6 +916,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/tasks/:id` | staff | scoped |  |
 | PUT | `/api/tasks/:id` | staff | scoped |  |
 | GET | `/api/tasks/:id/breadcrumbs` | staff | scoped |  |
+| GET | `/api/tasks/:id/collaborators` | staff | scoped |  |
+| PUT | `/api/tasks/:id/collaborators` | staff | scoped |  |
 | POST | `/api/tasks/:id/complete` | staff | scoped |  |
 | PUT | `/api/tasks/:id/content` | staff | scoped |  |
 | PUT | `/api/tasks/:id/dependency` | staff | scoped |  |

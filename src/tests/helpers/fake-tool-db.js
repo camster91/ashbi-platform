@@ -23,7 +23,7 @@ const TERMINAL = new Set(['EXECUTED', 'FAILED', 'REJECTED', 'EXPIRED']);
 
 export function createFakeToolDb() {
   const tables = {
-    organization: [], user: [], client: [], project: [], task: [], calendarEvent: [], chatMessage: [],
+    organization: [], user: [], client: [], project: [], task: [], taskCollaborator: [], calendarEvent: [], chatMessage: [],
     slackInstallation: [], slackChannelMapping: [], aiBridgeAction: [], auditEvent: [],
     aiProviderConnection: [], aiUsageRecord: [], platformSetting: [], credential: [],
   };
@@ -38,6 +38,8 @@ export function createFakeToolDb() {
   function matches(model, row, where = {}) {
     return Object.entries(where).every(([key, condition]) => {
       if (key === 'AND') return condition.every((branch) => matches(model, row, branch));
+      if (key === 'OR') return condition.some((branch) => matches(model, row, branch));
+      if (model === 'task' && key === 'collaborators') return tables.taskCollaborator.some(member => member.taskId === row.id && matches('taskCollaborator', member, condition.some));
       const relation = related(model, row, key);
       if (relation && condition && typeof condition === 'object' && !(condition instanceof Date)) {
         return relation.row ? matches(relation.target, relation.row, condition) : false;

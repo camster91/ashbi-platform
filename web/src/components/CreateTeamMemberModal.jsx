@@ -133,14 +133,14 @@ export default function CreateTeamMemberModal({ isOpen, onClose }) {
             </Select>
           </Field>
 
-          <Field label="Capacity (%)" hint="100% = full-time availability">
+          <Field label="Capacity (%)" hint="100% = 40 hours per week">
             <Input
               type="number"
               name="capacity"
               value={formData.capacity}
               onChange={handleChange}
               min="0"
-              max="100"
+              max="200"
             />
           </Field>
         </div>

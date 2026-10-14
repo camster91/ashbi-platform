@@ -9,6 +9,9 @@ import QueryErrorState from '../components/QueryErrorState';
 import { buildKanbanColumns } from './TaskKanban';
 import TaskViewCalendar from '../components/TaskViewCalendar';
 import TaskFieldCell from '../components/TaskFieldCell';
+import TaskFieldFilters from '../components/TaskFieldFilters';
+import TaskViewGallery from '../components/TaskViewGallery';
+import { groupTaskViewRows } from '@shared/task-view-groups.js';
 
 const STATUSES = ['PENDING', 'IN_PROGRESS', 'REVIEW', 'WAITING_CLIENT', 'WAITING_US', 'BLOCKED', 'COMPLETED', 'UPCOMING', 'IMMEDIATE', 'TODO'];
 const text = value => String(value || '').toLowerCase().replaceAll('_', ' ');
@@ -30,7 +33,9 @@ export default function TaskViews() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('PRIORITY');
   const [layout, setLayout] = useState('TABLE');
+  const [grouping, setGrouping] = useState('NONE');
   const [columnKeys, setColumnKeys] = useState([]);
+  const [fieldFiltersDirty, setFieldFiltersDirty] = useState(false);
   const [name, setName] = useState('');
   const [saveError, setSaveError] = useState('');
   const configQuery = useQuery({ queryKey: ['taskViews', projectId], queryFn: () => api.getTaskViews(projectId) });
@@ -40,6 +45,7 @@ export default function TaskViews() {
     setFilters(selected?.filters ?? {}); setSort(selected?.sort ?? 'PRIORITY');
     setLayout(selected?.layout ?? 'TABLE'); setName(selected?.name ?? ''); setSaveError('');
     setColumnKeys(selected?.columns ?? []);
+    setGrouping(selected?.grouping?.by === 'FIELD' ? `FIELD:${selected.grouping.fieldKey}` : selected?.grouping?.by ?? 'NONE');
   }, [selected]);
   useEffect(() => {
     const timeout = setTimeout(() => setSearch(filters.search?.trim() || ''), 300);
@@ -53,7 +59,7 @@ export default function TaskViews() {
       let page = 1;
       let response;
       do {
-        response = await api.getTasks({ projectId, ...queryFilters, page, limit: 100 });
+        response = await api.getTasks({ projectId, ...queryFilters, ...(queryFilters.fieldFilters && { fieldFilters: JSON.stringify(queryFilters.fieldFilters) }), page, limit: 100 });
         const rows = response?.tasks ?? [];
         tasks.push(...rows);
         if (!rows.length) break;
@@ -78,7 +84,8 @@ export default function TaskViews() {
   }
   function saveCurrent(asNew) {
     const key = asNew ? crypto.randomUUID() : selected.key;
-    const view = { key, name: name.trim(), filters, sort, layout, ...(columnKeys.length ? { columns: columnKeys } : {}) };
+    const group = grouping.startsWith('FIELD:') ? { by: 'FIELD', fieldKey: grouping.slice(6) } : { by: grouping };
+    const view = { key, name: name.trim(), filters, sort, layout, ...(grouping !== 'NONE' ? { grouping: group } : {}), ...(columnKeys.length ? { columns: columnKeys } : {}) };
     const views = asNew ? [...config.views, view] : config.views.map(item => item.key === key ? view : item);
     save.mutate({ views, selectedKey: key });
   }
@@ -87,6 +94,8 @@ export default function TaskViews() {
   const tasks = sortViewTasks(tasksQuery.data ?? [], sort);
   const fields = config.fields ?? [];
   const columns = columnKeys.map(key => fields.find(field => field.key === key && !field.archived)).filter(Boolean);
+  const group = grouping.startsWith('FIELD:') ? { by: 'FIELD', fieldKey: grouping.slice(6) } : { by: grouping };
+  const groups = groupTaskViewRows(tasks, group, fields, config.stages);
   const board = {};
   for (const task of tasks) (board[task.status || 'PENDING'] ??= []).push(task);
   const controlClass = 'min-h-11 max-w-full rounded border border-border bg-card px-3';
@@ -117,36 +126,38 @@ export default function TaskViews() {
       <label className="text-sm">Sort<select aria-label="Task view sort" className={`block ${controlClass}`} value={sort} onChange={event => setSort(event.target.value)}>
         <option value="PRIORITY">Priority</option><option value="DUE_DATE">Due date</option><option value="TITLE">Title</option>
       </select></label>
-      <label className="text-sm">Layout<select aria-label="Task view layout" className={`block ${controlClass}`} value={layout} onChange={event => setLayout(event.target.value)}><option value="TABLE">Table</option><option value="BOARD">Board</option><option value="CALENDAR">Calendar</option></select></label>
+      <label className="text-sm">Layout<select aria-label="Task view layout" className={`block ${controlClass}`} value={layout} onChange={event => setLayout(event.target.value)}><option value="TABLE">Table</option><option value="BOARD">Board</option><option value="CALENDAR">Calendar</option><option value="GALLERY">Gallery</option></select></label>
+      <label className="text-sm min-w-0 max-w-full">Grouping<select aria-label="Task view grouping" className={`block ${controlClass}`} disabled={!['TABLE', 'GALLERY'].includes(layout)} value={grouping} onChange={event => setGrouping(event.target.value)}><option value="NONE">No grouping</option><option value="STATUS">Status</option><option value="PRIORITY">Priority</option><option value="STAGE">Stage</option>{fields.filter(field => !field.archived && field.type !== 'RELATION').map(field => <option key={field.key} value={`FIELD:${field.key}`}>{field.name}</option>)}{group.by === 'FIELD' && !fields.some(field => field.key === group.fieldKey && !field.archived && field.type !== 'RELATION') && <option value={grouping}>Unavailable field — clear grouping</option>}</select></label>
     </fieldset>
+    <TaskFieldFilters projectId={projectId} fields={fields} value={filters.fieldFilters} onDirtyChange={setFieldFiltersDirty} disabled={save.isPending} onChange={fieldFilters => setFilters(current => { const next = { ...current }; if (fieldFilters.length) next.fieldFilters = fieldFilters; else delete next.fieldFilters; return next; })} />
     {(fields.some(field => !field.archived) || columnKeys.length > 0) && <fieldset className="min-w-0 rounded border border-border p-3" disabled={save.isPending}>
       <legend className="px-2 text-sm">Custom table columns</legend>
       <div className="flex flex-wrap gap-3">{fields.filter(field => !field.archived).map(field => <label key={field.key} className="inline-flex min-h-11 items-center gap-2">
         <input type="checkbox" checked={columnKeys.includes(field.key)} disabled={!columnKeys.includes(field.key) && columnKeys.length >= 20} onChange={event => setColumnKeys(keys => event.target.checked ? [...keys, field.key] : keys.filter(key => key !== field.key))} />{field.name}
       </label>)}</div>
       {columnKeys.some(key => !fields.some(field => field.key === key && !field.archived)) && <p role="status" className="text-sm">Some saved columns are archived or unavailable. <button type="button" className="min-h-11 underline" onClick={() => setColumnKeys(columns.map(field => field.key))}>Clear unavailable columns</button></p>}
-      <p className="text-xs text-muted-foreground">Choose up to 20 fields. Columns apply to the table layout.</p>
+      <p className="text-xs text-muted-foreground">Choose up to 20 fields for table columns and gallery details. Grouping applies to tables and galleries.</p>
     </fieldset>}
     <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); saveCurrent(true); }}>
       <label className="text-sm">View name<input aria-label="Task view name" value={name} onChange={event => setName(event.target.value)} required maxLength={80} className={`block ${controlClass}`} /></label>
-      <button type="submit" disabled={save.isPending || !name.trim() || config.views.length >= 20} className={`${controlClass} bg-primary text-primary-foreground disabled:opacity-50`}>Save as new view</button>
-      {selected && <><button type="button" disabled={save.isPending || !name.trim()} className={controlClass} onClick={() => saveCurrent(false)}>Save view changes</button>
+      <button type="submit" disabled={save.isPending || fieldFiltersDirty || !name.trim() || config.views.length >= 20} className={`${controlClass} bg-primary text-primary-foreground disabled:opacity-50`}>Save as new view</button>
+      {selected && <><button type="button" disabled={save.isPending || fieldFiltersDirty || !name.trim()} className={controlClass} onClick={() => saveCurrent(false)}>Save view changes</button>
         <button type="button" disabled={save.isPending} className={`${controlClass} text-destructive`} onClick={() => save.mutate({ views: config.views.filter(view => view.key !== selected.key), selectedKey: null })}>Delete view</button></>}
     </form>
     {saveError && <div role="alert" className="text-sm text-destructive">{saveError} <button type="button" className="min-h-11 underline" onClick={() => configQuery.refetch()}>Reload saved views</button></div>}
     <p className="text-sm text-muted-foreground" role="status">{tasksQuery.isFetching ? 'Loading tasks…' : `${tasks.length} tasks`}</p>
     {tasksQuery.isError ? <QueryErrorState error={tasksQuery.error} message="Tasks could not be loaded" onRetry={tasksQuery.refetch} />
       : tasksQuery.isLoading ? <LoadingState label="Loading tasks" /> : layout === 'CALENDAR' ? <TaskViewCalendar tasks={tasks} /> : tasks.length === 0 ? <p>No tasks match these filters.</p>
-      : layout === 'BOARD' ? <div className="flex flex-col lg:flex-row gap-4 lg:overflow-x-auto min-w-0 [contain:inline-size]">
+      : layout === 'GALLERY' ? <TaskViewGallery groups={groups} fields={columns} grouped={grouping !== 'NONE'} /> : layout === 'BOARD' ? <div className="flex flex-col lg:flex-row gap-4 lg:overflow-x-auto min-w-0 [contain:inline-size]">
         {buildKanbanColumns(board, config.stages).map(column => <section key={column.key} className="rounded border border-border p-3 lg:min-w-64" aria-label={column.label}>
           <h2 className="font-semibold mb-3">{column.label} ({column.tasks.length})</h2>
           <ul className="space-y-2">{column.tasks.map(task => <li key={task.id}><Link className="block min-h-11 rounded bg-card border border-border p-3 text-primary" to={`/task/${task.id}`}>{task.title}</Link></li>)}</ul>
         </section>)}
       </div> : <div className="overflow-x-auto min-w-0 focus-visible:ring-2 focus-visible:ring-ring" role="region" aria-label="Task table" tabIndex={0}><table className="w-full text-sm"><caption className="sr-only">Tasks in {selected?.name ?? 'All tasks'}</caption>
         <thead><tr>{['Task', 'Status', 'Priority', 'Assignee', 'Due date'].map(label => <th key={label} className="text-left border-b border-border p-3">{label}</th>)}{columns.map(field => <th key={field.key} className="text-left border-b border-border p-3">{field.name}</th>)}</tr></thead>
-        <tbody>{tasks.map(task => <tr key={task.id}><td className="border-b border-border p-3"><Link className="text-primary" to={`/task/${task.id}`}>{task.title}</Link></td>
+        {groups.map(section => <tbody key={section.key}>{grouping !== 'NONE' && <tr><th scope="rowgroup" colSpan={5 + columns.length} className="p-3 text-left bg-muted">{section.label} ({section.tasks.length})</th></tr>}{section.tasks.map(task => <tr key={task.id}><td className="border-b border-border p-3"><Link className="text-primary" to={`/task/${task.id}`}>{task.title}</Link></td>
           <td className="p-3 border-b border-border">{text(task.status)}</td><td className="p-3 border-b border-border">{TASK_PRIORITY_LABELS[task.priority] || task.priority}</td>
-          <td className="p-3 border-b border-border">{task.assignee?.name || 'Unassigned'}</td><td className="p-3 border-b border-border whitespace-nowrap">{task.dueDate ? formatDate(task.dueDate, { dateOnly: true }) : 'No date'}</td>{columns.map(field => <td key={field.key} className="p-3 border-b border-border"><TaskFieldCell field={field} value={task.fieldValues?.[field.key]} /></td>)}</tr>)}</tbody>
+          <td className="p-3 border-b border-border">{task.assignee?.name || 'Unassigned'}</td><td className="p-3 border-b border-border whitespace-nowrap">{task.dueDate ? formatDate(task.dueDate, { dateOnly: true }) : 'No date'}</td>{columns.map(field => <td key={field.key} className="p-3 border-b border-border"><TaskFieldCell field={field} value={task.fieldValues?.[field.key]} /></td>)}</tr>)}</tbody>)}
       </table></div>}
   </div>;
 }

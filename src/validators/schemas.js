@@ -141,14 +141,18 @@ export const projectTaskFieldsSchema = z.object({ revision: z.number().int().min
 export const taskFieldValuesSchema = z.object({ revision: z.number().int().min(0), definitionRevision: z.number().int().min(0),
   values: z.record(taskStageKeySchema.refine(value => !['__proto__', 'prototype', 'constructor'].includes(value)), z.unknown()).refine(value => Object.keys(value).length <= 40),
 }).strict();
+export const taskCollaboratorsSchema = z.object({ revision: z.number().int().min(0), userIds: z.array(cuidId).max(30).refine(ids => new Set(ids).size === ids.length) }).strict();
 export const taskViewFiltersSchema = z.object({
   search: z.string().trim().max(200).optional(), stageKey: taskStageKeySchema.optional(),
   status: z.enum(TASK_STATUS_VALUES).optional(), priority: z.enum(TASK_PRIORITIES).optional(),
+  fieldFilters: z.preprocess(value => { if (typeof value !== 'string') return value; try { return JSON.parse(value); } catch { return value; } },
+    z.array(z.object({ key: taskStageKeySchema.refine(key => !['__proto__', 'prototype', 'constructor'].includes(key)), operator: z.enum(['EQ', 'CONTAINS', 'GTE', 'LTE', 'HAS']), value: z.union([z.string().max(2048), z.number().finite(), z.boolean()]) }).strict()).max(10)).optional(),
 }).strict();
 export const projectTaskViewsSchema = z.object({
   revision: z.number().int().min(0),
   views: z.array(z.object({ key: taskStageKeySchema, name: z.string().trim().min(1).max(80),
-    layout: z.enum(['TABLE', 'BOARD', 'CALENDAR']), sort: z.enum(['PRIORITY', 'DUE_DATE', 'TITLE']), filters: taskViewFiltersSchema,
+    layout: z.enum(['TABLE', 'BOARD', 'CALENDAR', 'GALLERY']), sort: z.enum(['PRIORITY', 'DUE_DATE', 'TITLE']), filters: taskViewFiltersSchema,
+    grouping: z.object({ by: z.enum(['NONE', 'STATUS', 'PRIORITY', 'STAGE', 'FIELD']), fieldKey: taskStageKeySchema.optional() }).strict().refine(value => value.by === 'FIELD' ? Boolean(value.fieldKey) : value.fieldKey === undefined).optional(),
     columns: z.array(taskStageKeySchema).max(20).refine(keys => new Set(keys).size === keys.length).optional(),
   }).strict()).max(20),
 }).strict().refine(({ views }) => ['key', 'name'].every(field => new Set(views.map(view => view[field].toLowerCase())).size === views.length),
@@ -523,7 +527,7 @@ export const requestAccessSchema = z.object({
 export const updateProfileSchema = z.object({
   name: userName.optional(),
   skills: z.array(z.string().max(50)).max(20).optional(),
-  capacity: z.number().int().min(1).max(168).optional(), // hours per week
+  capacity: z.number().int().min(0).max(200).optional(), // percent; 100 represents 40 hours per week
 });
 
 // ── Approval schemas ──────────────────────────────────────────────────────

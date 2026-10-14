@@ -76,7 +76,14 @@ export async function saveTaskFieldValues(prisma, taskId, { revision, definition
 }
 export async function taskFieldOptions(prisma, taskId, fieldKey, search = '') {
   const current = await readTaskFields(prisma, taskId);
-  const field = current.fields.find(item => item.key === fieldKey && item.type === 'RELATION' && !item.archived);
+  return relationFieldOptions(prisma, current.fields, fieldKey, search);
+}
+export async function projectTaskFieldOptions(prisma, projectId, fieldKey, search = '') {
+  const current = await readTaskFieldDefinitions(prisma, projectId);
+  return relationFieldOptions(prisma, current.fields, fieldKey, search);
+}
+async function relationFieldOptions(prisma, fields, fieldKey, search) {
+  const field = fields.find(item => item.key === fieldKey && item.type === 'RELATION' && !item.archived);
   if (!field) fail(404, 'Relation field not found');
   const model = models[field.target];
   const label = model === 'task' ? 'title' : 'name';

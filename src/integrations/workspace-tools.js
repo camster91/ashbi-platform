@@ -7,18 +7,21 @@ import { portfolioFilterSchema } from '../validators/schemas.js';
 import { taskViewFiltersSchema } from '../validators/schemas.js';
 import { taskViewWhere } from '../shared/task-view-filters.js';
 import { financialPortfolioWhere, invoicePortfolioWhere } from '../shared/financial-portfolio.js';
+import { validateTaskFieldFilters } from '../services/task-field-filters.service.js';
+import { readTeamWorkload } from '../services/team-workload.service.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
   after: z.string().min(1).max(50).optional(),
 }).strict();
 
-function listTool(name, description, model, select, where, inputSchema = pageSchema) {
+function listTool(name, description, model, select, where, inputSchema = pageSchema, preflight = async () => {}) {
   return {
     name, description, class: 'read', roles: ['ADMIN', 'TEAM'], inputSchema,
     resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
     timeoutMs: 5000,
     run: async ({ prisma, user, input }) => {
+      await preflight({ prisma, user, input });
       const rows = await prisma[model].findMany({
         where: { ...await where(user, input, prisma), ...(input.after ? { id: { gt: input.after } } : {}) },
         select, orderBy: { id: 'asc' }, take: input.limit + 1,
@@ -30,6 +33,12 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 }
 
 export const workspaceRegistry = createToolRegistry([
+  {
+    name: 'get_team_workload', description: 'Read active staff owned-task and contributor counts, and logged hours over the last seven days compared with weekly capacity. Counts can overlap; this does not forecast future availability.',
+    class: 'read', roles: ['ADMIN', 'TEAM'], inputSchema: z.object({}).strict(),
+    resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }), timeoutMs: 5000,
+    run: async ({ prisma, user }) => readTeamWorkload(prisma, user),
+  },
   listTool('list_invoices', 'Page through internal invoice identities and monetary values, preserving each currency. Optionally filter by portfolio.',
     'invoice', { id: true, invoiceNumber: true, status: true, total: true, currency: true, clientId: true, projectId: true, issueDate: true, dueDate: true },
     async (user, input, prisma) => ({ organizationId: user.organizationId, ...await invoicePortfolioWhere(prisma, input.portfolio, user.organizationId) }),
@@ -57,10 +66,11 @@ export const workspaceRegistry = createToolRegistry([
   listTool('list_clients', 'Page through workspace clients. Returns business identity, never credentials.',
     'client', { id: true, name: true, status: true, domain: true }, user => ({ organizationId: user.organizationId })),
   listTool('list_tasks', 'Page through workspace tasks, including unassigned work. Filter by projectId, status, priority, stageKey or search to reproduce a saved project view.',
-    'task', { id: true, title: true, projectId: true, status: true, stageKey: true, priority: true, dueDate: true, fieldValues: true, fieldValuesRevision: true,
+    'task', { id: true, title: true, projectId: true, status: true, stageKey: true, priority: true, dueDate: true, fieldValues: true, fieldValuesRevision: true, assigneeId: true, collaboratorsRevision: true, collaborators: { select: { userId: true, user: { select: { name: true, isActive: true } } } },
       recurrenceRule: true, recurrenceNextDate: true, recurrenceRevision: true, recurrenceSourceId: true, recurrenceScheduledDate: true },
     (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) }, ...taskViewWhere(input) }),
-    pageSchema.extend({ portfolio: portfolioFilterSchema, projectId: z.string().min(1).max(50).optional(), ...taskViewFiltersSchema.shape })),
+    pageSchema.extend({ portfolio: portfolioFilterSchema, projectId: z.string().min(1).max(50).optional(), ...taskViewFiltersSchema.shape }),
+    ({ prisma, user, input }) => validateTaskFieldFilters(prisma, input.projectId, input.fieldFilters, user.organizationId)),
   ...BUILTIN_TOOLS.filter(tool => ['list_my_tasks', 'get_project_summary', 'create_task', 'create_calendar_event'].includes(tool.name)),
 ]);
 

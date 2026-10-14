@@ -21,7 +21,10 @@ if (files.length === 0) {
   console.error('No Node test files found');
   process.exitCode = 1;
 } else {
-  const result = spawnSync(process.execPath, ['--import', stdoutGuard, '--test', ...files], {
+  // Relative paths keep the Windows command line below its length limit as the
+  // suite grows, without splitting tests into separate runs or changing coverage.
+  const targets = files.map(file => path.relative(process.cwd(), file));
+  const result = spawnSync(process.execPath, ['--import', stdoutGuard, '--test', ...targets], {
     stdio: 'inherit',
     env: { ...process.env, NODE_ENV: 'test', CI: process.env.CI || '1' },
   });

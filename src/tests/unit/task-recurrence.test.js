@@ -6,7 +6,7 @@ import { processRecurringTasks, saveTaskRecurrence } from '../../services/task-r
 
 const rule = { frequency: 'MONTHLY', interval: 1, startDate: '2026-01-31', timeZone: 'America/Toronto' };
 const source = () => ({ id: 'source-1', projectId: 'project-1', title: 'Monthly review', status: 'COMPLETED', stageKey: 'done',
-  recurrenceRule: rule, recurrenceNextDate: new Date('2026-01-31T00:00:00Z'), recurrenceRevision: 0, priority: 'HIGH', category: 'UPCOMING', tags: '[]' });
+  project: { organizationId: 'org-a' }, recurrenceRule: rule, recurrenceNextDate: new Date('2026-01-31T00:00:00Z'), recurrenceRevision: 0, priority: 'HIGH', category: 'UPCOMING', tags: '[]' });
 function fixture(tasks = [source()]) {
   const created = [];
   const rows = tasks.map(item => ({ ...item }));
@@ -20,8 +20,9 @@ function fixture(tasks = [source()]) {
         if (row.recurrenceRevision !== where.recurrenceRevision || +row.recurrenceNextDate !== +where.recurrenceNextDate) return { count: 0 };
         Object.assign(row, data); return { count: 1 };
       },
-      create: async ({ data }) => { created.push(data); return data; },
+      create: async ({ data }) => { created.push(data); return { ...data, id: 'generated' }; },
     }, user: { findFirst: async () => null },
+    taskCollaborator: { findMany: async () => [], createMany: async () => ({ count: 0 }) },
     $transaction: async (work, options) => { assert.equal(options.isolationLevel, 'Serializable'); return work(db); },
   };
   return { db, created, rows };
@@ -82,4 +83,20 @@ test('not due in the selected timezone does not generate; one bad source does no
   const mixed = fixture([{ ...source(), id: 'bad', recurrenceRule: {} }, source()]);
   await assert.rejects(processRecurringTasks(mixed.db, { now: new Date('2026-02-01T17:00:00Z') }), /Failed to generate 1/);
   assert.equal(mixed.created.length, 1);
+});
+
+test('calendar copies retain active tenant contributors without changing the accountable owner', async () => {
+  const { db, created } = fixture([{ ...source(), assigneeId: 'owner' }]);
+  db.user.findFirst = async ({ where }) => { assert.equal(where.organizationId, 'org-a'); assert.equal(where.isActive, true); return { id: 'owner' }; };
+  db.taskCollaborator.findMany = async ({ where, take }) => {
+    assert.deepEqual(where, { taskId: 'source-1', organizationId: 'org-a', user: { organizationId: 'org-a', isActive: true, role: { in: ['ADMIN', 'TEAM'] } } });
+    assert.equal(take, 30); return [{ userId: 'helper' }];
+  };
+  const copies = [];
+  db.taskCollaborator.createMany = async ({ data }) => { copies.push(...data); };
+  await processRecurringTasks(db, { now: new Date('2026-02-01T17:00:00Z') });
+  assert.equal(created[0].assigneeId, 'owner');
+  assert.deepEqual(copies, [{ taskId: 'generated', userId: 'helper', organizationId: 'org-a' }]);
+  assert.equal((await processRecurringTasks(db, { now: new Date('2026-02-01T17:00:00Z') })).generated, 0);
+  assert.equal(copies.length, 1);
 });

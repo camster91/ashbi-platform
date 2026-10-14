@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-107 models, 0 enums, 53 tenant-scoped, 13 soft-deletable.
+108 models, 0 enums, 54 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -78,7 +78,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 62 |
+| [Organization](#model-organization) | `organizations` | no | no | 63 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -109,7 +109,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [SlackInstallation](#model-slackinstallation) | `slack_installations` | yes | no | 15 |
 | [Snippet](#model-snippet) | `snippets` | no | no | 13 |
 | [SupportHourEntry](#model-supporthourentry) | `support_hours` | yes | no | 12 |
-| [Task](#model-task) | `tasks` | no | yes | 47 |
+| [Task](#model-task) | `tasks` | no | yes | 49 |
+| [TaskCollaborator](#model-taskcollaborator) | `task_collaborators` | yes | no | 8 |
 | [TaskComment](#model-taskcomment) | `task_comments` | no | no | 9 |
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
 | [Template](#model-template) | `templates` | yes | no | 11 |
@@ -118,7 +119,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [TimeSession](#model-timesession) | `time_sessions` | no | no | 16 |
 | [TrashedItem](#model-trasheditem) | `trashed_items` | yes | yes | 9 |
 | [UnmatchedEmail](#model-unmatchedemail) | `unmatched_emails` | yes | no | 16 |
-| [User](#model-user) | `users` | yes | no | 52 |
+| [User](#model-user) | `users` | yes | no | 53 |
 | [WPAlert](#model-wpalert) | `wp_alerts` | yes | no | 9 |
 | [WPBackup](#model-wpbackup) | `wp_backups` | yes | no | 15 |
 | [WPBridgeNonce](#model-wpbridgenonce) | `wp_bridge_nonces` | yes | no | 7 |
@@ -1704,6 +1705,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `users` | User[] | list, required |  | → User |  |
+| `taskCollaborations` | TaskCollaborator[] | list, required |  | → TaskCollaborator |  |
 | `clients` | Client[] | list, required |  | → Client |  |
 | `projects` | Project[] | list, required |  | → Project |  |
 | `formDrafts` | FormDraft[] | list, required |  | → FormDraft |  |
@@ -2636,6 +2638,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `properties` | String | required | `"{}"` |  | JSON: Custom properties/fields |
 | `fieldValues` | Json | optional |  |  | Typed custom values, separate from legacy properties |
 | `fieldValuesRevision` | Int | required | `0` |  |  |
+| `collaboratorsRevision` | Int | required | `0` |  |  |
 | `parentId` | String | optional |  |  | For subpages/subtasks |
 | `estimatedTime` | String | optional |  |  |  |
 | `startDate` | DateTime | optional |  |  |  |
@@ -2656,12 +2659,34 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `assignee` | User | optional |  | → User, via (assigneeId) → (id), "TaskAssignee" |  |
 | `milestone` | Milestone | optional |  | → Milestone, via (milestoneId) → (id), "MilestoneTasks" |  |
 | `comments` | TaskComment[] | list, required |  | → TaskComment |  |
+| `collaborators` | TaskCollaborator[] | list, required |  | → TaskCollaborator |  |
 | `timeEntries` | TimeEntry[] | list, required |  | → TimeEntry |  |
 | `timeSessions` | TimeSession[] | list, required |  | → TimeSession |  |
 | `parent` | Task | optional |  | → Task, via (parentId) → (id), onDelete Cascade, "TaskSubpages" |  |
 | `subpages` | Task[] | list, required |  | → Task, "TaskSubpages" |  |
 | `dependsOn` | Task | optional |  | → Task, via (dependsOnId) → (id), "TaskDependency" |  |
 | `blockedTasks` | Task[] | list, required |  | → Task, "TaskDependency" |  |
+
+### Model TaskCollaborator
+
+- Table: `task_collaborators`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([taskId, userId])`
+  - `@@index([userId])`
+  - `@@index([organizationId, userId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `taskId` | String | required |  |  |  |
+| `userId` | String | required |  |  |  |
+| `organizationId` | String | required |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `task` | Task | required |  | → Task, via (taskId) → (id), onDelete Cascade |  |
+| `user` | User | required |  | → User, via (userId) → (id), onDelete Cascade |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 
 ### Model TaskComment
 
@@ -2929,6 +2954,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `assignedThreads` | Thread[] | list, required |  | → Thread, "AssignedTo" |  |
 | `assignedTasks` | Task[] | list, required |  | → Task, "TaskAssignee" |  |
+| `taskCollaborations` | TaskCollaborator[] | list, required |  | → TaskCollaborator |  |
 | `draftedResponses` | Response[] | list, required |  | → Response, "DraftedBy" |  |
 | `approvedResponses` | Response[] | list, required |  | → Response, "ApprovedBy" |  |
 | `notifications` | Notification[] | list, required |  | → Notification |  |
