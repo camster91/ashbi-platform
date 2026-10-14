@@ -3,10 +3,10 @@ ALTER TABLE "tasks" ADD COLUMN "recurrenceFirstCompletedAt" TIMESTAMP(3),
  ADD COLUMN "recurrenceCompletionSourceId" TEXT;
 CREATE UNIQUE INDEX "tasks_recurrenceCompletionSourceId_key" ON "tasks"("recurrenceCompletionSourceId");
 CREATE INDEX "tasks_status_recurrenceCompletionProcessedAt_id_idx" ON "tasks"("status", "recurrenceCompletionProcessedAt", "id");
-UPDATE "tasks" SET "recurrenceFirstCompletedAt" = "completedAt" WHERE "status" = 'COMPLETED' AND "completedAt" IS NOT NULL;
+UPDATE "tasks" SET "recurrenceFirstCompletedAt" = "completedAt" WHERE "completedAt" IS NOT NULL;
 -- Completed history without a recorded date remains unknown, but must never
 -- become new repeat work when this additive migration is released.
-UPDATE "tasks" SET "recurrenceCompletionProcessedAt" = CURRENT_TIMESTAMP WHERE "status" = 'COMPLETED';
+UPDATE "tasks" SET "recurrenceCompletionProcessedAt" = CURRENT_TIMESTAMP WHERE "status" = 'COMPLETED' OR "completedAt" IS NOT NULL;
 CREATE FUNCTION task_first_completion_stamp() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP = 'UPDATE' AND OLD."recurrenceFirstCompletedAt" IS NOT NULL THEN
