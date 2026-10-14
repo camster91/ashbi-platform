@@ -17,7 +17,7 @@ test('team workload distinguishes canonical owner and contributor work after rel
   const current = (await json(await api.get('/api/team/workload'))).find((row: any) => row.id === member.id);
   expect(current.activeTasks).toBe(baseline.activeTasks + 1);
   expect(current.contributedTasks).toBe(baseline.contributedTasks + 1);
-  expect(current.weeklyCapacityHours).toBe(member.capacity);
+  expect(current.weeklyCapacityHours).toBe(member.capacity / 100 * 40);
   await page.goto('/team');
   const region = page.getByRole('region', { name: 'Team workload' });
   await expect(region.getByText(`${current.activeTasks} owned tasks · ${current.contributedTasks} contributions`, { exact: true })).toBeVisible();
@@ -27,5 +27,27 @@ test('team workload distinguishes canonical owner and contributor work after rel
     await page.setViewportSize({ width, height: 844 });
     const audit = await new AxeBuilder({ page }).include('[aria-label="Team workload"]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
     expect(audit.violations).toEqual([]);
+  }
+});
+
+test('profile percentage capacity preserves zero and updates weekly workload hours', async ({ page }) => {
+  await loginAdminThroughUi(page);
+  const api = page.request;
+  const original = await json(await api.get('/api/auth/me'));
+  try {
+    await json(await api.put('/api/auth/me', { data: { capacity: 0 } }));
+    await page.goto('/settings');
+    const capacity = page.getByLabel('Capacity (%)', { exact: true });
+    await expect(capacity).toHaveValue('0');
+    await capacity.fill('50');
+    const saved = page.waitForResponse(response => response.url().endsWith('/api/auth/me') && response.request().method() === 'PUT');
+    await page.getByRole('button', { name: 'Save Profile', exact: true }).click();
+    expect((await saved).status()).toBe(200);
+    await page.reload();
+    await expect(capacity).toHaveValue('50');
+    const workload = await json(await api.get('/api/team/workload'));
+    expect(workload.find((row: any) => row.id === original.id).weeklyCapacityHours).toBe(20);
+  } finally {
+    await json(await api.put('/api/auth/me', { data: { capacity: original.capacity } }));
   }
 });
