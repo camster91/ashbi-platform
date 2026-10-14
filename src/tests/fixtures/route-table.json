@@ -739,6 +739,7 @@
   "POST /api/invoices/from-proposal/:proposalId",
   "POST /api/invoices/stripe-webhook",
   "POST /api/invoices/templates",
+  "POST /api/invoices/unbilled/tools/:name",
   "POST /api/mailgun",
   "POST /api/mailgun-hitl/hitl-reply",
   "POST /api/mailgun/",

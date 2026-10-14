@@ -10538,8 +10538,8 @@
             "required": false,
             "schema": {
               "enum": [
-                "workspace_page",
                 "invoice",
+                "workspace_page",
                 "invoice_payment",
                 "proposal",
                 "contract",
@@ -10580,6 +10580,8 @@
             "required": false,
             "schema": {
               "enum": [
+                "invoice.created_from_unbilled",
+                "invoice.sources_released",
                 "workspace_page.access_changed",
                 "workspace_page.created",
                 "workspace_page.updated",
@@ -20886,6 +20888,68 @@
           "invoices"
         ],
         "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/invoices/unbilled/tools/{name}": {
+      "post": {
+        "operationId": "post_api_invoices_unbilled_tools_name",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/invoices/unbilled/tools/:name",
+        "tags": [
+          "invoices"
+        ],
+        "x-access": "admin",
         "x-tenancy": "scoped"
       }
     },

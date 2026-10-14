@@ -356,7 +356,7 @@ export function createToolExecutor(options = {}) {
    *
    * @param {{ prisma: any, user: any, requestId?: string | null, ip?: string | null }} ctx
    * @param {string} actionId
-   * @param {{ method?: 'api_key_confirm' | 'session_step_up', reauthenticated?: boolean, ownerOnly?: boolean }} [approval]
+   * @param {{ method?: 'api_key_confirm' | 'session_step_up' | 'session_confirm', reauthenticated?: boolean, ownerOnly?: boolean }} [approval]
    * @returns {Promise<{ action: any, idempotent: boolean }>}
    */
   async function approve(ctx, actionId, { method = 'session_step_up', reauthenticated = false, ownerOnly = false } = {}) {
@@ -488,7 +488,7 @@ export function createToolExecutor(options = {}) {
    * an ADMIN may reject any in the organization.
    * @param {{ prisma: any, user: any, requestId?: string | null, ip?: string | null }} ctx
    * @param {string} actionId
-   * @param {{ reason?: string, reauthenticated?: boolean, ownerOnly?: boolean, method?: 'session_step_up' | 'api_key_confirm' }} [rejection]
+   * @param {{ reason?: string, reauthenticated?: boolean, ownerOnly?: boolean, method?: 'session_step_up' | 'api_key_confirm' | 'session_confirm' }} [rejection]
    */
   async function reject(ctx, actionId, { reason = 'other', reauthenticated = false, ownerOnly = false, method = 'session_step_up' } = {}) {
     const scope = ownerWhere(ctx, { ownerOnly });

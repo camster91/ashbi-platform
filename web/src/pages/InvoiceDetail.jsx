@@ -236,7 +236,7 @@ export default function InvoiceDetail() {
       internalNotes: invoice.internalNotes || '',
       dueDate: toDateInputValue(invoice.dueDate),
       currency: invoice.currency || 'CAD',
-      taxRate: invoice.taxRate || HST_RATE,
+      taxRate: invoice.taxRate ?? HST_RATE,
       taxType: invoice.taxType || 'HST',
       discountAmount: invoice.discountAmount || 0,
       lineItems: (invoice.lineItems || []).map(li => ({
@@ -292,6 +292,8 @@ export default function InvoiceDetail() {
   const displayStatus = invoiceDisplayStatus(invoice);
   const repeats = recurrenceSummary(invoice);
   const isDraft = invoice.status === 'DRAFT';
+  const sourceBacked = Boolean(invoice.sourceBilling || invoice.billingSources);
+  const canManage = isAdmin || !sourceBacked;
   // Sent, viewed by the client, or overdue: payable and resendable.
   const isSent = isOpenInvoice(invoice) || invoice.isOverdue;
   const isPaid = invoice.status === 'PAID';
@@ -347,7 +349,7 @@ export default function InvoiceDetail() {
 
         {/* Desktop Actions */}
         <div className="hidden sm:flex items-center gap-2 flex-wrap justify-end">
-          {isDraft && (
+          {isDraft && canManage && (
             <>
               <Button variant="outline" size="sm" leftIcon={<Edit2 className="w-4 h-4" />} onClick={startEdit}>
                 Edit
@@ -360,7 +362,7 @@ export default function InvoiceDetail() {
               )}
             </>
           )}
-          {isSent && !isPaid && (
+          {isSent && !isPaid && canManage && (
             <Button size="sm" leftIcon={<DollarSign className="w-4 h-4" />}
               onClick={openMarkPaid}>
               Mark as Paid
@@ -378,6 +380,7 @@ export default function InvoiceDetail() {
               Download PDF
             </Button>
           </a>
+          {isAdmin && invoice.status === 'VOID' && invoice.billingSources && !invoice.billingSourcesReleasedAt && <Button variant="outline" size="sm" onClick={() => navigate(`/invoices/unbilled?release=${invoice.id}`)}>Review source release</Button>}
           {invoice.stripePaymentLink ? (
             <div className="flex items-center gap-1">
               <span className="inline-flex items-center gap-1 text-xs font-medium bg-success/10 text-success px-2 py-1 rounded-full">
@@ -397,7 +400,7 @@ export default function InvoiceDetail() {
               </button>
             </div>
           ) : (
-            invoice.status !== 'VOID' && invoice.status !== 'PAID' && (
+            canManage && invoice.status !== 'VOID' && invoice.status !== 'PAID' && (
               <Button
                 variant="outline" size="sm"
                 leftIcon={<CreditCard className="w-4 h-4" />}
@@ -426,7 +429,8 @@ export default function InvoiceDetail() {
 
         {/* Mobile Actions - Stacked */}
         <div className="sm:hidden flex flex-wrap gap-2">
-          {isDraft && (
+          {isAdmin && invoice.status === 'VOID' && invoice.billingSources && !invoice.billingSourcesReleasedAt && <Button variant="outline" size="sm" onClick={() => navigate(`/invoices/unbilled?release=${invoice.id}`)}>Review source release</Button>}
+          {isDraft && canManage && (
             <>
               <Button variant="outline" size="sm" leftIcon={<Edit2 className="w-4 h-4" />} onClick={startEdit}>
                 Edit
@@ -439,7 +443,7 @@ export default function InvoiceDetail() {
               )}
             </>
           )}
-          {isSent && !isPaid && (
+          {isSent && !isPaid && canManage && (
             <Button size="sm" leftIcon={<DollarSign className="w-4 h-4" />}
               onClick={openMarkPaid}>
               Mark Paid
@@ -457,6 +461,20 @@ export default function InvoiceDetail() {
       </div>
 
       {/* Alert: Overdue */}
+      {isAdmin && invoice.billingSources && <Card className="p-4 [overflow-wrap:anywhere]">
+        <details>
+          <summary className="min-h-11 flex items-center cursor-pointer font-semibold">Original billed work</summary>
+          <div className="space-y-3 pt-3">
+            <p>Original draft: {fmt(invoice.billingSources.totals?.total, invoice.billingSources.currency)} · {invoice.billingSources.taxType} {invoice.billingSources.taxRate}%</p>
+            <p>{invoice.billingSourcesReleasedAt ? `Sources released ${formatDate(invoice.billingSourcesReleasedAt)}. Original history is retained.` : 'Sources remain reserved for this invoice.'}</p>
+            <p className="text-sm text-muted-foreground">Later invoice edits do not replace this original source record.</p>
+            {invoice.billingSources.lineItems?.map(line => <div key={`${line.source.kind}:${line.source.id}`} className="border-t border-border pt-3 space-y-1">
+              <p>{line.description} · {line.quantity} × {fmt(line.unitPrice, invoice.billingSources.currency)} · {fmt(line.total, invoice.billingSources.currency)}</p>
+              <p className="text-sm">{line.source.kind}: {line.source.id} · {line.source.project?.name || 'Client expense'} · {line.source.user?.name || ''} · {formatDate(line.source.date)}</p>
+            </div>)}
+          </div>
+        </details>
+      </Card>}
       {invoice.isOverdue && (
         <div className="flex items-center gap-3 p-4 bg-destructive/5 border border-destructive/30 rounded-lg">
           <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0" />
@@ -470,7 +488,7 @@ export default function InvoiceDetail() {
       )}
 
       {/* Edit Mode */}
-      {editing && editForm ? (
+      {editing && editForm && canManage ? (
         <Card className="p-4 sm:p-6">
           <h2 className="font-semibold text-lg mb-4">Edit Invoice</h2>
           <DraftRecoveryNotice
@@ -498,7 +516,7 @@ export default function InvoiceDetail() {
               </div>
               <div>
                 <label htmlFor="invoice-edit-currency" className="block text-sm font-medium mb-1">Currency</label>
-                <select id="invoice-edit-currency" value={editForm.currency || 'CAD'}
+                <select id="invoice-edit-currency" disabled={sourceBacked} value={editForm.currency || 'CAD'}
                   onChange={(e) => setEditForm(f => ({ ...f, currency: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm">
                   {INVOICE_CURRENCY_OPTIONS.map(code => <option key={code} value={code}>{code}</option>)}

@@ -1279,7 +1279,11 @@ model Invoice {
   // Autosave draft
   draftData String? // JSON of unsaved form data
 
+  billingSources Json? // Immutable original approved-work preview; internal billing history
+  billingSourcesReleasedAt DateTime? // Reviewed release on an unpaid voided invoice
+
   @@unique([organizationId, invoiceNumber])
+  @@index([organizationId], map: "invoices_billing_sources_scope_idx", where: raw("\"billingSources\" IS NOT NULL"))
   @@unique([clientId, retainerPeriod], map: "invoices_clientId_retainerPeriod_live_key", where: raw("\"retainerPeriod\" IS NOT NULL AND status <> 'VOID' AND \"deletedAt\" IS NULL"))
   @@index([status, dueDate])
   @@index([status, overdueEscalatedAt, dueDate])

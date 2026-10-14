@@ -14,6 +14,10 @@ export async function updateDraftInvoice(prisma, invoice, { data, lineItems, rec
   const observedTime = new Date(invoice.updatedAt).getTime();
   if (!Number.isFinite(observedTime)) throw conflict();
   const updatedAt = new Date(Math.max(Date.now(), observedTime + 1));
+  if (invoice.billingSources && ['clientId', 'projectId', 'currency'].some(key => data[key] !== undefined && data[key] !== invoice[key])) {
+    throw Object.assign(new Error('The original billing client, project and currency must remain unchanged. Release sources and create a new draft to change them.'), { statusCode: 409 });
+  }
+  if (invoice.billingSources && data.isRecurring === true) throw Object.assign(new Error('Reviewed work is billed once. Use a separate recurring invoice template.'), { statusCode: 409 });
   try {
     return await prisma.$transaction(async tx => {
       const claimed = await tx.invoice.updateMany({

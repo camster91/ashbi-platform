@@ -13,10 +13,11 @@ const api = {
   deleteInvoice: vi.fn(),
 };
 const toast = { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() };
+const auth = { user: { id: 'u1', role: 'ADMIN' } };
 
 vi.mock('../lib/api', () => ({ api }));
 vi.mock('../hooks/useToast', () => ({ useToast: () => toast }));
-vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', role: 'ADMIN' } }) }));
+vi.mock('../hooks/useAuth', () => ({ useAuth: () => auth }));
 vi.mock('../hooks/useClients', () => ({ default: () => ({ data: [{ id: 'c1', name: 'Acme' }] }) }));
 vi.mock('../hooks/useAutosave', () => ({
   default: () => ({ draft: null, clearDraft: vi.fn(), status: 'idle', setDraft: vi.fn(), discardDraft: vi.fn(), saveNow: vi.fn() }),
@@ -106,5 +107,15 @@ describe('Invoices list', () => {
     await waitFor(() => expect(toast.warning).toHaveBeenCalled());
     expect(toast.warning.mock.calls[0][0]).toMatch(/no email went out/);
     expect(toast.success).not.toHaveBeenCalled();
+  });
+  it('keeps source-backed settlement administrator-only in both responsive layouts', async () => {
+    auth.user.role = 'TEAM';
+    api.getInvoices.mockResolvedValue({ invoices: [{ ...INVOICES[1], sourceBilling: true }], total: 1, stats: {} });
+    try {
+      renderPage();
+      await screen.findAllByText('INV-2');
+      expect(screen.queryAllByRole('button', { name: /Mark Paid/ })).toHaveLength(0);
+      expect(screen.queryByRole('button', { name: 'Bill approved work' })).not.toBeInTheDocument();
+    } finally { auth.user.role = 'ADMIN'; }
   });
 });

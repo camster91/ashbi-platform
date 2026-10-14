@@ -48,7 +48,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Access | Routes |
 | --- | --- |
-| admin | 40 |
+| admin | 41 |
 | admin + recent-auth | 14 |
 | admin + recent-auth (access change) | 1 |
 | admin + staff | 6 |
@@ -61,7 +61,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | recent-auth + staff | 5 |
 | staff | 394 |
 | staff (inline) | 1 |
-| **total** | 588 |
+| **total** | 589 |
 
 ## Routes by prefix
 
@@ -570,6 +570,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/invoices/templates` | staff | scoped |  |
 | POST | `/api/invoices/templates` | staff | scoped |  |
 | DELETE | `/api/invoices/templates/:id` | staff | scoped |  |
+| POST | `/api/invoices/unbilled/tools/:name` | admin | scoped |  |
 
 ### /api/leads
 

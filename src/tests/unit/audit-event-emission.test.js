@@ -186,6 +186,7 @@ test('bulk actions emit one event per changed invoice', async (t) => {
   const prisma = {
     auditEvent: audit,
     invoice: {
+      findFirst: async ({ where }) => Object.values(invoices).find(invoice => where.id.in.includes(invoice.id) && invoice.billingSources) ?? null,
       findUnique: async ({ where }) => invoices[where.id] ?? null,
       update: async ({ where, data }) => ({ ...invoices[where.id], ...data }),
       updateMany: async ({ where }) => {

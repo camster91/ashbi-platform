@@ -12,7 +12,7 @@ const reply = { status(code) { this.code = code; return this; }, send(body) { re
 async function handlers(registrar, prisma, options = {}) {
   const routes = {};
   const register = (url, _config, handler) => { routes[url] = handler; };
-  await registrar({ prisma, authenticate() {}, get: register, post() {}, put() {}, patch() {}, delete() {} }, options);
+  await registrar({ prisma, authenticate() {}, addHook() {}, get: register, post() {}, put() {}, patch() {}, delete() {} }, options);
   return routes;
 }
 test('unclassified financial records include unlinked projects without inferring a client portfolio', () => {

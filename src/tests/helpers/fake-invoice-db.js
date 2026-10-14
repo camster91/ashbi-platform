@@ -3,12 +3,15 @@
 // exercised without a database. Real-database behaviour (unique indexes,
 // concurrency, migrations) is covered by src/tests/integration/*.database.test.js.
 
+import prismaPkg from '@prisma/client';
+
 function matches(row, where = {}) {
   return Object.entries(where).every(([key, expected]) => {
     if (expected === undefined) return true;
     if (key === 'AND') return expected.every((clause) => matches(row, clause));
     if (key === 'OR') return expected.some((clause) => matches(row, clause));
     const actual = row[key];
+    if (key === 'billingSources' && expected?.not === prismaPkg.Prisma.DbNull) return actual !== null && actual !== undefined;
     if (expected && typeof expected === 'object' && !(expected instanceof Date)) {
       if ('in' in expected) return expected.in.includes(actual);
       if ('notIn' in expected) return !expected.notIn.includes(actual);
