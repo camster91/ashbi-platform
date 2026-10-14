@@ -690,6 +690,7 @@
   "POST /api/chat/projects/:projectId/messages/:messageId/reactions",
   "POST /api/chat/projects/:projectId/uploads",
   "POST /api/client-acquisition/intake",
+  "POST /api/client-assistants/:clientId/preview",
   "POST /api/client-portal/logout",
   "POST /api/client-portal/projects/:id/chat-uploads",
   "POST /api/client-portal/projects/:id/feedback",

@@ -70,12 +70,21 @@ export default function ClientAssistantPreview({ clientId, clientName }) {
   const visibleResult = result?.clientId === clientId ? result : null;
   return (
     <details className="rounded-lg border border-border bg-card p-4">
-      <summary className="min-h-11 cursor-pointer font-medium">Assistant preview</summary>
+      <summary className="min-h-11 cursor-pointer font-medium">Ask the account manager</summary>
       <p id={descriptionId} className="mt-2 text-sm text-muted-foreground">
         Staff preview for {clientName || 'this client'} using shareable project information.
         {' '}Client chat is not enabled. Conversations are not saved and no actions are taken.
       </p>
       <form onSubmit={submit} className="mt-4 space-y-3">
+        <div className="flex flex-wrap gap-2" aria-label="Suggested questions">
+          {[
+            ['Project status', 'Summarize this client’s project status and identify dates that need confirmation.'],
+            ['Draft client update', 'Draft a short client update using only these project records. List missing information for staff review.'],
+            ['Clarify a request', 'What information should we confirm before accepting a new client request? Prepare questions for a human handoff.'],
+          ].map(([label, question]) => (
+            <Button key={label} type="button" size="sm" variant="outline" disabled={pending} onClick={() => setMessage(question)}>{label}</Button>
+          ))}
+        </div>
         <label htmlFor={questionId} className="block text-sm font-medium">Ask about this client</label>
         <textarea
           id={questionId}

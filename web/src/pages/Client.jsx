@@ -23,7 +23,7 @@ import { formatRelativeTime, getHealthColor, getProjectStatusColor, getProjectSt
 import { formatDate, formatMoney } from '../lib/format';
 import { StatusBadge } from '../components/ui';
 import { invoiceBalanceDue, invoiceDisplayStatus } from '../lib/invoice-status';
-import ClientAssistantPreview from '../components/ClientAssistantPreview';
+import ClientAccountManager from '../components/ClientAccountManager';
 
 // "$830.00" for one currency, "$830.00 · US$120.00" when the amounts are in
 // several (different currencies are never added together).
@@ -126,7 +126,7 @@ export default function Client() {
       </div>
 
       {['ADMIN', 'TEAM'].includes(user?.role) && (
-        <ClientAssistantPreview key={id} clientId={id} clientName={client.name} />
+        <ClientAccountManager key={id} clientId={id} clientName={client.name} role={user.role} />
       )}
 
       {/* Quick Actions + Revenue Stats */}

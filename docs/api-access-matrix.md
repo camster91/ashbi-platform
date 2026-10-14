@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 410 |
+| staff | 411 |
 | staff (inline) | 1 |
-| **total** | 605 |
+| **total** | 606 |
 
 ## Routes by prefix
 
@@ -323,6 +323,12 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/client-acquisition/inquiries` | staff | scoped |  |
 | DELETE | `/api/client-acquisition/inquiries/:id` | admin | scoped |  |
 | POST | `/api/client-acquisition/intake` | public | exempt | public intake: Public ashbi.ca inquiry submission; own CORS allowlist, no cookies. |
+
+### /api/client-assistants
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/client-assistants/:clientId/preview` | staff | scoped |  |
 
 ### /api/client-portal
 

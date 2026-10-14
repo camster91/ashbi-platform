@@ -6,7 +6,7 @@ const { previewClientAssistant } = vi.hoisted(() => ({ previewClientAssistant: v
 vi.mock('../lib/api', () => ({ api: { previewClientAssistant } }));
 
 function ask(message = 'What is the project status?') {
-  fireEvent.click(screen.getByText('Assistant preview'));
+  fireEvent.click(screen.getByText('Ask the account manager'));
   fireEvent.change(screen.getByLabelText('Ask about this client'), { target: { value: message } });
   fireEvent.submit(screen.getByLabelText('Ask about this client').closest('form'));
 }
@@ -29,6 +29,13 @@ describe('client assistant preview', () => {
     expect(container.querySelector('img')).toBeNull();
     expect(screen.getByLabelText('Ask about this client')).toHaveAttribute('maxlength', '2000');
     expect(screen.getByText(/Conversations are not saved/)).toBeInTheDocument();
+  });
+
+  it('prefills account-manager questions without generating a response', () => {
+    render(<ClientAssistantPreview clientId="client-a" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Draft client update' }));
+    expect(screen.getByLabelText('Ask about this client').value).toContain('Draft');
+    expect(previewClientAssistant).not.toHaveBeenCalled();
   });
 
   it('blocks duplicate submissions while pending and reports safe errors without automatic retry', async () => {
