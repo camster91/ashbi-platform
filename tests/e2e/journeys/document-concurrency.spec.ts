@@ -14,6 +14,7 @@ test('concurrent document changes reject a stale draft, preserve it and allow an
   await page.getByPlaceholder('Search notes...').fill(title);
   await page.getByRole('button', { name: `Edit ${title}`, exact: true }).click();
   await page.getByLabel(`Edit ${title} content`, { exact: true }).fill('My pending draft');
+  await expect(page.getByRole('button', { name: `Pin ${title}`, exact: true })).toBeDisabled();
   await json(await api.put(`/api/notes/${note.id}`, { data: { revision: note.revision, content: 'Teammate update' } }));
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Document save recovery', exact: true }).getByRole('alert').filter({ hasText: 'Document changed since you started editing' })).toBeVisible();
@@ -37,6 +38,7 @@ test('concurrent document changes reject a stale draft, preserve it and allow an
   await page.getByLabel(`Edit ${title} content`, { exact: true }).fill('Reviewed merge');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByLabel(`Edit ${title} content`, { exact: true })).not.toBeVisible();
+  await expect(page.getByRole('button', { name: `Pin ${title}`, exact: true })).toBeEnabled();
   await page.reload();
   expect((await json(await api.get(`/api/notes/${note.id}`))).content).toBe('Reviewed merge');
 });
