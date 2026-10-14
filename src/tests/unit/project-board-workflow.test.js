@@ -36,3 +36,13 @@ test('stages and views are saved to the selected board while field definitions r
   await saveTaskViews(prisma, 'project', { revision: 0, views: [{ key: 'table', name: 'Delivery table', layout: 'TABLE', sort: 'TITLE', filters: {} }] }, 'board');
   assert.equal(board.taskViews[0].name, 'Delivery table'); assert.deepEqual(project.taskViews, []);
 });
+
+test('the listed DEFAULT board identity moves a task back to null membership', async () => {
+  const { prisma, task } = fixture();
+  await moveTaskBoard(prisma, 'task', { projectId: 'project', boardId: 'board', revision: 0 }, actor);
+  await moveTaskBoard(prisma, 'task', { projectId: 'project', boardId: 'DEFAULT', revision: 1 }, actor);
+  assert.equal(task.boardId, null);
+  assert.equal(task.boardMembershipRevision, 2);
+  assert.equal(task.assigneeId, 'owner');
+  assert.deepEqual(task.fieldValues, { amount: 0 });
+});

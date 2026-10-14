@@ -1,5 +1,5 @@
 import { withStageTransaction, resolveTaskStage } from './task-stages.service.js';
-import { activeTaskBoard } from './task-board-scope.js';
+import { activeTaskBoard, normalizeTaskBoardId } from './task-board-scope.js';
 
 export const DEFAULT_BOARD_ID = 'DEFAULT';
 const fail = (statusCode, message) => { throw Object.assign(new Error(message), { statusCode }); };
@@ -63,6 +63,7 @@ export async function moveTaskBoard(prisma, taskId, { projectId, revision, board
 export async function moveTaskBoardInTransaction(tx, taskId, { projectId, revision, boardId, stageKey }, actor) {
   staff(actor);
   if (!Number.isInteger(revision) || revision < 0 || (boardId !== null && (typeof boardId !== 'string' || !boardId))) fail(400, 'Provide a board and membership revision.');
+  boardId = normalizeTaskBoardId(boardId);
     await projectFor(tx, projectId, actor);
     const current = await tx.task.findFirst({ where: { id: taskId, projectId, deletedAt: null, project: { organizationId: actor.organizationId } } });
     if (!current) fail(404, 'Task not found');
