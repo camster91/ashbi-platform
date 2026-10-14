@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import QueryErrorState from './QueryErrorState';
 
 const control = 'min-h-11 min-w-0 max-w-full rounded border border-border bg-card px-3';
 export default function WorkspacePageAccess({ pageId }) {
+  const fieldId = useId();
   const cache = useQueryClient(); const [draft, setDraft] = useState(null); const [search, setSearch] = useState(''); const [chosen, setChosen] = useState(''); const [reloadError, setReloadError] = useState('');
   const query = useQuery({ queryKey: ['workspacePageAccess', pageId], queryFn: () => api.getWorkspacePageAccess(pageId) });
   const options = useInfiniteQuery({ queryKey: ['workspacePageAccessOptions', pageId, search], enabled: (draft ?? query.data)?.mode === 'RESTRICTED', initialPageParam: null,
@@ -18,10 +19,10 @@ export default function WorkspacePageAccess({ pageId }) {
     <h2 className="font-semibold">Page access</h2><p className="text-sm">The page owner and organization administrators retain access. Parent restrictions also apply, and changing this audience can change visibility of nested pages.</p>
     <form className="space-y-3" onSubmit={event => { event.preventDefault(); save.mutate(); }}>
       <fieldset disabled={save.isPending} className="min-w-0 space-y-3">
-        <label className="block">Audience<select className={`block ${control}`} value={config.mode} onChange={event => setDraft({ ...config, mode: event.target.value, members: event.target.value === 'TEAM' ? [] : config.members })}><option value="TEAM">All Ashbi staff</option><option value="RESTRICTED">Restricted staff</option></select></label>
+        <div><label className="block" htmlFor={`${fieldId}-audience`}>Audience</label><select id={`${fieldId}-audience`} className={`block ${control}`} value={config.mode} onChange={event => setDraft({ ...config, mode: event.target.value, members: event.target.value === 'TEAM' ? [] : config.members })}><option value="TEAM">All Ashbi staff</option><option value="RESTRICTED">Restricted staff</option></select></div>
         {config.mode === 'RESTRICTED' && <>
           <label className="block">Search teammates<input className={`block w-full ${control}`} maxLength={200} value={search} onChange={event => { setSearch(event.target.value); setChosen(''); }} /></label>
-          <label className="block">Teammate<select className={`block w-full ${control}`} value={chosen} onChange={event => setChosen(event.target.value)}><option value="">Choose a teammate</option>{items.filter(item => !config.members.some(member => member.userId === item.id)).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <div><label className="block" htmlFor={`${fieldId}-teammate`}>Teammate</label><select id={`${fieldId}-teammate`} className={`block w-full ${control}`} value={chosen} onChange={event => setChosen(event.target.value)}><option value="">Choose a teammate</option>{items.filter(item => !config.members.some(member => member.userId === item.id)).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
           {options.isError && <QueryErrorState error={options.error} message="Teammates could not be loaded" onRetry={options.refetch} />}
           {options.hasNextPage && <button type="button" className="min-h-11 underline" disabled={options.isFetchingNextPage} onClick={() => options.fetchNextPage()}>Load more teammates</button>}
           <button type="button" className="min-h-11 underline" disabled={!chosen || config.members.length >= 100} onClick={() => { const person = items.find(item => item.id === chosen); if (person) { setDraft({ ...config, members: [...config.members, { userId: person.id, name: person.name, role: 'READ', isActive: true }] }); setChosen(''); } }}>Add reader</button>
