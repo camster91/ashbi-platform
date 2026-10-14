@@ -88,7 +88,9 @@ test('unbilled selection preserves canonical clients and currency, approval, pag
     await assert.rejects(raw.invoice.update({ where: { id: invoice.id }, data: { currency: 'USD' } }), /client project and currency cannot change/);
     await assert.rejects(raw.invoice.update({ where: { id: invoice.id }, data: { isRecurring: true } }), /cannot recur/);
     await assert.rejects(raw.timeEntry.update({ where: { id: sourceTime.id }, data: { duration: 60 } }), /billed time/);
+    await assert.rejects(raw.timeEntry.update({ where: { id: sourceTime.id }, data: { deletedAt: new Date() } }), /billed time/);
     await assert.rejects(raw.expense.update({ where: { id: expense.id }, data: { amount: 20 } }), /billed expense/);
+    await assert.rejects(raw.expense.update({ where: { id: expense.id }, data: { deletedAt: new Date() } }), /billed expense/);
     await assert.rejects(raw.project.update({ where: { id: projects[0].id }, data: { clientId: otherClient.id } }), /billed time/);
     await assert.rejects(raw.timeEntry.update({ where: { id: sourceTime.id }, data: { invoiceId: null, invoiced: false } }), /billed time/);
     await raw.expense.update({ where: { id: expense.id }, data: { notes: 'Receipt follow-up' } });
