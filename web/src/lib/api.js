@@ -859,8 +859,7 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/invoices${query ? `?${query}` : ''}`);
   },
-  getInvoiceStats: () =>
-    request('/invoices/stats'),
+  getInvoiceStats: (params = {}) => { const query = new URLSearchParams(params).toString(); return request(`/invoices/stats${query ? `?${query}` : ''}`); },
   getInvoice: (id) =>
     request(`/invoices/${id}`),
   createInvoice: (data) =>
@@ -903,8 +902,7 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/expenses${query ? `?${query}` : ''}`);
   },
-  getExpenseSummary: () =>
-    request('/expenses/summary'),
+  getExpenseSummary: (params = {}) => { const query = new URLSearchParams(params).toString(); return request(`/expenses/summary${query ? `?${query}` : ''}`); },
   getExpense: (id) =>
     request(`/expenses/${id}`),
   createExpense: (data) =>
