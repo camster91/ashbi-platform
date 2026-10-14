@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { readFile } from 'node:fs/promises';
 import { createClientWithContact, json, loginAdminThroughUi } from './support';
 
 test('concurrent document changes reject a stale draft, preserve it and allow an explicit reviewed retry', async ({ page }) => {
@@ -17,6 +18,14 @@ test('concurrent document changes reject a stale draft, preserve it and allow an
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Document changed since you started editing' })).toBeVisible();
   await expect(page.getByLabel(`Edit ${title} content`, { exact: true })).toHaveValue('My pending draft');
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download draft' }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe('document-draft.json');
+  const draftPath = await download.path();
+  expect(draftPath).not.toBeNull();
+  const draft = JSON.parse(await readFile(draftPath!, 'utf8'));
+  expect(draft.content).toBe('My pending draft'); expect(draft.revision).toBe(note.revision);
   expect((await json(await api.get(`/api/notes/${note.id}`))).content).toBe('Teammate update');
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
@@ -27,7 +36,7 @@ test('concurrent document changes reject a stale draft, preserve it and allow an
   await expect(page.getByLabel(`Edit ${title} content`, { exact: true })).toHaveValue('Teammate update');
   await page.getByLabel(`Edit ${title} content`, { exact: true }).fill('Reviewed merge');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Edit ' + title, exact: true })).toBeVisible();
+  await expect(page.getByLabel(`Edit ${title} content`, { exact: true })).not.toBeVisible();
   await page.reload();
   expect((await json(await api.get(`/api/notes/${note.id}`))).content).toBe('Reviewed merge');
 });
