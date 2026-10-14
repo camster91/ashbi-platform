@@ -10,7 +10,7 @@ in the source record's own workflow and approval boundary.
   `src/services/work-queue.service.js`), registered with the client-delivery
   work-management routes.
 - Web: `/queue` (`web/src/pages/WorkQueue.jsx`), linked as **Daily Queue**
-  under Dashboard in the sidebar and in the mobile **More** menu.
+  under Dashboard in the **Work** sidebar area and in the **Work** section of the mobile **Settings** menu.
 
 ## Request
 
