@@ -5,6 +5,7 @@ import Modal from './Modal';
 import ConfirmDialog from './ConfirmDialog';
 import { useToast } from '../hooks/useToast';
 import Skeleton from './ui/Skeleton';
+import DocumentSaveRecovery from './DocumentSaveRecovery';
 
 const NOTE_TYPES = [
   { value: 'NOTE', label: 'Note', icon: '📝' },
@@ -144,7 +145,7 @@ export default function Notes({ projectId }) {
             <button
               type="button"
               key={note.id}
-              onClick={() => setSelectedNote(note)}
+              onClick={() => { updateMutation.reset(); setSelectedNote(note); }}
               aria-label={`Open note ${note.title}`}
               aria-pressed={selectedNote?.id === note.id}
               className={`w-full min-h-11 bg-card rounded-lg border p-4 text-left cursor-pointer hover:shadow-md active:bg-muted/50 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-offset-2 ${
@@ -194,7 +195,10 @@ export default function Notes({ projectId }) {
       {selectedNote && (
         <NoteEditor
           note={selectedNote}
-          onSave={(data) => updateMutation.mutate({ id: selectedNote.id, data })}
+          key={`${selectedNote.id}:${selectedNote.revision}`}
+          onSave={(data) => updateMutation.mutate({ id: selectedNote.id, data: { ...data, revision: selectedNote.revision } })}
+          saveError={updateMutation.error}
+          onReload={note => { setSelectedNote(note); updateMutation.reset(); }}
           onDelete={() => deleteMutation.mutate({ id: selectedNote.id, title: selectedNote.title })}
           onPin={() => pinMutation.mutate(selectedNote.id)}
           onClose={() => setSelectedNote(null)}
@@ -207,7 +211,7 @@ export default function Notes({ projectId }) {
   );
 }
 
-function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDeleting = false, deleteError }) {
+function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDeleting = false, deleteError, saveError, onReload }) {
   const [formData, setFormData] = useState({
     title: note?.title || '',
     content: note?.content || '',
@@ -237,20 +241,23 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
     <>
     <Modal isOpen={!showDeleteConfirm} onClose={onClose} title={note ? 'Edit Note' : 'Create Note'} size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="flex gap-4">
-          <div className="flex-1">
+        {note && <DocumentSaveRecovery noteId={note.id} draft={formData} error={saveError} onReload={onReload} />}
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="min-w-0 flex-1">
             <label className="block text-sm font-medium text-foreground mb-1">Title</label>
             <input
               type="text"
+              aria-label="Document title"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               className="w-full border rounded-lg px-3 py-2"
               required
             />
           </div>
-          <div className="w-48">
+          <div className="w-full sm:w-48">
             <label className="block text-sm font-medium text-foreground mb-1">Type</label>
             <select
+              aria-label="Document type"
               value={formData.type}
               onChange={(e) => setFormData({ ...formData, type: e.target.value })}
               className="w-full border rounded-lg px-3 py-2"
@@ -269,6 +276,7 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
             Content (Markdown supported)
           </label>
           <textarea
+            aria-label="Document content"
             value={formData.content}
             onChange={(e) => setFormData({ ...formData, content: e.target.value })}
             className="w-full border rounded-lg px-3 py-2 font-mono text-sm"
@@ -282,6 +290,7 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
           <div className="flex gap-2">
             <input
               type="text"
+              aria-label="New document tag"
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}

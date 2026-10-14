@@ -57,6 +57,7 @@ import useSettledFailure from '../hooks/useSettledFailure';
 import Modal from '../components/Modal';
 import { Button, LoadingState } from '../components/ui';
 import ConfirmDialog from '../components/ConfirmDialog';
+import DocumentSaveRecovery from '../components/DocumentSaveRecovery';
 
 // Overflow menu for the project header's secondary actions. A native
 // <details> disclosure keeps it dependency-free and keyboard operable.
@@ -826,8 +827,9 @@ function ProjectNotes({ projectId }) {
   };
 
   const startEdit = (note) => {
+    updateMutation.reset();
     setEditingId(note.id);
-    setEditForm({ title: note.title, content: note.content, type: note.type, tags: (note.tags || []).join(', ') });
+    setEditForm({ revision: note.revision, title: note.title, content: note.content, type: note.type, tags: (note.tags || []).join(', ') });
     setExpandedId(note.id);
   };
 
@@ -836,6 +838,7 @@ function ProjectNotes({ projectId }) {
     updateMutation.mutate({
       id: editingId,
       data: {
+        revision: editForm.revision,
         title: editForm.title,
         content: editForm.content,
         type: editForm.type,
@@ -971,35 +974,40 @@ function ProjectNotes({ projectId }) {
               {expandedId === note.id && (
                 editingId === note.id ? (
                   <form onSubmit={handleUpdate} className="mt-3 space-y-2">
-                    <div className="flex gap-2">
+                    <DocumentSaveRecovery noteId={note.id} draft={editForm} error={updateMutation.error} onReload={startEdit} />
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <input
                         value={editForm.title}
+                        aria-label={`Edit ${note.title} title`}
                         onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                        className="flex-1 px-3 py-1.5 rounded-lg border border-border bg-background text-sm"
+                        className="min-w-0 min-h-11 flex-1 px-3 py-1.5 rounded-lg border border-border bg-background text-sm"
                         required
                       />
                       <select
                         value={editForm.type}
+                        aria-label={`Edit ${note.title} type`}
                         onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
-                        className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm"
+                        className="min-w-0 min-h-11 px-3 py-1.5 rounded-lg border border-border bg-background text-sm"
                       >
                         {NOTE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                       </select>
                     </div>
                     <textarea
                       value={editForm.content}
+                      aria-label={`Edit ${note.title} content`}
                       onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
                       className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono"
                       rows={8}
                     />
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input
                         value={editForm.tags}
+                        aria-label={`Edit ${note.title} tags`}
                         onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
                         placeholder="Tags (comma separated)"
-                        className="flex-1 px-3 py-1.5 rounded-lg border border-border bg-background text-sm"
+                        className="min-w-0 min-h-11 basis-full sm:basis-auto flex-1 px-3 py-1.5 rounded-lg border border-border bg-background text-sm"
                       />
-                      <button type="submit" disabled={updateMutation.isPending} className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+                      <button type="submit" disabled={updateMutation.isPending} className="min-h-11 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
                         {updateMutation.isPending ? 'Saving...' : 'Save'}
                       </button>
                       <button type="button" onClick={() => setEditingId(null)} className="px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted rounded-lg">

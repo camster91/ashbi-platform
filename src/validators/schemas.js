@@ -2022,6 +2022,7 @@ export const noteProjectCreateSchema = z.object({
 });
 
 export const noteUpdateV2Schema = z.object({
+  revision: z.number().int().min(0),
   title: z.string().trim().min(1).max(200).optional(),
   content: z.string().max(50_000).optional(),
   type: z.enum(['NOTE', 'MEETING_NOTES', 'WIKI', 'DOC']).optional(),

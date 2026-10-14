@@ -74,7 +74,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [MarkupImportRecord](#model-markupimportrecord) | `markup_import_records` | yes | no | 22 |
 | [Message](#model-message) | `messages` | no | no | 15 |
 | [Milestone](#model-milestone) | `milestones` | no | yes | 13 |
-| [Note](#model-note) | `notes` | no | yes | 18 |
+| [Note](#model-note) | `notes` | no | yes | 19 |
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
@@ -1598,6 +1598,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `id` | String | id, required | `cuid()` |  |  |
+| `revision` | Int | required | `0` |  |  |
 | `title` | String | required |  |  |  |
 | `content` | String | required |  |  | Plain-text Markdown; clients must never render it as trusted HTML |
 | `type` | String | required | `"NOTE"` |  | NOTE, MEETING_NOTES, WIKI, DOC |

@@ -5,6 +5,8 @@ import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
+import Fastify from 'fastify';
+import noteRoutes from '../../routes/note.routes.js';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 
@@ -14,6 +16,7 @@ test('wiki hierarchy and templates remain isolated between two real tenants', {
 }, async () => {
   const { PrismaClient } = prismaPkg;
   const raw = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  const app = Fastify();
   const suffix = randomUUID();
   const ids = {
     orgA: `wiki-org-a-${suffix}`, orgB: `wiki-org-b-${suffix}`,
@@ -48,6 +51,18 @@ test('wiki hierarchy and templates remain isolated between two real tenants', {
       data: { title: 'Nested guide', content: '', type: 'DOC', projectId: ids.projectA, authorId: ids.userA, parentId: root.id, mentions: JSON.stringify([ids.userA]) },
     });
     assert.equal(child.parentId, root.id);
+    assert.equal(root.revision, 0);
+    const edits = await Promise.all(['Draft A', 'Draft B'].map(content => tenantA.note.updateMany({ where: { id: root.id, revision: 0 }, data: { content } })));
+    assert.deepEqual(edits.map(result => result.count).sort(), [0, 1]);
+    assert.equal((await tenantA.note.findUnique({ where: { id: root.id } })).revision, 1);
+    const rawEdit = await raw.note.update({ where: { id: root.id }, data: { revision: 0, isPinned: true } });
+    assert.equal(rawEdit.revision, 2, 'all write paths advance the database revision');
+    app.decorate('authenticate', async request => { request.user = { id: ids.userA, role: 'TEAM', organizationId: ids.orgA }; request.prisma = tenantA; });
+    await app.register(noteRoutes, { prefix: '/api' });
+    const raced = await Promise.all(['API draft A', 'API draft B'].map(content => app.inject({ method: 'PUT', url: `/api/notes/${root.id}`, payload: { revision: 2, content } })));
+    assert.deepEqual(raced.map(response => response.statusCode).sort(), [200, 409]);
+    assert.equal((await raw.note.findUnique({ where: { id: root.id } })).revision, 3);
+    assert.equal(await raw.activity.count({ where: { entityId: root.id, type: 'NOTE_UPDATED' } }), 1);
     assert.equal(await tenantB.note.findUnique({ where: { id: root.id } }), null);
     assert.equal((await tenantB.note.findMany({ where: { isTemplate: true } })).length, 0);
     await assert.rejects(
@@ -69,7 +84,9 @@ test('wiki hierarchy and templates remain isolated between two real tenants', {
       /does not belong to organization/i,
     );
   } finally {
+    await app.close();
     await raw.notification.deleteMany({ where: { userId: { in: [ids.userA, ids.userB] } } });
+    await raw.activity.deleteMany({ where: { projectId: { in: [ids.projectA, ids.projectB] } } });
     await raw.note.deleteMany({ where: { projectId: { in: [ids.projectA, ids.projectB] } } });
     await raw.user.deleteMany({ where: { id: { in: [ids.userA, ids.userB] } } });
     await raw.project.deleteMany({ where: { id: { in: [ids.projectA, ids.projectB] } } });

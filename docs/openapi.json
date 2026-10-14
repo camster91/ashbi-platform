@@ -3620,6 +3620,10 @@
               }
             ]
           },
+          "revision": {
+            "minimum": 0,
+            "type": "integer"
+          },
           "tags": {
             "items": {
               "maxLength": 50,
@@ -3643,6 +3647,9 @@
             "type": "string"
           }
         },
+        "required": [
+          "revision"
+        ],
         "type": "object"
       },
       "OnboardingClient": {

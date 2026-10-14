@@ -273,13 +273,15 @@ export default async function noteRoutes(fastify) {
     preHandler: validateBody(noteUpdateV2Schema),
   }, async (request, reply) => {
     const { id } = request.params;
-    const { title, content, type, tags, isPinned, isTemplate, parentId, mentionUserIds } = request.body;
+    const { revision, title, content, type, tags, isPinned, isTemplate, parentId, mentionUserIds } = request.body;
 
     const existing = await request.prisma.note.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Note not found' });
     }
+
+    if (existing.revision !== revision) return reply.status(409).send({ error: 'Document changed since you started editing. Your draft has not been saved. Reload the document before trying again.' });
 
     if (parentId !== undefined) {
       const parentCheck = await validateParent(request.prisma, { parentId, projectId: existing.projectId, noteId: id });
@@ -303,9 +305,9 @@ export default async function noteRoutes(fastify) {
     const priorMentions = new Set(parseStringArray(existing.mentions));
     const newlyMentioned = mentionUsers.filter(user => !priorMentions.has(user.id));
     const note = await request.prisma.$transaction(async transaction => {
-      const updated = await transaction.note.update({
-        where: { id }, data, include: { author: { select: { id: true, name: true } } },
-      });
+      const changed = await transaction.note.updateMany({ where: { id, revision, deletedAt: null }, data });
+      if (changed.count !== 1) throw Object.assign(new Error('Document changed since you started editing. Your draft has not been saved. Reload the document before trying again.'), { statusCode: 409 });
+      const updated = await transaction.note.findUnique({ where: { id }, include: { author: { select: { id: true, name: true } } } });
       await transaction.activity.create({
         data: {
           type: parentId !== undefined && parentId !== existing.parentId ? 'NOTE_MOVED' : 'NOTE_UPDATED',

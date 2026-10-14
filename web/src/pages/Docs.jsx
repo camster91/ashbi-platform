@@ -27,6 +27,7 @@ import { cn } from '../lib/utils';
 import { Card, Button, EmptyState, ListPageSkeleton } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import PortfolioFilter from '../components/PortfolioFilter';
+import DocumentSaveRecovery from '../components/DocumentSaveRecovery';
 
 const NOTE_TYPES = [
   { value: '', label: 'All Types', icon: Layers },
@@ -189,8 +190,10 @@ export default function Docs() {
   });
 
   const startEdit = (note) => {
+    updateMutation.reset();
     setEditingId(note.id);
     setEditForm({
+      revision: note.revision,
       title: note.title,
       content: note.content,
       type: note.type,
@@ -207,6 +210,7 @@ export default function Docs() {
     updateMutation.mutate({
       id: editingId,
       data: {
+        revision: editForm.revision,
         title: editForm.title,
         content: editForm.content,
         type: editForm.type,
@@ -269,6 +273,7 @@ export default function Docs() {
       </div>
 
       {/* Filters */}
+      {editingId && <DocumentSaveRecovery noteId={editingId} draft={editForm} error={updateMutation.error} onReload={startEdit} />}
       <div className="flex flex-col sm:flex-row gap-3">
         <PortfolioFilter value={portfolio} disabled={Boolean(editingId) || showNewNote} onChange={value => { const next = new URLSearchParams(searchParams); if (value) next.set('portfolio', value); else next.delete('portfolio'); setSearchParams(next); }} />
         <div className="relative flex-1 max-w-md">
@@ -630,17 +635,19 @@ function NoteCard({
       {expanded && (
         editing ? (
           <form onSubmit={onUpdate} className="mt-3 space-y-2">
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 value={editForm.title}
+                aria-label={`Edit ${note.title} title`}
                 onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                className="flex-1 px-2 py-1.5 rounded border border-border bg-background text-sm"
+                className="min-w-0 min-h-11 flex-1 px-2 py-1.5 rounded border border-border bg-background text-sm"
                 required
               />
               <select
                 value={editForm.type}
+                aria-label={`Edit ${note.title} type`}
                 onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
-                className="px-2 py-1.5 rounded border border-border bg-background text-sm"
+                className="min-w-0 min-h-11 px-2 py-1.5 rounded border border-border bg-background text-sm"
               >
                 {NOTE_TYPES.filter(t => t.value).map(t => (
                   <option key={t.value} value={t.value}>{t.label}</option>
@@ -649,6 +656,7 @@ function NoteCard({
             </div>
             <textarea
               value={editForm.content}
+              aria-label={`Edit ${note.title} content`}
               onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
               className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm font-mono"
               rows={6}
@@ -685,17 +693,18 @@ function NoteCard({
                 ))}
               </select>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 value={editForm.tags}
+                aria-label={`Edit ${note.title} tags`}
                 onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
                 placeholder="Tags"
-                className="flex-1 px-2 py-1.5 rounded border border-border bg-background text-sm"
+                className="min-w-0 min-h-11 basis-full sm:basis-auto flex-1 px-2 py-1.5 rounded border border-border bg-background text-sm"
               />
-              <button type="submit" disabled={updatePending} className="px-3 py-1.5 bg-primary text-primary-foreground rounded text-sm font-medium hover:opacity-90">
+              <button type="submit" disabled={updatePending} className="min-h-11 px-3 py-1.5 bg-primary text-primary-foreground rounded text-sm font-medium hover:opacity-90">
                 {updatePending ? 'Saving...' : 'Save'}
               </button>
-              <button type="button" onClick={onCancelEdit} className="px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted rounded">
+              <button type="button" onClick={onCancelEdit} className="min-h-11 px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted rounded">
                 Cancel
               </button>
             </div>

@@ -61,7 +61,7 @@ export const workspaceRegistry = createToolRegistry([
     (user, input) => ({ organizationId: user.organizationId, ...financialPortfolioWhere(input.portfolio) }),
     pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_notes', 'Page through internal project documents and notes. Optionally filter by portfolio.',
-    'note', { id: true, title: true, content: true, type: true, projectId: true, updatedAt: true },
+    'note', { id: true, title: true, content: true, type: true, projectId: true, revision: true, updatedAt: true },
     (user, input) => ({ project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) } }),
     pageSchema.extend({ portfolio: portfolioFilterSchema })),
   listTool('list_time_entries', 'Page through canonical time entries. Team members see their own entries; admins see the workspace. Optionally filter by portfolio.',

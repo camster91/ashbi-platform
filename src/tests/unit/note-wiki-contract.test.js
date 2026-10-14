@@ -23,7 +23,7 @@ test('wiki schemas accept the shipped document types and bounded hierarchy field
   });
   assert.equal(created.type, 'WIKI');
   assert.equal(created.isTemplate, true);
-  assert.deepEqual(noteUpdateV2Schema.parse({ type: 'MEETING_NOTES', parentId: null }).parentId, null);
+  assert.deepEqual(noteUpdateV2Schema.parse({ revision: 0, type: 'MEETING_NOTES', parentId: null }).parentId, null);
   assert.equal(noteFromTemplateSchema.parse({}).mentionUserIds.length, 0);
   assert.throws(() => noteProjectCreateSchema.parse({ title: 'Bad', content: '', type: 'TASK' }));
 });
