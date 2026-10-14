@@ -335,6 +335,8 @@ export const api = {
   },
   getClient: (id) =>
     request(`/clients/${id}`),
+  previewClientAssistant: (id, data) =>
+    request(`/client-assistants/${encodeURIComponent(id)}/preview`, { method: 'POST', body: data, timeout: 90000, silent: true }),
   createClient: (data) =>
     request('/clients', { method: 'POST', body: data }),
   updateClient: (id, data) =>

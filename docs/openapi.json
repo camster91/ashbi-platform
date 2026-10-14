@@ -14426,6 +14426,81 @@
         "x-tenancy": "exempt"
       }
     },
+    "/api/client-assistants/{clientId}/preview": {
+      "post": {
+        "operationId": "post_api_client_assistants_clientId_preview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "message": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "message"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/client-assistants/:clientId/preview",
+        "tags": [
+          "client-assistants"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/client-portal/chat-attachments/{attachmentId}": {
       "get": {
         "operationId": "get_api_client_portal_chat_attachments_attachmentId",
@@ -37378,6 +37453,9 @@
     },
     {
       "name": "client-acquisition"
+    },
+    {
+      "name": "client-assistants"
     },
     {
       "name": "client-portal"
