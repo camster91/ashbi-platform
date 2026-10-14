@@ -83,7 +83,7 @@ function Toast({ id, type = 'info', title, message, action, duration, timer, now
       <Icon className={cn('w-5 h-5 mt-0.5 flex-shrink-0', ICON_STYLES[type])} aria-hidden="true" />
       <div className="flex-1 min-w-0">
         {title && <p className="font-semibold text-sm">{title}</p>}
-        {message && <p className={cn('text-sm', title ? 'opacity-80 mt-0.5' : '')}>{message}</p>}
+        {message && <p className={cn('text-sm', title ? 'mt-0.5' : '')}>{message}</p>}
         {timer && action?.label && (
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
             <span>Undo available for {remainingSeconds} {remainingSeconds === 1 ? 'second' : 'seconds'}</span>
