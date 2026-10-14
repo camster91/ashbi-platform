@@ -25,7 +25,7 @@ function matches(row, where = {}) {
 export function createFakeInvoiceDb({ clients = [], invoices = [], organizationId = 'org-a' } = {}) {
   const state = {
     clients: clients.map((client) => ({ organizationId, contacts: [], ...client })),
-    invoices: invoices.map((invoice) => ({ lineItems: [], payments: [], currency: 'CAD', ...invoice })),
+    invoices: invoices.map((invoice) => ({ organizationId, deletedAt: null, updatedAt: new Date(), lineItems: [], payments: [], currency: 'CAD', ...invoice })),
     lineItems: [],
     payments: [],
     sequences: new Map(),
@@ -65,6 +65,7 @@ export function createFakeInvoiceDb({ clients = [], invoices = [], organizationI
         const invoice = {
           id: `invoice-${state.nextId++}`,
           status: 'DRAFT',
+          deletedAt: null,
           currency: 'CAD',
           viewToken: `default-token-${state.nextId}`,
           createdAt: new Date(),
