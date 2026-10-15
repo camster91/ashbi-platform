@@ -11,10 +11,8 @@ import invoiceRoutes from '../../routes/invoice.routes.js';
 import portalRoutes from '../../routes/portal.routes.js';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../../utils/request-context.js';
-import { shouldSkipHeavyTests } from '../_test-skip.js';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
-
-const skip = shouldSkipHeavyTests();
+import { assertDisposableDatabase } from '../helpers/disposable-database.js';
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -27,7 +25,7 @@ let createdInvoiceId;
 let createdInvoiceNumber;
 
 before(async () => {
-  if (skip) return;
+  assertDisposableDatabase();
   fastify = Fastify({ logger: false });
   await fastify.register(cookie);
   await fastify.register(jwt, {
@@ -104,20 +102,27 @@ before(async () => {
 });
 
 after(async () => {
-  if (skip) return;
-  // Cleanup
+  try {
+    // Incomplete setup must not turn an undefined fixture filter into delete-all.
+    if (testClientId) {
   await rawPrisma.invoicePayment.deleteMany({ where: { invoice: { clientId: testClientId } } });
   await rawPrisma.invoiceLineItem.deleteMany({ where: { invoice: { clientId: testClientId } } });
   await rawPrisma.invoice.deleteMany({ where: { clientId: testClientId } });
-  await rawPrisma.lineItemTemplate.deleteMany({ where: { organizationId: testOrganizationId } });
   await rawPrisma.contact.deleteMany({ where: { clientId: testClientId } });
-  await rawPrisma.client.deleteMany({ where: { organizationId: testOrganizationId } });
-  await rawPrisma.user.delete({ where: { id: testUserId } }).catch(() => null);
+    }
+    if (testOrganizationId) {
+      await rawPrisma.lineItemTemplate.deleteMany({ where: { organizationId: testOrganizationId } });
+      await rawPrisma.client.deleteMany({ where: { organizationId: testOrganizationId } });
+    }
+  if (testUserId) await rawPrisma.user.delete({ where: { id: testUserId } }).catch(() => null);
   // Invoice sends and payments now write audit events for this fixture org.
-  await purgeFixtureAuditEvents(rawPrisma, { ids: [testOrganizationId] });
-  await rawPrisma.organization.delete({ where: { id: testOrganizationId } }).catch(() => null);
-  await rawPrisma.$disconnect();
-  await fastify.close();
+    if (testOrganizationId) {
+      await purgeFixtureAuditEvents(rawPrisma, { ids: [testOrganizationId] });
+      await rawPrisma.organization.delete({ where: { id: testOrganizationId } }).catch(() => null);
+    }
+  } finally {
+    try { await rawPrisma.$disconnect(); } finally { await fastify?.close(); }
+  }
 });
 
 function authHeader() {
@@ -126,7 +131,7 @@ function authHeader() {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('Invoice CRUD', { skip }, () => {
+describe('Invoice CRUD', () => {
 
   test('POST /api/invoices — create invoice with all fields', async () => {
     const res = await fastify.inject({
@@ -563,7 +568,7 @@ describe('Invoice CRUD', { skip }, () => {
 // A VIEWED invoice behaves exactly like SENT: listed
 // under the "Sent" filter, counted as outstanding, payable from the public
 // page and by mark-paid, overdue once past due, and voidable.
-describe('VIEWED invoices behave like SENT', { skip }, () => {
+describe('VIEWED invoices behave like SENT', () => {
   async function sentInvoice(title, unitPrice) {
     const created = await fastify.inject({
       method: 'POST', url: '/api/invoices', headers: authHeader(),

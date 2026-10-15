@@ -14,13 +14,14 @@ const api = {
 };
 const toast = { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() };
 const auth = { user: { id: 'u1', role: 'ADMIN' } };
+const clearDraft = vi.fn();
 
 vi.mock('../lib/api', () => ({ api }));
 vi.mock('../hooks/useToast', () => ({ useToast: () => toast }));
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => auth }));
 vi.mock('../hooks/useClients', () => ({ default: () => ({ data: [{ id: 'c1', name: 'Acme' }] }) }));
 vi.mock('../hooks/useAutosave', () => ({
-  default: () => ({ draft: null, clearDraft: vi.fn(), status: 'idle', setDraft: vi.fn(), discardDraft: vi.fn(), saveNow: vi.fn() }),
+  default: () => ({ draft: null, clearDraft, status: 'idle', setDraft: vi.fn(), discardDraft: vi.fn(), saveNow: vi.fn() }),
 }));
 
 const { default: Invoices, INVOICE_CSV_HEADERS, invoiceCsvRows } = await import('../pages/Invoices');
@@ -64,6 +65,8 @@ describe('Invoices list', () => {
     Object.values(toast).forEach((fn) => fn.mockReset());
     api.getInvoices.mockResolvedValue({ invoices: INVOICES, total: 2, stats: {} });
     api.sendInvoice.mockReset();
+    api.createInvoice.mockReset();
+    clearDraft.mockReset().mockResolvedValue(true);
   });
 
   it('shows Partly paid with what is left, and marks recurring invoices', async () => {
@@ -89,6 +92,34 @@ describe('Invoices list', () => {
     // jsdom matches no media query, so the mobile layout is the one rendered;
     // the desktop duplicate (with its own required description) is not.
     expect(screen.getAllByRole('textbox', { name: 'Line item 1 description' })).toHaveLength(1);
+  });
+
+  it.each([true, false])('clears the submitted recovery with an empty baseline and reports cleanup=%s honestly', async (cleared) => {
+    api.createInvoice.mockResolvedValue({ id: 'created-invoice', status: 'DRAFT' });
+    clearDraft.mockResolvedValue(cleared);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'New Invoice' }));
+    fireEvent.change(screen.getByLabelText('Client *'), { target: { value: 'c1' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Line item 1 description' }), { target: { value: 'Draft-only QA' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Invoice', exact: true }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Invoice created'));
+    expect(api.createInvoice).toHaveBeenCalledTimes(1);
+    expect(clearDraft).toHaveBeenCalledWith({ resetTo: expect.objectContaining({ clientId: '', title: '', lineItems: [{ description: '', itemType: 'LABOR', quantity: 1, unitPrice: 0 }] }) });
+    expect(screen.queryByRole('heading', { name: 'New Invoice' })).not.toBeInTheDocument();
+    if (cleared) expect(toast.warning).not.toHaveBeenCalled();
+    else expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining('recovery draft could not be cleared'), expect.stringContaining('Do not create it again'));
+  });
+
+  it('keeps form edits and recovery when invoice creation fails', async () => {
+    api.createInvoice.mockRejectedValue(new Error('Offline'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'New Invoice' }));
+    fireEvent.change(screen.getByLabelText('Client *'), { target: { value: 'c1' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Line item 1 description' }), { target: { value: 'Keep my draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Invoice', exact: true }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to create invoice', 'Offline'));
+    expect(clearDraft).not.toHaveBeenCalled();
+    expect(screen.getByRole('textbox', { name: 'Line item 1 description' })).toHaveValue('Keep my draft');
   });
 
   it('shows a VIEWED invoice as Viewed and still offers Mark Paid', async () => {

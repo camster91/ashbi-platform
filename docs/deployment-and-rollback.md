@@ -1,5 +1,11 @@
 # Immutable deployment and rollback
 
+Verified October 15, 2026: the owner-authorized SSH release of `4349f6d` passed
+this controller and exact public revision/readiness checks. See
+[launch-status.md](launch-status.md) for the evidence and remaining acceptance.
+Coolify adoption remains incomplete. The failed protected workflow is not a
+successful release and must not be treated as the production controller.
+
 Production has one deployment controller: the reviewed direct-VPS release
 script at `scripts/deploy-vps-direct.sh`. GitHub Actions and Coolify do not
 deploy production. Coolify may monitor the service, but it must not have an

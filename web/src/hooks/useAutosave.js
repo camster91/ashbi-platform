@@ -15,6 +15,8 @@ export default function useAutosave(entity, id, formData, debounceMs = DEBOUNCE_
   const previousRef = useRef(null);
   const formDataRef = useRef(formData);
   const revisionRef = useRef(null);
+  const pendingSavesRef = useRef(new Set());
+  const clearingRef = useRef(false);
   formDataRef.current = formData;
 
   useEffect(() => {
@@ -52,11 +54,14 @@ export default function useAutosave(entity, id, formData, debounceMs = DEBOUNCE_
   }, [entity, id]);
 
   const persist = useCallback(async (data = formDataRef.current) => {
-    if (!entity || !id || data == null) return false;
+    if (!entity || !id || data == null || clearingRef.current) return false;
     const serialized = JSON.stringify(data);
     setStatus('saving');
+    let request;
     try {
-      const result = await api.saveDraft(entity, id, data, revisionRef.current ?? undefined, options.baseUpdatedAt);
+      request = api.saveDraft(entity, id, data, revisionRef.current ?? undefined, options.baseUpdatedAt);
+      pendingSavesRef.current.add(request);
+      const result = await request;
       previousRef.current = serialized;
       revisionRef.current = result.revision;
       setRevision(result.revision);
@@ -66,11 +71,13 @@ export default function useAutosave(entity, id, formData, debounceMs = DEBOUNCE_
     } catch (error) {
       setStatus(error?.status === 409 || error?.data?.code === 'DRAFT_CONFLICT' ? 'conflict' : 'error');
       return false;
+    } finally {
+      pendingSavesRef.current.delete(request);
     }
   }, [entity, id, options.baseUpdatedAt]);
 
   useEffect(() => {
-    if (!initializedRef.current || !entity || !id || formData == null) return undefined;
+    if (!initializedRef.current || !entity || !id || formData == null || clearingRef.current) return undefined;
     const serialized = JSON.stringify(formData);
     if (serialized === previousRef.current) return undefined;
     setStatus('unsaved');
@@ -89,21 +96,33 @@ export default function useAutosave(entity, id, formData, debounceMs = DEBOUNCE_
     return () => window.removeEventListener('beforeunload', warnBeforeUnload);
   }, [status]);
 
-  const clearDraft = useCallback(async () => {
+  const clearDraft = useCallback(async ({ resetTo } = {}) => {
     if (!entity || !id) return false;
+    clearTimeout(timerRef.current);
+    clearingRef.current = true;
     setStatus('saving');
     try {
+      // A save accepted before clear must finish first, so its returned revision
+      // participates in the same compare-and-swap deletion.
+      const pending = await Promise.allSettled([...pendingSavesRef.current]);
+      // A failed/ambiguous save cannot authorize deleting a recovery snapshot.
+      if (pending.some(result => result.status === 'rejected')) return false;
       await api.clearDraft(entity, id, revisionRef.current ?? undefined);
       setDraft(null);
       setDraftMeta(null);
       revisionRef.current = null;
       setRevision(null);
-      previousRef.current = JSON.stringify(formDataRef.current);
+      previousRef.current = JSON.stringify(resetTo === undefined ? formDataRef.current : resetTo);
       setStatus('idle');
       return true;
     } catch (error) {
       setStatus(error?.status === 409 || error?.data?.code === 'DRAFT_CONFLICT' ? 'conflict' : 'error');
       return false;
+    } finally {
+      // Even when clearing fails, a caller's explicit post-submit reset must
+      // not overwrite the recoverable snapshot with the empty form.
+      if (resetTo !== undefined) previousRef.current = JSON.stringify(resetTo);
+      clearingRef.current = false;
     }
   }, [entity, id]);
 

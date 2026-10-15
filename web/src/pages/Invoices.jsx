@@ -117,12 +117,14 @@ export default function Invoices() {
   // Mutations
   const createMutation = useMutation({
     mutationFn: (data) => api.createInvoice(data),
-    onSuccess: () => {
-      void formDraft.clearDraft();
+    onSuccess: async () => {
+      const emptyForm = newInvoiceForm();
+      const cleared = await formDraft.clearDraft({ resetTo: emptyForm });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setShowCreate(false);
-      resetForm();
+      setForm(emptyForm);
       toast.success('Invoice created');
+      if (!cleared) toast.warning('Invoice created, but its recovery draft could not be cleared', 'Do not create it again. Review or discard the saved draft before starting another invoice.');
     },
     onError: (err) => toast.error('Failed to create invoice', err.message),
   });
@@ -183,12 +185,13 @@ export default function Invoices() {
   });
 
   // Form helpers
-  const resetForm = () => setForm({
+  const newInvoiceForm = () => ({
     clientId: '', projectId: '', title: '', notes: '', dueDate: '', currency: 'CAD',
     taxRate: HST_RATE, taxType: 'HST', discountAmount: 0,
     isRecurring: false, recurringInterval: 'MONTHLY',
     lineItems: [{ description: '', itemType: 'LABOR', quantity: 1, unitPrice: 0 }],
   });
+  const resetForm = () => setForm(newInvoiceForm());
 
   const addLineItem = () => setForm(f => ({
     ...f,

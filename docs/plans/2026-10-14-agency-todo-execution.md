@@ -10,11 +10,15 @@
 
 Prepared October 14, 2026 from three parallel read-only agent audits of main `80054ded43666a4988b3bcec03db17d14f0f4f14`. [Master delivery plan](../master-app-delivery-plan.md) remains the execution ledger; [product status](../product-status.md) owns capability classifications; [replacement readiness](../replacement-readiness-matrix.md) owns target acceptance. This document expands the approved [agency-agent roadmap](../agency-agent-platform-roadmap.md) into work packages.
 
+## Current execution overlay — October 15, 2026
+
+[Launch evidence](../launch-status.md) supersedes the release snapshot below. `4349f6d` is deployed by the owner-authorized direct-VPS controller with strict readiness and 41/41 API/MCP checks. #597 already implements saved client-agent profiles and human channels/DM membership; #598 implements the stored client timeline; #600 implements Gmail dispatch receipts. W1/W4/W7 must extend those implementations, not recreate them. Saved client-agent conversations, durable runs, bot execution and mailbox ingestion remain open. Finish the focused internal-pilot acceptance before widening implementation. The work-package descriptions below retain their October 14 design context; the current delivery ledger owns status.
+
 ## 1. Starting point and completion rule
 
 - **Merged:** #592 Note audiences, #593 navigation simplification, #594 export repair and #595 client account-manager brief/plugin discovery. Do not reopen them as implementation TODOs.
 - **Already available:** project chat, threads, files/reactions, portal visibility rules, email inbox/draft workflows, Gmail transport, project communication history, workload/time/billing/reviews, governed AI sessions, action receipts, MCP and workers. Extend these modules rather than replacing them wholesale.
-- **Still missing:** persisted client-agent profiles/conversations/runs, client-bound plugin execution, company channels/DM membership and bot mention execution, reliable mailbox-level ingestion and unified communication projection, WhatsApp/OpenSEO adapters, remaining collaboration/history and agency-operation deltas, plus real acceptance and cutover.
+- **Still missing:** saved client-agent conversations/durable runs, client-bound plugin execution and bot mention execution, reliable mailbox-level ingestion, WhatsApp/OpenSEO adapters, remaining collaboration/history and agency-operation deltas, plus real acceptance and cutover. Profiles, human channel/DM membership and the stored communication projection are already merged/deployed; extend their existing services.
 - **Release snapshot:** #595 main CI [38662512953](https://github.com/camster91/ashbi-platform/actions/runs/38662512953) was running when checked. The waiting production run [38649706109](https://github.com/camster91/ashbi-platform/actions/runs/38649706109) targets older `0a02e146`, not #595. Deployment is already authorized; protected execution and exact-version verification remain necessary.
 
 A work package is complete only when its behavior is implemented, relevant tests pass, review findings are resolved, the exact head passes required CI, and it merges normally. Deployment and target acceptance are separate checks. The whole approved TODO is complete only after all work packages and their provider/target gates have evidence; a merged foundation is not the entire product.
@@ -59,14 +63,14 @@ W4 and W6 can proceed while runtime work is underway after schema contracts are 
 
 1. Remove stale owner-hold language and merged-feature build TODOs. Preserve outstanding target acceptance.
 2. Check main CI for the exact chosen revision. Record which protected run would deploy that revision; supersede older waiting runs only through the authorized release process.
-3. Execute the existing protected release using its permitted reviewer/UI path. Do not change environment rules or use direct deployment to bypass the gate.
+3. W0 release execution is complete through the explicitly owner-authorized SSH controller; see launch evidence. Preserve permanent review rules. Coolify adoption remains separate and must be completed before using it as controller.
 4. Verify encrypted backup/rollback evidence, deployed revision and strict API/database/Redis/worker readiness. Explain any degraded services separately.
 
 **Exit:** exact release revision is independently verified, or the precise missing execution capability is recorded. This gate does not halt unrelated implementation. The owner is not asked to approve deployment again.
 
 ### W1 — Persistent client agent profiles and conversations
 
-**Create:** `src/services/agent-profile.service.js`, `src/services/agent-conversation.service.js`, unit/database tests and compact client profile/conversation components.
+**Extend existing:** `src/services/client-agent-profile.service.js` and the shipped profile controls. Create only the missing client-bound conversation service/history components and focused tests; preserve saved profile identity and revision checks.
 
 **Modify under lead ownership:** `prisma/schema.prisma`, a committed migration, `src/utils/prisma-tenant-proxy.js`, `src/utils/tenant-relations.js`, `src/routes/client-assistant.routes.js`, existing Account manager integration and workspace tools.
 
@@ -121,7 +125,7 @@ Add the assistant to the existing client portal with saved history, source refer
 
 ### W4 — Company channels and direct conversations
 
-**Create:** `src/services/workspace-chat.service.js`, `src/routes/workspace-chat.routes.js`, new UI components and membership/socket/database tests.
+**Already merged/deployed in #597:** `src/services/workspace-chat.service.js`, workspace chat routes/UI and membership tests. Reuse this foundation for missing bot/mention behavior; do not create a second channel/DM system.
 
 **Extend:** schema, domain registration, `src/auth/socket-auth.js`, realtime subscriber/emitter integration and existing navigation/Chat page under lead ownership.
 
@@ -158,7 +162,7 @@ Add the assistant to the existing client portal with saved history, source refer
 
 ### W7 — Client communication timeline and intake
 
-**Create:** `src/services/client-communications.service.js`, scoped route/tool adapters and a client Communications component.
+**Already merged/deployed in #598:** `src/services/client-communications.service.js`, shared route/tool adapters and the client Communications component. Extend this stored projection only for verified missing sources/intake; it does not establish live mailbox synchronization.
 
 1. Begin after W6 identity contracts; new channel messages additionally depend on W4. Project a paginated timeline from existing `Thread`/`Message`, `ProjectCommunication` and permitted chat/source records. Link/deduplicate identities; do not create a third competing copy of every email body.
 2. Label source, sender, mailbox, audience, original/observed time, task linkage and incomplete sources. Internal notes remain internal; no client access is inferred from a matching email address.
@@ -230,9 +234,9 @@ Freeze a tested revision, execute protected release and verify deployed revision
 
 Retain source access/exports and a tested fallback. Switching work to Hub does not by itself authorize cancelling subscriptions or deleting source data. Final acceptance includes restored data integrity, provider behavior, team permissions, communication delivery evidence and remaining exceptions.
 
-## 4. First execution checklist
+## 4. Historical first execution checklist — superseded by #597/#598
 
-Start W1/W2 contracts, W4 membership and W6 identity work in parallel; do not begin by building all screens or all providers.
+The foundation instructions below record the original work split and must not queue profiles/channels/timelines for rebuilding. Current execution starts with the pilot acceptance in #565, then the remaining gaps in the delivery ledger.
 
 1. Lead records the profile/run/channel/mailbox model contracts and intended audiences; agents review them before schema edits.
 2. Agent A adds focused failing profile ownership/revision tests, then the smallest service and migration-backed persistence slice. Prove save/reload through the client UI before extending model behavior.
@@ -277,7 +281,7 @@ Database commands require the documented disposable test database, not productio
 
 | Gate | Concrete requirement | Work that can continue now |
 | --- | --- | --- |
-| Protected production release | Permitted GitHub reviewer/UI execution for the exact tested release; authorization already exists | All local/synthetic implementation and QA |
+| Future controller adoption | Direct-VPS release is verified. Complete and authorize the Coolify handoff before changing controller; do not revive a failed workflow as deployment proof | Current pilot QA and bounded local/synthetic implementation |
 | History | Choose retained revision bound and restore authority; recommendation already prepared: 100/admin | Collaboration, conflicts and permission tests |
 | Mailboxes | Identify company/client-work mailboxes, viewers/senders and provider OAuth consent; exclude unrelated personal mail | Connection adapters, pagination/identity tests and UI |
 | WhatsApp | Dedicated account/number, supported provider and verified group/mention path | Signed adapter, mapping and replay tests |
