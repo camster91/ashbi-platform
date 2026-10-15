@@ -25,7 +25,7 @@ export default function ClientAccountManager({ clientId, clientName, role }) {
   const [open, setOpen] = useState(false);
   const { data, isPending, isFetching, isError, refetch } = useQuery({
     queryKey: ['client-account-manager', clientId, role],
-    queryFn: () => api.getWorkQueue({ clientId, owner: role === 'ADMIN' ? 'everyone' : 'me' }),
+    queryFn: () => api.getClientAccountManagerBrief(clientId),
     enabled: open && Boolean(clientId),
     retry: false,
     placeholderData: null,
@@ -48,7 +48,7 @@ export default function ClientAccountManager({ clientId, clientName, role }) {
       <div className="mt-2 space-y-4">
         <p className="text-sm text-muted-foreground">
           Review {clientName || 'this client'}’s work and open the source record to take the next step.
-          {' '}{role === 'ADMIN' ? 'Includes the team’s work.' : 'Includes your assigned tasks and the reviews you can open.'}
+          {' '}{(data ? data.owner === 'everyone' : role === 'ADMIN') ? 'Includes the team’s work.' : 'Includes your assigned tasks and the reviews you can open.'}
         </p>
         {open && !clientId && <p role="status">Choose a client to see their work.</p>}
         {open && clientId && isPending && !isError && <p role="status">Loading client work…</p>}
@@ -72,6 +72,7 @@ export default function ClientAccountManager({ clientId, clientName, role }) {
                 {' '}Counts reflect only the records loaded.
               </p>
             )}
+            {data.scopeMismatch && <p role="status" className="text-sm text-warning">Some source records could not be matched to this client. This view is incomplete.</p>}
             {truncatedSources.length > 0 && (
               <p role="status" className="text-sm text-warning">
                 Source limits were reached for {sourceNames(truncatedSources)}. Counts and records may exclude additional work.
@@ -98,7 +99,7 @@ export default function ClientAccountManager({ clientId, clientName, role }) {
                 ))}
               </ul>
             ) : <p className="text-sm text-muted-foreground">{incomplete ? 'No records were returned from the sources that loaded. Additional work may be missing.' : 'No work records were returned for this client and your access.'}</p>}
-            {rows.length > 8 && <p className="text-xs text-muted-foreground">Showing 8 of {rows.length} loaded records. Open the client work queue to review more.</p>}
+            {(data.hasMore || rows.length > 8) && <p className="text-xs text-muted-foreground">Showing {Math.min(rows.length, 8)} of {data.total ?? rows.length} loaded records. Open the client work queue to review more.</p>}
           </>
         )}
         <Link className="inline-flex min-h-11 items-center text-sm underline underline-offset-4" to={`/queue?clientId=${encodeURIComponent(clientId || '')}`}>Open client work queue</Link>

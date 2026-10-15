@@ -1,9 +1,11 @@
 import { z } from 'zod';
-import { validateBody, validateParams } from '../validators/schemas.js';
+import { validateBody, validateParams, validateQuery } from '../validators/schemas.js';
 import { getProvider } from '../ai/providers/index.js';
 import { AiProviderError, isAiControlError, sendAiError } from '../ai/errors.js';
 import { requestStorage } from '../utils/request-context.js';
 import { buildClientAssistantContext } from '../services/client-assistant-context.service.js';
+import { readClientAccountManagerBrief } from '../services/client-account-manager.service.js';
+import { ToolError } from '../ai/tools/registry.js';
 
 const paramsSchema = z.object({ clientId: z.string().min(1).max(100) }).strict();
 const messageSchema = z.object({ message: z.string().trim().min(1).max(2000) }).strict();
@@ -27,6 +29,19 @@ async function requireStaff(request, reply) {
 /** Staff preview only. Client portal access and autonomous tools are separate slices. */
 export default async function clientAssistantRoutes(fastify, options = {}) {
   const chat = options.chat ?? ((input) => getProvider().chat(input));
+  fastify.get('/:clientId/brief', {
+    onRequest: [fastify.authenticate, requireStaff],
+    preHandler: [validateParams(paramsSchema), validateQuery(z.object({ limit: z.coerce.number().int().min(1).max(50).default(8) }).strict())],
+  }, async (request, reply) => {
+    try {
+      return await readClientAccountManagerBrief(request.prisma, request.user, { clientId: request.params.clientId, ...request.query });
+    } catch (error) {
+      if (error instanceof ToolError) return reply.code(error.statusCode).send({
+        error: error.code === 'RECORD_NOT_FOUND' ? 'Client not found' : 'Client brief unavailable', code: error.code,
+      });
+      throw error;
+    }
+  });
   fastify.post('/:clientId/preview', {
     onRequest: [fastify.authenticate, requireStaff],
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },

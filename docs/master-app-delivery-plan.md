@@ -8,6 +8,12 @@ One organization shares Ashbi Design and freelance work with the Ashbi team. Por
 
 Implemented, CI verified, merged, deployed and target accepted are separate states. Check an implementation TODO only after its normal merge and required CI; check acceptance TODOs only after the named evidence exists. CI browser journeys use disposable records and do not prove real provider or populated production acceptance. Do not infer a completion percentage from unequal checklist items.
 
+The owner has since explicitly lifted the production hold and authorized deployment. Historical hold references in the ledger describe earlier releases; they are not a request for repeat approval. Protected deployment execution, exact-version verification and populated acceptance remain separate gates.
+
+## Approved agency-agent workstream
+
+The October 14 expansion covers app-native account managers, curated plugins, ChatGPT MCP, email communication tracking, human/bot chat, WhatsApp intake, service dashboards and agency operations. The [agency-agent roadmap](agency-agent-platform-roadmap.md) defines the ordered slices and acceptance criteria. Begin with shared read-only briefs and plugin discovery; extend existing chat/email/billing/review/portal modules before adding parallel systems. This workstream preserves the source-primary migration and existing release gates.
+
 ## Reconciled delivery ledger
 
 | Workstream | Current evidence | Remaining exit condition |
@@ -25,12 +31,12 @@ Implemented, CI verified, merged, deployed and target accepted are separate stat
 
 ## Ordered TODOs and next steps
 
-1. **Verify merged collections delivery (#590).** PR #590 is merged as e1690e4 with all required head CI and main CI 38600489530 passed. Preserve the production hold. If another commit changes the head, verify that head before merging.
+1. **Verify merged collections delivery (#590).** PR #590 is merged as e1690e4 with all required head CI and main CI 38600489530 passed. The production hold has been lifted by the owner; preserve required checks and protected deployment controls. If another commit changes the head, verify that head before merging.
 2. **Simplify the staff surface.** Project Note audiences are merged and required main CI passed. The approved navigation change groups staff workflows into Work, Clients, Knowledge, Finance and Settings, shares the section lists across desktop/mobile and reduces the compact rail to five controls. Native AI remains opt-in. Navigation browser coverage and required CI/merge evidence are tracked on [#593](https://github.com/camster91/ashbi-platform/pull/593); code delivery does not imply production acceptance. Editor and permission consolidation is a separate follow-up; do not remove capabilities or change authorization while reorganizing navigation.
 3. **Finish simultaneous editing and retained-version recovery.** Preserve existing drafts/conflict recovery. Retention duration/version bound and restore authority remain undecided in [the decision packet](document-recovery-decision.md); neither proposed policy is approved. Continue policy-independent work while that choice is pending.
 4. **Complete disposable integrated acceptance.** Run representative agency and freelance projects through docs, records/forms, tasks, approvals, time, billing and portal roles. Prove actual ChatGPT connection/revocation and the full revenue/provider journey using authorized sandbox accounts. Resolve defects and attach exact-head evidence to the relevant source issues.
 5. **Prepare and approve one-time input.** Review canonical/source/financial mappings and historical files, then rehearse the bounded input in disposable staging. Reconcile counts, relationships, ownership, files and monetary totals separately for each currency. Do not send client messages or trigger charges/reminders from historical input.
-6. **Release and verify the populated target after the hold is lifted.** Follow protected release gates, backup/restore and rollback checks. Production input requires the reviewed bounded run. Recheck health, permissions, UI/mobile/keyboard/accessibility, provider behavior and recovery on the exact deployed version.
+6. **Execute the authorized release and verify the populated target.** Follow protected release gates, backup/restore and rollback checks. Production input requires the reviewed bounded run. Recheck health, permissions, UI/mobile/keyboard/accessibility, provider behavior and recovery on the exact deployed version.
 7. **Team dogfood and cutover.** Record Cameron/Bianca/team acceptance, exact workflow cutover approval and source/export fallback. Retire sources only after separate approval and reconciled acceptance.
 
 Steps 4's test design and step 5's mapping preparation can proceed alongside implementation. They cannot substitute for unfinished feature gates. Production/provider actions requiring access or approval stay explicit rather than being checked off as code delivery.

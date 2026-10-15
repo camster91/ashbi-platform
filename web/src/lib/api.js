@@ -147,13 +147,13 @@ async function request(endpoint, options = {}) {
         data
       );
 
-      // Only dispatch global error/unauthorized events if not silenced
-      // (e.g. /auth/me checks are expected to 401 when not logged in)
+      // Silent flows may opt into session-expiry handling while keeping
+      // provider errors local. Anonymous /auth/me probes remain silent.
       // Auth endpoints (/auth/login, /auth/me) handle their own errors —
       // don't trigger global toast/logout for them
       const isAuthEndpoint = endpoint.startsWith('/auth/login') || endpoint.startsWith('/auth/me');
-      if (!silent && !isAuthEndpoint) {
-        dispatchApiError(error, endpoint, retry, options.userInitiated);
+      if ((!silent || options.notifyUnauthorized) && !isAuthEndpoint) {
+        if (!silent) dispatchApiError(error, endpoint, retry, options.userInitiated);
         if (onUnauthorized) {
           onUnauthorized(data.error || 'Session expired. Please log in again.');
         }
@@ -335,8 +335,10 @@ export const api = {
   },
   getClient: (id) =>
     request(`/clients/${id}`),
+  getClientAccountManagerBrief: (id) =>
+    request(`/client-assistants/${encodeURIComponent(id)}/brief`),
   previewClientAssistant: (id, data) =>
-    request(`/client-assistants/${encodeURIComponent(id)}/preview`, { method: 'POST', body: data, timeout: 90000, silent: true }),
+    request(`/client-assistants/${encodeURIComponent(id)}/preview`, { method: 'POST', body: data, timeout: 90000, silent: true, notifyUnauthorized: true }),
   createClient: (data) =>
     request('/clients', { method: 'POST', body: data }),
   updateClient: (id, data) =>

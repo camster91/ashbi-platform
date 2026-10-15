@@ -4,13 +4,13 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ClientAccountManager from '../components/ClientAccountManager';
 
-const { getWorkQueue, previewClientAssistant } = vi.hoisted(() => ({ getWorkQueue: vi.fn(), previewClientAssistant: vi.fn() }));
-vi.mock('../lib/api', () => ({ api: { getWorkQueue, previewClientAssistant } }));
+const { getClientAccountManagerBrief, previewClientAssistant } = vi.hoisted(() => ({ getClientAccountManagerBrief: vi.fn(), previewClientAssistant: vi.fn() }));
+vi.mock('../lib/api', () => ({ api: { getClientAccountManagerBrief, previewClientAssistant } }));
 
 const queue = (overrides = {}) => ({
   generatedAt: '2026-10-14T14:00:00.000Z',
   counts: { needs_action: 2, awaiting_approval: 1, waiting_on_client: 0, at_risk: 1 },
-  partial: false, failedSources: [], truncatedSources: [],
+  partial: false, failedSources: [], truncatedSources: [], owner: 'everyone',
   rows: [{ id: 'task-a', type: 'task', title: 'Review designs', owner: { name: 'Bianca' }, state: 'REVIEW', nextAction: 'Review the draft', sourceUrl: '/task/task-a' }],
   ...overrides,
 });
@@ -23,18 +23,18 @@ function renderManager(props = {}) {
 
 async function openManager() {
   fireEvent.click(screen.getByText('Account manager'));
-  await waitFor(() => expect(getWorkQueue).toHaveBeenCalled());
+  await waitFor(() => expect(getClientAccountManagerBrief).toHaveBeenCalled());
 }
 
-beforeEach(() => { vi.resetAllMocks(); getWorkQueue.mockResolvedValue(queue()); });
+beforeEach(() => { vi.resetAllMocks(); getClientAccountManagerBrief.mockResolvedValue(queue()); });
 
 describe('client account manager', () => {
-  it.each([['ADMIN', 'everyone'], ['TEAM', 'me']])('loads lazily with client and %s owner scope, without generating AI', async (role, owner) => {
+  it.each(['ADMIN', 'TEAM'])('loads lazily with client and %s role, without generating AI', async (role) => {
     renderManager({ role });
-    expect(getWorkQueue).not.toHaveBeenCalled();
+    expect(getClientAccountManagerBrief).not.toHaveBeenCalled();
     await openManager();
     await screen.findByRole('link', { name: 'Review designs' });
-    expect(getWorkQueue).toHaveBeenCalledExactlyOnceWith({ clientId: 'client-a', owner });
+    expect(getClientAccountManagerBrief).toHaveBeenCalledExactlyOnceWith('client-a');
     expect(previewClientAssistant).not.toHaveBeenCalled();
     expect(screen.getByRole('link', { name: 'Open client work queue' })).toHaveAttribute('href', '/queue?clientId=client-a');
     expect(screen.getByText('Owner: Bianca · State: REVIEW')).toBeInTheDocument();
@@ -44,7 +44,7 @@ describe('client account manager', () => {
   });
 
   it('warns about incomplete and truncated sources even when no records were returned', async () => {
-    getWorkQueue.mockResolvedValue(queue({ rows: [], partial: true, failedSources: ['invoices'], truncatedSources: ['tasks'] }));
+    getClientAccountManagerBrief.mockResolvedValue(queue({ rows: [], partial: true, failedSources: ['invoices'], truncatedSources: ['tasks'] }));
     renderManager();
     await openManager();
     expect(await screen.findByText(/Could not load: invoices/)).toBeInTheDocument();
@@ -54,20 +54,20 @@ describe('client account manager', () => {
   });
 
   it('shows a safe failure and retries only on request', async () => {
-    getWorkQueue.mockRejectedValueOnce(new Error('Secret server details')).mockResolvedValueOnce(queue());
+    getClientAccountManagerBrief.mockRejectedValueOnce(new Error('Secret server details')).mockResolvedValueOnce(queue());
     renderManager();
     await openManager();
     expect(await screen.findByRole('alert')).toHaveTextContent('Client work could not be loaded');
     expect(screen.queryByText(/Secret server/)).not.toBeInTheDocument();
-    expect(getWorkQueue).toHaveBeenCalledTimes(1);
+    expect(getClientAccountManagerBrief).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Retry client work' }));
     await screen.findByRole('link', { name: 'Review designs' });
-    expect(getWorkQueue).toHaveBeenCalledTimes(2);
+    expect(getClientAccountManagerBrief).toHaveBeenCalledTimes(2);
   });
 
   it('limits visible source records and does not link unsafe URLs', async () => {
     const paths = ['/task/safe', '//evil.example', 'javascript:alert(1)', '/\\evil.example', 'https://evil.example'];
-    getWorkQueue.mockResolvedValue(queue({ rows: Array.from({ length: 10 }, (_, index) => ({ id: index, type: 'task', title: `Record ${index}`, sourceUrl: paths[index % paths.length], nextAction: 'Review' })) }));
+    getClientAccountManagerBrief.mockResolvedValue(queue({ rows: Array.from({ length: 10 }, (_, index) => ({ id: index, type: 'task', title: `Record ${index}`, sourceUrl: paths[index % paths.length], nextAction: 'Review' })) }));
     renderManager();
     await openManager();
     const list = await screen.findByRole('list', { name: 'Client work records' });
@@ -82,12 +82,21 @@ describe('client account manager', () => {
     await openManager();
     await screen.findByRole('link', { name: 'Review designs' });
     let resolveNext;
-    getWorkQueue.mockImplementationOnce(() => new Promise((resolve) => { resolveNext = resolve; }));
+    getClientAccountManagerBrief.mockImplementationOnce(() => new Promise((resolve) => { resolveNext = resolve; }));
     rerender(<ClientAccountManager clientId="client-b" clientName="Beta" role="ADMIN" />);
     expect(screen.queryByText('Review designs')).not.toBeInTheDocument();
-    await waitFor(() => expect(getWorkQueue).toHaveBeenLastCalledWith({ clientId: 'client-b', owner: 'everyone' }));
+    await waitFor(() => expect(getClientAccountManagerBrief).toHaveBeenLastCalledWith('client-b'));
     await act(async () => { resolveNext(queue({ rows: [] })); });
     expect(screen.queryByText('Review designs')).not.toBeInTheDocument();
     expect(await screen.findByText(/No work records were returned for this client/)).toBeInTheDocument();
+  });
+
+  it('shows the server-bounded total and source mismatch warning', async () => {
+    getClientAccountManagerBrief.mockResolvedValue(queue({ hasMore: true, total: 40,
+      partial: true, scopeMismatch: true, rows: Array.from({ length: 8 }, (_, id) => ({ id, type: 'task', title: `Work ${id}` })) }));
+    renderManager();
+    await openManager();
+    expect(await screen.findByText(/Showing 8 of 40 loaded records/)).toBeInTheDocument();
+    expect(screen.getByText(/could not be matched to this client/)).toBeInTheDocument();
   });
 });

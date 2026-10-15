@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 411 |
+| staff | 412 |
 | staff (inline) | 1 |
-| **total** | 606 |
+| **total** | 607 |
 
 ## Routes by prefix
 
@@ -328,6 +328,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
+| GET | `/api/client-assistants/:clientId/brief` | staff | scoped |  |
 | POST | `/api/client-assistants/:clientId/preview` | staff | scoped |  |
 
 ### /api/client-portal
