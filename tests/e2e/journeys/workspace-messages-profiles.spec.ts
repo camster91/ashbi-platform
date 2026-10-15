@@ -6,7 +6,7 @@ test('staff profile settings and workspace messages persist through UI writes', 
   await loginAdminThroughUi(page);
   const api = page.request;
   const { client, suffix } = await createClientWithContact(api, 'Account manager settings');
-  await page.goto(`/clients/${client.id}`);
+  await page.goto(`/client/${client.id}`);
   await page.getByText('Account manager', { exact: true }).click();
   await page.getByText('Account manager settings', { exact: true }).click();
   await page.getByLabel('Agent name', { exact: true }).fill(`Manager ${suffix}`);
@@ -48,4 +48,5 @@ test('staff profile settings and workspace messages persist through UI writes', 
     expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()).violations).toEqual([]);
   }
 });
+
 
