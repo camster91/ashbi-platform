@@ -59,7 +59,6 @@ import { useTheme } from '../hooks/useTheme';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { isWorkspaceDestinationActive } from '../lib/workspace-navigation';
-import { isComingSoon } from '../lib/featureFlags';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import NotificationsDropdown from './NotificationsDropdown';
 import LiveTimer from './LiveTimer';
