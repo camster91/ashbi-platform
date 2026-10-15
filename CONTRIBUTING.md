@@ -38,6 +38,8 @@ npm run build
 
 Run the following when the changed paths or acceptance criteria require them:
 
+Database suites and full `verify` require the [separate disposable test database](docs/local-verification.md), not the development `ashbihub` connection. Provision/migrate it and set its loopback test URL before running the commands below. CI provides its own isolated services.
+
 ```bash
 npm run test:integration
 npm run test:e2e:setup

@@ -77,6 +77,10 @@ Use `prisma db push` only against a disposable local database. Shared environmen
 
 ## Testing
 
+Before `verify`, `verify:release` or `test:integration`, provision and select a
+[disposable local test database](docs/local-verification.md). The development
+`ashbihub` connection is not a safe test target. `verify:quick` needs no database.
+
 ```bash
 npm run verify:quick    # package boundaries, typecheck, lint, backend and frontend unit tests
 npm run verify          # verify:quick plus integration tests and a production build
