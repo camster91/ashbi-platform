@@ -16,6 +16,7 @@ function fixture({ actor = { ...user, isActive: true }, clientResult = client, t
   const reads = [];
   const findMany = model => async args => { reads.push([model, args]); return []; };
   const prisma = {
+    clientAgentProfile: { findFirst: async () => null },
     user: { findFirst: async args => { reads.push(['actor', args]); return actor; }, findMany: findMany('users') },
     client: { findFirst: async args => { reads.push(['client', args]); return clientResult; } },
     project: { findMany: async args => { reads.push(['projects', args]); return [project]; } },
@@ -120,6 +121,9 @@ test('real MCP SDK discovers curated read tools and returns a scoped brief witho
     assert.equal(result.isError, undefined); assert.equal(result.structuredContent.output.total, 1);
     const plugins = await clientSdk.callTool({ name: 'list_account_manager_plugins', arguments: {} });
     assert.equal(plugins.structuredContent.output.plugins[0].id, 'client-work');
+    const profile = await clientSdk.callTool({ name: 'get_client_agent_profile', arguments: { clientId: client.id } });
+    assert.equal(profile.structuredContent.output.revision, 0);
+    assert.equal(profile.structuredContent.output.portalEnabled, false);
     assert.equal(service.list({ ...ctx, scopes: ['workspace:actions'] }).some(t => t.name === briefTool.name), false);
     assert.equal(service.list({ ...ctx, user: { ...user, role: 'BOT' } }).length, 0);
   } finally { await clientSdk.close(); await server.close(); }

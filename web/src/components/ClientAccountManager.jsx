@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import Button from './ui/Button';
 import ClientAssistantPreview from './ClientAssistantPreview';
+import ClientAgentSettings from './ClientAgentSettings';
 
 const VIEWS = [
   ['needs_action', 'Needs action'],
@@ -103,6 +104,7 @@ export default function ClientAccountManager({ clientId, clientName, role }) {
           </>
         )}
         <Link className="inline-flex min-h-11 items-center text-sm underline underline-offset-4" to={`/queue?clientId=${encodeURIComponent(clientId || '')}`}>Open client work queue</Link>
+        {open && clientId && <ClientAgentSettings key={`settings-${clientId}`} clientId={clientId} />}
         {open && clientId && <ClientAssistantPreview key={clientId} clientId={clientId} clientName={clientName} />}
       </div>
     </details>

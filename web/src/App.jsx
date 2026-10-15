@@ -84,6 +84,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const WorkQueue = lazy(() => import('./pages/WorkQueue'));
 const Credentials = lazy(() => import('./pages/Credentials'));
 const Chat = lazy(() => import('./pages/Chat'));
+const WorkspaceMessages = lazy(() => import('./pages/WorkspaceMessages'));
 const AiContextSettings = lazy(() => import('./pages/AiContextSettings'));
 const CommandCenter = lazy(() => import('./pages/CommandCenter'));
 const Docs = lazy(() => import('./pages/Docs'));
@@ -247,6 +248,7 @@ function AppRoutes() {
                   <Routes>
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/queue" element={<WorkQueue />} />
+                  <Route path="/messages" element={<WorkspaceMessages />} />
                   <Route path="/" element={<Navigate to="/dashboard" />} />
                   <Route path="/inbox" element={<Inbox />} />
                   <Route path="/thread/:id" element={<Thread />} />

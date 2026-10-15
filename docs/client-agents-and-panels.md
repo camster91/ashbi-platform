@@ -12,7 +12,9 @@ The workspace MCP server now exposes `list_account_manager_plugins` and `get_cli
 
 The staff HTTP preview still generates answers only on explicit submission. MCP returns deterministic context for ChatGPT to reason over; it does not invoke a second model. Durable agent runs and shared conversation history remain unimplemented. Existing workspace MCP access does not imply those new capabilities are implemented.
 
-## First working slice: staff account manager
+## Staff account manager and profile settings
+
+Persistent staff configuration and company messages are described in [workspace messages](workspace-messages.md). Profile defaults are read-only until saved; the shared staff profile uses revision-checked audited writes and controls preview enablement and the client-work plugin. Client portal activation remains off.
 
 Open a client and expand **Account manager**. The panel loads the shared account-manager brief only when opened, reusing the existing permission-scoped client work queue. It shows needs-action, approval, waiting-on-client and at-risk counts, the observation time, incomplete/truncated source warnings and up to eight source records with owner, state and next action. ADMIN users see team work; TEAM users see their assigned tasks and accessible reviews. Source links and **Open client work queue** lead to the existing human workflows; opening a link does not send a notification or complete a handoff. This brief uses no model call.
 
@@ -20,9 +22,9 @@ Expand **Ask the account manager** for project questions, client-update drafts o
 
 `POST /api/client-assistants/:clientId/preview` accepts only `{message}` (1–2,000 characters). It resolves the client and up to 25 projects through the tenant proxy and explicit organization/client/deletion filters. The model sees only client ID/name/domain and project ID/name/status/start/end dates. It sees no contacts, finance, credentials, internal chat, internal notes, AI summaries or other clients. The response includes the exact context used and observation time; the UI labels a truncated project list. Foreign, missing and deleted clients have the same 404 response. CLIENT and BOT principals are refused. The route permits at most five requests per minute per IP through the existing rate limiter.
 
-This is single-question staff preview: no persisted conversation, custom persona configuration, autonomous tools, client portal chat or channel delivery. A draft in the answer is text only. It does not create a ticket or claim an action happened. The existing staff tool catalogue is not made available to client principals. Unknown provider errors are redacted.
+This is single-question staff preview with saved profile preferences: no persisted conversation, autonomous tools, client portal chat or channel delivery. A draft in the answer is text only. It does not create a ticket or claim an action happened. The existing staff tool catalogue is not made available to client principals. Unknown provider errors are redacted.
 
-Code: `web/src/components/ClientAccountManager.jsx`, `src/services/client-assistant-context.service.js`, `src/routes/client-assistant.routes.js`, `web/src/components/ClientAssistantPreview.jsx` and its integration into the existing client page. No database migration or new profile storage is introduced in this slice. An operational AI provider is required to generate a real response; credentials and existing kill switches are not changed here.
+Code: `web/src/components/ClientAccountManager.jsx`, `src/services/client-assistant-context.service.js`, `src/routes/client-assistant.routes.js`, `web/src/components/ClientAssistantPreview.jsx` and its integration into the existing client page. The profile/messages follow-up adds migration `20261015020000_agency_profiles_workspace_chat`; saved profile configuration does not itself provide conversation history or durable jobs. An operational AI provider is required to generate a real response; credentials and existing kill switches are not changed here.
 
 ## Influencers Link: mention to ticket
 

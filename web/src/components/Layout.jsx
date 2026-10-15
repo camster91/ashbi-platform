@@ -184,6 +184,7 @@ export default function Layout({ children }) {
   const workNav = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true },
     { name: 'Daily Queue', href: '/queue', icon: ListTodo },
+    { name: 'Messages', href: '/messages', icon: MessageSquare },
     { name: 'Projects', href: '/projects', icon: FolderOpen, id: 'projects-link' },
     { name: 'Schedule', href: '/schedule', icon: Calendar },
     ...(isAdmin ? [

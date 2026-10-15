@@ -26,6 +26,7 @@ import { WORKSPACE_WIKI_ACTIONS } from './workspace-wiki-actions.js';
 import { readWorkspacePageAccess } from '../services/workspace-page-access.service.js';
 import { wikiToolCall } from './workspace-wiki-tool-errors.js';
 import { WORKSPACE_ACCOUNT_MANAGER_TOOLS } from './workspace-account-manager-tools.js';
+import { WORKSPACE_CHAT_TOOLS } from './workspace-chat-tools.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
@@ -52,6 +53,7 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 
 export const workspaceRegistry = createToolRegistry([
   ...WORKSPACE_ACCOUNT_MANAGER_TOOLS,
+  ...WORKSPACE_CHAT_TOOLS,
   {
     name: 'get_workspace_page_access', description: 'Read current page audience, staff grants and observed access revision. Only the page owner or organization administrator may inspect this roster; parent restrictions still apply.', class: 'read', roles: ['ADMIN', 'TEAM'], timeoutMs: 5000,
     inputSchema: z.object({ pageId: z.string().min(1).max(80) }).strict(), resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
