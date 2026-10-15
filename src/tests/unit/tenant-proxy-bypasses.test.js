@@ -162,7 +162,7 @@ test('the runtime relation map matches every @relation(fields: [...]) in the sch
       assert.deepEqual(scalars, [`${field[1]}Id`, 'organizationId']);
       const referenced = /references:\s*\[([^\]]*)\]/.exec(field[3]);
       assert.deepEqual(referenced?.[1].split(',').map(name => name.trim()), ['id', 'organizationId']);
-      assert.ok(['User', 'WorkspaceCollection', 'WorkspaceChatChannel'].includes(field[2]));
+      assert.ok(['User', 'WorkspaceCollection', 'WorkspaceChatChannel', 'ClientAgentConversation'].includes(field[2]));
       assert.equal(tenantModelPolicy[model], 'direct');
       assert.equal(tenantModelPolicy[field[2].toLowerCase()], 'direct');
     }

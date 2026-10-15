@@ -147,6 +147,8 @@ export const EXPORT_ENTITIES = Object.freeze([
   { name: 'revenue_snapshots', model: 'RevenueSnapshot', category: 'finance', where: (org) => ({ client: activeClient(org) }), description: 'Monthly revenue snapshots per client' },
 
   // Communication
+  { name: 'client_agent_conversations', model: 'ClientAgentConversation', category: 'communication', where: (org) => ({ organizationId: org, client: activeClient(org) }), description: 'Shared staff client account-manager conversations, including archived conversations' },
+  { name: 'client_agent_runs', model: 'ClientAgentRun', category: 'communication', where: (org) => ({ organizationId: org, conversation: { organizationId: org, client: activeClient(org) } }), omit: ['idempotencyKey', 'inputHash', 'claimToken'], description: 'Stored client account-manager questions, answers and run outcomes; internal intent and worker tokens omitted' },
   { name: 'threads', model: 'Thread', category: 'communication', where: threadScope, omit: ['inboundDeliveryKey'], description: 'Email conversation threads' },
   { name: 'messages', model: 'Message', category: 'communication', where: (org) => ({ thread: threadScope(org) }), omit: ['rawEmail'], description: 'Email messages (parsed body and headers)' },
   { name: 'internal_notes', model: 'InternalNote', category: 'communication', where: (org) => ({ thread: threadScope(org) }), description: 'Internal notes on threads' },
@@ -241,6 +243,8 @@ export const EXCLUDED_FIELD_REASONS = Object.freeze({
   inboundDeliveryKey: 'internal inbound email idempotency key',
   idempotencyKey: 'internal request idempotency key',
   payloadHash: 'internal request idempotency hash',
+  inputHash: 'internal account-manager request idempotency hash',
+  claimToken: 'internal worker claim token',
 });
 
 /**

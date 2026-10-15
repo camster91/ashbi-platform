@@ -21,6 +21,10 @@ const ACTOR_TYPE_SET = new Set(AUDIT_ACTOR_TYPES);
  * listed for the action are dropped.
  */
 export const AUDIT_EVENT_CATALOG = Object.freeze({
+  'client_agent_conversation.created': { entityType: 'client_agent_conversation', metadata: ['clientId', 'revision'] },
+  'client_agent_conversation.archived': { entityType: 'client_agent_conversation', metadata: ['clientId', 'revision'] },
+  'client_agent_run.requested': { entityType: 'client_agent_run', metadata: ['clientId', 'conversationId', 'runId'] },
+  'client_agent_run.cancelled': { entityType: 'client_agent_run', metadata: ['clientId', 'conversationId', 'runId'] },
   'gmail_send.claimed': { entityType: 'gmail_send_receipt', metadata: ['status', 'hubThreadId', 'responseId'] },
   'gmail_send.accepted': { entityType: 'gmail_send_receipt', metadata: ['status', 'hubThreadId', 'responseId'] },
   'gmail_send.completed': { entityType: 'gmail_send_receipt', metadata: ['status', 'hubThreadId', 'responseId'] },

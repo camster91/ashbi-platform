@@ -5,6 +5,7 @@ import os from 'node:os';
 
 import {
   closeQueueInfrastructure,
+  clientAgentQueue,
   getWorkerConnection,
   hydrateEmailJobData,
   QUEUES,
@@ -31,12 +32,17 @@ import { resolveEmbeddingOrganizationId } from './embedding-ownership.js';
 import { checkAllEscalations, checkThreadEscalation, runForEachOrganization } from './escalation.js';
 import { processNotificationJob } from './notification-job.js';
 import { closeRealtimeEmitter } from '../realtime/emitter.js';
+import { processClientAgentRun } from './client-agent-run.js';
+import { expireClientAgentRuns } from './client-agent-run-recovery.js';
+import { registerClientAgentRunSubscriber } from '../subscribers/client-agent-run.subscriber.js';
 import { dispatchDomainEvents } from '../services/domain-event-dispatcher.service.js';
 import { initSentry, Sentry } from '../observability/sentry.js';
 import { sendOperationalAlert } from '../observability/alerts.js';
 import { createShutdown, installProcessHandlers } from '../utils/process-lifecycle.js';
 
 initSentry('worker');
+
+registerClientAgentRunSubscriber({ enqueue: (...args) => clientAgentQueue.add(...args) });
 
 // Workers and the heartbeat use the blocking-safe connection; producers in
 // queue.js keep their own fail-fast connection.
@@ -304,9 +310,28 @@ const domainEventsWorker = createWorker(
   QUEUES.DOMAIN_EVENTS,
   async (job) => {
     if (job.name !== 'dispatch-domain-events') throw new Error(`Unknown domain events job: ${job.name}`);
+    const organizationIds = await resolveTenantOrganizationIds(backgroundPrisma);
+    for (const organizationId of organizationIds) {
+      try {
+        await runTenantJob(backgroundPrisma, organizationId, tenant => expireClientAgentRuns(tenant, organizationId));
+      } catch (error) {
+        logger.error({ organizationId, errorCode: error.code, errorName: error.name }, 'Client agent expiry sweep failed');
+      }
+    }
     return dispatchDomainEvents(backgroundPrisma);
   },
   { concurrency: 1 },
+);
+
+const clientAgentWorker = createWorker(
+  QUEUES.CLIENT_AGENT,
+  async job => {
+    if (job.name !== 'run-client-agent') throw new Error('Unknown client agent job');
+    return runTenantJob(backgroundPrisma, job.data?.organizationId, tenant => processClientAgentRun(
+      tenant, { organizationId: job.data?.organizationId, runId: job.data?.runId },
+    ));
+  },
+  { concurrency: 2 },
 );
 
 const activeWorkers = [
@@ -318,10 +343,11 @@ const activeWorkers = [
   embeddingWorker,
   scheduledWorker,
   domainEventsWorker,
+  clientAgentWorker,
 ].filter(Boolean);
 
-if (activeWorkers.length !== 8) {
-  throw new Error(`Worker startup incomplete (${activeWorkers.length}/8 active)`);
+if (activeWorkers.length !== 9) {
+  throw new Error(`Worker startup incomplete (${activeWorkers.length}/9 active)`);
 }
 
 await setupRecurringJobs();
@@ -342,7 +368,7 @@ const heartbeatInterval = setInterval(() => {
 }, 15_000);
 heartbeatInterval.unref();
 
-console.log(`Workers started (${activeWorkers.length}/8 active)`);
+console.log(`Workers started (${activeWorkers.length}/9 active)`);
 
 // Same lifecycle as the API (src/utils/process-lifecycle.js): one idempotent
 // drain, so a second signal joins it instead of exiting mid-drain. The

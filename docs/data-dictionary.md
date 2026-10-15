@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-121 models, 0 enums, 67 tenant-scoped, 13 soft-deletable.
+123 models, 0 enums, 69 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -39,8 +39,10 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [CalendarEvent](#model-calendarevent) | `calendar_events` | no | no | 22 |
 | [ChatMessage](#model-chatmessage) | `chat_messages` | no | no | 22 |
 | [ChatReaction](#model-chatreaction) | `chat_reactions` | no | no | 7 |
-| [Client](#model-client) | `clients` | yes | yes | 55 |
+| [Client](#model-client) | `clients` | yes | yes | 56 |
+| [ClientAgentConversation](#model-clientagentconversation) | `client_agent_conversations` | yes | no | 13 |
 | [ClientAgentProfile](#model-clientagentprofile) | `client_agent_profiles` | yes | no | 17 |
+| [ClientAgentRun](#model-clientagentrun) | `client_agent_runs` | yes | no | 20 |
 | [ClientEmailMapping](#model-clientemailmapping) | `client_email_mappings` | no | no | 8 |
 | [ClientEmbedding](#model-clientembedding) | `client_embeddings` | no | no | 10 |
 | [ClientInvitation](#model-clientinvitation) | `client_invitations` | no | no | 8 |
@@ -81,7 +83,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 76 |
+| [Organization](#model-organization) | `organizations` | no | no | 78 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -123,7 +125,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [TimeSession](#model-timesession) | `time_sessions` | no | no | 16 |
 | [TrashedItem](#model-trasheditem) | `trashed_items` | yes | yes | 9 |
 | [UnmatchedEmail](#model-unmatchedemail) | `unmatched_emails` | yes | no | 16 |
-| [User](#model-user) | `users` | yes | no | 64 |
+| [User](#model-user) | `users` | yes | no | 66 |
 | [WPAlert](#model-wpalert) | `wp_alerts` | yes | no | 9 |
 | [WPBackup](#model-wpbackup) | `wp_backups` | yes | no | 15 |
 | [WPBridgeNonce](#model-wpbridgenonce) | `wp_bridge_nonces` | yes | no | 7 |
@@ -702,7 +704,35 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `estimates` | Estimate[] | list, required |  | → Estimate |  |
 | `rateCards` | RateCard[] | list, required |  | → RateCard |  |
 | `agentProfiles` | ClientAgentProfile[] | list, required |  | → ClientAgentProfile |  |
+| `agentConversations` | ClientAgentConversation[] | list, required |  | → ClientAgentConversation |  |
 | `workspaceChatChannels` | WorkspaceChatChannel[] | list, required |  | → WorkspaceChatChannel |  |
+
+### Model ClientAgentConversation
+
+- Table: `client_agent_conversations`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([id, organizationId])`
+  - `@@index([organizationId, clientId, id])`
+  - `@@index([clientId])`
+  - `@@index([createdById, organizationId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `clientId` | String | required |  |  |  |
+| `title` | String | required |  |  |  |
+| `createdById` | String | required |  |  |  |
+| `revision` | Int | required | `0` |  |  |
+| `archivedAt` | DateTime | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `client` | Client | required |  | → Client, via (clientId) → (id), onDelete Cascade |  |
+| `createdBy` | User | required |  | → User, via (createdById, organizationId) → (id, organizationId), onDelete Restrict, "ClientAgentConversationCreator" |  |
+| `runs` | ClientAgentRun[] | list, required |  | → ClientAgentRun |  |
 
 ### Model ClientAgentProfile
 
@@ -735,6 +765,42 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `client` | Client | required |  | → Client, via (clientId) → (id), onDelete Cascade |  |
 | `createdBy` | User | required |  | → User, via (createdById, organizationId) → (id, organizationId), onDelete Restrict, "AgentProfileCreator" |  |
 | `updatedBy` | User | required |  | → User, via (updatedById, organizationId) → (id, organizationId), onDelete Restrict, "AgentProfileUpdater" |  |
+
+### Model ClientAgentRun
+
+- Table: `client_agent_runs`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([organizationId, requestedById, idempotencyKey], map: "client_agent_runs_intent_key")`
+  - `@@unique([organizationId, conversationId], map: "client_agent_runs_one_active", where: raw("status IN ('QUEUED', 'RUNNING')"))`
+  - `@@index([organizationId, conversationId, id])`
+  - `@@index([conversationId, organizationId])`
+  - `@@index([organizationId, status, deadlineAt])`
+  - `@@index([requestedById, organizationId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `conversationId` | String | required |  |  |  |
+| `requestedById` | String | required |  |  |  |
+| `idempotencyKey` | String | required |  |  |  |
+| `inputHash` | String | required |  |  |  |
+| `prompt` | String | required |  |  |  |
+| `response` | String | optional |  |  |  |
+| `status` | String | required | `"QUEUED"` |  |  |
+| `profileRevision` | Int | optional |  |  |  |
+| `claimToken` | String | optional |  |  |  |
+| `startedAt` | DateTime | optional |  |  |  |
+| `finishedAt` | DateTime | optional |  |  |  |
+| `deadlineAt` | DateTime | optional |  |  |  |
+| `errorCode` | String | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `conversation` | ClientAgentConversation | required |  | → ClientAgentConversation, via (conversationId, organizationId) → (id, organizationId), onDelete Cascade |  |
+| `requestedBy` | User | required |  | → User, via (requestedById, organizationId) → (id, organizationId), onDelete Restrict, "ClientAgentRunRequester" |  |
 
 ### Model ClientEmailMapping
 
@@ -1878,6 +1944,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `impersonationSessions` | ImpersonationSession[] | list, required |  | → ImpersonationSession |  |
 | `breakGlassGrants` | BreakGlassGrant[] | list, required |  | → BreakGlassGrant |  |
 | `clientAgentProfiles` | ClientAgentProfile[] | list, required |  | → ClientAgentProfile |  |
+| `clientAgentConversations` | ClientAgentConversation[] | list, required |  | → ClientAgentConversation |  |
+| `clientAgentRuns` | ClientAgentRun[] | list, required |  | → ClientAgentRun |  |
 | `noteRevisions` | NoteRevision[] | list, required |  | → NoteRevision |  |
 | `workspacePageRevisions` | WorkspacePageRevision[] | list, required |  | → WorkspacePageRevision |  |
 | `workspaceChatChannels` | WorkspaceChatChannel[] | list, required |  | → WorkspaceChatChannel |  |
@@ -3153,6 +3221,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `ownedPublicInquiries` | PublicInquiry[] | list, required |  | → PublicInquiry, "PublicInquiryOwner" |  |
 | `createdAgentProfiles` | ClientAgentProfile[] | list, required |  | → ClientAgentProfile, "AgentProfileCreator" |  |
 | `updatedAgentProfiles` | ClientAgentProfile[] | list, required |  | → ClientAgentProfile, "AgentProfileUpdater" |  |
+| `createdAgentConversations` | ClientAgentConversation[] | list, required |  | → ClientAgentConversation, "ClientAgentConversationCreator" |  |
+| `requestedClientAgentRuns` | ClientAgentRun[] | list, required |  | → ClientAgentRun, "ClientAgentRunRequester" |  |
 | `createdWorkspaceChatChannels` | WorkspaceChatChannel[] | list, required |  | → WorkspaceChatChannel, "WorkspaceChatCreator" |  |
 | `workspaceChatMemberships` | WorkspaceChatMember[] | list, required |  | → WorkspaceChatMember |  |
 | `workspaceChatMessages` | WorkspaceChatMessage[] | list, required |  | → WorkspaceChatMessage, "WorkspaceChatAuthor" |  |

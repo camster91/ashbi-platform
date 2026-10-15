@@ -142,6 +142,7 @@ export const weeklyDigestQueue = createQueue(QUEUES.WEEKLY_DIGEST);
 export const embeddingQueue = createQueue(QUEUES.EMBEDDING);
 export const scheduledQueue = createQueue(QUEUES.SCHEDULED);
 export const domainEventsQueue = createQueue(QUEUES.DOMAIN_EVENTS);
+export const clientAgentQueue = createQueue(QUEUES.CLIENT_AGENT);
 export const ALL_QUEUES = Object.freeze([
   emailQueue,
   healthQueue,
@@ -151,6 +152,7 @@ export const ALL_QUEUES = Object.freeze([
   embeddingQueue,
   scheduledQueue,
   domainEventsQueue,
+  clientAgentQueue,
 ]);
 
 /**

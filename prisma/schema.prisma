@@ -93,6 +93,8 @@ model Organization {
 
   @@map("organizations")
   clientAgentProfiles ClientAgentProfile[]
+  clientAgentConversations ClientAgentConversation[]
+  clientAgentRuns ClientAgentRun[]
   noteRevisions NoteRevision[]
   workspacePageRevisions WorkspacePageRevision[]
   workspaceChatChannels WorkspaceChatChannel[]
@@ -171,6 +173,8 @@ model User {
   @@map("users")
   createdAgentProfiles ClientAgentProfile[] @relation("AgentProfileCreator")
   updatedAgentProfiles ClientAgentProfile[] @relation("AgentProfileUpdater")
+  createdAgentConversations ClientAgentConversation[] @relation("ClientAgentConversationCreator")
+  requestedClientAgentRuns ClientAgentRun[] @relation("ClientAgentRunRequester")
   createdWorkspaceChatChannels WorkspaceChatChannel[] @relation("WorkspaceChatCreator")
   workspaceChatMemberships WorkspaceChatMember[]
   workspaceChatMessages WorkspaceChatMessage[] @relation("WorkspaceChatAuthor")
@@ -281,6 +285,7 @@ model Client {
   @@index([organizationId])
   @@map("clients")
   agentProfiles ClientAgentProfile[]
+  agentConversations ClientAgentConversation[]
   workspaceChatChannels WorkspaceChatChannel[]
 }
 
@@ -3120,6 +3125,57 @@ model GmailSendReceipt {
   @@index([userId, organizationId])
   @@index([organizationId, status, createdAt])
   @@map("gmail_send_receipts")
+}
+
+model ClientAgentConversation {
+  id String @id @default(cuid())
+  organizationId String
+  clientId String
+  title String
+  createdById String
+  revision Int @default(0)
+  archivedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy User @relation("ClientAgentConversationCreator", fields: [createdById, organizationId], references: [id, organizationId], onDelete: Restrict)
+  runs ClientAgentRun[]
+  @@unique([id, organizationId])
+  @@index([organizationId, clientId, id])
+  @@index([clientId])
+  @@index([createdById, organizationId])
+  @@map("client_agent_conversations")
+}
+
+model ClientAgentRun {
+  id String @id @default(cuid())
+  organizationId String
+  conversationId String
+  requestedById String
+  idempotencyKey String
+  inputHash String
+  prompt String
+  response String?
+  status String @default("QUEUED")
+  profileRevision Int?
+  claimToken String?
+  startedAt DateTime?
+  finishedAt DateTime?
+  deadlineAt DateTime?
+  errorCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversation ClientAgentConversation @relation(fields: [conversationId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  requestedBy User @relation("ClientAgentRunRequester", fields: [requestedById, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@unique([organizationId, requestedById, idempotencyKey], map: "client_agent_runs_intent_key")
+  @@unique([organizationId, conversationId], map: "client_agent_runs_one_active", where: raw("status IN ('QUEUED', 'RUNNING')"))
+  @@index([organizationId, conversationId, id])
+  @@index([conversationId, organizationId])
+  @@index([organizationId, status, deadlineAt])
+  @@index([requestedById, organizationId])
+  @@map("client_agent_runs")
 }
 
 model ClientAgentProfile {

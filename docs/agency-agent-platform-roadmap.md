@@ -38,7 +38,9 @@ Keep asset origin, license/usage rights, supplied sources, AI involvement and ap
 
 ## Current implementation boundary
 
-The first slice provides a staff preview, curated read-only `client-work` plugin and shared deterministic brief. The [staff profile/messages follow-up](workspace-messages.md) adds persistent profile configuration and human company/direct conversations, with code presence distinct from merge/production acceptance. Saved agent conversations, configurable provider plugin installations, durable agent jobs, app-wide bot execution, new mailbox connections, WhatsApp delivery and OpenSEO adapters remain unfinished. Existing task/finance/chat/email/portal code must be audited and extended before claiming any replacement is complete.
+The first slice provides a staff preview, curated read-only `client-work` plugin and shared deterministic brief. The [staff profile/messages follow-up](workspace-messages.md) adds persistent profile configuration and human company/direct conversations, with code presence distinct from merge/production acceptance.
+
+October 15, 2026 implementation overlay: [shared staff agent conversations and durable runs](client-agent-conversations.md) are **code-present, unshipped** in the follow-up branch, with stored questions/results, status, cancellation and requester intent recovery. Production migration, worker delivery and real-provider acceptance are not established by this overlay. Configurable provider plugin installations, app-wide bot execution, new mailbox connections, WhatsApp delivery and OpenSEO adapters remain unfinished. Existing task/finance/chat/email/portal code must be audited and extended before claiming any replacement is complete.
 
 ## Standards references
 
