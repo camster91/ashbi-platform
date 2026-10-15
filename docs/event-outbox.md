@@ -39,6 +39,22 @@ Code:
 
 ## Event envelope
 
+The durable client account-manager follow-up registers the code-present,
+unshipped `client_agent.run_requested` v1 event. Its aggregate is
+`client_agent_run`, identified by the run id. The strict payload contains only
+`clientId`, `conversationId`, `runId` and `requestedById`; it never stores the
+question, answer, profile instructions, intent key or worker claim token.
+The queued run, event and required audit evidence commit in one transaction.
+Provider execution happens separately from the producer. This catalog entry
+alone does not establish worker deployment or provider acceptance.
+
+The subscriber requests three bounded queue delivery attempts with exponential
+backoff starting at two seconds. Permanent run claims prevent those delivery
+retries from repeating inference. Recovery marks ten-minute-old `QUEUED` runs
+`FAILED` (`RUN_QUEUE_EXPIRED`) without dispatch or requeue; expired `RUNNING`
+runs become `UNKNOWN` and are not reclaimed. See
+[client-agent-conversations.md](client-agent-conversations.md).
+
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | cuid | Event id. Consumers dedupe on it. |

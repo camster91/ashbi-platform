@@ -368,3 +368,32 @@ describe('secrecy', () => {
     assert.doesNotMatch(everything, /9876543210/);
   });
 });
+
+
+describe('caller cancellation before upstream dispatch', () => {
+  it('a delayed policy hook cannot dispatch platform chat, JSON or custom chains after abort', async () => {
+    for (const kind of ['chat', 'chatJSON', 'chatVia']) {
+      const controller = new AbortController(); let release, entered;
+      const ready = new Promise(resolve => { entered = resolve; });
+      const blocked = new Promise(resolve => { release = resolve; });
+      const t = setup({ hooks: { beforeCall: async () => { entered(); await blocked; } } });
+      let customCalls = 0;
+      const options = { prompt: 'Synthetic question', signal: controller.signal };
+      const pending = kind === 'chatVia'
+        ? t.governance.chatVia(options, async () => { customCalls++; return 'late'; })
+        : t.governance[kind](options);
+      await ready; controller.abort(); release();
+      await assert.rejects(pending, error => error.name === 'AbortError');
+      assert.equal(t.platformCalls.length, 0); assert.equal(customCalls, 0);
+    }
+  });
+
+  it('a budget lookup completing after abort cannot start a BYOK request', async () => {
+    const controller = new AbortController();
+    const t = setup({ connection: {} });
+    const aggregate = t.db.aiUsageRecord.aggregate.bind(t.db.aiUsageRecord);
+    t.db.aiUsageRecord.aggregate = async (...args) => { controller.abort(); return aggregate(...args); };
+    await assert.rejects(t.governance.chat({ prompt: 'Synthetic question', signal: controller.signal }), error => error.name === 'AbortError');
+    assert.equal(t.calls.length, 0); assert.equal(t.db.aiUsageRecord.rows.length, 0);
+  });
+});

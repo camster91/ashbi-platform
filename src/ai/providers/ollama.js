@@ -40,13 +40,13 @@ class OllamaProvider {
     return headers;
   }
 
-  async chat({ system, prompt, temperature = 0.3, maxTokens = 4096 }) {
+  async chat({ system, prompt, temperature = 0.3, maxTokens = 4096, signal }) {
     const messages = [];
     if (system) messages.push({ role: 'system', content: system });
     messages.push({ role: 'user', content: prompt });
 
     const res = await fetch(`${this.baseUrl}/api/chat`, {
-      signal: AbortSignal.timeout(ollamaChatTimeoutMs()),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(ollamaChatTimeoutMs())]) : AbortSignal.timeout(ollamaChatTimeoutMs()),
       method: 'POST',
       headers: this._headers(),
       body: JSON.stringify({

@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 431 |
+| staff | 439 |
 | staff (inline) | 1 |
-| **total** | 626 |
+| **total** | 634 |
 
 ## Routes by prefix
 
@@ -380,6 +380,14 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | --- | --- | --- | --- | --- |
 | GET | `/api/clients` | staff | scoped |  |
 | POST | `/api/clients` | staff | scoped |  |
+| GET | `/api/clients/:clientId/assistant/conversations` | staff | scoped |  |
+| POST | `/api/clients/:clientId/assistant/conversations` | staff | scoped |  |
+| GET | `/api/clients/:clientId/assistant/conversations/:conversationId` | staff | scoped |  |
+| POST | `/api/clients/:clientId/assistant/conversations/:conversationId/archive` | staff | scoped |  |
+| POST | `/api/clients/:clientId/assistant/conversations/:conversationId/runs` | staff | scoped |  |
+| GET | `/api/clients/:clientId/assistant/conversations/:conversationId/runs/:runId` | staff | scoped |  |
+| POST | `/api/clients/:clientId/assistant/conversations/:conversationId/runs/:runId/cancel` | staff | scoped |  |
+| GET | `/api/clients/:clientId/assistant/conversations/:conversationId/runs/by-intent/:idempotencyKey` | staff | scoped |  |
 | GET | `/api/clients/:id` | staff | scoped |  |
 | PUT | `/api/clients/:id` | staff | scoped |  |
 | GET | `/api/clients/:id/contacts` | staff | scoped |  |

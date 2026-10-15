@@ -17,7 +17,7 @@ class GeminiProvider {
     return Boolean(env.geminiApiKey);
   }
 
-  async chat({ system, prompt, temperature = 0.3, maxTokens = 4096 }) {
+  async chat({ system, prompt, temperature = 0.3, maxTokens = 4096, signal }) {
     const model = this.client.getGenerativeModel({
       model: this.modelName,
       systemInstruction: system,
@@ -27,7 +27,10 @@ class GeminiProvider {
       }
     });
 
-    const result = await model.generateContent(prompt);
+    // This SDK only listens for future abort events. Reject a deadline that
+    // elapsed during governance routing before it can start a new request.
+    signal?.throwIfAborted();
+    const result = await model.generateContent(prompt, signal ? { signal } : undefined);
     return result.response.text();
   }
 

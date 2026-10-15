@@ -90,6 +90,9 @@ function applyStringChecks(schema, out) {
       case 'email': out.format = 'email'; break;
       case 'url': out.format = 'uri'; break;
       case 'uuid': out.format = 'uuid'; break;
+      // Zod v3 uses /^c[^\s-]{8,}$/i. Express its case-insensitive
+      // prefix explicitly because JSON Schema patterns cannot carry flags.
+      case 'cuid': addPattern(out, '^[cC][^\\s-]{8,}$'); break;
       case 'datetime': out.format = 'date-time'; break;
       case 'date': out.format = 'date'; break;
       case 'time': out.format = 'time'; break;
