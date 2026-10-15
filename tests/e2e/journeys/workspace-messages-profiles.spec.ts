@@ -30,7 +30,7 @@ test('staff profile settings and workspace messages persist through UI writes', 
     data: { kind: 'COMPANY', name, memberIds: [] },
   }));
   await page.goto('/messages');
-  await page.getByRole('button', { name, exact: true }).click();
+  await page.getByRole('button', { name: new RegExp(name) }).click();
   const content = `Persisted team update ${suffix}`;
   await page.getByLabel('Message', { exact: true }).fill(content);
   const messageSaved = page.waitForResponse(response => response.request().method() === 'POST' &&
@@ -41,10 +41,11 @@ test('staff profile settings and workspace messages persist through UI writes', 
   const history = await json(await api.get(`/api/workspace-chat/channels/${channel.id}/messages`));
   expect(history.items.filter(item => item.content === content)).toHaveLength(1);
   await page.reload();
-  await page.getByRole('button', { name, exact: true }).click();
+  await page.getByRole('button', { name: new RegExp(name) }).click();
   await expect(page.getByText(content, { exact: true })).toBeVisible();
   for (const width of [1280, 390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()).violations).toEqual([]);
   }
 });
+
