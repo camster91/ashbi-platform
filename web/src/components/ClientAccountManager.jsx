@@ -1,10 +1,30 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import Button from './ui/Button';
 import ClientAssistantPreview from './ClientAssistantPreview';
 import ClientAgentSettings from './ClientAgentSettings';
+import { useAuth } from '../hooks/useAuth';
+
+const ClientAgentConversations = lazy(() => import('./ClientAgentConversations'));
+
+function SavedConversations({ clientId }) {
+  const { user } = useAuth();
+  if (!user?.id || !user.organizationId || !['ADMIN', 'TEAM'].includes(user.role)) return null;
+  return <SavedConversationsProfile key={`${user.organizationId}:${user.id}:${user.role}:${clientId}`} clientId={clientId} />;
+}
+
+function SavedConversationsProfile({ clientId }) {
+  // Share the settings cache so saved profile changes immediately update Send.
+  const profile = useQuery({ queryKey: ['client-agent-profile', clientId], queryFn: () => api.getClientAgentProfile(clientId), retry: false, staleTime: 0, refetchOnMount: 'always', refetchOnWindowFocus: false });
+  const profileEnabled = !profile.isError && !profile.isFetching && Boolean(profile.data?.enabled && profile.data.pluginIds?.includes('client-work'));
+  return <div className="space-y-3">
+    {profile.isPending && <p role="status">Checking account manager settings…</p>}
+    {profile.isError && <div role="alert"><p>Account manager settings could not be checked. Saved conversations remain available; sending is paused.</p><Button type="button" variant="outline" onClick={() => profile.refetch()}>Retry account manager settings</Button></div>}
+    <Suspense fallback={<p role="status">Loading saved conversations…</p>}><ClientAgentConversations clientId={clientId} profileEnabled={profileEnabled} /></Suspense>
+  </div>;
+}
 
 const VIEWS = [
   ['needs_action', 'Needs action'],
@@ -24,6 +44,7 @@ function isLocalPath(value) {
 
 export default function ClientAccountManager({ clientId, clientName, role }) {
   const [open, setOpen] = useState(false);
+  const [conversationsOpen, setConversationsOpen] = useState(false);
   const { data, isPending, isFetching, isError, refetch } = useQuery({
     queryKey: ['client-account-manager', clientId, role],
     queryFn: () => api.getClientAccountManagerBrief(clientId),
@@ -42,7 +63,10 @@ export default function ClientAccountManager({ clientId, clientName, role }) {
     <details
       className="rounded-lg border border-border bg-card p-4"
       onToggle={(event) => {
-        if (event.target === event.currentTarget) setOpen(event.currentTarget.open);
+        if (event.target === event.currentTarget) {
+          setOpen(event.currentTarget.open);
+          if (!event.currentTarget.open) setConversationsOpen(false);
+        }
       }}
     >
       <summary className="min-h-11 cursor-pointer font-medium">Account manager</summary>
@@ -106,6 +130,10 @@ export default function ClientAccountManager({ clientId, clientName, role }) {
         <Link className="inline-flex min-h-11 items-center text-sm underline underline-offset-4" to={`/queue?clientId=${encodeURIComponent(clientId || '')}`}>Open client work queue</Link>
         {open && clientId && <ClientAgentSettings key={`settings-${clientId}`} clientId={clientId} />}
         {open && clientId && <ClientAssistantPreview key={clientId} clientId={clientId} clientName={clientName} />}
+        {open && clientId && <details className="rounded-lg border border-border p-3" onToggle={(event) => { if (event.target === event.currentTarget) setConversationsOpen(event.currentTarget.open); }}>
+          <summary className="min-h-11 cursor-pointer font-medium">Saved conversations</summary>
+          {conversationsOpen && <SavedConversations clientId={clientId} />}
+        </details>}
       </div>
     </details>
   );

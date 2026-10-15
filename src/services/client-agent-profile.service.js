@@ -27,7 +27,7 @@ function project(row) {
     pluginIds: Array.isArray(row.pluginIds) ? row.pluginIds.filter(id => id === 'client-work') : [],
     ...(row.updatedAt ? { updatedAt: row.updatedAt } : {}) };
 }
-async function authorize(prisma, user, clientId) {
+export async function authorizeClientAgentStaff(prisma, user, clientId) {
   if (typeof user?.id !== 'string' || !user.id || typeof user.organizationId !== 'string'
     || !user.organizationId || !['ADMIN', 'TEAM'].includes(user.role)) fail('ROLE_DENIED', 'Active staff access required.', 403);
   const actor = await prisma.user.findFirst({ where: { id: user.id, organizationId: user.organizationId, isActive: true },
@@ -50,7 +50,7 @@ export async function readClientAgentProfile(prisma, user, clientId) {
   ({ clientId } = parse(clientAgentProfileParamsSchema, { clientId }));
   const scoped = scopedFor(prisma, user);
   try {
-    const actor = await authorize(scoped, user, clientId);
+    const actor = await authorizeClientAgentStaff(scoped, user, clientId);
     const row = await scoped.clientAgentProfile.findFirst({ where: { organizationId: actor.organizationId, clientId }, select });
     if (!row) return { id: null, clientId, name: 'Account manager', instructions: '', enabled: true,
       portalEnabled: false, revision: 0, pluginIds: ['client-work'] };
@@ -69,7 +69,7 @@ export async function saveClientAgentProfile(prisma, user, clientId, input) {
   const scoped = scopedFor(prisma, user);
   try {
     return await scoped.$transaction(async tx => {
-      const actor = await authorize(tx, user, clientId);
+      const actor = await authorizeClientAgentStaff(tx, user, clientId);
       const where = { organizationId: actor.organizationId, clientId };
       let row;
       if (revision === 0) {

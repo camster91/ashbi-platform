@@ -5,6 +5,15 @@ The document-history implementation adds `note_revisions` and `workspace_page_re
 Status: **code-present, not target verified** (#412, "a workspace export
 usable by a leaving customer, including files").
 
+The unshipped durable account-manager follow-up adds
+`client_agent_conversations` and `client_agent_runs`. These contain shared
+staff conversation titles and retained questions, responses and run outcomes,
+including archived conversations, for active clients in the requested
+organization. Internal request intent keys, input hashes and worker claim
+tokens are omitted. See [client-agent-conversations.md](client-agent-conversations.md)
+for access and retention behavior. This is an operator export addition;
+production migration and real-tenant export acceptance remain unverified.
+
 `scripts/export-workspace.js` produces a complete, tenant-scoped export of one
 organization: its business records as JSON Lines plus the files its members
 uploaded, with a manifest of row counts and SHA-256 checksums. It is an

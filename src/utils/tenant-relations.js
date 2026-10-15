@@ -27,6 +27,8 @@ let cache = null;
 export const COMPOSITE_TENANT_RELATIONS = Object.freeze({
   gmailsendreceipt: { user: ['userId', 'organizationId'] },
   clientagentprofile: { createdBy: ['createdById', 'organizationId'], updatedBy: ['updatedById', 'organizationId'] },
+  clientagentconversation: { createdBy: ['createdById', 'organizationId'] },
+  clientagentrun: { conversation: ['conversationId', 'organizationId'], requestedBy: ['requestedById', 'organizationId'] },
   workspacechatchannel: { createdBy: ['createdById', 'organizationId'] },
   workspacechatmember: { channel: ['channelId', 'organizationId'], user: ['userId', 'organizationId'] },
   workspacechatmessage: { channel: ['channelId', 'organizationId'], author: ['authorId', 'organizationId'] },
@@ -61,7 +63,7 @@ export function tenantRelationMap() {
       if (field.kind !== 'object') continue;
       const fk = scalars.has(`${field.name}Id`) ? `${field.name}Id` : null;
       const fkFields = COMPOSITE_TENANT_RELATIONS[model.name.toLowerCase()]?.[field.name] ?? (fk ? [fk] : []);
-      if (fkFields.some(key => !scalars.has(key)) || (fkFields.length > 1 && (fkFields[0] !== fk || fkFields[1] !== 'organizationId' || !['User', 'WorkspaceCollection', 'WorkspaceChatChannel'].includes(field.type)))) throw new Error('Tenancy Error: unsupported composite relation');
+      if (fkFields.some(key => !scalars.has(key)) || (fkFields.length > 1 && (fkFields[0] !== fk || fkFields[1] !== 'organizationId' || !['User', 'WorkspaceCollection', 'WorkspaceChatChannel', 'ClientAgentConversation'].includes(field.type)))) throw new Error('Tenancy Error: unsupported composite relation');
       relations[field.name] = { target: String(field.type).toLowerCase(), fk, fkFields };
       if (fk) foreignKeys[fk] = field.name;
     }

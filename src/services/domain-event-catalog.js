@@ -34,6 +34,13 @@ const dataIssues = z.array(z.string().regex(/^[A-Za-z]+$/).max(40)).min(1).max(2
 
 /** @type {Readonly<Record<string, DomainEventSpec>>} */
 export const DOMAIN_EVENT_CATALOG = Object.freeze({
+  'client_agent.run_requested': {
+    aggregateType: 'client_agent_run',
+    currentVersion: 1,
+    versions: {
+      1: z.object({ clientId: id, conversationId: id, runId: id, requestedById: id }).strict(),
+    },
+  },
   'invoice.paid': {
     aggregateType: 'invoice',
     currentVersion: 1,

@@ -8,4 +8,5 @@ export const QUEUES = Object.freeze({
   SCHEDULED: 'scheduled-maintenance',
   // Transactional outbox dispatcher (#412, docs/event-outbox.md).
   DOMAIN_EVENTS: 'domain-events',
+  CLIENT_AGENT: 'client-agent',
 });

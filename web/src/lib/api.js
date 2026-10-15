@@ -339,6 +339,19 @@ export const api = {
   getClientCommunication: (clientId, source, id) => request(`/client-communications/${encodeURIComponent(clientId)}/${encodeURIComponent(source)}/${encodeURIComponent(id)}`),
   getClientAgentProfile: (id) => request(`/client-assistants/${encodeURIComponent(id)}/profile`),
   updateClientAgentProfile: (id, data) => request(`/client-assistants/${encodeURIComponent(id)}/profile`, { method: 'PATCH', body: data }),
+  listClientAgentConversations: (clientId, params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value != null)).toString();
+    return request(`/clients/${encodeURIComponent(clientId)}/assistant/conversations${query ? `?${query}` : ''}`, { silent: true, notifyUnauthorized: true });
+  },
+  createClientAgentConversation: (clientId, data) => request(`/clients/${encodeURIComponent(clientId)}/assistant/conversations`, { method: 'POST', body: data, silent: true, notifyUnauthorized: true }),
+  getClientAgentConversation: (clientId, id, params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value != null)).toString();
+    return request(`/clients/${encodeURIComponent(clientId)}/assistant/conversations/${encodeURIComponent(id)}${query ? `?${query}` : ''}`, { silent: true, notifyUnauthorized: true });
+  },
+  startClientAgentRun: (clientId, id, data) => request(`/clients/${encodeURIComponent(clientId)}/assistant/conversations/${encodeURIComponent(id)}/runs`, { method: 'POST', body: data, silent: true, notifyUnauthorized: true }),
+  getClientAgentRun: (clientId, id, runId) => request(`/clients/${encodeURIComponent(clientId)}/assistant/conversations/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}`, { silent: true, notifyUnauthorized: true }),
+  getClientAgentRunByIntent: (clientId, id, idempotencyKey) => request(`/clients/${encodeURIComponent(clientId)}/assistant/conversations/${encodeURIComponent(id)}/runs/by-intent/${encodeURIComponent(idempotencyKey)}`, { silent: true, notifyUnauthorized: true }),
+  cancelClientAgentRun: (clientId, id, runId) => request(`/clients/${encodeURIComponent(clientId)}/assistant/conversations/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST', body: {}, silent: true, notifyUnauthorized: true }),
   listWorkspaceChatChannels: (params = {}) => request(`/workspace-chat/channels?${new URLSearchParams(Object.entries(params).filter(([, value]) => value != null))}`),
   listWorkspaceChatPeople: () => request('/workspace-chat/people'),
   createWorkspaceChatChannel: (data) => request('/workspace-chat/channels', { method: 'POST', body: data }),

@@ -20,6 +20,15 @@ import { collectRouteInventory } from '../helpers/route-inventory.js';
 import { zodToJsonSchema } from '../helpers/zod-to-json-schema.js';
 
 describe('zodToJsonSchema', () => {
+  test('CUID pattern matches installed Zod validation without inventing regex flags', () => {
+    const schema = z.string().cuid();
+    const converted = zodToJsonSchema(schema);
+    assert.deepEqual(converted, { type: 'string', pattern: '^[cC][^\\s-]{8,}$' });
+    const pattern = new RegExp(converted.pattern);
+    for (const value of ['cm1234567', 'Cm1234567', 'cshort', 'cm12345-7', 'cm12345 7', 'xm1234567']) {
+      assert.equal(pattern.test(value), schema.safeParse(value).success, value);
+    }
+  });
   test('objects: required keys, strict, defaults and optional fields', () => {
     const schema = z.object({
       name: z.string().trim().min(1).max(100),

@@ -49,6 +49,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'expense', 'taskcollaborator', 'projectboard', 'workspacepage', 'workspacepagegrant',
   'workspacecollection', 'workspacerecord', 'workspacerecordform',
   'clientagentprofile', 'workspacechatchannel', 'workspacechatmember', 'workspacechatmessage', 'gmailsendreceipt',
+  'clientagentconversation', 'clientagentrun',
   'noterevision', 'workspacepagerevision'
 ]);
 
@@ -92,6 +93,14 @@ const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platfor
 // redundant organizationId is not enough: the referenced parent must belong
 // to the same organization or the graph would span tenants.
 const DIRECT_PARENT_RELATIONS = {
+  clientagentconversation: [
+    { relation: 'client', field: 'clientId', model: 'client', delegate: 'client', required: true },
+    { relation: 'createdBy', field: 'createdById', model: 'user', delegate: 'user', required: true },
+  ],
+  clientagentrun: [
+    { relation: 'conversation', field: 'conversationId', model: 'clientagentconversation', delegate: 'clientAgentConversation', required: true },
+    { relation: 'requestedBy', field: 'requestedById', model: 'user', delegate: 'user', required: true },
+  ],
   noterevision: [{ relation: 'note', field: 'noteId', model: 'note', delegate: 'note', required: true }],
   workspacepagerevision: [{ relation: 'page', field: 'pageId', model: 'workspacepage', delegate: 'workspacePage', required: true }],
   workspacecollection: [{ relation: 'author', field: 'authorId', model: 'user', delegate: 'user', required: true }],
@@ -401,7 +410,7 @@ export function createScopedPrisma(prisma, organizationId) {
 
   function ownedSelector(modelKey, where) {
     if (isPlainObject(where?.id_organizationId)) {
-      if (!['user', 'workspacecollection'].includes(modelKey) || Object.keys(where.id_organizationId).length !== 2 || typeof where.id_organizationId.id !== 'string' || typeof where.id_organizationId.organizationId !== 'string') throw new TenancyError('Unsupported composite reference', 400);
+      if (!['user', 'workspacecollection', 'clientagentconversation'].includes(modelKey) || Object.keys(where.id_organizationId).length !== 2 || typeof where.id_organizationId.id !== 'string' || typeof where.id_organizationId.organizationId !== 'string') throw new TenancyError('Unsupported composite reference', 400);
       where = { ...where, ...where.id_organizationId };
       delete where.id_organizationId;
     }

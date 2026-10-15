@@ -357,6 +357,10 @@ export function createAiGovernance(deps = {}) {
     const callContext = { ...context, feature: feature ?? context?.feature ?? null };
     if (beforeCall) await beforeCall({ route: hookRoute, organizationId, options: providerOptions, feature: callContext.feature });
 
+    // Routing and policy hooks may outlive a caller's execution deadline.
+    // Do not start upstream work after cancellation, even if an SDK ignores
+    // signals that were already aborted before it attached its listener.
+    providerOptions.signal?.throwIfAborted();
     if (routed.source === 'platform') {
       let result;
       if (platformCall) {
@@ -382,6 +386,7 @@ export function createAiGovernance(deps = {}) {
 
     const { connection, provider } = routed;
     await assertWithinBudget(connection, callContext);
+    providerOptions.signal?.throwIfAborted();
     const model = pickModel(connection, requestedModel);
     const system = json ? `${providerOptions.system || ''}\n\n${JSON_ONLY_INSTRUCTION}`.trim() : providerOptions.system;
     let completion;

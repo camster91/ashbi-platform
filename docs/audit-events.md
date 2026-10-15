@@ -270,6 +270,22 @@ Project Note audience changes emit `note.access_changed` with fromMode, toMode a
 `revision`, `clientId`, `enabled` and `pluginIds` for entity `client_agent_profile`.
 Profile instructions are not copied to the audit log.
 
+The durable conversation/run follow-up is **code-present, not yet released or
+verified on the target deployment**. Its required audit records commit with
+the conversation change, queued run or cancellation; missing evidence rolls
+back that transaction.
+
+| Action | Entity | Metadata |
+| --- | --- | --- |
+| `client_agent_conversation.created` | `client_agent_conversation` | `clientId`, `revision` |
+| `client_agent_conversation.archived` | `client_agent_conversation` | `clientId`, `revision` |
+| `client_agent_run.requested` | `client_agent_run` | `clientId`, `conversationId`, `runId` |
+| `client_agent_run.cancelled` | `client_agent_run` | `clientId`, `conversationId`, `runId` |
+
+Titles, questions, responses, profile instructions, request intent keys and
+worker claim tokens are excluded from these audit events. Transcript storage
+and export boundaries are described in [client-agent-conversations.md](client-agent-conversations.md).
+
 `workspace_chat.channel_created` records `kind`, `memberCount`, `clientId` and
 `projectId`; `workspace_chat.membership_changed` records `channelId`,
 `memberUserId` and `active`, both for entity `workspace_chat_channel`.
