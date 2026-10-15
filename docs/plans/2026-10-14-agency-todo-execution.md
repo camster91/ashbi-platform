@@ -35,7 +35,7 @@ Workers write only their assigned new files. The lead integrates existing-file c
 ```text
 W0 Ledger + exact release readiness
   |
-  +-- W1 Profiles/history --> W2 Durable runs --> W3 Restricted plugins/MCP
+  +-- W1 Profiles/history --> W2 Durable runs --> W3 Restricted plugins/MCP + W3b portal assistant
   |                                            |
   +-- W4 Channels/DMs -----------------------> W5 Bot mentions/UI
   |
@@ -110,6 +110,14 @@ Proposed transport contract (these new routes/tools are planned, not currently i
 The current ChatGPT OAuth connection grants read scope only. Add any action consent deliberately; do not silently enlarge existing grants or classify a paid model run as a read.
 
 **Exit:** app/API/MCP agree on state and denials; cross-client tool inputs, forged tools, stale grants and prompt-injected permission changes fail. Unconfigured plugins report unavailable, not connected.
+
+### W3b — Client-facing account managers in the portal
+
+This remains a required approved slice, not implied by staff assistant acceptance. After W1–W3, add a separately enabled client-facing profile surface, portal-principal-bound conversations and human handoff. Use the existing portal authentication and derive client identity from that principal, never a caller-selected tenant/client or a staff conversation ID. Reuse bounded context with only explicitly client-visible projects, documents, messages and published panels; do not expose staff transcripts, finance, internal notes or the organization-wide tool catalogue.
+
+Add the assistant to the existing client portal with saved history, source references, unavailable/paused states and a clear request-for-human flow. Staff see the resulting handoff in their authorized client workspace; a handoff is recorded only when that record exists. Read/draft/request intake can be enabled independently of client write or external-send tools. Portal access defaults off until deliberately enabled for that client through the staff configuration.
+
+**Exit:** two real synthetic client principals can each converse with their own enabled assistant, reload their own history and request a staff handoff. Foreign profile/conversation IDs, guessed staff history, revoked portal access, disabled profiles and hidden documents/messages are denied. Client-origin instructions cannot turn into staff authority; no bot/client gets generic staff MCP scope. Include portal mobile/keyboard and prompt-injection tests. W12 must verify this slice before the approved agent TODO is complete.
 
 ### W4 — Company channels and direct conversations
 
