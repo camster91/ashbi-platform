@@ -256,3 +256,17 @@ superuser-run migration, never by relaxing the append-only triggers for the
 application role.
 
 Project Note audience changes emit `note.access_changed` with fromMode, toMode and memberCount; the immutable event and audience save share one transaction. Titles/content and member rosters are excluded from this event.
+
+
+## Shared account-manager profiles and workspace chat
+
+`client_agent_profile.created` and `client_agent_profile.updated` retain only
+`revision`, `clientId`, `enabled` and `pluginIds` for entity `client_agent_profile`.
+Profile instructions are not copied to the audit log.
+
+`workspace_chat.channel_created` records `kind`, `memberCount`, `clientId` and
+`projectId`; `workspace_chat.membership_changed` records `channelId`,
+`memberUserId` and `active`, both for entity `workspace_chat_channel`.
+`workspace_chat.message_created` uses entity `workspace_chat_message` and
+records only `channelId` and `parentId`. No message body is audited.
+These mutations require successful audit evidence in the same transaction.

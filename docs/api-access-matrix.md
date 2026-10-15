@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 412 |
+| staff | 421 |
 | staff (inline) | 1 |
-| **total** | 607 |
+| **total** | 616 |
 
 ## Routes by prefix
 
@@ -330,6 +330,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | --- | --- | --- | --- | --- |
 | GET | `/api/client-assistants/:clientId/brief` | staff | scoped |  |
 | POST | `/api/client-assistants/:clientId/preview` | staff | scoped |  |
+| GET | `/api/client-assistants/:clientId/profile` | staff | scoped |  |
+| PATCH | `/api/client-assistants/:clientId/profile` | staff | scoped |  |
 
 ### /api/client-portal
 
@@ -1086,3 +1088,15 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
 | GET | `/api/work-queue` | staff | scoped |  |
+
+### /api/workspace-chat
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/workspace-chat/channels` | staff | scoped |  |
+| POST | `/api/workspace-chat/channels` | staff | scoped |  |
+| PATCH | `/api/workspace-chat/channels/:channelId/members/:userId` | staff | scoped |  |
+| GET | `/api/workspace-chat/channels/:channelId/messages` | staff | scoped |  |
+| POST | `/api/workspace-chat/channels/:channelId/messages` | staff | scoped |  |
+| POST | `/api/workspace-chat/channels/:channelId/read` | staff | scoped |  |
+| GET | `/api/workspace-chat/people` | staff | scoped |  |

@@ -73,6 +73,10 @@ const orgUser = (org) => ({ organizationId: org });
 
 /** @type {readonly EntitySpec[]} */
 export const EXPORT_ENTITIES = Object.freeze([
+  { name: 'client_agent_profiles', model: 'ClientAgentProfile', category: 'workspace', where: (org) => ({ organizationId: org }), description: 'Staff account-manager preferences and plugin settings' },
+  { name: 'workspace_chat_channels', model: 'WorkspaceChatChannel', category: 'workspace', where: (org) => ({ organizationId: org }), description: 'Company, client, project and direct staff message channels' },
+  { name: 'workspace_chat_members', model: 'WorkspaceChatMember', category: 'workspace', where: (org) => ({ organizationId: org }), description: 'Staff channel memberships and read markers' },
+  { name: 'workspace_chat_messages', model: 'WorkspaceChatMessage', category: 'workspace', where: (org) => ({ organizationId: org }), description: 'Staff messages and reply links' },
   // Workspace and people
   { name: 'organization', model: 'Organization', category: 'workspace', where: (org) => ({ id: org }), description: 'The organization (workspace) itself' },
   { name: 'users', model: 'User', category: 'workspace', where: orgUser, omit: ['password', 'resetToken', 'resetTokenExpiresAt', 'mfaSecret', 'mfaRecoveryCodes', 'mfaLastUsedStep', 'mfaFailedAttempts', 'mfaLockedUntil', 'sessionVersion'], description: 'Staff and client-portal members (no credentials)' },

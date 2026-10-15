@@ -4,6 +4,8 @@ import Button from './ui/Button';
 
 // Fixed copy only: provider errors can contain credentials or response bodies.
 const ERROR_MESSAGES = new Map([
+  ['CLIENT_AGENT_PLUGIN_DISABLED', 'Client work is disabled for this account manager. Enable it in Account manager settings to use project context.'],
+  ['CLIENT_AGENT_PAUSED', 'This account manager is paused. Enable it in Account manager settings before generating a preview.'],
   ['AI_DISABLED', 'AI is turned off. Ask an admin to check the workspace AI settings.'],
   ['AI_BUDGET_EXCEEDED', 'This workspace has reached its monthly AI budget. Ask an admin to review the budget in Settings.'],
   ['AI_UNAVAILABLE', 'AI is not set up for this workspace. Ask an admin to check the AI provider in Settings.'],

@@ -335,6 +335,15 @@ export const api = {
   },
   getClient: (id) =>
     request(`/clients/${id}`),
+  getClientAgentProfile: (id) => request(`/client-assistants/${encodeURIComponent(id)}/profile`),
+  updateClientAgentProfile: (id, data) => request(`/client-assistants/${encodeURIComponent(id)}/profile`, { method: 'PATCH', body: data }),
+  listWorkspaceChatChannels: (params = {}) => request(`/workspace-chat/channels?${new URLSearchParams(Object.entries(params).filter(([, value]) => value != null))}`),
+  listWorkspaceChatPeople: () => request('/workspace-chat/people'),
+  createWorkspaceChatChannel: (data) => request('/workspace-chat/channels', { method: 'POST', body: data }),
+  getWorkspaceChatMessages: (id, params = {}) => request(`/workspace-chat/channels/${encodeURIComponent(id)}/messages?${new URLSearchParams(Object.entries(params).filter(([, value]) => value != null))}`),
+  postWorkspaceChatMessage: (id, data) => request(`/workspace-chat/channels/${encodeURIComponent(id)}/messages`, { method: 'POST', body: data }),
+  markWorkspaceChatRead: (id) => request(`/workspace-chat/channels/${encodeURIComponent(id)}/read`, { method: 'POST', body: {} }),
+  setWorkspaceChatMember: (id, userId, active) => request(`/workspace-chat/channels/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, { method: 'PATCH', body: { active } }),
   getClientAccountManagerBrief: (id) =>
     request(`/client-assistants/${encodeURIComponent(id)}/brief`),
   previewClientAssistant: (id, data) =>

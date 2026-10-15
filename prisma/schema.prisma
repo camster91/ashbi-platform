@@ -92,6 +92,10 @@ model Organization {
   breakGlassGrants      BreakGlassGrant[]
 
   @@map("organizations")
+  clientAgentProfiles ClientAgentProfile[]
+  workspaceChatChannels WorkspaceChatChannel[]
+  workspaceChatMembers WorkspaceChatMember[]
+  workspaceChatMessages WorkspaceChatMessage[]
 }
 
 model User {
@@ -162,6 +166,11 @@ model User {
   @@index([organizationId])
   @@unique([id, organizationId])
   @@map("users")
+  createdAgentProfiles ClientAgentProfile[] @relation("AgentProfileCreator")
+  updatedAgentProfiles ClientAgentProfile[] @relation("AgentProfileUpdater")
+  createdWorkspaceChatChannels WorkspaceChatChannel[] @relation("WorkspaceChatCreator")
+  workspaceChatMemberships WorkspaceChatMember[]
+  workspaceChatMessages WorkspaceChatMessage[] @relation("WorkspaceChatAuthor")
 }
 
 model OnboardingProgress {
@@ -267,6 +276,8 @@ model Client {
   @@index([status])
   @@index([organizationId])
   @@map("clients")
+  agentProfiles ClientAgentProfile[]
+  workspaceChatChannels WorkspaceChatChannel[]
 }
 
 model Contact {
@@ -362,6 +373,7 @@ model Project {
   @@index([organizationId])
   @@index([organizationId, portfolio])
   @@map("projects")
+  workspaceChatChannels WorkspaceChatChannel[]
 }
 
 model Task {
@@ -3036,4 +3048,102 @@ model EmailWebhookReceipt {
 
   @@index([receivedAt])
   @@map("email_webhook_receipts")
+}
+
+
+// Shared staff account-manager configuration; portal activation is a later slice.
+model ClientAgentProfile {
+  id String @id @default(cuid())
+  organizationId String
+  clientId String
+  name String @default("Account manager")
+  instructions String @default("")
+  enabled Boolean @default(true)
+  portalEnabled Boolean @default(false)
+  revision Int @default(1)
+  pluginIds Json @default("[\"client-work\"]")
+  createdById String
+  updatedById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy User @relation("AgentProfileCreator", fields: [createdById, organizationId], references: [id, organizationId], onDelete: Restrict)
+  updatedBy User @relation("AgentProfileUpdater", fields: [updatedById, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@unique([organizationId, clientId])
+  @@unique([id, organizationId])
+  @@index([clientId])
+  @@index([createdById, organizationId])
+  @@index([updatedById, organizationId])
+  @@map("client_agent_profiles")
+}
+
+// Company channels/DMs coexist with legacy project/portal ChatMessage records.
+model WorkspaceChatChannel {
+  id String @id @default(cuid())
+  organizationId String
+  kind String
+  name String
+  clientId String?
+  projectId String?
+  directKey String?
+  createdById String
+  revision Int @default(1)
+  archivedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  createdBy User @relation("WorkspaceChatCreator", fields: [createdById, organizationId], references: [id, organizationId], onDelete: Restrict)
+  members WorkspaceChatMember[]
+  messages WorkspaceChatMessage[]
+  @@unique([id, organizationId])
+  @@unique([organizationId, directKey])
+  @@index([organizationId, updatedAt])
+  @@index([clientId])
+  @@index([projectId])
+  @@index([createdById, organizationId])
+  @@map("workspace_chat_channels")
+}
+
+model WorkspaceChatMember {
+  id String @id @default(cuid())
+  organizationId String
+  channelId String
+  userId String
+  leftAt DateTime?
+  lastReadAt DateTime?
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  channel WorkspaceChatChannel @relation(fields: [channelId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  user User @relation(fields: [userId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@unique([channelId, userId])
+  @@index([organizationId, userId, leftAt])
+  @@index([channelId, organizationId])
+  @@index([userId, organizationId])
+  @@map("workspace_chat_members")
+}
+
+model WorkspaceChatMessage {
+  id String @id @default(cuid())
+  organizationId String
+  channelId String
+  authorId String
+  content String
+  parentId String?
+  clientKey String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  channel WorkspaceChatChannel @relation(fields: [channelId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  author User @relation("WorkspaceChatAuthor", fields: [authorId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  parent WorkspaceChatMessage? @relation("WorkspaceChatReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies WorkspaceChatMessage[] @relation("WorkspaceChatReplies")
+  @@unique([channelId, clientKey])
+  @@index([organizationId, channelId, createdAt, id])
+  @@index([channelId, organizationId])
+  @@index([authorId, organizationId])
+  @@index([parentId])
+  @@map("workspace_chat_messages")
 }

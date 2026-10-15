@@ -47,7 +47,8 @@ const DIRECT_SCOPED_MODELS = new Set([
   // Expenses: the client and project are optional, so the organization is a
   // column of its own (migration 20261001130000_expense_organization).
   'expense', 'taskcollaborator', 'projectboard', 'workspacepage', 'workspacepagegrant',
-  'workspacecollection', 'workspacerecord', 'workspacerecordform'
+  'workspacecollection', 'workspacerecord', 'workspacerecordform',
+  'clientagentprofile', 'workspacechatchannel', 'workspacechatmember', 'workspacechatmessage'
 ]);
 
 // Evidence tables that may only ever be appended to. Request-scoped code gets

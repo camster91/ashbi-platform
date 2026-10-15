@@ -21,6 +21,11 @@ const ACTOR_TYPE_SET = new Set(AUDIT_ACTOR_TYPES);
  * listed for the action are dropped.
  */
 export const AUDIT_EVENT_CATALOG = Object.freeze({
+  'client_agent_profile.created': { entityType: 'client_agent_profile', metadata: ['revision', 'clientId', 'enabled', 'pluginIds'] },
+  'client_agent_profile.updated': { entityType: 'client_agent_profile', metadata: ['revision', 'clientId', 'enabled', 'pluginIds'] },
+  'workspace_chat.channel_created': { entityType: 'workspace_chat_channel', metadata: ['kind', 'memberCount', 'clientId', 'projectId'] },
+  'workspace_chat.message_created': { entityType: 'workspace_chat_message', metadata: ['channelId', 'parentId'] },
+  'workspace_chat.membership_changed': { entityType: 'workspace_chat_channel', metadata: ['channelId', 'memberUserId', 'active'] },
   'workspace_collection.created': { entityType: 'workspace_collection', metadata: ['revision', 'schemaRevision'] },
   'workspace_collection.updated': { entityType: 'workspace_collection', metadata: ['revision', 'schemaRevision', 'archived'] },
   'workspace_record.created': { entityType: 'workspace_record', metadata: ['revision', 'collectionId'] },

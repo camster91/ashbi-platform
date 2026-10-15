@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { readClientAgentProfile } from '../services/client-agent-profile.service.js';
 import { ACCOUNT_MANAGER_PLUGINS, clientBriefSchema, readClientAccountManagerBrief } from '../services/client-account-manager.service.js';
 
 const read = (name, description, inputSchema, run) => ({
@@ -8,6 +9,9 @@ const read = (name, description, inputSchema, run) => ({
 });
 
 export const WORKSPACE_ACCOUNT_MANAGER_TOOLS = [
+  read('get_client_agent_profile',
+    'Read the shared staff account-manager profile for one authorized client. Defaults have revision zero and are not persisted; this does not enable portal access or generate a response.',
+    z.object({ clientId: z.string().trim().min(1).max(100) }).strict(), ({ prisma, user, input }) => readClientAgentProfile(prisma, user, input.clientId)),
   read('list_account_manager_plugins',
     'List curated account-manager plugins implemented in this Hub build. This catalog does not grant access or establish external provider connections.',
     z.object({}).strict(), () => ({ plugins: ACCOUNT_MANAGER_PLUGINS })),

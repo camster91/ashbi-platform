@@ -9,6 +9,7 @@ import approvalRoutes from '../../routes/approvals.routes.js';
 import aiConnectionRoutes from '../../routes/ai-connection.routes.js';
 import aiToolRoutes from '../../routes/ai-tool.routes.js';
 import clientAssistantRoutes from '../../routes/client-assistant.routes.js';
+import clientAgentProfileRoutes from '../../routes/client-agent-profile.routes.js';
 
 /**
  * Register automation and AI routes: AI actions, the AI bridge, semantic
@@ -34,4 +35,5 @@ export async function registerAiRoutes(fastify) {
   await fastify.register(aiConnectionRoutes, { prefix: '/api/ai-connections' });
   await fastify.register(aiToolRoutes, { prefix: '/api/ai-tools' });
   await fastify.register(clientAssistantRoutes, { prefix: '/api/client-assistants' });
+  await fastify.register(clientAgentProfileRoutes, { prefix: '/api/client-assistants' });
 }

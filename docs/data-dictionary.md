@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-114 models, 0 enums, 60 tenant-scoped, 13 soft-deletable.
+118 models, 0 enums, 64 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -39,7 +39,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [CalendarEvent](#model-calendarevent) | `calendar_events` | no | no | 22 |
 | [ChatMessage](#model-chatmessage) | `chat_messages` | no | no | 22 |
 | [ChatReaction](#model-chatreaction) | `chat_reactions` | no | no | 7 |
-| [Client](#model-client) | `clients` | yes | yes | 53 |
+| [Client](#model-client) | `clients` | yes | yes | 55 |
+| [ClientAgentProfile](#model-clientagentprofile) | `client_agent_profiles` | yes | no | 17 |
 | [ClientEmailMapping](#model-clientemailmapping) | `client_email_mappings` | no | no | 8 |
 | [ClientEmbedding](#model-clientembedding) | `client_embeddings` | no | no | 10 |
 | [ClientInvitation](#model-clientinvitation) | `client_invitations` | no | no | 8 |
@@ -78,12 +79,12 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 69 |
+| [Organization](#model-organization) | `organizations` | no | no | 73 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
 | [PlatformSetting](#model-platformsetting) | `platform_settings` | no | no | 5 |
-| [Project](#model-project) | `projects` | yes | yes | 61 |
+| [Project](#model-project) | `projects` | yes | yes | 62 |
 | [ProjectBoard](#model-projectboard) | `project_boards` | yes | no | 16 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
@@ -120,7 +121,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [TimeSession](#model-timesession) | `time_sessions` | no | no | 16 |
 | [TrashedItem](#model-trasheditem) | `trashed_items` | yes | yes | 9 |
 | [UnmatchedEmail](#model-unmatchedemail) | `unmatched_emails` | yes | no | 16 |
-| [User](#model-user) | `users` | yes | no | 58 |
+| [User](#model-user) | `users` | yes | no | 63 |
 | [WPAlert](#model-wpalert) | `wp_alerts` | yes | no | 9 |
 | [WPBackup](#model-wpbackup) | `wp_backups` | yes | no | 15 |
 | [WPBridgeNonce](#model-wpbridgenonce) | `wp_bridge_nonces` | yes | no | 7 |
@@ -129,6 +130,9 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [WPReport](#model-wpreport) | `wp_reports` | yes | no | 14 |
 | [WPSite](#model-wpsite) | `wp_sites` | yes | no | 32 |
 | [WeeklyDigest](#model-weeklydigest) | `weekly_digests` | yes | no | 14 |
+| [WorkspaceChatChannel](#model-workspacechatchannel) | `workspace_chat_channels` | yes | no | 18 |
+| [WorkspaceChatMember](#model-workspacechatmember) | `workspace_chat_members` | yes | no | 10 |
+| [WorkspaceChatMessage](#model-workspacechatmessage) | `workspace_chat_messages` | yes | no | 14 |
 | [WorkspaceCollection](#model-workspacecollection) | `workspace_collections` | yes | no | 16 |
 | [WorkspacePage](#model-workspacepage) | `workspace_pages` | yes | no | 17 |
 | [WorkspacePageGrant](#model-workspacepagegrant) | `workspace_page_grants` | yes | no | 9 |
@@ -694,6 +698,40 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `wpSites` | WPSite[] | list, required |  | → WPSite, "WPSiteClient" |  |
 | `estimates` | Estimate[] | list, required |  | → Estimate |  |
 | `rateCards` | RateCard[] | list, required |  | → RateCard |  |
+| `agentProfiles` | ClientAgentProfile[] | list, required |  | → ClientAgentProfile |  |
+| `workspaceChatChannels` | WorkspaceChatChannel[] | list, required |  | → WorkspaceChatChannel |  |
+
+### Model ClientAgentProfile
+
+- Table: `client_agent_profiles`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([organizationId, clientId])`
+  - `@@unique([id, organizationId])`
+  - `@@index([clientId])`
+  - `@@index([createdById, organizationId])`
+  - `@@index([updatedById, organizationId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `clientId` | String | required |  |  |  |
+| `name` | String | required | `"Account manager"` |  |  |
+| `instructions` | String | required | `""` |  |  |
+| `enabled` | Boolean | required | `true` |  |  |
+| `portalEnabled` | Boolean | required | `false` |  |  |
+| `revision` | Int | required | `1` |  |  |
+| `pluginIds` | Json | required | `"[\"client-work\"]"` |  |  |
+| `createdById` | String | required |  |  |  |
+| `updatedById` | String | required |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `client` | Client | required |  | → Client, via (clientId) → (id), onDelete Cascade |  |
+| `createdBy` | User | required |  | → User, via (createdById, organizationId) → (id, organizationId), onDelete Restrict, "AgentProfileCreator" |  |
+| `updatedBy` | User | required |  | → User, via (updatedById, organizationId) → (id, organizationId), onDelete Restrict, "AgentProfileUpdater" |  |
 
 ### Model ClientEmailMapping
 
@@ -1778,6 +1816,10 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `domainEvents` | DomainEvent[] | list, required |  | → DomainEvent |  |
 | `impersonationSessions` | ImpersonationSession[] | list, required |  | → ImpersonationSession |  |
 | `breakGlassGrants` | BreakGlassGrant[] | list, required |  | → BreakGlassGrant |  |
+| `clientAgentProfiles` | ClientAgentProfile[] | list, required |  | → ClientAgentProfile |  |
+| `workspaceChatChannels` | WorkspaceChatChannel[] | list, required |  | → WorkspaceChatChannel |  |
+| `workspaceChatMembers` | WorkspaceChatMember[] | list, required |  | → WorkspaceChatMember |  |
+| `workspaceChatMessages` | WorkspaceChatMessage[] | list, required |  | → WorkspaceChatMessage |  |
 
 ### Model OutreachSequence
 
@@ -1937,6 +1979,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `loomImportRecords` | LoomImportRecord[] | list, required |  | → LoomImportRecord |  |
 | `markupImportRecords` | MarkupImportRecord[] | list, required |  | → MarkupImportRecord |  |
 | `reviewSessions` | ReviewSession[] | list, required |  | → ReviewSession |  |
+| `workspaceChatChannels` | WorkspaceChatChannel[] | list, required |  | → WorkspaceChatChannel |  |
 
 ### Model ProjectBoard
 
@@ -3044,6 +3087,11 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `googleCalendarConnection` | GoogleCalendarConnection | optional |  | → GoogleCalendarConnection |  |
 | `aiBridgeActions` | AiBridgeAction[] | list, required |  | → AiBridgeAction |  |
 | `ownedPublicInquiries` | PublicInquiry[] | list, required |  | → PublicInquiry, "PublicInquiryOwner" |  |
+| `createdAgentProfiles` | ClientAgentProfile[] | list, required |  | → ClientAgentProfile, "AgentProfileCreator" |  |
+| `updatedAgentProfiles` | ClientAgentProfile[] | list, required |  | → ClientAgentProfile, "AgentProfileUpdater" |  |
+| `createdWorkspaceChatChannels` | WorkspaceChatChannel[] | list, required |  | → WorkspaceChatChannel, "WorkspaceChatCreator" |  |
+| `workspaceChatMemberships` | WorkspaceChatMember[] | list, required |  | → WorkspaceChatMember |  |
+| `workspaceChatMessages` | WorkspaceChatMessage[] | list, required |  | → WorkspaceChatMessage, "WorkspaceChatAuthor" |  |
 
 ### Model WPAlert
 
@@ -3267,6 +3315,93 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `clientHealthSummary` | String | required | `"{}"` |  | JSON: per-client health scores |
 | `fullDigest` | String | required |  |  | Full AI-generated digest text |
 | `createdAt` | DateTime | required | `now()` |  |  |
+
+### Model WorkspaceChatChannel
+
+- Table: `workspace_chat_channels`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([id, organizationId])`
+  - `@@unique([organizationId, directKey])`
+  - `@@index([organizationId, updatedAt])`
+  - `@@index([clientId])`
+  - `@@index([projectId])`
+  - `@@index([createdById, organizationId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `kind` | String | required |  |  |  |
+| `name` | String | required |  |  |  |
+| `clientId` | String | optional |  |  |  |
+| `projectId` | String | optional |  |  |  |
+| `directKey` | String | optional |  |  |  |
+| `createdById` | String | required |  |  |  |
+| `revision` | Int | required | `1` |  |  |
+| `archivedAt` | DateTime | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `client` | Client | optional |  | → Client, via (clientId) → (id), onDelete Restrict |  |
+| `project` | Project | optional |  | → Project, via (projectId) → (id), onDelete Restrict |  |
+| `createdBy` | User | required |  | → User, via (createdById, organizationId) → (id, organizationId), onDelete Restrict, "WorkspaceChatCreator" |  |
+| `members` | WorkspaceChatMember[] | list, required |  | → WorkspaceChatMember |  |
+| `messages` | WorkspaceChatMessage[] | list, required |  | → WorkspaceChatMessage |  |
+
+### Model WorkspaceChatMember
+
+- Table: `workspace_chat_members`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([channelId, userId])`
+  - `@@index([organizationId, userId, leftAt])`
+  - `@@index([channelId, organizationId])`
+  - `@@index([userId, organizationId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `channelId` | String | required |  |  |  |
+| `userId` | String | required |  |  |  |
+| `leftAt` | DateTime | optional |  |  |  |
+| `lastReadAt` | DateTime | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `channel` | WorkspaceChatChannel | required |  | → WorkspaceChatChannel, via (channelId, organizationId) → (id, organizationId), onDelete Cascade |  |
+| `user` | User | required |  | → User, via (userId, organizationId) → (id, organizationId), onDelete Restrict |  |
+
+### Model WorkspaceChatMessage
+
+- Table: `workspace_chat_messages`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([channelId, clientKey])`
+  - `@@index([organizationId, channelId, createdAt, id])`
+  - `@@index([channelId, organizationId])`
+  - `@@index([authorId, organizationId])`
+  - `@@index([parentId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `channelId` | String | required |  |  |  |
+| `authorId` | String | required |  |  |  |
+| `content` | String | required |  |  |  |
+| `parentId` | String | optional |  |  |  |
+| `clientKey` | String | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `channel` | WorkspaceChatChannel | required |  | → WorkspaceChatChannel, via (channelId, organizationId) → (id, organizationId), onDelete Cascade |  |
+| `author` | User | required |  | → User, via (authorId, organizationId) → (id, organizationId), onDelete Restrict, "WorkspaceChatAuthor" |  |
+| `parent` | WorkspaceChatMessage | optional |  | → WorkspaceChatMessage, via (parentId) → (id), onDelete SetNull, "WorkspaceChatReplies" |  |
+| `replies` | WorkspaceChatMessage[] | list, required |  | → WorkspaceChatMessage, "WorkspaceChatReplies" |  |
 
 ### Model WorkspaceCollection
 

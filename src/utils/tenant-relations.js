@@ -25,6 +25,10 @@ let cache = null;
 // edges bind a globally unique parent id to the same organization column the
 // request proxy stamps and filters. Arbitrary composite keys remain unsupported.
 export const COMPOSITE_TENANT_RELATIONS = Object.freeze({
+  clientagentprofile: { createdBy: ['createdById', 'organizationId'], updatedBy: ['updatedById', 'organizationId'] },
+  workspacechatchannel: { createdBy: ['createdById', 'organizationId'] },
+  workspacechatmember: { channel: ['channelId', 'organizationId'], user: ['userId', 'organizationId'] },
+  workspacechatmessage: { channel: ['channelId', 'organizationId'], author: ['authorId', 'organizationId'] },
   workspacecollection: { author: ['authorId', 'organizationId'] },
   workspacerecord: { collection: ['collectionId', 'organizationId'], author: ['authorId', 'organizationId'] },
   workspacerecordform: { collection: ['collectionId', 'organizationId'], author: ['authorId', 'organizationId'] },
@@ -56,7 +60,7 @@ export function tenantRelationMap() {
       if (field.kind !== 'object') continue;
       const fk = scalars.has(`${field.name}Id`) ? `${field.name}Id` : null;
       const fkFields = COMPOSITE_TENANT_RELATIONS[model.name.toLowerCase()]?.[field.name] ?? (fk ? [fk] : []);
-      if (fkFields.some(key => !scalars.has(key)) || (fkFields.length > 1 && (fkFields[0] !== fk || fkFields[1] !== 'organizationId' || !['User', 'WorkspaceCollection'].includes(field.type)))) throw new Error('Tenancy Error: unsupported composite relation');
+      if (fkFields.some(key => !scalars.has(key)) || (fkFields.length > 1 && (fkFields[0] !== fk || fkFields[1] !== 'organizationId' || !['User', 'WorkspaceCollection', 'WorkspaceChatChannel'].includes(field.type)))) throw new Error('Tenancy Error: unsupported composite relation');
       relations[field.name] = { target: String(field.type).toLowerCase(), fk, fkFields };
       if (fk) foreignKeys[fk] = field.name;
     }
