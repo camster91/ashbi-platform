@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-119 models, 0 enums, 65 tenant-scoped, 13 soft-deletable.
+121 models, 0 enums, 67 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -76,11 +76,12 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [MarkupImportRecord](#model-markupimportrecord) | `markup_import_records` | yes | no | 22 |
 | [Message](#model-message) | `messages` | no | no | 15 |
 | [Milestone](#model-milestone) | `milestones` | no | yes | 13 |
-| [Note](#model-note) | `notes` | no | yes | 23 |
+| [Note](#model-note) | `notes` | no | yes | 24 |
+| [NoteRevision](#model-noterevision) | `note_revisions` | yes | no | 15 |
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 74 |
+| [Organization](#model-organization) | `organizations` | no | no | 76 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -135,8 +136,9 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [WorkspaceChatMember](#model-workspacechatmember) | `workspace_chat_members` | yes | no | 10 |
 | [WorkspaceChatMessage](#model-workspacechatmessage) | `workspace_chat_messages` | yes | no | 14 |
 | [WorkspaceCollection](#model-workspacecollection) | `workspace_collections` | yes | no | 16 |
-| [WorkspacePage](#model-workspacepage) | `workspace_pages` | yes | no | 17 |
+| [WorkspacePage](#model-workspacepage) | `workspace_pages` | yes | no | 18 |
 | [WorkspacePageGrant](#model-workspacepagegrant) | `workspace_page_grants` | yes | no | 9 |
+| [WorkspacePageRevision](#model-workspacepagerevision) | `workspace_page_revisions` | yes | no | 11 |
 | [WorkspaceRecord](#model-workspacerecord) | `workspace_records` | yes | no | 13 |
 | [WorkspaceRecordForm](#model-workspacerecordform) | `workspace_record_forms` | yes | no | 12 |
 
@@ -1697,6 +1699,34 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `author` | User | required |  | → User, via (authorId) → (id), "NoteAuthor" |  |
 | `parent` | Note | optional |  | → Note, via (parentId) → (id), onDelete SetNull, "NoteHierarchy" |  |
 | `children` | Note[] | list, required |  | → Note, "NoteHierarchy" |  |
+| `history` | NoteRevision[] | list, required |  | → NoteRevision |  |
+
+### Model NoteRevision
+
+- Table: `note_revisions`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([noteId, revision])`
+  - `@@index([organizationId, noteId, revision])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `noteId` | String | required |  |  |  |
+| `revision` | Int | required |  |  |  |
+| `title` | String | required |  |  |  |
+| `content` | String | required |  |  |  |
+| `type` | String | required |  |  |  |
+| `isPinned` | Boolean | required |  |  |  |
+| `tags` | String | required |  |  |  |
+| `isTemplate` | Boolean | required |  |  |  |
+| `audienceNodes` | Json | required |  |  |  |
+| `recordedAt` | DateTime | required | `now()` |  |  |
+| `editedById` | String | optional |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `note` | Note | required |  | → Note, via (noteId) → (id), onDelete Cascade |  |
 
 ### Model Notification
 
@@ -1848,6 +1878,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `impersonationSessions` | ImpersonationSession[] | list, required |  | → ImpersonationSession |  |
 | `breakGlassGrants` | BreakGlassGrant[] | list, required |  | → BreakGlassGrant |  |
 | `clientAgentProfiles` | ClientAgentProfile[] | list, required |  | → ClientAgentProfile |  |
+| `noteRevisions` | NoteRevision[] | list, required |  | → NoteRevision |  |
+| `workspacePageRevisions` | WorkspacePageRevision[] | list, required |  | → WorkspacePageRevision |  |
 | `workspaceChatChannels` | WorkspaceChatChannel[] | list, required |  | → WorkspaceChatChannel |  |
 | `workspaceChatMembers` | WorkspaceChatMember[] | list, required |  | → WorkspaceChatMember |  |
 | `workspaceChatMessages` | WorkspaceChatMessage[] | list, required |  | → WorkspaceChatMessage |  |
@@ -3496,6 +3528,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `parent` | WorkspacePage | optional |  | → WorkspacePage, via (parentId) → (id), onDelete Restrict, "WorkspacePageHierarchy" |  |
 | `children` | WorkspacePage[] | list, required |  | → WorkspacePage, "WorkspacePageHierarchy" |  |
 | `grants` | WorkspacePageGrant[] | list, required |  | → WorkspacePageGrant |  |
+| `history` | WorkspacePageRevision[] | list, required |  | → WorkspacePageRevision |  |
 
 ### Model WorkspacePageGrant
 
@@ -3518,6 +3551,29 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `page` | WorkspacePage | required |  | → WorkspacePage, via (pageId) → (id), onDelete Cascade |  |
 | `user` | User | required |  | → User, via (userId) → (id), onDelete Restrict |  |
+
+### Model WorkspacePageRevision
+
+- Table: `workspace_page_revisions`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([pageId, revision])`
+  - `@@index([organizationId, pageId, revision])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `pageId` | String | required |  |  |  |
+| `revision` | Int | required |  |  |  |
+| `title` | String | required |  |  |  |
+| `content` | String | required |  |  |  |
+| `audienceNodes` | Json | required |  |  |  |
+| `recordedAt` | DateTime | required | `now()` |  |  |
+| `editedById` | String | optional |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `page` | WorkspacePage | required |  | → WorkspacePage, via (pageId) → (id), onDelete Cascade |  |
 
 ### Model WorkspaceRecord
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
@@ -6,6 +6,7 @@ import { renderMarkdown } from '../lib/markdown';
 import QueryErrorState from '../components/QueryErrorState';
 import DocumentSaveRecovery from '../components/DocumentSaveRecovery';
 import WorkspacePageAccess from '../components/WorkspacePageAccess';
+const DocumentHistoryPanel = lazy(() => import('../components/DocumentHistoryPanel'));
 
 const control = 'block min-h-11 min-w-0 w-full rounded border border-border bg-card px-3';
 export default function WorkspaceWikiPage() {
@@ -15,6 +16,7 @@ export default function WorkspaceWikiPage() {
 function WikiPageEditor({ pageId }) {
   const cache = useQueryClient();
   const [draft, setDraft] = useState(null); const [search, setSearch] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
   const query = useQuery({ queryKey: ['workspacePage', pageId], queryFn: () => api.getWorkspacePage(pageId) });
   const parents = useInfiniteQuery({ queryKey: ['workspacePageParents', search], enabled: Boolean(draft), initialPageParam: null, queryFn: ({ pageParam }) => api.getWorkspacePages({ search, limit: 25, ...(pageParam ? { after: pageParam } : {}) }), getNextPageParam: page => page.nextCursor || undefined });
   const parentId = draft ? draft.parentId : query.data?.parentId;
@@ -28,6 +30,8 @@ function WikiPageEditor({ pageId }) {
   return <div className="min-w-0 space-y-5 [overflow-wrap:anywhere]">
     <Link className="min-h-11 inline-flex items-center text-primary" to="/wiki">Workspace wiki</Link>
     <h1 className="text-2xl font-heading font-bold">{page.title}</h1>
+    <button type="button" className="min-h-11 underline" disabled={save.isPending} onClick={() => setShowHistory(true)}>Version history</button>
+    {showHistory && <Suspense fallback={<p role="status">Loading version history…</p>}><DocumentHistoryPanel kind="page" documentId={pageId} currentRevision={draft?.revision ?? page.revision} open={showHistory} onOpenChange={setShowHistory} hideTrigger onRestored={() => { setShowHistory(false); setDraft(null); save.reset(); cache.invalidateQueries({ queryKey: ['workspacePage', pageId] }); cache.invalidateQueries({ queryKey: ['workspacePages'] }); }} /></Suspense>}
     <p className="text-sm text-muted-foreground">{page.accessMode === 'RESTRICTED' ? 'Restricted staff audience' : 'Shared with Ashbi staff'} · {page.author?.name || 'Original author unavailable'}{page.archivedAt && ' · Archived'}</p>
     {page.parentId && (parent.isError || parent.data?.archivedAt ? <p>Parent page unavailable. Choose a top-level or active parent when editing or restoring.</p> : parent.data && <Link className="min-h-11 inline-flex items-center text-primary" to={`/wiki/${page.parentId}`}>Parent: {parent.data.title}</Link>)}
     {draft ? <form aria-label="Edit knowledge page" className="space-y-3" onSubmit={event => { event.preventDefault(); save.mutate({ ...draft, ...(page.archivedAt ? { archived: false } : {}) }); }}>

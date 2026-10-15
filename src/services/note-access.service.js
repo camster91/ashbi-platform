@@ -4,6 +4,7 @@ import { composeDocumentAudience, documentAudienceRights } from '../shared/docum
 import { currentWikiStaff } from './workspace-page-authorization.js';
 import { withStageTransaction } from './task-stages.service.js';
 import { recordAuditEvent } from './audit-event.service.js';
+import { attributeDocumentEdit } from './document-history-actor.js';
 
 const fail = (statusCode, message) => { throw Object.assign(new Error(message), { statusCode }); };
 const scope = organizationId => ({ project: { organizationId } });
@@ -94,6 +95,7 @@ export async function saveNoteAccessInTransaction(tx, id, input, actor) {
     if (parsed.data.members.some(row => row.userId === note.authorId)) fail(400, 'The document owner retains access automatically');
     const added = parsed.data.members.filter(row => !note.accessGrants.some(old => old.userId === row.userId && old.role === row.role));
     if (added.length && await tx.user.count({ where: { id: { in: added.map(row => row.userId) }, organizationId: user.organizationId, isActive: true, role: { in: ['ADMIN', 'TEAM'] } } }) !== added.length) fail(404, 'A selected teammate is unavailable');
+    await attributeDocumentEdit(tx, user);
     const changed = await tx.note.updateMany({ where: { id, accessRevision: parsed.data.revision, deletedAt: null, ...scope(user.organizationId) }, data: { accessMode: parsed.data.mode, accessGrants: parsed.data.members } });
     if (changed.count !== 1) fail(409, 'Document access changed. Reload before saving.');
     if (!await recordAuditEvent(tx, { organizationId: user.organizationId, actorUserId: user.id, actorType: 'USER', action: 'note.access_changed', entityId: id, metadata: { fromMode: note.accessMode, toMode: parsed.data.mode, memberCount: parsed.data.members.length } })) fail(503, 'Document access could not be saved with its audit record');

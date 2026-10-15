@@ -26,6 +26,12 @@ Related #412 references, all generated and checked for drift:
 
 ## Guarantees
 
+`note.revision_restored` and `workspace_page.revision_restored` identify the
+source revision, previous revision and newly recorded revision. Restoring
+history requires this audit record and the new snapshot in the same
+serializable transaction. Document content and historical audience details
+are never copied into the audit metadata.
+
 `workspace_page.access_changed` records only `fromMode`, `toMode`, `revision`
 and `memberCount`. The permissions change and required audit record share one
 transaction; page content and staff names are not copied into this event.

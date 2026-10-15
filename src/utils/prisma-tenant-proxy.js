@@ -48,13 +48,15 @@ const DIRECT_SCOPED_MODELS = new Set([
   // column of its own (migration 20261001130000_expense_organization).
   'expense', 'taskcollaborator', 'projectboard', 'workspacepage', 'workspacepagegrant',
   'workspacecollection', 'workspacerecord', 'workspacerecordform',
-  'clientagentprofile', 'workspacechatchannel', 'workspacechatmember', 'workspacechatmessage', 'gmailsendreceipt'
+  'clientagentprofile', 'workspacechatchannel', 'workspacechatmember', 'workspacechatmessage', 'gmailsendreceipt',
+  'noterevision', 'workspacepagerevision'
 ]);
 
 // Evidence tables that may only ever be appended to. Request-scoped code gets
 // no update/upsert/delete path for them; the database enforces the same rule
 // with triggers (see prisma/migrations/*_audit_events).
 const APPEND_ONLY_MODELS = new Set(['auditevent', 'reviewdecision']);
+const TRIGGER_OWNED_MODELS = new Set(['noterevision', 'workspacepagerevision']);
 const APPEND_ONLY_BLOCKED_METHODS = new Set([
   'update', 'updateMany', 'updateManyAndReturn', 'upsert', 'delete', 'deleteMany',
 ]);
@@ -90,6 +92,8 @@ const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platfor
 // redundant organizationId is not enough: the referenced parent must belong
 // to the same organization or the graph would span tenants.
 const DIRECT_PARENT_RELATIONS = {
+  noterevision: [{ relation: 'note', field: 'noteId', model: 'note', delegate: 'note', required: true }],
+  workspacepagerevision: [{ relation: 'page', field: 'pageId', model: 'workspacepage', delegate: 'workspacePage', required: true }],
   workspacecollection: [{ relation: 'author', field: 'authorId', model: 'user', delegate: 'user', required: true }],
   workspacerecord: [
     { relation: 'collection', field: 'collectionId', model: 'workspacecollection', delegate: 'workspaceCollection', required: true },
@@ -596,6 +600,9 @@ export function createScopedPrisma(prisma, organizationId) {
             return async () => {
               throw new TenancyError(`${String(modelName)}.${String(methodName)} is not permitted in request scope`);
             };
+          }
+          if (TRIGGER_OWNED_MODELS.has(modelKey) && WRITE_METHODS.has(methodName)) {
+            return async () => { throw new TenancyError(`${String(modelName)} snapshots are database-owned; ${methodName} is not permitted`); };
           }
           if (APPEND_ONLY_MODELS.has(modelKey) && APPEND_ONLY_BLOCKED_METHODS.has(methodName)) {
             return async () => {

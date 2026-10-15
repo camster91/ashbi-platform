@@ -550,6 +550,9 @@ export const api = {
   saveNoteAccess: (id, data) => request('/notes/' + encodeURIComponent(id) + '/access', { method: 'PUT', body: data }),
   getNote: (id) =>
     request(`/notes/${id}`),
+  listDocumentHistory: (kind, id) => request(`/document-history/${kind === 'note' ? 'notes' : 'pages'}/${encodeURIComponent(id)}`),
+  getDocumentRevision: (kind, id, version) => request(`/document-history/${kind === 'note' ? 'notes' : 'pages'}/${encodeURIComponent(id)}/${encodeURIComponent(version)}`),
+  restoreDocumentRevision: (kind, id, version, data) => request(`/document-history/${kind === 'note' ? 'notes' : 'pages'}/${encodeURIComponent(id)}/${encodeURIComponent(version)}/restore`, { method: 'POST', body: data }),
   getWorkspacePages: (params = {}) => request(`/wiki/pages?${new URLSearchParams(params)}`),
   getRecordCollections: (params = {}) => request(`/collections?${new URLSearchParams(params)}`),
   getRecordCollection: (id) => request(`/collections/${encodeURIComponent(id)}?includeArchived=true`),

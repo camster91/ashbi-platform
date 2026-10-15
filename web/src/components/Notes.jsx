@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import Modal from './Modal';
@@ -6,6 +6,7 @@ import ConfirmDialog from './ConfirmDialog';
 import { useToast } from '../hooks/useToast';
 import Skeleton from './ui/Skeleton';
 import DocumentSaveRecovery from './DocumentSaveRecovery';
+const DocumentHistoryPanel = lazy(() => import('./DocumentHistoryPanel'));
 
 const NOTE_TYPES = [
   { value: 'NOTE', label: 'Note', icon: '📝' },
@@ -203,6 +204,11 @@ export default function Notes({ projectId }) {
           onSave={(data) => updateMutation.mutate({ id: selectedNote.id, data: { ...data, revision: selectedNote.revision } })}
           saveError={updateMutation.error}
           onReload={note => { setSelectedNote(note); updateMutation.reset(); }}
+          onHistoryRestored={() => {
+            setSelectedNote(null);
+            queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
+            toast.success('Document restored', 'The selected version was saved as a new revision.');
+          }}
           onDelete={() => deleteMutation.mutate({ id: selectedNote.id, title: selectedNote.title })}
           onClose={() => setSelectedNote(null)}
           isLoading={updateMutation.isPending}
@@ -214,7 +220,7 @@ export default function Notes({ projectId }) {
   );
 }
 
-function NoteEditor({ note, onSave, onDelete, onClose, isLoading, isDeleting = false, deleteError, saveError, onReload }) {
+function NoteEditor({ note, onSave, onDelete, onClose, isLoading, isDeleting = false, deleteError, saveError, onReload, onHistoryRestored }) {
   const [formData, setFormData] = useState({
     title: note?.title || '',
     content: note?.content || '',
@@ -223,6 +229,7 @@ function NoteEditor({ note, onSave, onDelete, onClose, isLoading, isDeleting = f
   });
   const [tagInput, setTagInput] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -242,8 +249,10 @@ function NoteEditor({ note, onSave, onDelete, onClose, isLoading, isDeleting = f
 
   return (
     <>
-    <Modal isOpen={!showDeleteConfirm} onClose={onClose} title={note ? 'Edit Note' : 'Create Note'} size="lg">
+    {note && showHistory && <Suspense fallback={<p role="status">Loading version history…</p>}><DocumentHistoryPanel kind="note" documentId={note.id} currentRevision={note.revision} open={showHistory} onOpenChange={setShowHistory} hideTrigger onRestored={onHistoryRestored} /></Suspense>}
+    <Modal isOpen={!showDeleteConfirm && !showHistory} onClose={onClose} title={note ? 'Edit Note' : 'Create Note'} size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {note && <button type="button" className="min-h-11 underline" disabled={isLoading || isDeleting} onClick={() => setShowHistory(true)}>Version history</button>}
         {note && <DocumentSaveRecovery noteId={note.id} draft={formData} error={saveError} onReload={onReload} />}
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="min-w-0 flex-1">
