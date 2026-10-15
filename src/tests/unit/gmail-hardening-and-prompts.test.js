@@ -134,9 +134,12 @@ test('a send goes out from the connected mailbox, with one From, and is recorded
   });
   const originalFetch = globalThis.fetch;
   let sentRaw = '';
+  let providerCalls = 0;
+  const intentKey = randomUUID();
   globalThis.fetch = async (url, init = {}) => {
     if (String(url).endsWith('/profile')) return new Response(JSON.stringify({ emailAddress: 'studio@gmail.test' }), { status: 200 });
     if (String(url).endsWith('/messages/send')) {
+      providerCalls++;
       const payload = JSON.parse(init.body);
       sentRaw = Buffer.from(payload.raw.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
       assert.equal('threadId' in payload, false, 'no Gmail thread for a hub-only conversation');
@@ -152,7 +155,7 @@ test('a send goes out from the connected mailbox, with one From, and is recorded
   const response = await app.inject({
     method: 'POST',
     url: '/send',
-    payload: { idempotencyKey: randomUUID(), to: 'olivia@northwind.test', subject: 'Re: café', body: 'Friday works.', threadId: null, in_reply_to: null, hubThreadId: 'thr-1' },
+    payload: { idempotencyKey: intentKey, to: 'olivia@northwind.test', subject: 'Re: café', body: 'Friday works.', threadId: null, in_reply_to: null, hubThreadId: 'thr-1' },
   });
   assert.equal(response.statusCode, 200, response.body);
   const headers = headersOf(sentRaw);
@@ -160,6 +163,21 @@ test('a send goes out from the connected mailbox, with one From, and is recorded
   assert.ok(headers.some((line) => line.startsWith('Subject: =?UTF-8?B?')));
   assert.equal(recorded[0].senderEmail, 'studio@gmail.test');
   assert.equal(recorded[0].senderName, 'Pat Lee');
+  const replay = await app.inject({ method: 'POST', url: '/send', payload: {
+    idempotencyKey: intentKey, to: 'olivia@northwind.test', subject: 'Re: café', body: 'Friday works.', hubThreadId: 'thr-1',
+  } });
+  assert.equal(replay.statusCode, 200, replay.body);
+  assert.equal(providerCalls, 1);
+  assert.equal(recorded.length, 1);
+  env.gmailSyncOrganizationId = undefined;
+  globalThis.fetch = async () => { throw Error('Local recovery must not access Gmail'); };
+  for (const request of [{ method: 'GET', url: `/send-receipts/${intentKey}` },
+    { method: 'POST', url: `/send-receipts/${intentKey}/reconcile`, payload: {} }]) {
+    const local = await app.inject(request);
+    assert.equal(local.statusCode, 200, local.body);
+    assert.equal(local.json().status, 'COMPLETED');
+  }
+  assert.equal(recorded.length, 1);
 });
 
 // ---------------------------------------------------------------- paste
