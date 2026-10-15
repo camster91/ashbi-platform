@@ -178,7 +178,7 @@ function Conversations({ clientId, profileEnabled, user }) {
 
   return <section className="space-y-4 rounded-lg border border-border bg-card p-4" aria-label="Account manager conversations">
     <h2 className="font-medium">Account manager conversations</h2>
-    <p className="text-sm text-muted-foreground">Shared with the Ashbi team. These conversations are not private. The account manager answers questions; it does not send messages or make changes to client work.</p>
+    <p className="text-sm text-muted-foreground">Shared with the Ashbi team. These conversations are not private. Each question is answered on its own using current client data. The account manager answers questions; it does not send messages or make changes to client work.</p>
     {list.isPending && <p role="status">Loading conversations…</p>}
     {list.isError && <div role="alert"><p>Conversations are unavailable or you no longer have access.</p><Button type="button" variant="outline" onClick={() => list.refetch()}>Refresh conversations</Button></div>}
     {readable && <>
