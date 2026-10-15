@@ -50,8 +50,11 @@ test('migrated document history preserves bounded immutable snapshots and curren
           revision: 0, mode: 'RESTRICTED', members: [{ userId: reader.id, role: 'READ' }],
         }, owner);
         let snapshots = await rows(doc.id);
-        assert.equal(snapshots.length, initial.length + 1);
+        if (kind === 'note') assert.equal(snapshots.length, initial.length + 1);
+        else assert.ok(snapshots.length > initial.length, 'page CAS and grant writes may each capture a revision');
         const grantSnapshot = snapshots.at(-1);
+        const grantedDocument = await raw[model].findUnique({ where: { id: doc.id } });
+        assert.equal(grantSnapshot.revision, grantedDocument.revision, 'newest granted snapshot matches the final parent revision');
         assert.equal(grantSnapshot.editedById, owner.id);
         assert.equal(grantSnapshot.audienceNodes[0].accessMode, 'RESTRICTED');
         assert.deepEqual(grantSnapshot.audienceNodes[0].grants, [{ userId: reader.id, role: 'READ' }], 'capture sees the final newly granted reader');
@@ -61,9 +64,11 @@ test('migrated document history preserves bounded immutable snapshots and curren
         await saveAccess(scoped, doc.id, { revision: granted.revision, mode: 'RESTRICTED', members: [] }, admin);
         snapshots = await rows(doc.id);
         const revokeSnapshot = snapshots.at(-1);
+        const revokedDocument = await raw[model].findUnique({ where: { id: doc.id } });
+        assert.equal(revokeSnapshot.revision, revokedDocument.revision, 'newest revoked snapshot matches the final parent revision');
         assert.equal(revokeSnapshot.editedById, admin.id);
         assert.deepEqual(revokeSnapshot.audienceNodes[0].grants, [], 'capture excludes the removed reader');
-        assert.deepEqual(snapshots.at(-2), grantSnapshot, 'removing access does not rewrite the previously granted audience');
+        assert.deepEqual(snapshots.find(row => row.id === grantSnapshot.id && row.revision === grantSnapshot.revision), grantSnapshot, 'removing access does not rewrite the previously granted audience');
         await assert.rejects(readDocumentRevision(scoped, reader, kind, doc.id, grantSnapshot.revision), { statusCode: 404 });
         await assert.rejects(saveAccess(scoped, doc.id, { revision: granted.revision, mode: 'TEAM', members: [] }, owner), { statusCode: 409 });
         assert.deepEqual(await rows(doc.id), snapshots, 'stale access revision creates no snapshot');

@@ -36,11 +36,12 @@ export async function saveWorkspacePageAccess(prisma, id, input, actor) {
 export async function saveWorkspacePageAccessInTransaction(tx, id, input, actor) {
   const validated = await validateWorkspacePageAccess(tx, id, input, actor);
   await attributeDocumentEdit(tx, actor);
-  await tx.workspacePageGrant.deleteMany({ where: { pageId: id, organizationId: actor.organizationId } });
-  if (validated.input.members.length) await tx.workspacePageGrant.createMany({ data: validated.input.members.map(row => ({ ...row, pageId: id, organizationId: actor.organizationId })) });
-  // Capture the final audience in the document revision, within the same transaction.
+  // Claim the observed access revision before grant triggers advance it again.
   const changed = await tx.workspacePage.updateMany({ where: { id, organizationId: actor.organizationId, accessRevision: validated.input.revision }, data: { accessMode: validated.input.mode, accessRevision: { increment: 1 } } });
   if (changed.count !== 1) fail(409, 'Page access changed. Reload before saving.');
+  await tx.workspacePageGrant.deleteMany({ where: { pageId: id, organizationId: actor.organizationId } });
+  if (validated.input.members.length) await tx.workspacePageGrant.createMany({ data: validated.input.members.map(row => ({ ...row, pageId: id, organizationId: actor.organizationId })) });
+  // Existing grant triggers update the page, capturing the final audience too.
   const current = await readWorkspacePageAccess(tx, id, actor);
   if (!await recordAuditEvent(tx, { organizationId: actor.organizationId, actorUserId: actor.id, actorType: 'USER', action: 'workspace_page.access_changed', entityId: id, metadata: { fromMode: validated.current.mode, toMode: current.mode, revision: current.revision, memberCount: current.members.length } })) fail(503, 'Page access could not be saved with its audit record.');
   return current;
