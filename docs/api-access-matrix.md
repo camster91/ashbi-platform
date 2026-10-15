@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 425 |
+| staff | 431 |
 | staff (inline) | 1 |
-| **total** | 620 |
+| **total** | 626 |
 
 ## Routes by prefix
 
@@ -466,6 +466,17 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
 | GET | `/api/dashboard/stats` | staff | scoped |  |
+
+### /api/document-history
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/document-history/notes/:documentId` | staff | scoped |  |
+| GET | `/api/document-history/notes/:documentId/:version` | staff | scoped |  |
+| POST | `/api/document-history/notes/:documentId/:version/restore` | staff | scoped |  |
+| GET | `/api/document-history/pages/:documentId` | staff | scoped |  |
+| GET | `/api/document-history/pages/:documentId/:version` | staff | scoped |  |
+| POST | `/api/document-history/pages/:documentId/:version/restore` | staff | scoped |  |
 
 ### /api/domain-events
 

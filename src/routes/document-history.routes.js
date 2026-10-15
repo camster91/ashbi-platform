@@ -9,7 +9,6 @@ const emptyQuery = z.object({}).strict();
 const restoreBody = z.object({ revision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER) }).strict();
 const messages = { 400: 'Invalid document history request', 403: 'Document history access denied', 404: 'Document revision not found', 409: 'Document changed or revision unavailable. Reload before restoring history.', 503: 'Document history is temporarily unavailable' };
 export default async function documentHistoryRoutes(fastify) {
-  const auth = { onRequest: [fastify.authenticate, requireStaff] };
   function handler(kind, operation) {
     return async (request, reply) => {
       const parsed = (operation === 'list' ? params : versionParams).safeParse(request.params);
@@ -26,6 +25,7 @@ export default async function documentHistoryRoutes(fastify) {
       }
     };
   }
+  const auth = { onRequest: [fastify.authenticate, requireStaff] };
   fastify.get('/notes/:documentId', auth, handler('note', 'list'));
   fastify.get('/notes/:documentId/:version', auth, handler('note', 'read'));
   fastify.post('/notes/:documentId/:version/restore', auth, handler('note', 'restore'));
