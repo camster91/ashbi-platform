@@ -170,6 +170,19 @@ test('reply parent must belong to the same channel and organization', async () =
   f.rows().workspaceChatMessage.push({ id: 'other-message', organizationId: 'other', channelId: 'other-channel' });
   await assert.rejects(postWorkspaceChatMessage(f.db, actor, c.id, { content: 'reply', parentId: 'other-message', idempotencyKey: 'key-00002' }), rejectCode('RECORD_NOT_FOUND'));
 });
+test('membership changes cannot strand retained history or remove the final channel manager', async () => {
+  const f = database();
+  const { channel } = await createWorkspaceChatChannel(f.db, actor, { kind: 'COMPANY', name: 'Retained history', memberIds: ['b'] });
+  await assert.rejects(setWorkspaceChatMember(f.db, actor, channel.id, actor.id, false), rejectCode('CHAT_CONFLICT'));
+  await setWorkspaceChatMember(f.db, actor, channel.id, 'b', false);
+  await assert.rejects(setWorkspaceChatMember(f.db, actor, channel.id, actor.id, false), rejectCode('CHAT_CONFLICT'));
+  assert.equal((await listWorkspaceChatChannels(f.db, actor)).items.length, 1);
+  await setWorkspaceChatMember(f.db, actor, channel.id, 'b', true);
+  f.rows().user.find(person => person.id === 'b').role = 'ADMIN';
+  await setWorkspaceChatMember(f.db, actor, channel.id, actor.id, false);
+  assert.equal((await listWorkspaceChatChannels(f.db, { ...actor, id: 'b' })).items.length, 1);
+});
+
 test('audit failure rolls back channel, memberships and messages', async () => {
   const f = database(); f.db.failAudit = true;
   await assert.rejects(direct(f), rejectCode('AUDIT_UNAVAILABLE'));
