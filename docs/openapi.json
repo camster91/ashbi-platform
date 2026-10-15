@@ -2976,6 +2976,7 @@
         "type": "object"
       },
       "GmailSend": {
+        "additionalProperties": false,
         "properties": {
           "body": {
             "maxLength": 50000,
@@ -2985,6 +2986,10 @@
           "hubThreadId": {
             "maxLength": 50,
             "minLength": 1,
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
             "type": "string"
           },
           "in_reply_to": {
@@ -3010,6 +3015,11 @@
                 "type": "null"
               }
             ]
+          },
+          "responseId": {
+            "maxLength": 50,
+            "minLength": 1,
+            "type": "string"
           },
           "subject": {
             "maxLength": 500,
@@ -3038,6 +3048,7 @@
           }
         },
         "required": [
+          "idempotencyKey",
           "to",
           "subject",
           "body"
@@ -10538,6 +10549,7 @@
             "required": false,
             "schema": {
               "enum": [
+                "gmail_send_receipt",
                 "client_agent_profile",
                 "workspace_chat_channel",
                 "workspace_chat_message",
@@ -10587,6 +10599,11 @@
             "required": false,
             "schema": {
               "enum": [
+                "gmail_send.claimed",
+                "gmail_send.accepted",
+                "gmail_send.completed",
+                "gmail_send.rejected",
+                "gmail_send.unknown",
                 "client_agent_profile.created",
                 "client_agent_profile.updated",
                 "workspace_chat.channel_created",
@@ -21219,6 +21236,124 @@
           }
         ],
         "summary": "POST /api/gmail/send",
+        "tags": [
+          "gmail"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/gmail/send-receipts/{key}": {
+      "get": {
+        "operationId": "get_api_gmail_send_receipts_key",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/gmail/send-receipts/:key",
+        "tags": [
+          "gmail"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/gmail/send-receipts/{key}/reconcile": {
+      "post": {
+        "operationId": "post_api_gmail_send_receipts_key_reconcile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/gmail/send-receipts/:key/reconcile",
         "tags": [
           "gmail"
         ],

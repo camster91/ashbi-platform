@@ -96,6 +96,7 @@ model Organization {
   workspaceChatChannels WorkspaceChatChannel[]
   workspaceChatMembers WorkspaceChatMember[]
   workspaceChatMessages WorkspaceChatMessage[]
+  gmailSendReceipts GmailSendReceipt[]
 }
 
 model User {
@@ -171,6 +172,7 @@ model User {
   createdWorkspaceChatChannels WorkspaceChatChannel[] @relation("WorkspaceChatCreator")
   workspaceChatMemberships WorkspaceChatMember[]
   workspaceChatMessages WorkspaceChatMessage[] @relation("WorkspaceChatAuthor")
+  gmailSendReceipts GmailSendReceipt[]
 }
 
 model OnboardingProgress {
@@ -3052,6 +3054,30 @@ model EmailWebhookReceipt {
 
 
 // Shared staff account-manager configuration; portal activation is a later slice.
+model GmailSendReceipt {
+  id String @id @default(cuid())
+  organizationId String
+  userId String
+  idempotencyKey String
+  payloadHash String
+  mailbox String
+  snapshot Json
+  status String @default("DISPATCHING")
+  providerMessageId String?
+  providerThreadId String?
+  hubMessageId String?
+  errorCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  finishedAt DateTime?
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@unique([organizationId, userId, idempotencyKey])
+  @@index([userId, organizationId])
+  @@index([organizationId, status, createdAt])
+  @@map("gmail_send_receipts")
+}
+
 model ClientAgentProfile {
   id String @id @default(cuid())
   organizationId String

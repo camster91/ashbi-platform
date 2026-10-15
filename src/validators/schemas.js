@@ -1511,6 +1511,8 @@ const SINGLE_LINE = /^[^\r\n]*$/;
 const singleLineMessage = 'must be a single line (no line breaks)';
 
 export const gmailSendSchema = z.object({
+  idempotencyKey: z.string().uuid(),
+  responseId: cuidId.optional(),
   to: z.string().email().max(255).regex(SINGLE_LINE, singleLineMessage),
   subject: z.string().min(1).max(500).regex(SINGLE_LINE, singleLineMessage),
   body: z.string().min(1).max(50_000),
@@ -1521,7 +1523,7 @@ export const gmailSendSchema = z.object({
   in_reply_to: z.string().max(500).regex(SINGLE_LINE, singleLineMessage).nullable().optional(),
   references: z.string().max(500).regex(SINGLE_LINE, singleLineMessage).nullable().optional(),
   hubThreadId: cuidId.optional(),
-});
+}).strict();
 
 export const gmailReplySchema = z.object({
   hubThreadId: cuidId,

@@ -13,6 +13,7 @@ const RAW_MESSAGE = /\b(?:message|detail|error|reason)\s*:\s*(?:err|error|e)\.me
 
 // file -> [allowed occurrences, why the message is caller-safe]
 const ALLOWED = {
+  'gmail.routes.js': [1, 'only registry ToolError instances with fixed caller-safe receipt-service messages reach this branch; unknown errors use a fixed 503'],
   'invoice-billing.routes.js': [1, 'only registry ToolError instances with caller-safe service messages reach the response; fresh-admin denial is fixed and unknown failures are rethrown'],
   'workspace-api.routes.js': [1, 'only registry ToolError instances carry fixed caller-safe messages; unknown errors are rethrown'],
   'ai-bridge.routes.js': [9, 'ToolError / AI control errors carry fixed, caller-safe messages'],

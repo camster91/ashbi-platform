@@ -4,7 +4,10 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import env from '../config/env.js';
-import { validateBody, gmailDraftReplySchema, gmailSendSchema } from '../validators/schemas.js';
+import { z } from 'zod';
+import { validateBody, validateParams, validateQuery, gmailDraftReplySchema, gmailSendSchema } from '../validators/schemas.js';
+import { ToolError } from '../ai/tools/registry.js';
+import { sendGmailWithReceipt, readGmailSendReceipt, reconcileGmailSendReceipt } from '../services/gmail-send.service.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
 import { aiErrorBody, isAiControlError } from '../ai/errors.js';
 import { organizationNameFor } from '../utils/organization-name.js';
@@ -181,123 +184,56 @@ export function replySignature(user, organizationName) {
 }
 
 
-export default async function gmailRoutes(fastify) {
+/** Prepared transport keeps access tokens out of durable receipt snapshots. */
+export async function prepareGmailTransport() {
+  const token = await getGmailAccessToken();
+  const mailbox = await gmailMailboxAddress(token);
+  if (!mailbox || !gmailSendSchema.shape.to.safeParse(mailbox).success) throw new Error('Mailbox identity unavailable');
+  return {
+    mailbox: mailbox.toLowerCase(),
+    async send(snapshot) {
+      const raw = encodeBase64Url(buildMimeMessage({ from: mailbox, to: snapshot.to, subject: snapshot.subject,
+        body: snapshot.body, inReplyTo: snapshot.in_reply_to, references: snapshot.references }));
+      const response = await fetch(GMAIL_API + '/messages/send', {
+        signal: outboundSignal('api'), method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw, ...(snapshot.threadId ? { threadId: snapshot.threadId } : {}) }),
+      });
+      if (!response.ok) throw Object.assign(new Error('Gmail delivery outcome unavailable'), {
+        definiteRejection: [400, 401, 403, 404, 413, 415, 422, 429].includes(response.status),
+      });
+      return response.json();
+    },
+  };
+}
 
-  // ==================== POST /api/gmail/send ====================
-  /**
-   * Send an email via Gmail API
-   * Body: { to, subject, body, threadId?, in_reply_to?, references? }
-   * - threadId: Gmail thread ID to reply into (null or omitted: new thread)
-   * - in_reply_to: Message-ID header of the email being replied to
-   * Answers 409 GMAIL_NOT_CONNECTED when this workspace has no mailbox.
-   */
-  fastify.post('/send', {
-    onRequest: [fastify.authenticate],
-    preHandler: validateBody(gmailSendSchema),
-  }, async (request, reply) => {
-    const { to, subject, body, threadId, in_reply_to, references, hubThreadId } = request.body;
-
-    if (!to || !subject || !body) {
-      return reply.status(400).send({ error: 'Missing required fields: to, subject, body' });
+export default async function gmailRoutes(fastify, options = {}) {
+  const staff = async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user?.role)) return reply.code(403).send({ error: 'Staff access required', code: 'ROLE_DENIED' });
+  };
+  const prepare = options.prepareGmail || prepareGmailTransport;
+  const receiptParams = z.object({ key: z.string().uuid() }).strict();
+  const receiptHandler = (operation, needsConnection = true) => async (request, reply) => {
+    if (needsConnection) {
+      const connection = gmailConnectionFor(request.user);
+      if (!connection.connected) return reply.code(409).send({ error: gmailNotConnectedMessage(connection.reason), code: GMAIL_NOT_CONNECTED, reason: connection.reason });
     }
-
-    const connection = gmailConnectionFor(request.user);
-    if (!connection.connected) {
-      return reply.status(409).send({ error: gmailNotConnectedMessage(connection.reason), code: GMAIL_NOT_CONNECTED, reason: connection.reason });
-    }
-
-    // The reply is filed on a hub thread only if this workspace can see it.
-    if (hubThreadId) {
-      const hubThread = await request.prisma.thread.findFirst({ where: { id: hubThreadId }, select: { id: true } });
-      if (!hubThread) return reply.status(404).send({ error: 'Conversation not found. Reload the page and try again.' });
-    }
-
     try {
-      const token = await getGmailAccessToken();
-      const mailbox = await gmailMailboxAddress(token);
-
-      const mime = buildMimeMessage({
-        from: mailbox,
-        to,
-        subject,
-        body,
-        inReplyTo: in_reply_to,
-        references
-      });
-
-      const encoded = encodeBase64Url(mime);
-
-      const payload = { raw: encoded };
-      if (threadId) {
-        payload.threadId = threadId;
-      }
-
-      const resp = await fetch(`${GMAIL_API}/messages/send`, {
-        signal: outboundSignal('api'),
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!resp.ok) {
-        const err = await resp.text();
-        fastify.log.error(`Gmail send failed: ${resp.status} ${err}`);
-        return reply.status(502).send({
-          error: `Gmail refused the email (error ${resp.status}), so it was not sent. Check the address and try again; if it keeps failing, the Gmail connection may need to be renewed.`,
-          code: 'GMAIL_SEND_FAILED',
-        });
-      }
-
-      const data = await resp.json();
-
-      // Log the sent email to Hub DB
-      if (hubThreadId) {
-        await request.prisma.message.create({
-          data: {
-            direction: 'OUTBOUND',
-            // The mailbox the email went out from (the person who sent it is
-            // the sender name).
-            senderEmail: mailbox || request.user.email || 'gmail@hub.local',
-            senderName: request.user.name || null,
-            subject,
-            bodyText: body,
-            receivedAt: new Date(),
-            threadId: hubThreadId,
-            aiExtracted: JSON.stringify({
-              gmailMessageId: data.id,
-              gmailThreadId: data.threadId,
-              source: 'gmail-send',
-              sentAt: new Date().toISOString()
-            })
-          }
-        });
-
-        // Update thread status
-        await request.prisma.thread.update({
-          where: { id: hubThreadId },
-          data: {
-            status: 'AWAITING_RESPONSE',
-            lastActivityAt: new Date()
-          }
-        });
-      }
-
-      return {
-        success: true,
-        messageId: data.id,
-        threadId: data.threadId
-      };
-    } catch (err) {
-      fastify.log.error({ errorName: err?.name }, 'Gmail send error');
-      return reply.status(502).send({
-        error: "The email couldn't be sent because Gmail didn't respond. Your draft is still here; try again in a minute.",
-        code: 'GMAIL_SEND_FAILED',
-      });
+      const result = await operation(request);
+      return reply.code(result.statusCode).send(result.body);
+    } catch (error) {
+      if (error instanceof ToolError) return reply.code(error.statusCode).send({ error: error.message, code: error.code });
+      request.log.warn({ errorName: error?.name }, 'Gmail receipt operation unavailable');
+      return reply.code(503).send({ error: 'Delivery could not be confirmed. Keep this send intent and check its status before sending anything again.', code: 'GMAIL_RECEIPT_UNAVAILABLE' });
     }
-  });
+  };
+  const auth = { onRequest: [fastify.authenticate, staff] };
+  fastify.post('/send', { ...auth, preHandler: validateBody(gmailSendSchema) },
+    receiptHandler(r => sendGmailWithReceipt(r.prisma, r.user, r.body, { prepare })));
+  fastify.get('/send-receipts/:key', { ...auth, preHandler: [validateParams(receiptParams), validateQuery(z.object({}).strict())] },
+    receiptHandler(r => readGmailSendReceipt(r.prisma, r.user, r.params.key), false));
+  fastify.post('/send-receipts/:key/reconcile', { ...auth, preHandler: [validateParams(receiptParams), validateBody(z.object({}).strict())] },
+    receiptHandler(r => reconcileGmailSendReceipt(r.prisma, r.user, r.params.key), false));
 
   // ==================== POST /api/gmail/draft-reply ====================
   /**

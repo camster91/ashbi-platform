@@ -42,7 +42,7 @@ const api = {
 vi.mock('../lib/api', () => ({
   api: new Proxy({}, { get: (_target, prop) => api[prop] ?? vi.fn(async () => ({})) }),
 }));
-vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', name: 'Pat Lee', role: 'TEAM' } }) }));
+vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', organizationId: 'org-a', name: 'Pat Lee', role: 'TEAM' } }) }));
 vi.mock('../hooks/useToast', () => ({ useToast: () => toast }));
 
 const { default: Thread, assignmentSuggestionLabel, buildGmailSendPayload, gmailConnectionLine, responseStatusLabel } = await import('../pages/Thread');
@@ -70,6 +70,7 @@ const hubOnlyDraft = {
 };
 
 beforeEach(() => {
+  localStorage.clear();
   vi.clearAllMocks();
   api.getThread.mockImplementation(async () => thread);
 });
@@ -114,7 +115,7 @@ describe('Reply via Gmail', () => {
   it('sends without null Gmail ids and signs with the person, not a fixed name', async () => {
     api.gmailDraftReply.mockResolvedValue(hubOnlyDraft);
     api.getGmailStatus.mockResolvedValue({ connected: true, email: 'team@studio.test' });
-    api.gmailSend.mockResolvedValue({ success: true });
+    api.gmailSend.mockResolvedValue({ success: true, status: 'COMPLETED', receiptId: 'receipt-test' });
     renderThread();
 
     fireEvent.click(await screen.findByRole('button', { name: /Reply via Gmail/ }));
@@ -129,6 +130,7 @@ describe('Reply via Gmail', () => {
     expect(body).not.toHaveProperty('threadId');
     expect(body).not.toHaveProperty('in_reply_to');
     expect(body.hubThreadId).toBe('thr-1');
+    expect(body.idempotencyKey).toMatch(/^[a-f0-9-]{36}$/);
   });
 
   it('shows why the draft is a template when AI could not write it', async () => {

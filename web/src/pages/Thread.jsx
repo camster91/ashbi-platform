@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   User,
@@ -34,6 +34,8 @@ import {
   cn,
 } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
+import useGmailSendIntent from '../hooks/useGmailSendIntent';
+import GmailSendRecovery from '../components/GmailSendRecovery';
 import { useToast } from '../hooks/useToast';
 import Modal, { ModalFooter } from '../components/Modal';
 import ResponseReviewActions from '../components/ResponseReviewActions';
@@ -153,8 +155,18 @@ function SavedDraftActions({ response, threadSubject, isAdmin, resolved, editing
 
 export default function Thread() {
   const { id } = useParams();
+  const { user } = useAuth();
+  return <ThreadContent key={JSON.stringify([user?.organizationId, user?.id, id])} />;
+}
+
+function ThreadContent() {
+  const { id } = useParams();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const gmailRecovery = useGmailSendIntent({ userId: user?.id, organizationId: user?.organizationId, threadId: id });
+  const active = useRef(true);
+  const gmailSubmitting = useRef(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const isAdmin = user?.role === 'ADMIN';
   const toast = useToast();
   const [responseText, setResponseText] = useState('');
@@ -171,6 +183,13 @@ export default function Thread() {
   const [gmailResponseId, setGmailResponseId] = useState(null);
   // The saved draft being edited in the composer, if any.
   const [editingResponseId, setEditingResponseId] = useState(null);
+  useEffect(() => {
+    if (gmailRecovery.status !== 'COMPLETED') return;
+    setShowGmailReply(false); setGmailReplyText(''); setGmailReplyTo('');
+    setGmailReplySubject(''); setGmailDraftMeta(null); setGmailResponseId(null);
+    queryClient.invalidateQueries({ queryKey: ['thread', id] });
+    queryClient.invalidateQueries({ queryKey: ['client-communications'] });
+  }, [gmailRecovery.status, id, queryClient]);
 
   const {
     data: thread,
@@ -265,6 +284,7 @@ export default function Thread() {
   const gmailDraftMutation = useMutation({
     mutationFn: (responseId) => api.gmailDraftReply(id, responseId),
     onSuccess: (data) => {
+      if (!active.current) return;
       setGmailResponseId(data.responseId || null);
       gmailSendMutation.reset();
       setGmailReplyText(data.draft || '');
@@ -278,32 +298,37 @@ export default function Thread() {
   });
 
   const gmailSendMutation = useMutation({
-    mutationFn: () => api.gmailSend(buildGmailSendPayload({
-      to: gmailReplyTo,
-      subject: gmailReplySubject,
-      body: gmailReplyText,
-      meta: gmailDraftMeta,
-      hubThreadId: id,
-    })),
-    onSuccess: async () => {
-      const sentResponseId = gmailResponseId;
-      setShowGmailReply(false);
-      setGmailReplyText('');
-      setGmailReplyTo('');
-      setGmailReplySubject('');
-      setGmailDraftMeta(null);
-      setGmailResponseId(null);
+    mutationFn: ({ payload }) => api.gmailSend(payload),
+    onSuccess: (data, variables) => {
+      if (!active.current || variables.localThreadId !== id) return;
+      try { gmailRecovery.recordResult(data); }
+      catch { toast.error('Delivery status could not be retained', 'Keep this send attempt and check its status before sending again.'); }
+      if (data.status !== 'COMPLETED') return;
+      setShowGmailReply(false); setGmailReplyText(''); setGmailReplyTo('');
+      setGmailReplySubject(''); setGmailDraftMeta(null); setGmailResponseId(null);
       toast.success('Reply sent via Gmail');
-      if (sentResponseId) {
-        try {
-          await api.markResponseSent(sentResponseId);
-        } catch (error) {
-          toast.error('The email was sent, but the saved draft still shows Approved', error?.message);
-        }
-      }
       queryClient.invalidateQueries({ queryKey: ['thread', id] });
     },
+    onError: (error, variables) => {
+      if (!active.current || variables.localThreadId !== id) return;
+      try { gmailRecovery.recordResult({ status: error?.data?.code === 'GMAIL_SEND_REJECTED' ? 'REJECTED' : 'UNKNOWN' }); }
+      catch { /* The retained key and storage warning remain the no-resend fence. */ }
+    },
+    onSettled: () => { gmailSubmitting.current = false; },
   });
+
+  function submitGmailReply(event) {
+    event.preventDefault();
+    if (gmailSubmitting.current || gmailRecovery.intent || gmailRecovery.storageError || gmailSendMutation.isPending) return;
+    gmailSubmitting.current = true;
+    try {
+      const idempotencyKey = gmailRecovery.prepareIntent();
+      const payload = { ...buildGmailSendPayload({ to: gmailReplyTo, subject: gmailReplySubject,
+        body: gmailReplyText, meta: gmailDraftMeta, hubThreadId: id }),
+        idempotencyKey, ...(gmailResponseId ? { responseId: gmailResponseId } : {}) };
+      gmailSendMutation.mutate({ localThreadId: id, payload });
+    } catch { gmailSubmitting.current = false; toast.error('Sending is blocked', 'The browser could not retain the send intent. Restore browser storage before continuing.'); }
+  }
 
   const copyGmailReply = async () => {
     try {
@@ -318,6 +343,11 @@ export default function Thread() {
     if (gmailSendMutation.isPending) return;
     gmailSendMutation.reset();
     setShowGmailReply(false);
+  };
+
+  const openGmailReply = (responseId) => {
+    if (gmailRecovery.intent || gmailRecovery.storageError) setShowGmailReply(true);
+    else gmailDraftMutation.mutate(responseId);
   };
 
   if (isLoading) {
@@ -350,6 +380,7 @@ export default function Thread() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
+      {!showGmailReply && <GmailSendRecovery recovery={gmailRecovery} />}
       {/* Header */}
       {/* Stacks on phones: title first, then badges and actions on their own row. */}
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4" data-testid="thread-header">
@@ -392,7 +423,7 @@ export default function Thread() {
             <>
               <button
                 type="button"
-                onClick={() => gmailDraftMutation.mutate()}
+                onClick={() => openGmailReply()}
                 disabled={gmailDraftMutation.isPending}
                 className="min-h-11 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 flex items-center gap-1.5 transition-all hover-lift disabled:opacity-60"
               >
@@ -425,7 +456,8 @@ export default function Thread() {
 
       {/* Gmail Reply Modal */}
       <Modal isOpen={showGmailReply} onClose={closeGmailReply} title="Reply via Gmail" size="lg" showCloseButton={!gmailSendMutation.isPending}>
-        <form onSubmit={(event) => { event.preventDefault(); gmailSendMutation.mutate(); }} className="space-y-4">
+        <form onSubmit={submitGmailReply} className="space-y-4">
+          <GmailSendRecovery recovery={gmailRecovery} />
               {gmailNotConnected && (
                 <div role="alert" className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
                   <p className="font-medium">Gmail isn&apos;t connected</p>
@@ -504,7 +536,7 @@ export default function Thread() {
                 {gmailCopied ? 'Copied' : 'Copy reply'}
               </button>
             )}
-            <button type="submit" disabled={gmailNotConnected || gmailStatusQuery.isLoading || !gmailReplyText.trim() || !gmailReplyTo.trim() || !gmailReplySubject.trim() || gmailSendMutation.isPending} className="flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+            <button type="submit" disabled={Boolean(gmailRecovery.intent) || gmailRecovery.storageError || gmailNotConnected || gmailStatusQuery.isLoading || !gmailReplyText.trim() || !gmailReplyTo.trim() || !gmailReplySubject.trim() || gmailSendMutation.isPending} className="flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
               {gmailSendMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Send className="w-4 h-4" aria-hidden="true" />}
               {gmailSendMutation.isPending ? 'Sending…' : 'Send email'}
             </button>
@@ -823,7 +855,7 @@ export default function Thread() {
                       onEdit={() => editDraft(response)}
                       onSubmit={() => submitForApprovalMutation.mutate(response.id)}
                       submitting={submitForApprovalMutation.isPending && submitForApprovalMutation.variables === response.id}
-                      onSend={() => gmailDraftMutation.mutate(response.id)}
+                      onSend={() => openGmailReply(response.id)}
                       preparingSend={gmailDraftMutation.isPending && gmailDraftMutation.variables === response.id}
                     />
                   </li>

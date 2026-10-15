@@ -25,6 +25,7 @@ let cache = null;
 // edges bind a globally unique parent id to the same organization column the
 // request proxy stamps and filters. Arbitrary composite keys remain unsupported.
 export const COMPOSITE_TENANT_RELATIONS = Object.freeze({
+  gmailsendreceipt: { user: ['userId', 'organizationId'] },
   clientagentprofile: { createdBy: ['createdById', 'organizationId'], updatedBy: ['updatedById', 'organizationId'] },
   workspacechatchannel: { createdBy: ['createdById', 'organizationId'] },
   workspacechatmember: { channel: ['channelId', 'organizationId'], user: ['userId', 'organizationId'] },

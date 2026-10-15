@@ -21,6 +21,11 @@ const ACTOR_TYPE_SET = new Set(AUDIT_ACTOR_TYPES);
  * listed for the action are dropped.
  */
 export const AUDIT_EVENT_CATALOG = Object.freeze({
+  'gmail_send.claimed': { entityType: 'gmail_send_receipt', metadata: ['status', 'hubThreadId', 'responseId'] },
+  'gmail_send.accepted': { entityType: 'gmail_send_receipt', metadata: ['status', 'hubThreadId', 'responseId'] },
+  'gmail_send.completed': { entityType: 'gmail_send_receipt', metadata: ['status', 'hubThreadId', 'responseId'] },
+  'gmail_send.rejected': { entityType: 'gmail_send_receipt', metadata: ['status', 'hubThreadId', 'responseId'] },
+  'gmail_send.unknown': { entityType: 'gmail_send_receipt', metadata: ['status', 'hubThreadId', 'responseId'] },
   'client_agent_profile.created': { entityType: 'client_agent_profile', metadata: ['revision', 'clientId', 'enabled', 'pluginIds'] },
   'client_agent_profile.updated': { entityType: 'client_agent_profile', metadata: ['revision', 'clientId', 'enabled', 'pluginIds'] },
   'workspace_chat.channel_created': { entityType: 'workspace_chat_channel', metadata: ['kind', 'memberCount', 'clientId', 'projectId'] },

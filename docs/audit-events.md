@@ -270,3 +270,13 @@ Profile instructions are not copied to the audit log.
 `workspace_chat.message_created` uses entity `workspace_chat_message` and
 records only `channelId` and `parentId`. No message body is audited.
 These mutations require successful audit evidence in the same transaction.
+
+## Gmail send receipts
+
+`gmail_send.claimed`, `gmail_send.accepted`, `gmail_send.completed`,
+`gmail_send.rejected` and `gmail_send.unknown` use entity type
+`gmail_send_receipt`. Their metadata allowlist is `status`, `hubThreadId` and
+`responseId`. Claim and outcome audit writes commit with their receipt transition;
+local message/thread/response finalization commits with the completed audit.
+No email content, recipients, mailbox credentials, snapshots or provider error
+payloads are included. See [gmail-send-receipts.md](gmail-send-receipts.md).
