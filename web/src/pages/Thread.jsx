@@ -311,7 +311,7 @@ function ThreadContent() {
     },
     onError: (error, variables) => {
       if (!active.current || variables.localThreadId !== id) return;
-      try { gmailRecovery.recordResult({ status: error?.code === 'GMAIL_SEND_REJECTED' ? 'REJECTED' : 'UNKNOWN' }); }
+      try { gmailRecovery.recordResult({ status: error?.data?.code === 'GMAIL_SEND_REJECTED' ? 'REJECTED' : 'UNKNOWN' }); }
       catch { /* The retained key and storage warning remain the no-resend fence. */ }
     },
     onSettled: () => { gmailSubmitting.current = false; },

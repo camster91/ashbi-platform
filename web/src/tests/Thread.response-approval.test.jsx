@@ -156,4 +156,23 @@ describe('response approval on a conversation', () => {
     expect(within(dialog).getByRole('button', { name: 'Send email' })).toBeDisabled();
     expect(api.markResponseSent).not.toHaveBeenCalled();
   });
+
+  it('recognizes a definite rejection in the API error envelope without a status round trip', async () => {
+    withResponse({ status: 'APPROVED' });
+    api.gmailDraftReply.mockResolvedValue({ draft: 'Hi', subject: 'Re: x', to: 'olivia@northwindcoffee.com', responseId: 'r1', notice: null });
+    api.gmailSend.mockRejectedValueOnce(Object.assign(new Error('Gmail rejected the send'), {
+      status: 409, data: { code: 'GMAIL_SEND_REJECTED' },
+    }));
+    renderThread();
+    fireEvent.click((await savedDrafts()).getByRole('button', { name: 'Send via Gmail' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Reply via Gmail' });
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Send email' })).toBeEnabled());
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send email' }));
+    expect(await within(dialog).findByText('This send attempt was rejected. No email was accepted for delivery.')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Check delivery status' })).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Clear confirmed send attempt' }));
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Send email' })).toBeEnabled());
+    expect(api.gmailSend).toHaveBeenCalledTimes(1);
+    expect(api.markResponseSent).not.toHaveBeenCalled();
+  });
 });

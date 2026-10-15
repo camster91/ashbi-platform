@@ -57,6 +57,7 @@ CREATE UNIQUE INDEX gmail_receipt_approved_response_live_key
   WHERE snapshot->>'responseId' IS NOT NULL AND status <> 'REJECTED';
 
 CREATE FUNCTION ashbi_validate_gmail_send_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE actor_role TEXT;
 BEGIN
   IF TG_OP = 'UPDATE' THEN
     IF NEW.id IS DISTINCT FROM OLD.id OR NEW."organizationId" IS DISTINCT FROM OLD."organizationId"
@@ -79,11 +80,12 @@ BEGIN
     IF NEW.status <> 'DISPATCHING' OR NEW."providerMessageId" IS NOT NULL OR NEW."providerThreadId" IS NOT NULL OR NEW."hubMessageId" IS NOT NULL THEN
       RAISE EXCEPTION 'send receipt must begin before dispatch' USING ERRCODE = '23514';
     END IF;
-    PERFORM 1 FROM users WHERE id = NEW."userId" AND "organizationId" = NEW."organizationId" AND "isActive" AND role IN ('ADMIN','TEAM') FOR SHARE;
+    SELECT role::text INTO actor_role FROM users WHERE id = NEW."userId" AND "organizationId" = NEW."organizationId" AND "isActive" AND role IN ('ADMIN','TEAM') FOR SHARE;
     IF NOT FOUND THEN RAISE EXCEPTION 'send receipt actor unavailable' USING ERRCODE = '23514'; END IF;
     IF NEW.snapshot->>'hubThreadId' IS NOT NULL THEN
       PERFORM 1 FROM threads t JOIN clients c ON c.id = t."clientId"
-        WHERE t.id = NEW.snapshot->>'hubThreadId' AND c."organizationId" = NEW."organizationId" AND c."deletedAt" IS NULL FOR SHARE OF t,c;
+        WHERE t.id = NEW.snapshot->>'hubThreadId' AND c."organizationId" = NEW."organizationId" AND c."deletedAt" IS NULL
+          AND (actor_role = 'ADMIN' OR t."assignedToId" = NEW."userId") FOR SHARE OF t,c;
       IF NOT FOUND THEN RAISE EXCEPTION 'send receipt thread unavailable' USING ERRCODE = '23514'; END IF;
     END IF;
     IF NEW.snapshot->>'responseId' IS NOT NULL THEN

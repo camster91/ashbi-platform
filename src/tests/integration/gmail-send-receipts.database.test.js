@@ -9,11 +9,12 @@ import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 const url = process.env.TENANT_INTEGRATION_DATABASE_URL;
 // Inject a local storage failure inside the real interactive transaction.
 // All transports below are fixtures; this test never calls Gmail or OAuth.
-function fault(client, { auditAction, messageCreate = false }) {
+function fault(client, { auditAction, messageCreate = false, beforeReceiptCreate }) {
   return new Proxy(client, { get(target, key) {
-    if (key === '$transaction') return (fn, ...args) => target.$transaction(tx => fn(fault(tx, { auditAction, messageCreate })), ...args);
-    if (key === 'auditEvent' || key === 'message') return new Proxy(target[key], { get(delegate, method) {
-      if (method === 'create') return args => {
+    if (key === '$transaction') return (fn, ...args) => target.$transaction(tx => fn(fault(tx, { auditAction, messageCreate, beforeReceiptCreate })), ...args);
+    if (key === 'auditEvent' || key === 'message' || key === 'gmailSendReceipt') return new Proxy(target[key], { get(delegate, method) {
+      if (method === 'create') return async args => {
+        if (key === 'gmailSendReceipt' && beforeReceiptCreate) await beforeReceiptCreate();
         if (key === 'auditEvent' && args.data.action === auditAction || key === 'message' && messageCreate) throw Error('Synthetic local write failure');
         return delegate.create(args);
       };
@@ -104,6 +105,16 @@ test('durable Gmail intents enforce PostgreSQL claims, unknown outcome fences an
     await assert.rejects(sendGmailWithReceipt(fault(raw, { auditAction: 'gmail_send.claimed' }), users[0], rollback, { prepare }), { code: 'GMAIL_SEND_AUDIT_UNAVAILABLE' });
     assert.equal(await raw.gmailSendReceipt.count({ where: { organizationId: orgs[0], idempotencyKey: rollback.idempotencyKey } }), 0);
     assert.equal(providerCalls, beforeRollback);
+    // Reassign after the service's authorization read but before receipt INSERT.
+    // The locked SQL check must refuse stale TEAM authority before dispatch.
+    const reassigned = await draft('reassigned-before-claim'); const beforeReassignment = providerCalls;
+    await raw.user.update({ where: { id: users[0].id }, data: { role: 'TEAM' } });
+    await assert.rejects(sendGmailWithReceipt(fault(raw, {
+      beforeReceiptCreate: () => raw.thread.update({ where: { id: reassigned.hubThreadId }, data: { assignedToId: null } }),
+    }), { ...users[0], role: 'TEAM' }, reassigned, { prepare }));
+    assert.equal(providerCalls, beforeReassignment);
+    assert.equal(await raw.gmailSendReceipt.count({ where: { organizationId: orgs[0], idempotencyKey: reassigned.idempotencyKey } }), 0);
+    await raw.user.update({ where: { id: users[0].id }, data: { role: 'ADMIN' } });
     const audits = await raw.auditEvent.findMany({ where: { organizationId: orgs[0], action: { startsWith: 'gmail_send.' } } });
     assert.doesNotMatch(JSON.stringify(audits.map(row => row.metadata)), /Approved body|client@example|snapshot|tokens/);
     await raw.user.update({ where: { id: users[0].id }, data: { isActive: false } });
