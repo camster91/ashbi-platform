@@ -12,8 +12,8 @@ export async function clearBrowserPushSubscription({ removeFromServer = false, s
     if (signal?.aborted || !sub) return true;
     if (removeFromServer) await api.unsubscribePush(sub.endpoint);
     if (signal?.aborted) return true;
-    await sub.unsubscribe();
-    return true;
+    const removed = await sub.unsubscribe();
+    return removed !== false;
   } catch (error) {
     console.error('Push cleanup failed:', error);
     return false;
@@ -84,10 +84,11 @@ export function usePushNotifications({ userId } = {}) {
       // Browser permission and subscriptions are shared across accounts. A
       // leftover subscription cannot establish this account's consent, even
       // for legacy subscriptions with no recorded preference.
-      const accountSubscribed = !!sub && getPushOptIn(userId) === true;
+      const accountConsent = getPushOptIn(userId);
+      const accountSubscribed = !!sub && accountConsent === true;
       setBrowserSubscriptionPresent(!!sub);
       setSubscribed(accountSubscribed);
-      setStatus(!navigator.onLine ? 'offline' : accountSubscribed ? 'subscribed' : Notification.permission);
+      setStatus(!navigator.onLine ? 'offline' : sub && accountConsent !== true ? 'cleanup_required' : accountSubscribed ? 'subscribed' : Notification.permission);
       return accountSubscribed;
     } catch {
       setStatus('error');
@@ -210,7 +211,9 @@ export function usePushNotifications({ userId } = {}) {
     }
   }, [supported, recordOptIn]);
 
-  const cleanupPending = browserSubscriptionPresent && optedIn === false;
+  // Unclaimed legacy subscriptions can still deliver. Surface removal even
+  // without an explicit opt-out instead of claiming notifications are off.
+  const cleanupPending = browserSubscriptionPresent && optedIn !== true;
   return { permission, subscribed, status, error, supported, offline, optedIn, cleanupPending, subscribe, unsubscribe, checkSubscription };
 }
 

@@ -75,6 +75,8 @@ describe('push consent after a shared browser changes accounts', () => {
     expect(getPushOptIn('account-b')).toBeNull();
     expect(result.current.optedIn).toBeNull();
     expect(result.current.subscribed).toBe(false);
+    expect(result.current.cleanupPending).toBe(true);
+    expect(result.current.status).toBe('cleanup_required');
     expect(shouldAutoResubscribe({ userId: 'account-b', permission: 'granted' })).toBe(false);
     expect(apiMock.subscribePush).not.toHaveBeenCalled();
   });
@@ -140,5 +142,18 @@ describe('push consent after a shared browser changes accounts', () => {
     expect(second.result.current.cleanupPending).toBe(false);
     expect(second.result.current.subscribed).toBe(false);
     expect(getPushOptIn('account-a')).toBe(false);
+  });
+
+  it('keeps removal available when the browser reports unsuccessful unsubscription', async () => {
+    apiMock.unsubscribePush.mockResolvedValue({ success: true });
+    subscription.unsubscribe.mockResolvedValue(false);
+    const { result } = await mountAccount('account-b');
+    await act(async () => {
+      expect(await result.current.unsubscribe()).toBe(false);
+    });
+    expect(result.current.cleanupPending).toBe(true);
+    expect(result.current.status).toBe('error');
+    expect(getPushOptIn('account-b')).toBe(false);
+    expect(apiMock.subscribePush).not.toHaveBeenCalled();
   });
 });

@@ -84,7 +84,7 @@ describe('usePushNotifications', () => {
     };
     setBrowser({ permission: 'granted', subscription });
     const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
-    await waitFor(() => expect(result.current.status).toBe('granted'));
+    await waitFor(() => expect(result.current.status).toBe('cleanup_required'));
 
     await act(() => result.current.subscribe());
 
@@ -328,7 +328,7 @@ describe('usePushNotifications consent races and account preferences', () => {
     setPushOptIn('user-a', false);
     setBrowser({ permission: 'granted', subscription });
     const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
-    await waitFor(() => expect(result.current.status).toBe('granted'));
+    await waitFor(() => expect(result.current.status).toBe('cleanup_required'));
     expect(result.current.subscribed).toBe(false);
 
     let outcome;
@@ -343,7 +343,8 @@ describe('usePushNotifications consent races and account preferences', () => {
     setBrowser({ permission: 'granted', subscription });
     const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
 
-    await waitFor(() => expect(result.current.status).toBe('granted'));
+    await waitFor(() => expect(result.current.status).toBe('cleanup_required'));
+    expect(result.current.cleanupPending).toBe(true);
     expect(result.current.subscribed).toBe(false);
     expect(result.current.optedIn).toBeNull();
     expect(getPushOptIn('user-a')).toBeNull();
@@ -353,7 +354,7 @@ describe('usePushNotifications consent races and account preferences', () => {
     setPushOptIn('user-a', false);
     setBrowser({ permission: 'granted', subscription });
     const first = renderHook(() => usePushNotifications({ userId: 'user-a' }));
-    await waitFor(() => expect(first.result.current.status).toBe('granted'));
+    await waitFor(() => expect(first.result.current.status).toBe('cleanup_required'));
     expect(first.result.current.subscribed).toBe(false);
     expect(getPushOptIn('user-a')).toBe(false);
     expect(first.result.current.optedIn).toBe(false);
