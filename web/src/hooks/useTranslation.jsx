@@ -69,10 +69,3 @@ export function useTranslation(lang = 'en', customTranslations = defaultTranslat
 
   return { t, currentLang, setLang, languages: defaultLanguages };
 }
-
-// Legacy exports for backward compatibility
-export function useTranslations(lang = 'en') {
-  console.warn('useTranslations is deprecated. Use useTranslation instead.');
-  const { t } = useTranslation(lang);
-  return { t, tLogin: (key) => t(`auth.${key}`) };
-}
