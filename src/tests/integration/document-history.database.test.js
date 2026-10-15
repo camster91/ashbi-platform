@@ -87,7 +87,7 @@ test('migrated document history preserves bounded immutable snapshots and curren
 
       if (kind === 'page') await t.test('page: 100-member roster changes coalesce without evicting content history', async () => {
         const members = Array.from({ length: 100 }, () => ({
-          id: randomUUID(), organizationId: orgs[0], role: 'TEAM', name: 'History roster fixture',
+          id: `c${randomUUID().replaceAll('-', '').slice(0, 24)}`, organizationId: orgs[0], role: 'TEAM', name: 'History roster fixture',
           email: `${randomUUID()}@e2e.example.test`, password: randomUUID(),
         }));
         await raw.user.createMany({ data: members });
