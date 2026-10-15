@@ -52,6 +52,11 @@ Optional seeding via `npx prisma db seed` / `node prisma/seed.js` uses
 `bcrypt` (not `bcryptjs`) and requires `ADMIN_SEED_PASSWORD` when configured.
 
 ### Lint / test / build
+
+`npm run verify`, `verify:release` and `test:integration` mutate test fixtures.
+Use `docs/local-verification.md` to provision a separate loopback test database;
+the development `ashbihub` URL above is deliberately rejected by those suites.
+Do not disable this safety guard or point fixture tests at shared/customer data.
 Commands are in `package.json` / `web/package.json`:
 - Backend: `npm run lint`, `npm run type-check`, `npm test` (~600 unit tests),
   `npm run build`.
