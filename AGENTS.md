@@ -81,6 +81,9 @@ stale note.
 | Dashboard `/api/dashboard/stats` returned 500 (table casing) | `31c72df` (PR #251), broader hardening in `10bd6e0` (PR #238) | `src/routes/dashboard.routes.js:250` uses `FROM "invoices" i`; covered by `src/tests/integration/invoice.test.js` |
 | Clients page always showed 6 hardcoded `ASHBI_DESIGN_CLIENTS` | `31c72df` (PR #251); unused constant removed in `080866d` | `web/src/pages/Clients.jsx:124` returns `Array.isArray(clients) ? clients : []`; no fallback constant is referenced by the render path |
 
-For the current backlog and known defects, see issue **#290** (tracking)
-and **#291** (shipping plan). Do not add new bug notes to this file —
-file an issue on GitHub instead so the backlog stays the source of truth.
+For the current execution checklist, see issue **#565** and
+`docs/master-app-delivery-plan.md`; `docs/launch-status.md` records the dated
+deployment/QA evidence. #290/#291 are historical trackers, not competing work
+queues. Verify older issue claims against current code and acceptance evidence
+before changing behavior. Do not add new bug notes here; file a confirmed defect
+on GitHub and link the current checklist.

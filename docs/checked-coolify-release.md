@@ -1,5 +1,10 @@
 # Checked Coolify release adoption
 
+**Current status, October 15, 2026:** adoption is incomplete. Production
+`4349f6d` was deployed through the owner-authorized reviewed direct-VPS script.
+The protected run failed before deployment; see [launch-status.md](launch-status.md).
+The checklist below remains future adoption work, not the current release path.
+
 Production still uses `scripts/deploy-vps-direct.sh`. Merging this preparation
 does not transfer deployment ownership. `COOLIFY_RELEASE_ENABLED` must remain
 unset or false until the adoption below is verified and recorded in
