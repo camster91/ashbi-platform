@@ -26,6 +26,8 @@ Recovery targets to validate, not guaranteed service levels: recover an individu
 
 ## Storage and acceptance
 
+Company wiki capture records the final page state of each committed transaction. Grant bookkeeping can advance the document's concurrency revision many times during one roster change; those intermediate states do not consume history slots. Recorded revision numbers may therefore have gaps. Restoration forces the deferred snapshot before checking the same transaction's audit and commit, preserving all-or-nothing recovery.
+
 With a 50,000-character content limit, a naive 100-revision design can retain approximately five million content characters per heavily edited document, plus metadata and database overhead. Measure encoded bytes and real edit rates before approving a purge schedule. Store full snapshots first for simple integrity checks; compression or deltas can be considered after recovery is proven.
 
 Acceptance requires two-tenant read/restore denial, stale concurrent edits retaining drafts, transactional snapshots, restore-as-new-revision, archived/deleted parents and members, malicious Markdown rendering, inaccessible attachments, the 100-revision boundary, export fidelity, Trash recovery and an isolated backup restoration. Mobile/keyboard history inspection and an administrator restore journey must pass against a disposable populated database before production acceptance.

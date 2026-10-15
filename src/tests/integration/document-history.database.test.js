@@ -10,6 +10,7 @@ import { listDocumentHistory, readDocumentRevision, restoreDocumentRevision } fr
 import { saveNoteAccess } from '../../services/note-access.service.js';
 import { saveWorkspacePageAccess } from '../../services/workspace-page-access.service.js';
 import { updateWorkspacePage } from '../../services/workspace-pages.service.js';
+import { attributeDocumentEdit } from '../../services/document-history-actor.js';
 
 const url = process.env.TENANT_INTEGRATION_DATABASE_URL;
 
@@ -50,8 +51,7 @@ test('migrated document history preserves bounded immutable snapshots and curren
           revision: 0, mode: 'RESTRICTED', members: [{ userId: reader.id, role: 'READ' }],
         }, owner);
         let snapshots = await rows(doc.id);
-        if (kind === 'note') assert.equal(snapshots.length, initial.length + 1);
-        else assert.ok(snapshots.length > initial.length, 'page CAS and grant writes may each capture a revision');
+        assert.equal(snapshots.length, initial.length + 1, 'one committed access change records one final snapshot');
         const grantSnapshot = snapshots.at(-1);
         const grantedDocument = await raw[model].findUnique({ where: { id: doc.id } });
         assert.equal(grantSnapshot.revision, grantedDocument.revision, 'newest granted snapshot matches the final parent revision');
@@ -63,6 +63,7 @@ test('migrated document history preserves bounded immutable snapshots and curren
 
         await saveAccess(scoped, doc.id, { revision: granted.revision, mode: 'RESTRICTED', members: [] }, admin);
         snapshots = await rows(doc.id);
+        assert.equal(snapshots.length, initial.length + 2, 'revoking access records one final snapshot');
         const revokeSnapshot = snapshots.at(-1);
         const revokedDocument = await raw[model].findUnique({ where: { id: doc.id } });
         assert.equal(revokeSnapshot.revision, revokedDocument.revision, 'newest revoked snapshot matches the final parent revision');
@@ -82,6 +83,53 @@ test('migrated document history preserves bounded immutable snapshots and curren
           assert.deepEqual(edited.audienceNodes[0].grants, []);
         }
         await raw[model].delete({ where: { id: doc.id } });
+      });
+
+      if (kind === 'page') await t.test('page: 100-member roster changes coalesce without evicting content history', async () => {
+        const members = Array.from({ length: 100 }, () => ({
+          id: randomUUID(), organizationId: orgs[0], role: 'TEAM', name: 'History roster fixture',
+          email: `${randomUUID()}@e2e.example.test`, password: randomUUID(),
+        }));
+        await raw.user.createMany({ data: members });
+        const doc = await create({ accessMode: 'RESTRICTED', content: 'Content before roster changes' });
+        await raw.workspacePage.update({ where: { id: doc.id }, data: { content: 'Second content version' } });
+        await raw.workspacePage.update({ where: { id: doc.id }, data: { content: 'Third content version' } });
+        const baseline = await rows(doc.id);
+        assert.equal(baseline.length, 3);
+        const grants = members.map(({ id }) => ({ userId: id, role: 'READ' }));
+        await saveWorkspacePageAccess(scoped, doc.id, { revision: 0, mode: 'RESTRICTED', members: grants }, owner);
+        let snapshots = await rows(doc.id);
+        let current = await raw.workspacePage.findUnique({ where: { id: doc.id } });
+        assert.equal(snapshots.length, baseline.length + 1, 'adding 100 grants records only the final committed audience');
+        assert.deepEqual(snapshots.slice(0, baseline.length), baseline, 'adding a roster retains prior content snapshots');
+        assert.equal(snapshots.at(-1).revision, current.revision);
+        assert.equal(snapshots.at(-1).editedById, owner.id);
+        assert.deepEqual(snapshots.at(-1).audienceNodes[0].grants, [...grants].sort((a, b) => a.userId.localeCompare(b.userId)));
+        const beforeReplacement = snapshots;
+
+        await raw.$transaction(async tx => {
+          await attributeDocumentEdit(tx, admin);
+          await tx.workspacePageGrant.deleteMany({ where: { pageId: doc.id, organizationId: orgs[0] } });
+          await tx.workspacePageGrant.createMany({ data: members.map(({ id }) => ({ organizationId: orgs[0], pageId: doc.id, userId: id, role: 'EDIT' })) });
+        });
+        snapshots = await rows(doc.id);
+        current = await raw.workspacePage.findUnique({ where: { id: doc.id } });
+        assert.equal(snapshots.length, beforeReplacement.length + 1, '200 raw grant mutations in one transaction coalesce');
+        assert.deepEqual(snapshots.slice(0, beforeReplacement.length), beforeReplacement);
+        assert.equal(snapshots.at(-1).revision, current.revision);
+        assert.equal(snapshots.at(-1).editedById, admin.id);
+        assert.deepEqual(snapshots.at(-1).audienceNodes[0].grants, [...grants].map(grant => ({ ...grant, role: 'EDIT' })).sort((a, b) => a.userId.localeCompare(b.userId)));
+        const beforeRemoval = snapshots;
+        await saveWorkspacePageAccess(scoped, doc.id, { revision: current.accessRevision, mode: 'RESTRICTED', members: [] }, owner);
+        snapshots = await rows(doc.id);
+        current = await raw.workspacePage.findUnique({ where: { id: doc.id } });
+        assert.equal(snapshots.length, beforeRemoval.length + 1, 'removing 100 grants records only the final audience');
+        assert.deepEqual(snapshots.slice(0, beforeRemoval.length), beforeRemoval);
+        assert.equal(snapshots.at(-1).revision, current.revision);
+        assert.equal(snapshots.at(-1).editedById, owner.id);
+        assert.deepEqual(snapshots.at(-1).audienceNodes[0].grants, []);
+        assert.equal(current.content, 'Third content version');
+        await raw.workspacePage.delete({ where: { id: doc.id } });
       });
 
       await t.test(`${kind}: SQL and Prisma writes capture current content, retain 100, and roll back pruning`, async () => {
@@ -107,6 +155,7 @@ test('migrated document history preserves bounded immutable snapshots and curren
         assert.deepEqual(snapshots.map(row => row.revision), Array.from({ length: 100 }, (_, i) => i + 1));
         await assert.rejects(raw.$transaction(async tx => {
           await tx[model].update({ where: { id }, data: { content: 'Must roll back' } });
+          if (kind === 'page') await tx.$executeRawUnsafe('SET CONSTRAINTS workspace_page_history_capture IMMEDIATE');
           assert.equal(await tx[history].count({ where: { [key]: id } }), 100);
           throw new Error('Fixture rollback');
         }), /Fixture rollback/);

@@ -67,6 +67,9 @@ export async function restoreDocumentRevision(prisma, actor, kind, id, version, 
     await tx.$executeRaw`SELECT set_config('ashbi.actor_user_id', ${user.id}, true)`;
     const changed = await tx[spec.model].updateMany({ where: { id, revision: parsed.data.revision, ...(kind === 'note' ? { project: { organizationId: user.organizationId }, deletedAt: null } : { organizationId: user.organizationId, archivedAt: null }) }, data: changes });
     if (changed.count !== 1) fail(409, 'Document changed. Reload before restoring history.');
+    // Page capture normally coalesces grant bookkeeping at commit. Restoration
+    // must verify its snapshot before accepting the same transaction's audit.
+    if (kind === 'page') await tx.$executeRaw`SET CONSTRAINTS workspace_page_history_capture IMMEDIATE`;
     const updated = await tx[spec.model].findFirst({ where: { id, ...(kind === 'note' ? { project: { organizationId: user.organizationId } } : { organizationId: user.organizationId }) } });
     if (!updated || updated.revision <= document.revision) fail(503, 'Document history could not be recorded');
     const recorded = await tx[spec.history].findFirst({ where: { ...whereFor(spec, user, id), revision: updated.revision }, select: { revision: true } });

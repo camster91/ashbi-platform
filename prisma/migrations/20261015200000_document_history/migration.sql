@@ -81,18 +81,25 @@ BEGIN
 END;
 $$;
 CREATE FUNCTION capture_workspace_page_revision() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE editor TEXT;
+DECLARE editor TEXT; final_page "workspace_pages"%ROWTYPE;
 BEGIN
-  SELECT "id" INTO editor FROM "users" WHERE "id" = NULLIF(current_setting('ashbi.actor_user_id', true), '') AND "organizationId" = NEW."organizationId" AND "isActive";
+  -- Grant row triggers advance the page once per roster mutation. At commit,
+  -- record only the final state so a large roster cannot evict content history.
+  SELECT * INTO final_page FROM "workspace_pages" WHERE "id" = NEW."id";
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  IF EXISTS (SELECT 1 FROM "workspace_page_revisions" WHERE "pageId" = final_page."id" AND "revision" = final_page."revision") THEN RETURN NULL; END IF;
+  SELECT "id" INTO editor FROM "users" WHERE "id" = NULLIF(current_setting('ashbi.actor_user_id', true), '') AND "organizationId" = final_page."organizationId" AND "isActive";
   INSERT INTO "workspace_page_revisions" ("id", "organizationId", "pageId", "revision", "title", "content", "audienceNodes", "editedById")
-    VALUES (NEW."id" || ':' || NEW."revision", NEW."organizationId", NEW."id", NEW."revision", NEW."title", NEW."content", workspace_page_history_audience(NEW."id"), editor);
+    VALUES (final_page."id" || ':' || final_page."revision", final_page."organizationId", final_page."id", final_page."revision", final_page."title", final_page."content", workspace_page_history_audience(final_page."id"), editor)
+    ON CONFLICT ("pageId", "revision") DO NOTHING;
   DELETE FROM "workspace_page_revisions" WHERE "pageId" = NEW."id" AND "revision" NOT IN
     (SELECT "revision" FROM "workspace_page_revisions" WHERE "pageId" = NEW."id" ORDER BY "revision" DESC LIMIT 100);
   RETURN NEW;
 END;
 $$;
 CREATE TRIGGER note_history_capture AFTER INSERT OR UPDATE ON "notes" FOR EACH ROW EXECUTE FUNCTION capture_note_revision();
-CREATE TRIGGER workspace_page_history_capture AFTER INSERT OR UPDATE ON "workspace_pages" FOR EACH ROW EXECUTE FUNCTION capture_workspace_page_revision();
+CREATE CONSTRAINT TRIGGER workspace_page_history_capture AFTER INSERT OR UPDATE ON "workspace_pages"
+  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION capture_workspace_page_revision();
 
 -- Only parent capture/retention and FK cascades may insert/remove snapshots.
 -- No writer, including a nested one, can rewrite an existing snapshot.
