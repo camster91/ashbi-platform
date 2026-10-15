@@ -335,6 +335,8 @@ export const api = {
   },
   getClient: (id) =>
     request(`/clients/${id}`),
+  listClientCommunications: (id, params = {}) => request(`/client-communications/${encodeURIComponent(id)}?${new URLSearchParams(Object.entries(params).filter(([, value]) => value != null))}`),
+  getClientCommunication: (clientId, source, id) => request(`/client-communications/${encodeURIComponent(clientId)}/${encodeURIComponent(source)}/${encodeURIComponent(id)}`),
   getClientAgentProfile: (id) => request(`/client-assistants/${encodeURIComponent(id)}/profile`),
   updateClientAgentProfile: (id, data) => request(`/client-assistants/${encodeURIComponent(id)}/profile`, { method: 'PATCH', body: data }),
   listWorkspaceChatChannels: (params = {}) => request(`/workspace-chat/channels?${new URLSearchParams(Object.entries(params).filter(([, value]) => value != null))}`),

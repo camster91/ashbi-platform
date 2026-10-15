@@ -24,6 +24,7 @@ import { formatDate, formatMoney } from '../lib/format';
 import { StatusBadge } from '../components/ui';
 import { invoiceBalanceDue, invoiceDisplayStatus } from '../lib/invoice-status';
 import ClientAccountManager from '../components/ClientAccountManager';
+import ClientCommunications from '../components/ClientCommunications';
 
 // "$830.00" for one currency, "$830.00 · US$120.00" when the amounts are in
 // several (different currencies are never added together).
@@ -126,7 +127,10 @@ export default function Client() {
       </div>
 
       {['ADMIN', 'TEAM'].includes(user?.role) && (
+        <>
         <ClientAccountManager key={id} clientId={id} clientName={client.name} role={user.role} />
+        <ClientCommunications key={`communications-${id}`} clientId={id} />
+        </>
       )}
 
       {/* Quick Actions + Revenue Stats */}
