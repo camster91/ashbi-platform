@@ -42,8 +42,16 @@ test('standalone typed records, formulas and reusable forms persist through real
   expect(rows.items[0].computed.field_3.value).toBe(0);
   await page.getByRole('button', { name: 'Edit Zero estimate', exact: true }).click();
   await page.getByLabel('Hours (required)', { exact: true }).fill('4');
+  const savedRecordResponse = page.waitForResponse(response =>
+    response.request().method() === 'PUT' &&
+    new URL(response.url()).pathname === `/api/collections/${collectionId}/records/${rows.items[0].id}`);
   await page.getByRole('button', { name: 'Save record', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Edit Zero estimate', exact: true })).toBeVisible();
+  const saveResponse = await savedRecordResponse;
+  expect(saveResponse.status()).toBe(200);
+  const savedRecord = await saveResponse.json();
+  expect(savedRecord.values.field_1).toBe(4);
+  expect(savedRecord.computed.field_3.value).toBe(200);
+  await expect(page.getByRole('button', { name: 'Edit Zero estimate', exact: true })).toBeEnabled();
   rows = await json(await api.get(`/api/collections/${collectionId}/records`));
   expect(rows.items[0].computed.field_3.value).toBe(200);
   await page.reload();
