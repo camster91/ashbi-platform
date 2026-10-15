@@ -68,17 +68,17 @@ const TAG_COLORS = {
 
 export function NotificationPreferences() {
   const { user } = useAuth();
-  const { permission, subscribed, status, error, supported, offline, optedIn, subscribe, unsubscribe } = usePushNotifications({ userId: user?.id });
-  // Opt-out is saved before cleanup, so a failed cleanup leaves a browser
-  // subscription behind for an account that has already said no.
-  const cleanupIncomplete = subscribed && optedIn === false;
+  const { permission, subscribed, status, error, supported, offline, cleanupPending, subscribe, unsubscribe } = usePushNotifications({ userId: user?.id });
+  // An unclaimed legacy subscription or a failed Disable can still deliver.
+  // Keep removal available without treating that subscription as consent.
+  const cleanupIncomplete = cleanupPending;
   const busy = status === 'subscribing' || status === 'unsubscribing';
 
   let summary = 'Notifications are available but not enabled.';
   if (!supported) summary = 'This browser does not support web push notifications.';
   else if (offline) summary = 'You are offline. Reconnect to change this preference.';
   else if (permission === 'denied') summary = 'Notifications are blocked in browser settings.';
-  else if (cleanupIncomplete) summary = 'Notifications are disabled for this account, but removing this browser\'s subscription did not finish. Select Disable notifications to retry.';
+  else if (cleanupIncomplete) summary = 'A notification subscription remains in this browser without this account\'s consent. Notifications may still arrive. Select Disable notifications to remove it before enabling notifications for this account.';
   else if (subscribed) summary = 'Notifications are enabled for this account and browser.';
 
   return (
@@ -98,7 +98,7 @@ export function NotificationPreferences() {
       {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
 
       <div className="flex flex-wrap gap-2">
-        {subscribed ? (
+        {subscribed || cleanupIncomplete ? (
           <Button type="button" variant="outline" onClick={unsubscribe} isLoading={status === 'unsubscribing'} disabled={busy || offline}>
             {status === 'unsubscribing' ? 'Disabling...' : 'Disable notifications'}
           </Button>

@@ -289,7 +289,7 @@ export default function Login() {
 
           {sessionNotice && (
             <div role="status" className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-foreground">
-              {sessionNotice} Locally saved drafts remain on this device.
+              {sessionNotice} Server-saved drafts can be recovered after signing in. Edits that were not saved may be lost.
             </div>
           )}
 

@@ -77,14 +77,14 @@ describe('usePushNotifications', () => {
     }
   });
 
-  it('registers an existing approved browser subscription to the signed-in account', async () => {
+  it('explicitly registers an existing browser subscription to the signed-in account', async () => {
     const subscription = {
       endpoint: 'https://push.example/subscription',
       toJSON: () => ({ endpoint: 'https://push.example/subscription', keys: { p256dh: 'key', auth: 'auth' } }),
     };
     setBrowser({ permission: 'granted', subscription });
     const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
-    await waitFor(() => expect(result.current.subscribed).toBe(true));
+    await waitFor(() => expect(result.current.status).toBe('cleanup_required'));
 
     await act(() => result.current.subscribe());
 
@@ -97,6 +97,7 @@ describe('usePushNotifications', () => {
   });
 
   it('removes the server endpoint and browser subscription when disabled', async () => {
+    setPushOptIn('user-a', true);
     const subscription = {
       endpoint: 'https://push.example/subscription',
       toJSON: vi.fn(),
@@ -233,7 +234,7 @@ describe('shouldAutoResubscribe', () => {
   });
 });
 
-describe('usePushNotifications consent races and backfill', () => {
+describe('usePushNotifications consent races and account preferences', () => {
   const subscription = {
     endpoint: 'https://push.example/subscription',
     toJSON: () => ({ endpoint: 'https://push.example/subscription', keys: { p256dh: 'key', auth: 'auth' } }),
@@ -327,7 +328,8 @@ describe('usePushNotifications consent races and backfill', () => {
     setPushOptIn('user-a', false);
     setBrowser({ permission: 'granted', subscription });
     const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
-    await waitFor(() => expect(result.current.subscribed).toBe(true));
+    await waitFor(() => expect(result.current.status).toBe('cleanup_required'));
+    expect(result.current.subscribed).toBe(false);
 
     let outcome;
     await act(async () => { outcome = await result.current.subscribe(); });
@@ -337,19 +339,23 @@ describe('usePushNotifications consent races and backfill', () => {
     expect(result.current.optedIn).toBe(true);
   });
 
-  it('backfills opt-in once for an existing approved subscription with no stored preference', async () => {
+  it('requires explicit consent for a legacy browser subscription with no account preference', async () => {
     setBrowser({ permission: 'granted', subscription });
     const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
 
-    await waitFor(() => expect(result.current.optedIn).toBe(true));
-    expect(getPushOptIn('user-a')).toBe(true);
+    await waitFor(() => expect(result.current.status).toBe('cleanup_required'));
+    expect(result.current.cleanupPending).toBe(true);
+    expect(result.current.subscribed).toBe(false);
+    expect(result.current.optedIn).toBeNull();
+    expect(getPushOptIn('user-a')).toBeNull();
   });
 
-  it('does not backfill over an explicit opt-out or without a subscription', async () => {
+  it('does not infer consent over an explicit opt-out or without a subscription', async () => {
     setPushOptIn('user-a', false);
     setBrowser({ permission: 'granted', subscription });
     const first = renderHook(() => usePushNotifications({ userId: 'user-a' }));
-    await waitFor(() => expect(first.result.current.subscribed).toBe(true));
+    await waitFor(() => expect(first.result.current.status).toBe('cleanup_required'));
+    expect(first.result.current.subscribed).toBe(false);
     expect(getPushOptIn('user-a')).toBe(false);
     expect(first.result.current.optedIn).toBe(false);
 
