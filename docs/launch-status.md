@@ -1,5 +1,25 @@
 # Internal pilot launch status
 
+## Current execution overlay — October 15
+
+Verified production is `37d02b304898ec5c621199f4a2a880ebd64a6372`, including #608 shared staff questions/durable runs, #609 unused-export cleanup and #606 document history. Required main CI [38808629217](https://github.com/camster91/ashbi-platform/actions/runs/38808629217) passed 2,195 backend, 183 integration and 1,351 frontend tests plus required release gates.
+
+Public exact-revision readiness and 169/169 bounded live API checks passed: 41 core/API/MCP/role checks, 24 communication/privacy checks, five client-portal filtering checks, 52 note/wiki-history checks and 47 agent-conversation CRUD checks. Normal QA browser acceptance on this release verified creating a shared conversation and persistence after full reload; a separate API cleanup helper passed 11/11 archive/readback checks. No Send or provider/model call was made; these results do not establish model quality, provider acceptance, full W1, whole-app replacement or source cutover.
+
+The #608 W1 foundation is deployed. Prior-turn conversational memory, persisted context observation/source evidence and real-provider/team acceptance remain open. Source apps remain primary until bounded input/readback and cutover are verified. Coolify adoption and alert ownership/destination remain separate work.
+
+Build-only xcode UUID fix #610 is merged as `82b1ec3fb0771eeea58d6171131b1bd05a66d60b`; main CI [38811217856](https://github.com/camster91/ashbi-platform/actions/runs/38811217856) is still in progress. It changes no runtime code and its packages are absent from the final production image. GitHub alert #208 was verified fixed at 2026-10-15T21:37:03Z; #207/#209 and stale automation #546/#567/#568 remain separate. This is not a claim that production serves the #610 merge.
+
+### Earlier document-history release evidence — ebafa8c
+
+Document history #606 and separate #605/#607 cleanup were verified at `ebafa8cd853b3f19a6397992b503fcaa4315a64e`. Final PR CI [38799311311](https://github.com/camster91/ashbi-platform/actions/runs/38799311311) and main CI [38801093378](https://github.com/camster91/ashbi-platform/actions/runs/38801093378) passed. The reviewed SSH controller deployed matching source after a fresh encrypted off-server backup; API and worker shared image `sha256:f29809ca8d368d2471256a0a956ffb9aa78fd9b24317c8e778012d7dd06b2da5`, with rollback containers retained. This was backup verification, not an executed restore drill.
+
+That release passed 122/122 bounded live checks and normal QA-admin browser verification of unsaved-draft preservation while inspecting history, edit/save, restore as a third revision and reload persistence. Synthetic documents were soft-deleted/archived and QA sessions signed out. This browser restore evidence remains attributed to `ebafa8c`; it is not relabeled as a new test on `37d02b3`. The newest-100 policy, including current, has no automatic time purge; populated migration/retention/rollback/permission CI passed.
+
+[#565](https://github.com/camster91/ashbi-platform/issues/565) owns the current execution queue. The older 18:43 UTC record below is retained as dated evidence; its serving revision and next-step list describe that earlier verification.
+
+## Historical verification — October 15, 18:43 UTC
+
 Verified October 15, 2026 at 18:43 UTC. This is a dated evidence record, not a
 claim that a later checkout or deployment has the same state. Recheck current
 main, public revision and the evidence for any issue before changing behavior.
