@@ -81,15 +81,16 @@ class OpenAICompatibleProvider {
    */
   async _request(path, init) {
     const controller = new AbortController();
+    const signal = init.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       let res;
       try {
         // Never follow redirects: a 3xx could send the key and prompt to a
         // host (or scheme) the outbound URL policy never checked.
-        res = await this.fetchImpl(`${this.baseUrl}${path}`, { ...init, headers: this._headers(), signal: controller.signal, redirect: 'manual' });
+        res = await this.fetchImpl(`${this.baseUrl}${path}`, { ...init, headers: this._headers(), signal, redirect: 'manual' });
       } catch (err) {
-        if (controller.signal.aborted || err?.name === 'AbortError') throw new AiProviderError('timeout');
+        if (signal.aborted || err?.name === 'AbortError') throw new AiProviderError('timeout');
         throw new AiProviderError('upstream');
       }
       if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
@@ -99,7 +100,7 @@ class OpenAICompatibleProvider {
       try {
         body = await res.json();
       } catch (err) {
-        if (controller.signal.aborted || err?.name === 'AbortError') throw new AiProviderError('timeout');
+        if (signal.aborted || err?.name === 'AbortError') throw new AiProviderError('timeout');
         body = null;
       }
       if (!res.ok) {
@@ -117,7 +118,7 @@ class OpenAICompatibleProvider {
    * Chat completion with token usage.
    * @returns {Promise<{ content: string, model: string, usage: { promptTokens: number, completionTokens: number, estimated: boolean } }>}
    */
-  async complete({ system, prompt, messages, temperature = 0.3, maxTokens = 4096, model } = {}) {
+  async complete({ system, prompt, messages, temperature = 0.3, maxTokens = 4096, model, signal } = {}) {
     const chatMessages = [];
     if (system) chatMessages.push({ role: 'system', content: system });
     if (Array.isArray(messages) && messages.length) {
@@ -132,6 +133,7 @@ class OpenAICompatibleProvider {
     const useModel = model || this.modelName;
     const body = await this._request('/v1/chat/completions', {
       method: 'POST',
+      ...(signal ? { signal } : {}),
       body: JSON.stringify({ model: useModel, messages: chatMessages, temperature, max_tokens: maxTokens, stream: false }),
     });
     const content = body.choices?.[0]?.message?.content;

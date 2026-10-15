@@ -17,14 +17,14 @@ class ClaudeProvider {
     return Boolean(env.anthropicApiKey);
   }
 
-  async chat({ system, prompt, temperature = 0.3, maxTokens = aiConfig.maxTokens, singleAttempt = false }) {
+  async chat({ system, prompt, temperature = 0.3, maxTokens = aiConfig.maxTokens, singleAttempt = false, signal }) {
     const response = await this.client.messages.create({
       model: aiConfig.model,
       max_tokens: maxTokens,
       temperature,
       system,
       messages: [{ role: 'user', content: prompt }]
-    }, singleAttempt ? { maxRetries: 0, timeout: 90_000 } : undefined);
+    }, singleAttempt ? { maxRetries: 0, timeout: 90_000, ...(signal ? { signal } : {}) } : signal ? { signal } : undefined);
 
     return response.content[0].text;
   }

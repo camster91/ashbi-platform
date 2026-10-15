@@ -344,6 +344,9 @@ export async function setupRecurringJobs() {
     ['trash-purge-daily-toronto', { pattern: '0 4 * * *', tz: 'America/Toronto' }, 'trash-purge'],
     // Unsent chat uploads older than 24 hours (docs/chat-media.md).
     ['chat-upload-cleanup-hourly', { every: 60 * 60 * 1000 }, 'chat-upload-cleanup'],
+    // Tenant expiry scans are maintenance, never part of the latency-sensitive
+    // outbox dispatcher. Stable scheduler identity prevents duplicate ticks.
+    ['client-agent-expiry-minute', { every: 60 * 1000 }, 'expire-client-agent-runs'],
   ];
   for (const [schedulerId, repeat, name] of scheduledJobs) {
     await scheduledQueue.upsertJobScheduler(

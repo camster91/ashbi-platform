@@ -293,6 +293,23 @@ const scheduledWorker = createWorker(
         return purgeExpiredTrashForAllOrganizations();
       case 'chat-upload-cleanup':
         return purgePendingChatUploads();
+      case 'expire-client-agent-runs': {
+        const organizationIds = await resolveTenantOrganizationIds(backgroundPrisma);
+        let expired = 0;
+        let queueExpired = 0;
+        let failed = 0;
+        for (const organizationId of organizationIds) {
+          try {
+            const result = await runTenantJob(backgroundPrisma, organizationId, tenant => expireClientAgentRuns(tenant, organizationId));
+            expired += result.expired;
+            queueExpired += result.queueExpired;
+          } catch (error) {
+            failed += 1;
+            logger.error({ organizationId, errorCode: error.code, errorName: error.name }, 'Client agent expiry sweep failed');
+          }
+        }
+        return { organizations: organizationIds.length, expired, queueExpired, failed };
+      }
       case 'fleet-digest':
         return { skipped: true, reason: 'retired WordPress fleet digest' };
       case 'scheduled-workflows':
@@ -310,14 +327,6 @@ const domainEventsWorker = createWorker(
   QUEUES.DOMAIN_EVENTS,
   async (job) => {
     if (job.name !== 'dispatch-domain-events') throw new Error(`Unknown domain events job: ${job.name}`);
-    const organizationIds = await resolveTenantOrganizationIds(backgroundPrisma);
-    for (const organizationId of organizationIds) {
-      try {
-        await runTenantJob(backgroundPrisma, organizationId, tenant => expireClientAgentRuns(tenant, organizationId));
-      } catch (error) {
-        logger.error({ organizationId, errorCode: error.code, errorName: error.name }, 'Client agent expiry sweep failed');
-      }
-    }
     return dispatchDomainEvents(backgroundPrisma);
   },
   { concurrency: 1 },

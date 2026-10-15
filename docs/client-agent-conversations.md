@@ -50,6 +50,13 @@ repeat its inference. Recovery marks a run still queued after ten minutes
 `FAILED` with `RUN_QUEUE_EXPIRED`, without invoking the provider or enqueueing
 another run. An expired running deadline becomes `UNKNOWN`; it is not
 automatically retried because provider usage or an answer may already exist.
+The separate minute-based maintenance job performs expiry scans on the existing
+scheduled-maintenance queue; it never delays the outbox dispatcher. Provider
+waiting is bounded by the remaining 120-second run deadline, including time
+already spent preparing context. The worker aborts supported transports and
+releases its slot even if a provider ignores cancellation; late results cannot
+replace the terminal outcome. Cancellation/timeout still cannot prove that an
+upstream request incurred no usage.
 The user can submit a new explicit request with a new intent key. These are
 code behaviors awaiting migrated-database and deployment acceptance.
 

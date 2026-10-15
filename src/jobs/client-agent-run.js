@@ -28,6 +28,7 @@ const PRE_DISPATCH_CODES = new Set(['ROLE_DENIED', 'RECORD_NOT_FOUND', 'CLIENT_A
  */
 export async function processClientAgentRun(prisma, { organizationId, runId }, {
   chat = input => getProvider().chat(input), now = () => new Date(), token = randomUUID,
+  setTimer = setTimeout, clearTimer = clearTimeout,
 } = {}) {
   const store = requestStorage.getStore();
   if (!validId(organizationId) || !validId(runId) || store?.organizationId !== organizationId || store?.prisma !== prisma) {
@@ -98,21 +99,43 @@ export async function processClientAgentRun(prisma, { organizationId, runId }, {
   const prepared = await prisma.clientAgentRun.updateMany({ where: { ...where, status: 'RUNNING', claimToken, deadlineAt: { gt: now() } },
     data: { profileRevision: profile.revision } });
   if (prepared.count !== 1) return result();
+  const remainingMs = +deadlineAt - +now();
+  if (remainingMs <= 0) return expire({ claimToken }, now());
+  const controller = new AbortController();
+  let deadlineHit = false;
+  let timer;
   try {
-    const response = await requestStorage.run({ ...store, feature: 'client_agent_run' }, () => chat({
-      system: SYSTEM,
-      prompt: JSON.stringify({ observedAt: now().toISOString(), snapshot: context,
-        preferences: { name: profile.name, instructions: profile.instructions }, question: run.prompt }),
-      temperature: 0.2, maxTokens: 2048, feature: 'client_agent_run', singleAttempt: true,
-    }));
+    const deadline = new Promise((_, reject) => {
+      timer = setTimer(() => {
+        deadlineHit = true;
+        controller.abort();
+        reject(failure('RUN_DEADLINE_EXCEEDED'));
+      }, remainingMs);
+    });
+    // The race releases the worker even when an SDK ignores cancellation.
+    // Its late answer cannot reach settlement; the attached race handler also
+    // consumes a late rejection without starting another provider attempt.
+    const response = await Promise.race([deadline, Promise.resolve().then(() => {
+      if (controller.signal.aborted) throw failure('RUN_DEADLINE_EXCEEDED');
+      return requestStorage.run({ ...store, feature: 'client_agent_run' }, () => chat({
+        system: SYSTEM,
+        prompt: JSON.stringify({ observedAt: now().toISOString(), snapshot: context,
+          preferences: { name: profile.name, instructions: profile.instructions }, question: run.prompt }),
+        temperature: 0.2, maxTokens: 2048, feature: 'client_agent_run', singleAttempt: true,
+        signal: controller.signal,
+      }));
+    })]);
     if (typeof response !== 'string' || !response.trim() || response.length > MAX_RESPONSE_LENGTH) {
       return settle('UNKNOWN', { errorCode: 'RUN_RESPONSE_INVALID' });
     }
     return settle('SUCCEEDED', { response, errorCode: null });
   } catch (error) {
+    if (deadlineHit) return settle('UNKNOWN', { errorCode: 'RUN_DEADLINE_EXCEEDED' });
     // These governed checks explicitly reject before provider dispatch. Other
     // errors, including AI_UNAVAILABLE, can conceal an upstream attempt.
     const denied = ['AI_DISABLED', 'AI_BUDGET_EXCEEDED'].includes(error?.code);
     return settle(denied ? 'FAILED' : 'UNKNOWN', { errorCode: denied ? error.code : 'RUN_PROVIDER_OUTCOME_UNKNOWN' });
+  } finally {
+    if (timer !== undefined) clearTimer(timer);
   }
 }

@@ -17,7 +17,7 @@ class GeminiProvider {
     return Boolean(env.geminiApiKey);
   }
 
-  async chat({ system, prompt, temperature = 0.3, maxTokens = 4096 }) {
+  async chat({ system, prompt, temperature = 0.3, maxTokens = 4096, signal }) {
     const model = this.client.getGenerativeModel({
       model: this.modelName,
       systemInstruction: system,
@@ -27,7 +27,7 @@ class GeminiProvider {
       }
     });
 
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent(prompt, signal ? { signal } : undefined);
     return result.response.text();
   }
 

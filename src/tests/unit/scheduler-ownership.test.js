@@ -38,12 +38,12 @@ test('scheduler bootstrap uses stable IDs and timezone-aware business schedules'
   await setupRecurringJobs();
   await setupRecurringJobs();
 
-  assert.equal(calls.length, 20);
-  const firstPass = calls.slice(0, 10);
-  const secondPass = calls.slice(10);
+  assert.equal(calls.length, 22);
+  const firstPass = calls.slice(0, 11);
+  const secondPass = calls.slice(11);
   assert.deepEqual(secondPass, firstPass);
   assert.equal(lockedCleanupAttempts, 2);
-  assert.equal(new Set(firstPass.map(({ queue, id }) => `${queue}:${id}`)).size, 10);
+  assert.equal(new Set(firstPass.map(({ queue, id }) => `${queue}:${id}`)).size, 11);
   assert.ok(removedSchedulers.includes('fleet-digest-daily-toronto'), 'retired fleet digest schedule is removed');
 
   const names = firstPass.map(({ template }) => template.name);
@@ -57,11 +57,16 @@ test('scheduler bootstrap uses stable IDs and timezone-aware business schedules'
     'overdue-invoices',
     'trash-purge',
     'chat-upload-cleanup',
+    'expire-client-agent-runs',
     'dispatch-domain-events',
   ]);
   const completion = firstPass.find(({ template }) => template.name === 'completion-repeats');
   assert.equal(completion.id, 'completion-repeats-minute');
   assert.deepEqual(completion.repeat, { every: 60_000 });
+  const expiry = firstPass.find(({ template }) => template.name === 'expire-client-agent-runs');
+  assert.equal(expiry.id, 'client-agent-expiry-minute');
+  assert.equal(expiry.queue, scheduledQueue.name);
+  assert.deepEqual(expiry.repeat, { every: 60_000 });
   const businessSchedules = firstPass.filter(({ queue }) => queue !== domainEventsQueue.name);
   for (const call of businessSchedules) {
     assert.equal(call.template.opts.attempts, 3);

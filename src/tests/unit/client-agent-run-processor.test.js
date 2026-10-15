@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { processClientAgentRun } from '../../jobs/client-agent-run.js';
 import { requestStorage } from '../../utils/request-context.js';
+import ClaudeProvider from '../../ai/providers/claude.js';
+import GeminiProvider from '../../ai/providers/gemini.js';
+import OllamaProvider from '../../ai/providers/ollama.js';
+import OpenAICompatibleProvider from '../../ai/providers/openai-compatible.js';
 
 const ids = { organizationId: 'org-a', runId: 'run-a' };
 function matches(row, where = {}) {
@@ -171,4 +175,77 @@ test('processor discards response received after deadline and never redispatches
   assert.equal(f.state.run.status, 'UNKNOWN'); assert.equal(f.state.run.response, undefined);
   assert.equal(f.state.run.errorCode, 'RUN_DEADLINE_EXCEEDED');
   await f.process(); assert.equal(calls, 1);
+});
+
+test('remaining deadline aborts a hung provider and releases worker even if abort is ignored', async () => {
+  for (const cancelled of [false, true]) {
+    const f = fixture();
+    let fire, delay, release, entered, signal, cleared = 0, calls = 0;
+    const ready = new Promise(resolve => { entered = resolve; });
+    // Context lookup consumes part of the original claim's deadline.
+    f.prisma.project.findMany = async () => { f.state.time = new Date(+f.state.time + 70_000); return []; };
+    const timer = {};
+    const pending = f.process({
+      setTimer: (callback, ms) => { fire = callback; delay = ms; return timer; },
+      clearTimer: handle => { assert.equal(handle, timer); cleared++; },
+      chat: options => { calls++; signal = options.signal; entered(); return new Promise(resolve => { release = resolve; }); },
+    });
+    await ready;
+    assert.equal(delay, 50_000); assert.equal(signal.aborted, false);
+    if (cancelled) Object.assign(f.state.run, { status: 'CANCELLED', claimToken: null });
+    f.state.time = new Date(+f.state.run.deadlineAt + 1); fire();
+    assert.equal((await pending).status, cancelled ? 'CANCELLED' : 'UNKNOWN');
+    assert.equal(signal.aborted, true); assert.equal(cleared, 1);
+    if (!cancelled) assert.equal(f.state.run.errorCode, 'RUN_DEADLINE_EXCEEDED');
+    const writes = f.state.writes.length;
+    release('A late answer must never be persisted');
+    await Promise.resolve(); await Promise.resolve();
+    assert.equal(f.state.writes.length, writes); assert.equal(f.state.run.response, undefined);
+    await f.process(); assert.equal(calls, 1);
+  }
+});
+
+test('provider completion and failure always clear the deadline timer', async () => {
+  for (const fails of [false, true]) {
+    const f = fixture(); let cleared = 0;
+    await f.process({ setTimer: () => 'timer', clearTimer: handle => { assert.equal(handle, 'timer'); cleared++; },
+      chat: async () => { if (fails) throw Error('Synthetic failure'); return 'Completed answer'; } });
+    assert.equal(cleared, 1); assert.equal(f.state.run.status, fails ? 'UNKNOWN' : 'SUCCEEDED');
+  }
+});
+
+test('Claude and Gemini pass caller cancellation through their supported SDK request options', async () => {
+  const controller = new AbortController();
+  const claude = new ClaudeProvider(); let claudeOptions;
+  claude.client = { messages: { create: async (_body, options) => { claudeOptions = options; return { content: [{ text: 'Answer' }] }; } } };
+  await claude.chat({ prompt: 'Question', singleAttempt: true, signal: controller.signal });
+  assert.deepEqual(claudeOptions, { maxRetries: 0, timeout: 90_000, signal: controller.signal });
+  const gemini = new GeminiProvider(); let geminiOptions;
+  gemini.client = { getGenerativeModel: () => ({ generateContent: async (_prompt, options) => {
+    geminiOptions = options; return { response: { text: () => 'Answer' } };
+  } }) };
+  await gemini.chat({ prompt: 'Question', signal: controller.signal });
+  assert.equal(geminiOptions.signal, controller.signal);
+});
+
+test('Ollama forwards a combined caller and provider timeout signal without network access', async t => {
+  const controller = new AbortController(); let observed;
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    observed = options.signal; return { ok: true, json: async () => ({ message: { content: 'Answer' } }) };
+  });
+  await new OllamaProvider().chat({ prompt: 'Question', signal: controller.signal });
+  assert.equal(observed.aborted, false); controller.abort(); assert.equal(observed.aborted, true);
+});
+
+test('BYOK fetch observes caller abort and does not retry it', async () => {
+  const controller = new AbortController(); let entered, calls = 0;
+  const ready = new Promise(resolve => { entered = resolve; });
+  const provider = new OpenAICompatibleProvider({ baseUrl: 'https://synthetic.example.invalid', apiKey: 'synthetic', model: 'test',
+    fetchImpl: async (_url, options) => {
+      calls++; entered();
+      return new Promise((_, reject) => options.signal.addEventListener('abort', () => reject(Object.assign(Error('Aborted'), { name: 'AbortError' })), { once: true }));
+    } });
+  const pending = provider.chat({ prompt: 'Question', signal: controller.signal });
+  await ready; controller.abort();
+  await assert.rejects(pending, error => error.type === 'timeout'); assert.equal(calls, 1);
 });
