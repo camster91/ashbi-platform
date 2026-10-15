@@ -167,7 +167,14 @@ export async function setWorkspaceChatMember(prisma, user, channelId, userId, ac
       if (!person) refuse();
       if (!member) await db.workspaceChatMember.create({ data: { channelId, userId, organizationId } });
       else if (member.leftAt) await db.workspaceChatMember.updateMany({ where: { channelId, userId, organizationId }, data: { leftAt: null } });
-    } else if (!active && member) await db.workspaceChatMember.updateMany({ where: { channelId, userId, organizationId, leftAt: null }, data: { leftAt: new Date() } });
+    } else if (member && !member.leftAt) {
+      const remainingIds = channel.members.filter(m => m.userId !== userId && m.leftAt == null).map(m => m.userId);
+      const remaining = await db.user.findMany({ where: { id: { in: remainingIds }, organizationId, isActive: true, role: { in: ['ADMIN', 'TEAM'] } }, select: { id: true, role: true } });
+      // Retained history must stay accessible and at least one current member
+      // must retain the authority to manage membership without an access bypass.
+      if (!remaining.length || !remaining.some(person => person.role === 'ADMIN' || person.id === channel.createdById)) refuse('CHAT_CONFLICT', 409);
+      await db.workspaceChatMember.updateMany({ where: { channelId, userId, organizationId, leftAt: null }, data: { leftAt: new Date() } });
+    }
     await audit(db, actor, 'workspace_chat.membership_changed', channelId, { channelId, memberUserId: userId, active });
     return { active };
   });

@@ -23,6 +23,8 @@ visibility remain unchanged. Existing Ash chat remains at its prior destination.
 Membership is required even for administrators. Removing a member prevents later
 history/post access; an authorized manager can re-add active staff with retained
 history available. Direct membership cannot be changed to reveal past messages.
+Membership changes cannot remove the final active member or the final member
+authorized to manage the channel, so retained history cannot be stranded by leaving.
 Inactive/departed principals cannot post. Archived/deleted parents and a project
 reassigned to another client make its former bound channel unavailable.
 

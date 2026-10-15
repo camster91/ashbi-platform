@@ -60,6 +60,8 @@ test('workspace chat PostgreSQL tenant, membership, linkage, concurrent replay a
       setWorkspaceChatMember(raw, users[0], channel.id, teammate.id, false),
     ]);
     assert.equal(race[1].status, 'fulfilled');
+    await assert.rejects(setWorkspaceChatMember(raw, users[0], channel.id, users[0].id, false), { statusCode: 409 });
+    assert.ok((await listWorkspaceChatChannels(raw, users[0])).items.some(item => item.id === channel.id));
     if (race[0].status === 'rejected') assert.equal(race[0].reason.statusCode, 404);
     await assert.rejects(postWorkspaceChatMessage(raw, teammate, channel.id, { content: 'After revocation', idempotencyKey: randomUUID() }), { statusCode: 404 });
     assert.equal(await raw.workspaceChatMessage.count({ where: { channelId: channel.id, content: 'Race with revocation' } }), race[0].status === 'fulfilled' ? 1 : 0);
