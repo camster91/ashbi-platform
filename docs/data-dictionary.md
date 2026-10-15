@@ -773,7 +773,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: no
 - Constraints and indexes:
   - `@@unique([organizationId, requestedById, idempotencyKey], map: "client_agent_runs_intent_key")`
-  - `@@unique([organizationId, conversationId], map: "client_agent_runs_one_active", where: raw("status IN ('QUEUED', 'RUNNING')"))`
+  - `@@unique([organizationId, conversationId], map: "client_agent_runs_one_active", where: raw("status = ANY (ARRAY['QUEUED'::text, 'RUNNING'::text])"))`
   - `@@index([organizationId, conversationId, id])`
   - `@@index([conversationId, organizationId])`
   - `@@index([organizationId, status, deadlineAt])`

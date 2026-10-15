@@ -3170,7 +3170,7 @@ model ClientAgentRun {
   conversation ClientAgentConversation @relation(fields: [conversationId, organizationId], references: [id, organizationId], onDelete: Cascade)
   requestedBy User @relation("ClientAgentRunRequester", fields: [requestedById, organizationId], references: [id, organizationId], onDelete: Restrict)
   @@unique([organizationId, requestedById, idempotencyKey], map: "client_agent_runs_intent_key")
-  @@unique([organizationId, conversationId], map: "client_agent_runs_one_active", where: raw("status IN ('QUEUED', 'RUNNING')"))
+  @@unique([organizationId, conversationId], map: "client_agent_runs_one_active", where: raw("status = ANY (ARRAY['QUEUED'::text, 'RUNNING'::text])"))
   @@index([organizationId, conversationId, id])
   @@index([conversationId, organizationId])
   @@index([organizationId, status, deadlineAt])
