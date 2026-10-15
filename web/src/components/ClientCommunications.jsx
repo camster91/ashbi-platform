@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
+import { paginatedItems } from '../lib/paginated-items';
 import Button from './ui/Button';
 
 function MessageDate({ value }) {
@@ -61,7 +62,7 @@ function Communications({ clientId }) {
     refetchOnWindowFocus: false,
   });
   const pages = history.data?.pages || [];
-  const items = [...new Map(pages.flatMap((page) => page.items || []).map((item) => [`${item.source}:${item.id}`, item])).values()];
+  const items = paginatedItems(pages, (item) => `${item.source}:${item.id}`);
   const partial = pages.some((page) => page.warnings?.length > 0);
   const exclusions = [...new Set(pages.flatMap((page) => page.coverage?.exclusions || []).filter((entry) => typeof entry === 'string' && entry.trim()))];
 

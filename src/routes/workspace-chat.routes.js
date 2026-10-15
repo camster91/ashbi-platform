@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { requireStaff } from '../middleware/require-staff.js';
 import { validateBody, validateParams, validateQuery } from '../validators/schemas.js';
 import { ToolError } from '../ai/tools/registry.js';
 import {
@@ -10,9 +11,6 @@ import {
 const id = z.string().trim().min(1).max(100);
 const channelParams = z.object({ channelId: id }).strict();
 const memberParams = z.object({ channelId: id, userId: id }).strict();
-async function requireStaff(request, reply) {
-  if (!request.user?.organizationId || !['ADMIN', 'TEAM'].includes(request.user?.role)) return reply.code(403).send({ error: 'Staff access required', code: 'ROLE_DENIED' });
-}
 function handler(operation) {
   return async (request, reply) => {
     try { return await operation(request); }
