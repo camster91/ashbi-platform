@@ -175,36 +175,3 @@ function extractName(fromString) {
 
   return null;
 }
-
-/**
- * Clean and normalize email body text
- */
-export function cleanEmailBody(text) {
-  if (!text) return '';
-
-  return text
-    // Remove excessive whitespace
-    .replace(/\r\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    // Remove common email signatures markers and content after
-    .replace(/^--\s*$/m, '\n---SIGNATURE---\n')
-    .split('---SIGNATURE---')[0]
-    // Remove forwarding headers
-    .replace(/^-+\s*Forwarded message\s*-+[\s\S]*?^From:/m, '')
-    // Remove reply quotes (lines starting with >)
-    .replace(/^>.*$/gm, '')
-    // Trim
-    .trim();
-}
-
-/**
- * Extract thread ID from email headers (for threading)
- */
-export function extractThreadId(headers) {
-  if (!headers) return null;
-
-  const parsed = typeof headers === 'string' ? JSON.parse(headers) : headers;
-
-  // Use In-Reply-To or References header for threading
-  return parsed['in-reply-to'] || parsed['references']?.split(/\s+/)[0] || null;
-}
