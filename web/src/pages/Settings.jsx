@@ -68,10 +68,10 @@ const TAG_COLORS = {
 
 export function NotificationPreferences() {
   const { user } = useAuth();
-  const { permission, subscribed, status, error, supported, offline, optedIn, subscribe, unsubscribe } = usePushNotifications({ userId: user?.id });
+  const { permission, subscribed, status, error, supported, offline, cleanupPending, subscribe, unsubscribe } = usePushNotifications({ userId: user?.id });
   // Opt-out is saved before cleanup, so a failed cleanup leaves a browser
   // subscription behind for an account that has already said no.
-  const cleanupIncomplete = subscribed && optedIn === false;
+  const cleanupIncomplete = cleanupPending;
   const busy = status === 'subscribing' || status === 'unsubscribing';
 
   let summary = 'Notifications are available but not enabled.';
@@ -98,7 +98,7 @@ export function NotificationPreferences() {
       {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
 
       <div className="flex flex-wrap gap-2">
-        {subscribed ? (
+        {subscribed || cleanupIncomplete ? (
           <Button type="button" variant="outline" onClick={unsubscribe} isLoading={status === 'unsubscribing'} disabled={busy || offline}>
             {status === 'unsubscribing' ? 'Disabling...' : 'Disable notifications'}
           </Button>

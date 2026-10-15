@@ -58,6 +58,7 @@ export function usePushNotifications({ userId } = {}) {
     && 'PushManager' in window;
   const [permission, setPermission] = useState(() => supported ? Notification.permission : 'unsupported');
   const [subscribed, setSubscribed] = useState(false);
+  const [browserSubscriptionPresent, setBrowserSubscriptionPresent] = useState(false);
   const [status, setStatus] = useState('checking');
   const [error, setError] = useState('');
   const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
@@ -80,20 +81,20 @@ export function usePushNotifications({ userId } = {}) {
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
-      // One-time backfill: subscriptions created before per-account consent
-      // was recorded were explicitly approved, so keep re-registering them.
-      if (sub && userId && Notification.permission === 'granted' && getPushOptIn(userId) === null) {
-        recordOptIn(true);
-      }
-      setSubscribed(!!sub);
-      setStatus(!navigator.onLine ? 'offline' : sub ? 'subscribed' : Notification.permission);
-      return !!sub;
+      // Browser permission and subscriptions are shared across accounts. A
+      // leftover subscription cannot establish this account's consent, even
+      // for legacy subscriptions with no recorded preference.
+      const accountSubscribed = !!sub && getPushOptIn(userId) === true;
+      setBrowserSubscriptionPresent(!!sub);
+      setSubscribed(accountSubscribed);
+      setStatus(!navigator.onLine ? 'offline' : accountSubscribed ? 'subscribed' : Notification.permission);
+      return accountSubscribed;
     } catch {
       setStatus('error');
       setError('We could not inspect this browser notification subscription. Try again.');
       return false;
     }
-  }, [supported, userId, recordOptIn]);
+  }, [supported, userId]);
 
   useEffect(() => {
     checkSubscription();
@@ -171,6 +172,7 @@ export function usePushNotifications({ userId } = {}) {
         return abandon(existing ? null : sub);
       }
       recordOptIn(true);
+      setBrowserSubscriptionPresent(true);
       setSubscribed(true);
       setStatus('subscribed');
       return true;
@@ -197,6 +199,7 @@ export function usePushNotifications({ userId } = {}) {
       setStatus('unsubscribing');
       const cleared = await clearBrowserPushSubscription({ removeFromServer: true });
       if (!cleared) throw new Error('Notifications could not be disabled. Try again.');
+      setBrowserSubscriptionPresent(false);
       setSubscribed(false);
       setStatus(Notification.permission);
       return true;
@@ -207,7 +210,8 @@ export function usePushNotifications({ userId } = {}) {
     }
   }, [supported, recordOptIn]);
 
-  return { permission, subscribed, status, error, supported, offline, optedIn, subscribe, unsubscribe, checkSubscription };
+  const cleanupPending = browserSubscriptionPresent && optedIn === false;
+  return { permission, subscribed, status, error, supported, offline, optedIn, cleanupPending, subscribe, unsubscribe, checkSubscription };
 }
 
 // Helper to convert VAPID key

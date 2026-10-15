@@ -19,7 +19,7 @@ const base = {
 
 describe('NotificationPreferences cleanup state', () => {
   it('reports disabled-with-incomplete-cleanup instead of enabled after a failed disable', () => {
-    pushState.current = { ...base, subscribed: true, optedIn: false, status: 'error', error: 'Notifications could not be disabled. Try again.' };
+    pushState.current = { ...base, subscribed: false, optedIn: false, cleanupPending: true, status: 'error', error: 'Notifications could not be disabled. Try again.' };
     render(<NotificationPreferences />);
 
     expect(screen.getByText(/disabled for this account/i)).toBeInTheDocument();

@@ -66,7 +66,8 @@ describe('Login authentication states', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent(/session was revoked/i);
     expect(screen.getByRole('status')).toHaveTextContent(/sign in again/i);
-    expect(screen.getByRole('status')).toHaveTextContent(/drafts remain/i);
+    expect(screen.getByRole('status')).toHaveTextContent(/server-saved drafts can be recovered after signing in/i);
+    expect(screen.getByRole('status')).toHaveTextContent(/edits that were not saved may be lost/i);
   });
 
 });

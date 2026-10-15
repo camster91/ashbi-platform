@@ -137,7 +137,7 @@ function RouteLoader() {
 
 function AuthCheckFailure({ authState, onRetry }) {
   const copy = {
-    offline: ['You appear to be offline', 'Reconnect and try again. You have not been signed out, and locally saved drafts remain on this device.'],
+    offline: ['You appear to be offline', 'Reconnect and try again. You have not been signed out. Server-saved drafts can be recovered after reconnecting; unsaved edits may be lost if you leave this page.'],
     timeout: ['The session check timed out', 'The server took too long to respond. Try again; you have not been signed out.'],
     server: ['We could not verify your session', 'The service is temporarily unavailable. Try again; you have not been signed out.'],
     forbidden: ['Access could not be verified', 'Your account may not have permission for this workspace. Try again or contact an administrator.'],

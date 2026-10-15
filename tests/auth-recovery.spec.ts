@@ -45,6 +45,7 @@ test('an explicit API revocation returns to login with durable recovery guidance
   await expect(page).toHaveURL(/\/login$/);
   const notice = page.getByRole('status');
   await expect(notice).toContainText('revoked by an administrator');
-  await expect(notice).toContainText('Locally saved drafts remain on this device');
+  await expect(notice).toContainText('Server-saved drafts can be recovered after signing in');
+  await expect(notice).toContainText('Edits that were not saved may be lost');
   await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
 });
