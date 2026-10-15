@@ -235,6 +235,9 @@ async function loadAuthorizedReceipt(prisma, user, key) {
   key = parse(keySchema, key).toLowerCase();
   const { db, actor } = await actorScope(prisma, user);
   const receipt = await db.gmailSendReceipt.findFirst({ where: scopeWhere(actor, key) });
+  // Only absence under the authenticated actor's key proves no claim exists.
+  // A later thread/assignment denial must never clear a possibly sent intent.
+  if (!receipt) fail('GMAIL_SEND_NOT_FOUND', 404);
   const snapshot = verifyReceipt(receipt, actor);
   await authorizeSnapshot(db, actor, snapshot);
   return { db, receipt };

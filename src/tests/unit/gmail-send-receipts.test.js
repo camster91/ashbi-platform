@@ -58,6 +58,17 @@ function fixture() {
 }
 const send = f => sendGmailWithReceipt(f.db, user, f.input, { prepare: f.prepare });
 
+test('receipt absence is distinct from losing access to an existing claimed send', async () => {
+  const f = fixture();
+  await assert.rejects(readGmailSendReceipt(f.db, user, f.input.idempotencyKey), { code: 'GMAIL_SEND_NOT_FOUND', statusCode: 404 });
+  await send(f);
+  f.state().user[0].role = 'TEAM';
+  f.state().thread[0].assignedToId = null;
+  await assert.rejects(readGmailSendReceipt(f.db, user, f.input.idempotencyKey), { code: 'RECORD_NOT_FOUND', statusCode: 404 });
+  assert.equal(f.sends(), 1);
+  assert.equal(f.state().gmailSendReceipt.length, 1);
+});
+
 test('claim commits before sending; accepted projection, response, thread and audit complete atomically', async () => {
   const f = fixture(); const result = await send(f);
   assert.equal(result.statusCode, 200); assert.equal(result.body.success, true); assert.equal(result.body.status, 'COMPLETED');

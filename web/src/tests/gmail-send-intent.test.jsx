@@ -91,13 +91,18 @@ describe('Gmail send intent', () => {
     hook.rerender(identity); expect(hook.result.current.intent.key).toBe(first);
   });
 
-  it('makes receipt GET explicit and only confirmed 404 clears dispatch uncertainty', async () => {
-    api.getGmailSendReceipt.mockRejectedValueOnce({ status: 503, message: 'private provider details' }).mockRejectedValueOnce({ status: 404 });
+  it('clears uncertainty only for explicit claim absence, preserving permission-denied 404 fences', async () => {
+    api.getGmailSendReceipt.mockRejectedValueOnce({ status: 503, message: 'private provider details' })
+      .mockRejectedValueOnce({ status: 404, data: { code: 'RECORD_NOT_FOUND' } })
+      .mockRejectedValueOnce({ status: 404, data: { code: 'GMAIL_SEND_NOT_FOUND' } });
     const hook = renderHook(() => useGmailSendIntent(identity));
     act(() => { hook.result.current.prepareIntent(); hook.result.current.recordResult({ status: 'UNKNOWN' }); });
     await act(async () => hook.result.current.checkReceipt());
     expect(hook.result.current.status).toBe('UNKNOWN');
     expect(hook.result.current.error).not.toContain('private');
+    await act(async () => hook.result.current.checkReceipt());
+    expect(hook.result.current.status).toBe('UNKNOWN');
+    act(() => expect(hook.result.current.clearConfirmedIntent()).toBe(false));
     await act(async () => hook.result.current.checkReceipt());
     expect(hook.result.current.status).toBe('NOT_DISPATCHED');
     act(() => expect(hook.result.current.clearConfirmedIntent()).toBe(true));

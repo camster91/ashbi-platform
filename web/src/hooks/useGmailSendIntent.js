@@ -88,7 +88,7 @@ export default function useGmailSendIntent(identity) {
     } catch (failure) {
       if (activeScope.current === scope) {
         try {
-          if (!reconcile && failure?.status === 404 && read()?.key === intent.key) retain({ key: intent.key, status: 'NOT_DISPATCHED' });
+          if (!reconcile && failure?.status === 404 && failure?.data?.code === 'GMAIL_SEND_NOT_FOUND' && read()?.key === intent.key) retain({ key: intent.key, status: 'NOT_DISPATCHED' });
           else setError(reconcile ? 'The sent email record could not be saved yet. Check its status again.' : 'Delivery status could not be checked. Keep this intent and try checking again.');
         } catch {
           setState((previous) => ({ scope, intent: previous.scope === scope ? previous.intent : null, storageError: true }));
