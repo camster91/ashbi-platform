@@ -116,6 +116,9 @@ test('same-key request delayed in prepare replays completed SENT response instea
     firstPrepared(); await secondReleased; return f.prepare();
   } });
   await secondWaiting;
+  // A missing receipt during transport preparation does not prove the
+  // original request stopped. The UI must retain this key on that response.
+  await assert.rejects(readGmailSendReceipt(f.db, user, f.input.idempotencyKey), { code: 'GMAIL_SEND_NOT_FOUND' });
   const completed = await send(f); assert.equal(f.state().response[0].status, 'SENT');
   releaseSecond();
   assert.deepEqual(await second, completed);

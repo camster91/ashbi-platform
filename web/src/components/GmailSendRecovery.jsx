@@ -7,13 +7,12 @@ const COPY = {
   ACCEPTED_PENDING_RECORD: 'Gmail accepted the email, but Hub has not finished saving its record. Finish saving without sending another email.',
   COMPLETED: 'The email was sent and its Hub record is saved.',
   REJECTED: 'This send attempt was rejected. No email was accepted for delivery.',
-  NOT_DISPATCHED: 'The server has no dispatched send attempt for this saved key. You can clear it and review the draft before sending.',
 };
 
 export default function GmailSendRecovery({ recovery }) {
   const { intent, status, storageError, error, checking, reconciling, checkReceipt, reconcileReceipt, clearConfirmedIntent } = recovery;
   if (!intent && !storageError) return null;
-  const terminal = ['COMPLETED', 'REJECTED', 'NOT_DISPATCHED'].includes(status);
+  const terminal = ['COMPLETED', 'REJECTED'].includes(status);
   return <section aria-label="Email delivery status" className="space-y-3 rounded-lg border border-border bg-muted/30 p-3 text-sm">
     {storageError && <p role="alert">Browser storage could not retain this send attempt. Sending is blocked. Restore browser storage before continuing.</p>}
     {intent && <p role="status">{COPY[status] || COPY.UNKNOWN}</p>}

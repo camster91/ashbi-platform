@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 
-const STATUSES = new Set(['PREPARED', 'UNKNOWN', 'DISPATCHING', 'ACCEPTED_PENDING_RECORD', 'COMPLETED', 'REJECTED', 'NOT_DISPATCHED']);
-const TERMINAL = new Set(['COMPLETED', 'REJECTED', 'NOT_DISPATCHED']);
+const STATUSES = new Set(['PREPARED', 'UNKNOWN', 'DISPATCHING', 'ACCEPTED_PENDING_RECORD', 'COMPLETED', 'REJECTED']);
+const TERMINAL = new Set(['COMPLETED', 'REJECTED']);
 const valid = (value) => value && typeof value.key === 'string' && /^[a-zA-Z0-9-]{16,100}$/.test(value.key) && STATUSES.has(value.status);
 const scopeKey = ({ userId, organizationId, threadId }) => [userId, organizationId, threadId].every((part) => typeof part === 'string' && part)
   ? `ashbi:gmail-send-intent:${[organizationId, userId, threadId].map(encodeURIComponent).join(':')}` : null;
@@ -69,7 +69,7 @@ export default function useGmailSendIntent(identity) {
   function recordResult(data) {
     const intent = read();
     if (!intent) throw storageFailure();
-    const status = STATUSES.has(data?.status) && !['PREPARED', 'NOT_DISPATCHED'].includes(data.status) ? data.status : 'UNKNOWN';
+    const status = STATUSES.has(data?.status) && data.status !== 'PREPARED' ? data.status : 'UNKNOWN';
     retain({ key: intent.key, status });
     return { key: intent.key, status };
   }
@@ -87,12 +87,12 @@ export default function useGmailSendIntent(identity) {
       return data;
     } catch (failure) {
       if (activeScope.current === scope) {
-        try {
-          if (!reconcile && failure?.status === 404 && failure?.data?.code === 'GMAIL_SEND_NOT_FOUND' && read()?.key === intent.key) retain({ key: intent.key, status: 'NOT_DISPATCHED' });
-          else setError(reconcile ? 'The sent email record could not be saved yet. Check its status again.' : 'Delivery status could not be checked. Keep this intent and try checking again.');
-        } catch {
-          setState((previous) => ({ scope, intent: previous.scope === scope ? previous.intent : null, storageError: true }));
-        }
+        // A timed-out POST can still be preparing its mailbox before claiming.
+        // Even confirmed receipt absence cannot release this saved send key.
+        setError(reconcile ? 'The sent email record could not be saved yet. Check its status again.'
+          : failure?.data?.code === 'GMAIL_SEND_NOT_FOUND'
+            ? 'No receipt exists yet, but the send may still be preparing. Keep this attempt and check again.'
+            : 'Delivery status could not be checked. Keep this intent and try checking again.');
       }
       return null;
     } finally {

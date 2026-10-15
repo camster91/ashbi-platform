@@ -32,9 +32,10 @@ calls Gmail or resends mail. `POST /api/gmail/send` retains success/message/thre
 IDs and adds receipt identity/status. Uncertain outcomes return 202 without
 claiming success. Missing keys fail validation before dispatch.
 
-Only a 404 with `GMAIL_SEND_NOT_FOUND` confirms absence of a claim for the active
-actor's saved key. Generic thread/assignment denials retain the uncertain intent;
-losing access does not prove that an earlier email was never sent.
+A 404 with `GMAIL_SEND_NOT_FOUND` means no claim exists yet for the active actor's
+saved key. A timed-out POST can still be preparing mailbox access before claiming,
+so this response retains the uncertain intent. Thread/assignment denials also
+retain it. Only confirmed completion or rejection permits clearing the send key.
 
 Migration `20261015120000_gmail_send_receipts` is required. SQL guards preserve
 immutable identity, payload/mailbox binding, accepted IDs and valid transitions.

@@ -91,7 +91,7 @@ describe('Gmail send intent', () => {
     hook.rerender(identity); expect(hook.result.current.intent.key).toBe(first);
   });
 
-  it('clears uncertainty only for explicit claim absence, preserving permission-denied 404 fences', async () => {
+  it('preserves uncertain keys for permission-denied and pre-claim receipt-absence responses', async () => {
     api.getGmailSendReceipt.mockRejectedValueOnce({ status: 503, message: 'private provider details' })
       .mockRejectedValueOnce({ status: 404, data: { code: 'RECORD_NOT_FOUND' } })
       .mockRejectedValueOnce({ status: 404, data: { code: 'GMAIL_SEND_NOT_FOUND' } });
@@ -104,9 +104,10 @@ describe('Gmail send intent', () => {
     expect(hook.result.current.status).toBe('UNKNOWN');
     act(() => expect(hook.result.current.clearConfirmedIntent()).toBe(false));
     await act(async () => hook.result.current.checkReceipt());
-    expect(hook.result.current.status).toBe('NOT_DISPATCHED');
-    act(() => expect(hook.result.current.clearConfirmedIntent()).toBe(true));
-    expect(hook.result.current.intent).toBeNull();
+    expect(hook.result.current.status).toBe('UNKNOWN');
+    expect(hook.result.current.error).toContain('may still be preparing');
+    act(() => expect(hook.result.current.clearConfirmedIntent()).toBe(false));
+    expect(hook.result.current.intent).not.toBeNull();
   });
 
   it('reconciles only accepted pending records using the saved key', async () => {
