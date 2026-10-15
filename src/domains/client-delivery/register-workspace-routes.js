@@ -10,6 +10,7 @@ import noteRoutes from '../../routes/note.routes.js';
 import workspaceWikiRoutes from '../../routes/workspace-wiki.routes.js';
 import workspaceRecordsRoutes from '../../routes/workspace-records.routes.js';
 import workspaceChatRoutes from '../../routes/workspace-chat.routes.js';
+import clientCommunicationsRoutes from '../../routes/client-communications.routes.js';
 
 /**
  * Register client-delivery workspace routes: brand, time tracking and
@@ -35,4 +36,5 @@ export async function registerClientWorkspaceRoutes(fastify) {
   await fastify.register(workspaceWikiRoutes, { prefix: '/api/wiki' });
   await fastify.register(workspaceRecordsRoutes, { prefix: '/api/collections' });
   await fastify.register(workspaceChatRoutes, { prefix: '/api/workspace-chat' });
+  await fastify.register(clientCommunicationsRoutes, { prefix: '/api/client-communications' });
 }
