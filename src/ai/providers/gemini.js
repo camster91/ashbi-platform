@@ -27,6 +27,9 @@ class GeminiProvider {
       }
     });
 
+    // This SDK only listens for future abort events. Reject a deadline that
+    // elapsed during governance routing before it can start a new request.
+    signal?.throwIfAborted();
     const result = await model.generateContent(prompt, signal ? { signal } : undefined);
     return result.response.text();
   }
