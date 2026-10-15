@@ -1,5 +1,11 @@
 # Canonical product and release status
 
+## October 15 current execution overlay
+
+Production was verified at `24ca6c3c06d63751331b1bb86a8c313f8dfc1bc8` after #603/#604, with strict readiness and 70 bounded live API/MCP, communication and portal checks. Shared staff guards and pagination consolidation merged separately in #605 as `d62193ef31243413f26032cd66e6dfe60f182bd3`; its required PR gates passed, and its production release is pending. Older revision references below are dated evidence, not the current deployment.
+
+Document history is in implementation: immutable database snapshots for project notes/documents and company wiki pages, newest 100 revisions including current, current AND recorded audience checks, and fresh-admin restore as a new audited edit. The owner approved this policy on October 15; no automatic time-based purge. Existing documents receive only a current-state baseline. Local service/panel/editor tests pass; populated migration rehearsal, required CI, normal merge and deployment are separate gates. Simultaneous editing and durable agent conversations remain open.
+
 This is the repository's authoritative capability status map, with the consolidation delivery status reconciled October 15, 2026. The [dated launch evidence](launch-status.md) records deployed `4349f6d`, passing strict readiness and 41/41 scoped API/MCP checks; only explicitly named browser smoke is verified. A feature is **code-present** when routes/UI/tests exist, **target-verified** only when target-environment evidence exists, **blocked** when an external decision/provider/human gate remains, and **deferred** when explicitly outside the supported milestone. Historical row evidence retains its own dates; code presence is never sufficient evidence for production or replacement readiness.
 
 The active agency-replacement acceptance map is [replacement-readiness-matrix.md](replacement-readiness-matrix.md).

@@ -8,7 +8,7 @@ describe('project notes destructive recovery', () => {
   it('requires confirmation before a soft delete while preserving the existing undo path', () => {
     expect(source).toContain("import ConfirmDialog from './ConfirmDialog'");
     expect(source).toContain('const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);');
-    expect(source).toContain('<Modal isOpen={!showDeleteConfirm}');
+    expect(source).toContain('<Modal isOpen={!showDeleteConfirm && !showHistory}');
     expect(source).toContain('onClick={() => setShowDeleteConfirm(true)}');
     expect(source).toContain('<ConfirmDialog');
     expect(source).toContain('isOpen={showDeleteConfirm}');

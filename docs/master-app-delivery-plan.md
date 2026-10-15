@@ -1,5 +1,14 @@
 # Ashbi master-app delivery plan
 
+## Current execution — October 15
+
+- Verified live: #603/#604 at `24ca6c3`, strict readiness and 70 bounded live checks. This supersedes the older deployment snapshot below.
+- Separate cleanup release: #605 merged as `d62193e` after required PR gates and independent spec/quality review. Shared staff guards and pagination preserve existing contracts; no tests or features were removed. Main CI and deployment remain separate.
+- Active feature: document history under the approved newest-100 policy, including current, with no time-based purge. Current-state baseline only; staff reads require current and recorded permission, and fresh admins restore as a new audited revision without replacing sharing, hierarchy or mentions. Isolated populated migration/retention/rollback/permissions tests, editor draft recovery, review and release are required.
+- Then: durable shared staff agent conversations/runs, restricted client tools and the remaining ordered agency work packages. Keep provider configuration, manual acceptance and source cutover explicit.
+
+Cleanup remains separate from new features. Continue in small reviewed slices: consolidate genuinely shared behavior, preserve distinct permission/persistence/concurrency/recovery tests, remove only confirmed unused code/dependencies, and archive superseded plans while retaining evidence. GitHub #565 is the current execution checklist; dated plans do not authorize rebuilding already shipped features.
+
 Reconciled October 15, 2026. The dated [launch evidence](launch-status.md) records deployed main `4349f6d`, 41/41 candidate API/MCP checks and limited browser smoke. Execution checklist: [#565](https://github.com/camster91/ashbi-platform/issues/565). The [agent-assisted TODO implementation plan](plans/2026-10-14-agency-todo-execution.md) expands the remaining work into parallel work packages and acceptance checks. This document owns delivery order and outstanding work; [product status](product-status.md) owns capability classifications, [consolidation](master-app-consolidation.md) owns scope/source requirements, and [replacement readiness](replacement-readiness-matrix.md) owns target acceptance. Earlier milestone checklists (#290/#291/#393/#414) are supporting references, not competing execution plans.
 
 ## Scope and status rules

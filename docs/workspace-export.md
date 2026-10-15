@@ -1,5 +1,7 @@
 # Workspace export (offboarding)
 
+The document-history implementation adds `note_revisions` and `workspace_page_revisions` to the operator export. These contain only retained snapshots (up to 100 per document), including immutable audience metadata; the export does not reconstruct versions from before history capture began. They remain private organization records and are not a public history endpoint. Verify them with the populated migration and export checks before claiming target readiness.
+
 Status: **code-present, not target verified** (#412, "a workspace export
 usable by a leaving customer, including files").
 

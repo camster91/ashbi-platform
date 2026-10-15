@@ -3,6 +3,7 @@
 import { validateBody, noteProjectCreateSchema, noteUpdateV2Schema, noteFromTemplateSchema } from '../validators/schemas.js';
 import { noteRestoreData, noteAccessSchema, authorizeNote, publicNote, noteAccessContext, visibleNoteIds, readNoteAccess, saveNoteAccess, noteMentionUsers, preserveNoteAudience } from '../services/note-access.service.js';
 import { withStageTransaction } from '../services/task-stages.service.js';
+import { attributeDocumentEdit } from '../services/document-history-actor.js';
 import { softDelete } from '../services/trash.service.js';
 import { portfolioFilterSchema } from '../validators/schemas.js';
 import { portfolioWhere } from '../shared/portfolio.js';
@@ -217,6 +218,7 @@ export default async function noteRoutes(fastify) {
 
     const note = await withStageTransaction(request.prisma, async transaction => {
       await currentNoteStaff(transaction, request.user);
+      await attributeDocumentEdit(transaction, request.user);
       if (parentId) await authorizeNote(transaction, parentId, request.user, { edit: true });
       const authorizedMentions = await noteMentionUsers(transaction, request.user, mentionUserIds, { authorId: request.user.id, projectId }, parentId);
       const created = await transaction.note.create({
@@ -260,6 +262,7 @@ export default async function noteRoutes(fastify) {
 
     const note = await withStageTransaction(request.prisma, async transaction => {
       const sourceAccess = await authorizeNote(transaction, templateId, request.user);
+      await attributeDocumentEdit(transaction, sourceAccess.user);
       if (sourceAccess.note.revision !== template.revision || !sourceAccess.note.isTemplate) throw Object.assign(new Error('Template changed. Reload before copying.'), { statusCode: 409 });
       if (parentId) await authorizeNote(transaction, parentId, request.user, { edit: true });
       const templateBarrier = composeDocumentAudience(sourceAccess.path);
@@ -332,6 +335,7 @@ export default async function noteRoutes(fastify) {
     const newlyMentioned = mentionUsers.filter(user => !priorMentions.has(user.id));
     const note = await withStageTransaction(request.prisma, async transaction => {
       const access = await authorizeNote(transaction, id, request.user, { edit: true, manage: parentId !== undefined && parentId !== existing.parentId });
+      await attributeDocumentEdit(transaction, access.user);
       if (access.note.revision !== revision) throw Object.assign(new Error('Document changed. Your draft is retained.'), { statusCode: 409 });
       if (parentId !== undefined && parentId !== existing.parentId) {
         if (parentId) await authorizeNote(transaction, parentId, request.user, { edit: true });
@@ -365,6 +369,7 @@ export default async function noteRoutes(fastify) {
     const { trashedItem } = await softDelete({ scopedPrisma: request.prisma, entity: 'NOTE', recordId: id, organizationId: request.user.organizationId,
       beforeDelete: async transaction => {
         const barrier = await preserveNoteAudience(transaction, id, request.user);
+        await attributeDocumentEdit(transaction, request.user);
         const children = await transaction.note.findMany({ where: { parentId: id, deletedAt: null }, select: { id: true } });
         // Compute every child barrier against the original tree before moving any.
         const access = await noteAccessContext(transaction, request.user);
@@ -380,6 +385,7 @@ export default async function noteRoutes(fastify) {
   fastify.post('/notes/:id/restore', { onRequest: [fastify.authenticate] }, async request => {
     const note = await withStageTransaction(request.prisma, async transaction => {
       const data = await noteRestoreData(transaction, request.params.id, request.user);
+      await attributeDocumentEdit(transaction, request.user);
       return transaction.note.update({ where: { id: request.params.id, deletedAt: { not: null } }, data });
     });
     return { success: true, note: presentNote(note) };
@@ -388,6 +394,7 @@ export default async function noteRoutes(fastify) {
   fastify.post('/notes/:id/pin', { onRequest: [fastify.authenticate] }, async request => {
     return withStageTransaction(request.prisma, async transaction => {
       const { note: existing } = await authorizeNote(transaction, request.params.id, request.user, { edit: true });
+      await attributeDocumentEdit(transaction, request.user);
       const note = await transaction.note.update({ where: { id: existing.id }, data: { isPinned: !existing.isPinned } });
       return { isPinned: note.isPinned };
     });

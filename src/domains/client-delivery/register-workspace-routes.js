@@ -7,6 +7,7 @@ import templateRoutes from '../../routes/template.routes.js';
 import portalRoutes from '../../routes/portal.routes.js';
 import onboardingRoutes from '../../routes/onboarding.routes.js';
 import noteRoutes from '../../routes/note.routes.js';
+import documentHistoryRoutes from '../../routes/document-history.routes.js';
 import workspaceWikiRoutes from '../../routes/workspace-wiki.routes.js';
 import workspaceRecordsRoutes from '../../routes/workspace-records.routes.js';
 import workspaceChatRoutes from '../../routes/workspace-chat.routes.js';
@@ -33,6 +34,7 @@ export async function registerClientWorkspaceRoutes(fastify) {
   await fastify.register(portalRoutes, { prefix: '/api/portal' });
   await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
   await fastify.register(noteRoutes, { prefix: '/api' });
+  await fastify.register(documentHistoryRoutes, { prefix: '/api/document-history' });
   await fastify.register(workspaceWikiRoutes, { prefix: '/api/wiki' });
   await fastify.register(workspaceRecordsRoutes, { prefix: '/api/collections' });
   await fastify.register(workspaceChatRoutes, { prefix: '/api/workspace-chat' });

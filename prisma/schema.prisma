@@ -93,6 +93,8 @@ model Organization {
 
   @@map("organizations")
   clientAgentProfiles ClientAgentProfile[]
+  noteRevisions NoteRevision[]
+  workspacePageRevisions WorkspacePageRevision[]
   workspaceChatChannels WorkspaceChatChannel[]
   workspaceChatMembers WorkspaceChatMember[]
   workspaceChatMessages WorkspaceChatMessage[]
@@ -729,6 +731,7 @@ model WorkspacePage {
   parent WorkspacePage? @relation("WorkspacePageHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
   children WorkspacePage[] @relation("WorkspacePageHierarchy")
   grants WorkspacePageGrant[]
+  history WorkspacePageRevision[]
 
   @@index([organizationId])
   @@index([organizationId, archivedAt, id])
@@ -781,11 +784,52 @@ model Note {
   author   User    @relation("NoteAuthor", fields: [authorId], references: [id])
   parent   Note?   @relation("NoteHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children Note[]  @relation("NoteHierarchy")
+  history NoteRevision[]
 
   @@index([projectId, parentId])
   @@index([projectId, isTemplate])
   @@index([parentId])
   @@map("notes")
+}
+
+// Trigger-owned immutable snapshots; recordedAt is capture time, not a claim
+// that pre-migration edit history was recovered. Missing editor attribution is explicit.
+model NoteRevision {
+  id String @id @default(cuid())
+  organizationId String
+  noteId String
+  revision Int
+  title String
+  content String
+  type String
+  isPinned Boolean
+  tags String
+  isTemplate Boolean
+  audienceNodes Json
+  recordedAt DateTime @default(now())
+  editedById String?
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  @@unique([noteId, revision])
+  @@index([organizationId, noteId, revision])
+  @@map("note_revisions")
+}
+
+model WorkspacePageRevision {
+  id String @id @default(cuid())
+  organizationId String
+  pageId String
+  revision Int
+  title String
+  content String
+  audienceNodes Json
+  recordedAt DateTime @default(now())
+  editedById String?
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  page WorkspacePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  @@unique([pageId, revision])
+  @@index([organizationId, pageId, revision])
+  @@map("workspace_page_revisions")
 }
 
 model Milestone {

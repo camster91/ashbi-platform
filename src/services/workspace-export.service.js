@@ -119,6 +119,8 @@ export const EXPORT_ENTITIES = Object.freeze([
 
   // Documents and wiki
   { name: 'notes', model: 'Note', category: 'documents', where: (org) => ({ deletedAt: null, project: activeProject(org) }), description: 'Notes, meeting notes, wiki pages and docs' },
+  { name: 'note_revisions', model: 'NoteRevision', category: 'documents', where: (org) => ({ organizationId: org, note: { deletedAt: null, project: activeProject(org) } }), description: 'Retained document revisions and snapshot audience metadata; organization-owner export only' },
+  { name: 'workspace_page_revisions', model: 'WorkspacePageRevision', category: 'documents', where: (org) => ({ organizationId: org }), description: 'Retained workspace page revisions and snapshot audience metadata; organization-owner export only' },
   { name: 'workspace_pages', model: 'WorkspacePage', category: 'documents', where: (org) => ({ organizationId: org }), description: 'Shared workspace knowledge pages including archived pages and hierarchy; independent of clients and projects' },
   { name: 'workspace_page_grants', model: 'WorkspacePageGrant', category: 'documents', where: (org) => ({ organizationId: org }), description: 'Current staff read/edit grants for restricted knowledge pages; organization-owner export only' },
   { name: 'workspace_collections', model: 'WorkspaceCollection', category: 'documents', where: (org) => ({ organizationId: org }), description: 'Standalone collection definitions and portfolios, including archived collections' },

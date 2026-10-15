@@ -2,6 +2,7 @@ import { workspacePageCreateSchema, workspacePageUpdateSchema } from '../validat
 import { withStageTransaction } from './task-stages.service.js';
 import { recordAuditEvent } from './audit-event.service.js';
 import { currentWikiStaff, pageAccessContext, pageAccessSelect, authorizeWorkspacePage } from './workspace-page-authorization.js';
+import { attributeDocumentEdit } from './document-history-actor.js';
 
 const fail = (statusCode, message) => { throw Object.assign(new Error(message), { statusCode }); };
 const author = { select: { id: true, name: true, isActive: true } };
@@ -53,6 +54,7 @@ export async function createWorkspacePageInTransaction(tx, input, actor) {
   const parsed = workspacePageCreateSchema.safeParse(input);
   if (!parsed.success) fail(400, 'Enter a title, bounded Markdown content and an available parent page.');
     await currentWikiStaff(tx, actor);
+    await attributeDocumentEdit(tx, actor);
     if (parsed.data.parentId) await authorizeWorkspacePage(tx, parsed.data.parentId, actor, { edit: true, includeArchived: false });
     await validateWorkspacePageParent(tx, parsed.data.parentId, actor.organizationId);
     const page = await tx.workspacePage.create({ data: { ...parsed.data, organizationId: actor.organizationId, authorId: actor.id }, include: { author } });
@@ -66,6 +68,7 @@ export async function updateWorkspacePageInTransaction(tx, id, input, actor) {
   const parsed = workspacePageUpdateSchema.safeParse(input);
   if (!parsed.success) fail(400, 'Provide the observed page revision and valid page changes.');
     await validateWorkspacePageChange(tx, id, parsed.data, actor);
+    await attributeDocumentEdit(tx, actor);
     const { revision, archived, ...changes } = parsed.data;
     const changed = await tx.workspacePage.updateMany({ where: { id, organizationId: actor.organizationId, revision }, data: { ...changes, ...(archived !== undefined ? { archivedAt: archived ? new Date() : null } : {}) } });
     if (changed.count !== 1) fail(409, 'Knowledge page changed. Your draft is retained; reload before saving.');

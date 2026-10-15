@@ -1,6 +1,6 @@
 # Document recovery decision
 
-Prepared October 13, 2026 for issue #404. This is a reviewable policy and implementation proposal; no retention job or production data change has been applied.
+Prepared October 13, 2026 for issue #404. **Option B approved by Cameron on October 15:** retain the newest 100 recorded revisions per document, including current; authorized staff may read, fresh administrators may restore as a new edit; no automatic time-based purge. Implementation and production acceptance remain separate evidence gates.
 
 ## Observed behavior
 
@@ -26,8 +26,10 @@ Recovery targets to validate, not guaranteed service levels: recover an individu
 
 ## Storage and acceptance
 
+Company wiki capture records the final page state of each committed transaction. Grant bookkeeping can advance the document's concurrency revision many times during one roster change; those intermediate states do not consume history slots. Recorded revision numbers may therefore have gaps. Restoration forces the deferred snapshot before checking the same transaction's audit and commit, preserving all-or-nothing recovery.
+
 With a 50,000-character content limit, a naive 100-revision design can retain approximately five million content characters per heavily edited document, plus metadata and database overhead. Measure encoded bytes and real edit rates before approving a purge schedule. Store full snapshots first for simple integrity checks; compression or deltas can be considered after recovery is proven.
 
 Acceptance requires two-tenant read/restore denial, stale concurrent edits retaining drafts, transactional snapshots, restore-as-new-revision, archived/deleted parents and members, malicious Markdown rendering, inaccessible attachments, the 100-revision boundary, export fidelity, Trash recovery and an isolated backup restoration. Mobile/keyboard history inspection and an administrator restore journey must pass against a disposable populated database before production acceptance.
 
-The remaining owner decision is the revision bound and restore authority (recommended: 100 revisions and administrator restore). Implementation and production acceptance should record those approved choices explicitly.
+The revision bound and restore authority are approved. New capture starts with each existing document's current state; previously overwritten content is unavailable. Historical reads must satisfy both current access and the captured audience. Restoring retains current sharing, ownership, hierarchy and mentions. Editor attribution may be unavailable for baseline and uninstrumented automated/raw writes; it must never be inferred from the original author. Implementation, populated migration rehearsal, exports, backup recovery and target acceptance still require their own evidence.
