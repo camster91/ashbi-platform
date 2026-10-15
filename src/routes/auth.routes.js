@@ -307,6 +307,7 @@ export default async function authRoutes(fastify, options = {}) {
         email: true,
         name: true,
         role: true,
+        organizationId: true,
         skills: true,
         capacity: true
       }

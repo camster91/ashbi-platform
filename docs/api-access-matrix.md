@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 423 |
+| staff | 425 |
 | staff (inline) | 1 |
-| **total** | 618 |
+| **total** | 620 |
 
 ## Routes by prefix
 
@@ -529,6 +529,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | --- | --- | --- | --- | --- |
 | POST | `/api/gmail/draft-reply` | staff | scoped |  |
 | POST | `/api/gmail/send` | staff | scoped |  |
+| GET | `/api/gmail/send-receipts/:key` | staff | scoped |  |
+| POST | `/api/gmail/send-receipts/:key/reconcile` | staff | scoped |  |
 | GET | `/api/gmail/status` | staff | scoped |  |
 | POST | `/api/gmail/sync-now` | admin | scoped |  |
 

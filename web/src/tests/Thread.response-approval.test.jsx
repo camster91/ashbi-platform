@@ -28,14 +28,14 @@ const api = {
   rejectResponse: vi.fn(async () => ({})),
   gmailDraftReply: vi.fn(),
   getGmailStatus: vi.fn(async () => ({ connected: true })),
-  gmailSend: vi.fn(async () => ({ success: true })),
+  gmailSend: vi.fn(async () => ({ success: true, status: 'COMPLETED', receiptId: 'receipt-test' })),
   markResponseSent: vi.fn(async () => ({})),
 };
 
 vi.mock('../lib/api', () => ({
   api: new Proxy({}, { get: (_target, prop) => api[prop] ?? vi.fn(async () => ({})) }),
 }));
-vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', name: 'Pat Lee', role } }) }));
+vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', organizationId: 'org-a', name: 'Pat Lee', role } }) }));
 vi.mock('../hooks/useToast', () => ({ useToast: () => toast }));
 
 const { default: Thread } = await import('../pages/Thread');
@@ -63,6 +63,7 @@ async function savedDrafts() {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   vi.clearAllMocks();
   role = 'TEAM';
 });
@@ -138,18 +139,21 @@ describe('response approval on a conversation', () => {
     expect(within(dialog).getByText(/This is the approved text/)).toBeInTheDocument();
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Send email' })).toBeEnabled());
     fireEvent.click(within(dialog).getByRole('button', { name: 'Send email' }));
-    await waitFor(() => expect(api.markResponseSent).toHaveBeenCalledWith('r1'));
+    await waitFor(() => expect(api.gmailSend).toHaveBeenCalledWith(expect.objectContaining({ responseId: 'r1', idempotencyKey: expect.any(String) })));
+    expect(api.markResponseSent).not.toHaveBeenCalled();
   });
 
-  it('says so when the email went out but the draft could not be marked sent', async () => {
+  it('offers record-only recovery when Gmail accepted but Hub has not finalized the draft', async () => {
     withResponse({ status: 'APPROVED' });
     api.gmailDraftReply.mockResolvedValue({ draft: 'Hi', subject: 'Re: x', to: 'olivia@northwindcoffee.com', responseId: 'r1', notice: null });
-    api.markResponseSent.mockRejectedValueOnce(new Error('Network down'));
+    api.gmailSend.mockResolvedValueOnce({ success: false, status: 'ACCEPTED_PENDING_RECORD', receiptId: 'receipt-test' });
     renderThread();
     fireEvent.click((await savedDrafts()).getByRole('button', { name: 'Send via Gmail' }));
     const dialog = await screen.findByRole('dialog', { name: 'Reply via Gmail' });
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Send email' })).toBeEnabled());
     fireEvent.click(within(dialog).getByRole('button', { name: 'Send email' }));
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('The email was sent, but the saved draft still shows Approved', 'Network down'));
+    expect(await within(dialog).findByRole('button', { name: 'Finish saving sent email' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Send email' })).toBeDisabled();
+    expect(api.markResponseSent).not.toHaveBeenCalled();
   });
 });

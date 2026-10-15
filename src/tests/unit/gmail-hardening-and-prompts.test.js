@@ -4,6 +4,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import Fastify from 'fastify';
+import { randomUUID } from 'node:crypto';
+import { gmailReceiptRouteFixture } from '../helpers/gmail-receipt-route-fixture.js';
 
 const { default: env } = await import('../../config/env.js');
 const { gmailSendSchema } = await import('../../validators/schemas.js');
@@ -32,11 +34,12 @@ async function gmailApp({ user = USER, prisma = {} } = {}) {
   const app = Fastify();
   app.decorate('authenticate', async (request) => { request.user = { ...user }; });
   app.decorate('adminOnly', async () => {});
+  const fixture = gmailReceiptRouteFixture(user);
+  Object.assign(fixture.prisma, prisma);
   app.addHook('preHandler', async (request) => {
     request.prisma = {
+      ...fixture.prisma,
       organization: { findUnique: async () => ({ name: 'Northwind Studio' }) },
-      thread: { findFirst: async () => ({ id: 'thr-1' }), update: async () => ({}) },
-      message: { create: async () => ({}) },
       ...prisma,
     };
   });
@@ -63,7 +66,7 @@ test('with no owning workspace configured, Gmail is off for everyone, even with 
   assert.match(status.json().error, /isn't set up on this deployment/);
   assert.match(status.json().error, /GMAIL_SYNC_ORGANIZATION_ID/);
 
-  const send = await app.inject({ method: 'POST', url: '/send', payload: { to: 'olivia@northwind.test', subject: 'Hi', body: 'Hello' } });
+  const send = await app.inject({ method: 'POST', url: '/send', payload: { idempotencyKey: randomUUID(), to: 'olivia@northwind.test', subject: 'Hi', body: 'Hello' } });
   assert.equal(send.statusCode, 409, send.body);
   assert.equal(send.json().code, 'GMAIL_NOT_CONNECTED');
   assert.equal(send.json().reason, 'not_configured');
@@ -81,7 +84,7 @@ test('each "not connected" reason has its own plain explanation', () => {
 // ---------------------------------------------------------------- header injection
 
 test('the send schema refuses line breaks in header fields', () => {
-  const base = { to: 'olivia@northwind.test', subject: 'Re: launch', body: 'Line one\r\nLine two is fine in the body' };
+  const base = { idempotencyKey: randomUUID(), to: 'olivia@northwind.test', subject: 'Re: launch', body: 'Line one\r\nLine two is fine in the body' };
   assert.equal(gmailSendSchema.safeParse(base).success, true);
   for (const [field, value] of [
     ['subject', 'Hi\r\nBcc: attacker@evil.test'],
@@ -143,13 +146,13 @@ test('a send goes out from the connected mailbox, with one From, and is recorded
   };
   t.after(() => { globalThis.fetch = originalFetch; });
   const recorded = [];
-  const app = await gmailApp({ prisma: { message: { create: async ({ data }) => { recorded.push(data); return data; } } } });
+  const app = await gmailApp({ prisma: { message: { create: async ({ data }) => { recorded.push(data); return { id: 'message-1', ...data }; } } } });
   t.after(() => app.close());
 
   const response = await app.inject({
     method: 'POST',
     url: '/send',
-    payload: { to: 'olivia@northwind.test', subject: 'Re: café', body: 'Friday works.', threadId: null, in_reply_to: null, hubThreadId: 'thr-1' },
+    payload: { idempotencyKey: randomUUID(), to: 'olivia@northwind.test', subject: 'Re: café', body: 'Friday works.', threadId: null, in_reply_to: null, hubThreadId: 'thr-1' },
   });
   assert.equal(response.statusCode, 200, response.body);
   const headers = headersOf(sentRaw);

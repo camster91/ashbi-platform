@@ -1134,6 +1134,8 @@ export const api = {
     request('/gmail/status'),
   gmailSend: (data) =>
     request('/gmail/send', { method: 'POST', body: data }),
+  getGmailSendReceipt: (key) => request(`/gmail/send-receipts/${encodeURIComponent(key)}`),
+  reconcileGmailSendReceipt: (key) => request(`/gmail/send-receipts/${encodeURIComponent(key)}/reconcile`, { method: 'POST', body: {} }),
   // With responseId, the reply uses that approved saved draft instead of AI.
   gmailDraftReply: (hubThreadId, responseId) =>
     request('/gmail/draft-reply', { method: 'POST', body: responseId ? { hubThreadId, responseId } : { hubThreadId } }),

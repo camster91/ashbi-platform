@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 // Clear errors when AI is not set up, and the workflows that used to break or
 // fail silently because of it: paste intake, Gmail reply, onboarding links.
 import assert from 'node:assert/strict';
@@ -214,13 +215,13 @@ test('paste without a project answers with the clear AI error instead of a 500',
 // ---------------------------------------------------------------- Gmail
 
 test('the Gmail send schema accepts the nulls a hub-only thread sends', () => {
-  const parsed = gmailSendSchema.safeParse({
+  const parsed = gmailSendSchema.safeParse({ idempotencyKey: randomUUID(),
     to: 'olivia@northwind.test', subject: 'Re: launch', body: 'Hi', threadId: null, in_reply_to: null, hubThreadId: 'thr-1',
   });
   assert.equal(parsed.success, true, JSON.stringify(parsed.error?.issues));
-  assert.equal(gmailSendSchema.safeParse({ to: 'olivia@northwind.test', subject: 's', body: 'b' }).success, true);
+  assert.equal(gmailSendSchema.safeParse({ idempotencyKey: randomUUID(), to: 'olivia@northwind.test', subject: 's', body: 'b' }).success, true);
   // Real Gmail thread ids are hex strings, not cuids.
-  assert.equal(gmailSendSchema.safeParse({ to: 'a@b.co', subject: 's', body: 'b', threadId: '18c2f0a9b3d4e5f6' }).success, true);
+  assert.equal(gmailSendSchema.safeParse({ idempotencyKey: randomUUID(), to: 'a@b.co', subject: 's', body: 'b', threadId: '18c2f0a9b3d4e5f6' }).success, true);
 });
 
 test('Gmail counts as connected only for the owning workspace and only with tokens', () => {
@@ -277,7 +278,7 @@ test('sending without a connected mailbox is refused with a reason and what to d
   const response = await app.inject({
     method: 'POST',
     url: '/send',
-    payload: { to: 'olivia@northwind.test', subject: 'Re: Launch date', body: 'Friday works.', threadId: null, in_reply_to: null, hubThreadId: 'thr-1' },
+    payload: { idempotencyKey: randomUUID(), to: 'olivia@northwind.test', subject: 'Re: Launch date', body: 'Friday works.', threadId: null, in_reply_to: null, hubThreadId: 'thr-1' },
   });
   assert.equal(response.statusCode, 409, response.body);
   assert.equal(response.json().code, GMAIL_NOT_CONNECTED);
