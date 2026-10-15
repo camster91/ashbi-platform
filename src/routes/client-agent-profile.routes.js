@@ -1,14 +1,10 @@
 import { z } from 'zod';
+import { requireStaff } from '../middleware/require-staff.js';
 import { validateBody, validateParams, validateQuery } from '../validators/schemas.js';
 import { ToolError } from '../ai/tools/registry.js';
 import { clientAgentProfileParamsSchema, clientAgentProfileUpdateSchema,
   readClientAgentProfile, saveClientAgentProfile } from '../services/client-agent-profile.service.js';
 
-async function requireStaff(request, reply) {
-  if (!['ADMIN', 'TEAM'].includes(request.user?.role) || !request.user?.organizationId) {
-    return reply.code(403).send({ error: 'Staff access required', code: 'ROLE_DENIED' });
-  }
-}
 const messages = Object.freeze({
   ROLE_DENIED: 'Active staff access required.', RECORD_NOT_FOUND: 'Client not found',
   INVALID_INPUT: 'Provide valid account manager profile fields.',

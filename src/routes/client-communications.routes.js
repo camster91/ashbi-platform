@@ -1,11 +1,9 @@
 import { z } from 'zod';
+import { requireStaff } from '../middleware/require-staff.js';
 import { ToolError } from '../ai/tools/registry.js';
 import { validateParams, validateQuery } from '../validators/schemas.js';
 import { communicationParamsSchema, communicationDetailParamsSchema, communicationsQuerySchema, listClientCommunications, readClientCommunication } from '../services/client-communications.service.js';
 
-async function requireStaff(request, reply) {
-  if (!request.user?.organizationId || !['ADMIN', 'TEAM'].includes(request.user?.role)) return reply.code(403).send({ error: 'Staff access required', code: 'ROLE_DENIED' });
-}
 function handle(operation) {
   return async (request, reply) => {
     try { return await operation(request); }

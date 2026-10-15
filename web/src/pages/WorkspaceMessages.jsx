@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
+import { paginatedItems } from '../lib/paginated-items';
 import { useAuth } from '../hooks/useAuth';
 import Button from '../components/ui/Button';
 import Input, { inputStyles } from '../components/ui/Input';
@@ -25,7 +26,7 @@ function Conversation({ channel, userId }) {
   const id = useId();
   const queryKey = ['workspace-chat-messages', userId, channel.id];
   const history = useInfiniteQuery({ queryKey, initialPageParam: undefined, queryFn: ({ pageParam }) => api.getWorkspaceChatMessages(channel.id, { limit: 30, ...(pageParam ? { after: pageParam } : {}) }), getNextPageParam: (page) => page.nextCursor || undefined, retry: false, refetchInterval: 10000, refetchOnWindowFocus: true });
-  const messages = history.isError ? [] : [...new Map((history.data?.pages || []).slice().reverse().flatMap((page) => page.items || []).map((message) => [message.id, message])).values()];
+  const messages = history.isError ? [] : paginatedItems((history.data?.pages || []).slice().reverse(), (message) => message.id);
   const latestId = messages.at(-1)?.id;
   useEffect(() => {
     if (!latestId || history.isError) return;
@@ -86,7 +87,7 @@ function StaffMessages({ user }) {
   const channelQueryKey = ['workspace-chat-channels', user.id];
   const channels = useInfiniteQuery({ queryKey: channelQueryKey, initialPageParam: undefined, queryFn: ({ pageParam }) => api.listWorkspaceChatChannels({ limit: 50, ...(pageParam ? { after: pageParam } : {}) }), getNextPageParam: (page) => page.nextCursor || undefined, retry: false });
   const people = useQuery({ queryKey: ['workspace-chat-people', user.id], queryFn: () => api.listWorkspaceChatPeople(), retry: false });
-  const channelItems = [...new Map((channels.data?.pages || []).flatMap((page) => page.items || []).map((item) => [item.id, item])).values()];
+  const channelItems = paginatedItems(channels.data?.pages, (item) => item.id);
   const channel = channels.isError ? null : channelItems.find((item) => item.id === selected);
 
   async function create(event) {
