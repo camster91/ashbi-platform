@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 
-export const FLOOR_MIGRATIONS = ['20260927030000_chat_message_visibility'];
+export const FLOOR_MIGRATIONS = ['20260927030000_chat_message_visibility', '20261016090000_workspace_account_manager_pilot'];
 const validName = name => /^[0-9]{14}_[a-z0-9_]+$/.test(name);
 
 async function appliedMigrations() {

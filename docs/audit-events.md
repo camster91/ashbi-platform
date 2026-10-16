@@ -311,3 +311,10 @@ clientId, revision and enabled.
 `client_service_project.published` retains clientId, revision, outcome, reportCount
 and complete. Report text, external identifiers and credentials are excluded.
 A failed audit insert rolls back mapping/report changes.
+
+
+Workspace account-manager pilot records `workspace_agent.installed`,
+`workspace_agent.updated`, `workspace_agent.requested`, `workspace_agent.delivered`
+and `workspace_agent.suppressed`. Metadata contains canonical IDs, enablement and
+run status only, never selected message text, preferences, prompts or answers.
+Request and settlement fail closed if the associated audit cannot be written.

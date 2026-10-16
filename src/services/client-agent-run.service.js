@@ -1,3 +1,4 @@
+import { authorizeSourceConversation, conversationAudience } from './client-agent-source-authority.service.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { ToolError, recordNotFound } from '../ai/tools/registry.js';
@@ -21,17 +22,19 @@ function parse(schema, value) {
   if (!result.success) refuse('INVALID_INPUT', 'Provide valid account manager run fields.', 400);
   return result.data;
 }
-function project(row) {
-  return { ...Object.fromEntries(Object.keys(runSelect).filter(key => key !== 'organizationId').map(key => [key, row[key]])), scope: 'SHARED_STAFF' };
+function project(row, scope = 'SHARED_STAFF') {
+  return { ...Object.fromEntries(Object.keys(runSelect).filter(key => key !== 'organizationId').map(key => [key, row[key]])), scope };
 }
-async function scope(db, user, clientId, conversationId, requireActive) {
+async function scope(db, user, clientId, conversationId, requireActive, lockSource = false) {
   const actor = await authorizeClientAgentStaff(db, user, clientId);
   const conversation = await db.clientAgentConversation.findFirst({ where: { id: conversationId, clientId, organizationId: actor.organizationId },
-    select: { id: true, organizationId: true, clientId: true, archivedAt: true } });
+    select: { id: true, organizationId: true, clientId: true, archivedAt: true, sourceChannelId: true, sourceBindingId: true } });
   if (!conversation || conversation.id !== conversationId || conversation.clientId !== clientId
     || conversation.organizationId !== actor.organizationId) throw recordNotFound('Conversation not found');
+  await authorizeSourceConversation(db, actor, conversation, { lock: lockSource });
+  if (requireActive && conversation.sourceChannelId) throw recordNotFound('Use the source-bound workspace request');
   if (requireActive && conversation.archivedAt != null) refuse('CONVERSATION_ARCHIVED', 'Archived conversations cannot start new runs.', 409);
-  return actor;
+  return { ...actor, conversationScope: conversationAudience(conversation) };
 }
 async function findRun(db, actor, conversationId, runId) {
   const row = await db.clientAgentRun.findFirst({ where: { id: runId, organizationId: actor.organizationId, conversationId }, select: runSelect });
@@ -44,6 +47,23 @@ async function guard(work) {
     if (error?.code === 'P2002' || error?.code === 'P2034' || error?.statusCode === 409) conflict();
     refuse('RUN_UNAVAILABLE', 'Account manager runs unavailable.', 503);
   }
+}
+
+// The caller must supply its authorized Serializable business transaction.
+export async function queueClientAgentRunInTransaction(db, actor, clientId, conversationId,
+  { question, idempotencyKey, inputHash, profileRevision }, { recordAudit = recordAuditEvent, recordEvent = recordDomainEvent } = {}) {
+  const row = await db.clientAgentRun.create({ data: { organizationId: actor.organizationId, conversationId,
+    requestedById: actor.id, idempotencyKey, inputHash, prompt: question, status: 'QUEUED', profileRevision: profileRevision }, select: runSelect });
+  if (!row || row.organizationId !== actor.organizationId || row.conversationId !== conversationId
+    || row.requestedById !== actor.id || row.status !== 'QUEUED') conflict();
+  const recorded = await recordEvent(db, { organizationId: actor.organizationId, type: 'client_agent.run_requested',
+    aggregateId: row.id, idempotencyKey: `client-agent-run:${row.id}:requested`,
+    payload: { clientId, conversationId, runId: row.id, requestedById: actor.id } });
+  if (!recorded?.event?.id) refuse('RUN_EVENT_UNAVAILABLE', 'The run could not be queued durably.', 503);
+  const audited = await recordAudit(db, { organizationId: actor.organizationId, actorUserId: actor.id, actorType: 'USER',
+    entityId: row.id, action: 'client_agent_run.requested', metadata: { clientId, conversationId, runId: row.id } });
+  if (!audited) refuse('RUN_AUDIT_UNAVAILABLE', 'Run audit unavailable.', 503);
+  return row;
 }
 
 /** Producer only: inference and Redis delivery belong to the separately authorized worker. */
@@ -80,16 +100,9 @@ export function createClientAgentRunService({ recordAudit = recordAuditEvent, re
               const pending = await db.clientAgentRun.findFirst({ where: { organizationId: actor.organizationId, conversationId,
                 status: { in: activeStatuses } }, select: { id: true } });
               if (pending) refuse('RUN_IN_PROGRESS', 'Wait for the current account manager run to finish or cancel it.', 409);
-              const row = await db.clientAgentRun.create({ data: { organizationId: actor.organizationId, conversationId,
-                requestedById: actor.id, idempotencyKey, inputHash, prompt: question, status: 'QUEUED', profileRevision: profile.revision }, select: runSelect });
-              if (!row || row.organizationId !== actor.organizationId || row.conversationId !== conversationId
-                || row.requestedById !== actor.id || row.status !== 'QUEUED') conflict();
-              const recorded = await recordEvent(db, { organizationId: actor.organizationId, type: 'client_agent.run_requested',
-                aggregateId: row.id, idempotencyKey: `client-agent-run:${row.id}:requested`,
-                payload: { clientId, conversationId, runId: row.id, requestedById: actor.id } });
-              if (!recorded?.event?.id) refuse('RUN_EVENT_UNAVAILABLE', 'The run could not be queued durably.', 503);
-              await audit(db, actor, clientId, row, 'client_agent_run.requested');
-              return project(row);
+              const row = await queueClientAgentRunInTransaction(db, actor, clientId, conversationId,
+                { question, idempotencyKey, inputHash, profileRevision: profile.revision }, { recordAudit, recordEvent });
+              return project(row, actor.conversationScope);
             });
           } catch (error) {
             // A concurrent same-key writer may have committed. Re-enter a fresh
@@ -105,7 +118,7 @@ export function createClientAgentRunService({ recordAudit = recordAuditEvent, re
       clientId = parse(id, clientId); conversationId = parse(id, conversationId); runId = parse(id, runId);
       return guard(() => withStageTransaction(prisma, async db => {
         const actor = await scope(db, user, clientId, conversationId, false);
-        return project(await findRun(db, actor, conversationId, runId));
+        return project(await findRun(db, actor, conversationId, runId), actor.conversationScope);
       }));
     },
     async byIntent(prisma, user, clientId, conversationId, idempotencyKey) {
@@ -117,26 +130,27 @@ export function createClientAgentRunService({ recordAudit = recordAuditEvent, re
         if (!row || row.organizationId !== actor.organizationId || row.requestedById !== actor.id
           || row.conversationId !== conversationId || row.idempotencyKey !== idempotencyKey) throw recordNotFound('Run not found');
         // Absence is a snapshot, never proof that a delayed producer cannot commit.
-        return project(row);
+        return project(row, actor.conversationScope);
       }));
     },
     async cancel(prisma, user, clientId, conversationId, runId) {
       clientId = parse(id, clientId); conversationId = parse(id, conversationId); runId = parse(id, runId);
       return guard(() => withStageTransaction(prisma, async db => {
-        const actor = await scope(db, user, clientId, conversationId, false);
+        const actor = await scope(db, user, clientId, conversationId, false, true);
         const current = await findRun(db, actor, conversationId, runId);
         if (actor.role !== 'ADMIN' && current.requestedById !== actor.id) refuse('ROLE_DENIED', 'Only an administrator or the requester can cancel this run.', 403);
-        if (current.status === 'CANCELLED') return project(current);
+        if (current.status === 'CANCELLED') return project(current, actor.conversationScope);
         if (!activeStatuses.includes(current.status)) conflict();
         const changed = await db.clientAgentRun.updateMany({ where: { id: runId, organizationId: actor.organizationId,
           conversationId, status: current.status }, data: { status: 'CANCELLED', finishedAt: new Date(), claimToken: null } });
         if (changed.count !== 1) conflict();
         const row = await findRun(db, actor, conversationId, runId);
         if (row.status !== 'CANCELLED') conflict();
+        if (actor.conversationScope === 'WORKSPACE_CHANNEL') await db.workspaceAccountManagerInvocation.updateMany({ where: { runId, organizationId: actor.organizationId, deliveryState: 'PENDING' }, data: { deliveryState: 'SUPPRESSED', deliveryCode: 'RUN_CANCELLED', suppressedAt: new Date() } });
         await audit(db, actor, clientId, row, 'client_agent_run.cancelled');
         // Cancellation blocks future settlement; it cannot promise a dispatched
         // provider request was stopped or that no usage was incurred.
-        return project(row);
+        return project(row, actor.conversationScope);
       }));
     },
   };

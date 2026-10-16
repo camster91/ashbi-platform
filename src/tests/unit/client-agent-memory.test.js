@@ -5,6 +5,7 @@ const current = { id: 'z', organizationId: 'org', conversationId: 'c', createdAt
 const prior = (id, overrides = {}) => ({ ...current, id, status: 'SUCCEEDED', createdAt: new Date('2026-10-16T00:00:00Z'), finishedAt: new Date('2026-10-16T00:01:00Z'), prompt: 'Question', response: 'Answer', ...overrides });
 const build = rows => buildClientAgentMemory({ clientAgentRun: { findMany: async args => {
   assert.equal(args.take, 5); assert.deepEqual(args.orderBy, [{ createdAt: 'desc' }, { id: 'desc' }]);
+  assert.deepEqual(args.where.conversation, { sourceChannelId: null, sourceBindingId: null });
   assert.equal(args.where.organizationId, current.organizationId); assert.equal(args.where.conversationId, current.conversationId);
   assert.deepEqual(args.where.finishedAt, { lt: current.createdAt });
   return rows;

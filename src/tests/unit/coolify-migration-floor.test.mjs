@@ -25,10 +25,19 @@ test('security floor persists after successful migration and after a later migra
     const operation = migrateWithFloor({ stateDir: root, migrationDir: root, readApplied: async () => ++calls === 1 ? [] : FLOOR_MIGRATIONS,
       migrate: async () => { if (fails) throw new Error('synthetic later migration failure'); } });
     if (fails) await assert.rejects(operation, /floor retained/); else await operation;
-    assert.equal((await fs.readFile(path.join(root, 'rollback-floor'), 'utf8')).trim(), FLOOR_MIGRATIONS[0]);
+    assert.equal((await fs.readFile(path.join(root, 'rollback-floor'), 'utf8')).trim(), FLOOR_MIGRATIONS.join('\n'));
   }
 }));
 test('invalid persisted floor cannot become a migration path', () => fixture(async root => {
   await fs.writeFile(path.join(root, 'rollback-floor'), '../outside\n');
   await assert.rejects(migrateWithFloor({ stateDir: root, migrationDir: root }), /Invalid persisted/);
+}));
+
+
+test('pilot confidentiality floor refuses a pre-pilot candidate even when the older chat floor is present', () => fixture(async root => {
+  const pilot = '20261016090000_workspace_account_manager_pilot';assert.ok(FLOOR_MIGRATIONS.includes(pilot));
+  await fs.mkdir(path.join(root, FLOOR_MIGRATIONS[0]));
+  let migrated = false;
+  await assert.rejects(migrateWithFloor({ stateDir: root, migrationDir: root, readApplied: async () => [pilot], migrate: async () => { migrated = true; } }), /below/);
+  assert.equal(migrated, false);
 }));

@@ -325,6 +325,7 @@ const DOMAIN_REGISTRARS = [
       ['document-history', '/api/document-history'],
       ['workspace-wiki', '/api/wiki'],
       ['workspace-records', '/api/collections'],
+      ['workspace-account-manager', '/api/workspace-chat'],
       ['workspace-chat', '/api/workspace-chat'],
       ['client-agent-action', '/api/clients'],
       ['client-communications', '/api/client-communications'],
@@ -386,7 +387,7 @@ test('every domain-registered route module has exactly one owner', () => {
   // media review staff and share-link APIs (#417), the domain event
   // outbox admin API (#412), and support impersonation / break-glass
   // recovery (#416), and the daily operator queue (#461).
-  assert.equal(owners.size, 88); // Includes client task proposals and saved service panels.
+  assert.equal(owners.size, 89); // Includes client task proposals and saved service panels.
 });
 
 test('route modules stay encapsulated so cross-domain registration order cannot leak hooks', () => {

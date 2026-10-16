@@ -117,7 +117,7 @@ docker() { echo "$1" >> "$LOG"; case $1 in inspect) echo false ;; esac; }`;
 test('a probe that cannot run fails closed: the floor is still raised and the image is refused', () => {
   const { dir, images } = fixture();
   bash(dir, images, 'raise_rollback_floor broken:1');
-  assert.equal(fs.readFileSync(path.join(dir, 'rollback-floor'), 'utf8'), `${CHAT}\n`, 'recorded despite the failed probe');
+  assert.equal(fs.readFileSync(path.join(dir, 'rollback-floor'), 'utf8'), `${CHAT}\n20261016090000_workspace_account_manager_pilot\n`, 'recorded despite the failed probe');
   assert.equal(bash(dir, images, 'if missing=$(image_meets_floor broken:1); then echo allowed; else echo "blocked $missing"; fi'), `blocked ${CHAT}\n`);
   assert.equal(bash(dir, images, 'image_has_migration broken:1 x && echo 0 || echo $?'), '2\n');
 });
@@ -129,4 +129,13 @@ test('container_image distinguishes a missing container from an unreadable one',
   assert.equal(run('docker() { echo "error: no such object: api" >&2; return 1; }'), '[]');
   assert.equal(run('docker() { echo "Error response from daemon: No such container: api" >&2; return 1; }'), '[]');
   assert.equal(run('docker() { echo "Cannot connect to the Docker daemon" >&2; return 1; }'), '[unknown]');
+});
+
+
+test('pilot confidentiality floor blocks otherwise chat-compatible older image', () => {
+  const { dir, images } = fixture();const pilot = '20261016090000_workspace_account_manager_pilot';
+  fs.appendFileSync(images, `pilot:1 /app/prisma/migrations/${CHAT}\npilot:1 /app/prisma/migrations/${pilot}\n`);
+  bash(dir, images, 'raise_rollback_floor pilot:1');
+  assert.equal(bash(dir, images, 'if missing=$(image_meets_floor new:1); then echo allowed; else echo "blocked $missing"; fi'), `blocked ${pilot}\n`);
+  assert.equal(bash(dir, images, 'image_meets_floor pilot:1 && echo ok'), 'ok\n');
 });

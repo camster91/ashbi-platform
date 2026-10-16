@@ -25,11 +25,14 @@ let cache = null;
 // edges bind a globally unique parent id to the same organization column the
 // request proxy stamps and filters. Arbitrary composite keys remain unsupported.
 export const COMPOSITE_TENANT_RELATIONS = Object.freeze({
+  workspaceaccountmanagerbinding: { channel: ['channelId', 'organizationId'], client: ['clientId', 'organizationId'], project: ['projectId', 'organizationId'], profile: ['profileId', 'organizationId'], createdBy: ['createdById', 'organizationId'], updatedBy: ['updatedById', 'organizationId'] },
+  workspaceaccountmanagerinvocation: { binding: ['bindingId', 'organizationId'], sourceMessage: ['sourceMessageId', 'organizationId'], requestedBy: ['requestedById', 'organizationId'], conversation: ['conversationId', 'organizationId'], run: ['runId', 'organizationId'] },
+
   gmailsendreceipt: { user: ['userId', 'organizationId'] },
   clientserviceproject: { client: ['clientId', 'organizationId'] },
   clientservicereport: { client: ['clientId', 'organizationId'], mapping: ['mappingId', 'organizationId', 'clientId'] },
   clientagentprofile: { createdBy: ['createdById', 'organizationId'], updatedBy: ['updatedById', 'organizationId'] },
-  clientagentconversation: { createdBy: ['createdById', 'organizationId'] },
+  clientagentconversation: { createdBy: ['createdById', 'organizationId'], sourceChannel: ['sourceChannelId', 'organizationId'], sourceBinding: ['sourceBindingId', 'organizationId'] },
   clientagentrun: { conversation: ['conversationId', 'organizationId'], requestedBy: ['requestedById', 'organizationId'] },
   workspacechatchannel: { createdBy: ['createdById', 'organizationId'] },
   workspacechatmember: { channel: ['channelId', 'organizationId'], user: ['userId', 'organizationId'] },
@@ -65,7 +68,7 @@ export function tenantRelationMap() {
       if (field.kind !== 'object') continue;
       const fk = scalars.has(`${field.name}Id`) ? `${field.name}Id` : null;
       const fkFields = COMPOSITE_TENANT_RELATIONS[model.name.toLowerCase()]?.[field.name] ?? (fk ? [fk] : []);
-      if (fkFields.some(key => !scalars.has(key)) || (fkFields.length > 1 && (fkFields[0] !== fk || fkFields[1] !== 'organizationId' || !['User', 'Client', 'WorkspaceCollection', 'WorkspaceChatChannel', 'ClientAgentConversation', 'ClientServiceProject'].includes(field.type) || (fkFields.length > 2 && !(model.name === 'ClientServiceReport' && field.name === 'mapping' && fkFields.length === 3 && fkFields[2] === 'clientId'))))) throw new Error('Tenancy Error: unsupported composite relation');
+      if (fkFields.some(key => !scalars.has(key)) || (fkFields.length > 1 && (fkFields[0] !== fk || fkFields[1] !== 'organizationId' || !['User', 'Client', 'WorkspaceCollection', 'WorkspaceChatChannel', 'ClientAgentConversation', 'ClientServiceProject', 'Project', 'ClientAgentProfile', 'WorkspaceAccountManagerBinding', 'WorkspaceChatMessage', 'ClientAgentRun'].includes(field.type) || (fkFields.length > 2 && !(model.name === 'ClientServiceReport' && field.name === 'mapping' && fkFields.length === 3 && fkFields[2] === 'clientId'))))) throw new Error('Tenancy Error: unsupported composite relation');
       relations[field.name] = { target: String(field.type).toLowerCase(), fk, fkFields };
       if (fk) foreignKeys[fk] = field.name;
     }

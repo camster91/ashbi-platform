@@ -11,7 +11,7 @@ export async function buildClientAgentMemory(prisma, run) {
   const cutoff = new Date(run.createdAt);
   if (!Number.isFinite(+cutoff)) throw new Error('Run creation cutoff is missing');
   const rows = await prisma.clientAgentRun.findMany({
-    where: { organizationId: run.organizationId, conversationId: run.conversationId, status: 'SUCCEEDED',
+    where: { organizationId: run.organizationId, conversationId: run.conversationId, conversation: { sourceChannelId: null, sourceBindingId: null }, status: 'SUCCEEDED',
       finishedAt: { lt: cutoff }, OR: [{ createdAt: { lt: cutoff } }, { createdAt: cutoff, id: { lt: run.id } }] },
     select: { id: true, organizationId: true, conversationId: true, status: true, createdAt: true, finishedAt: true, prompt: true, response: true },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 5,

@@ -49,7 +49,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'expense', 'taskcollaborator', 'projectboard', 'workspacepage', 'workspacepagegrant',
   'workspacecollection', 'workspacerecord', 'workspacerecordform',
   'clientagentprofile', 'workspacechatchannel', 'workspacechatmember', 'workspacechatmessage', 'gmailsendreceipt',
-  'clientagentconversation', 'clientagentrun', 'clientserviceproject', 'clientservicereport',
+  'workspaceaccountmanagerbinding', 'workspaceaccountmanagerinvocation', 'clientagentconversation', 'clientagentrun', 'clientserviceproject', 'clientservicereport',
   'noterevision', 'workspacepagerevision'
 ]);
 
@@ -67,6 +67,7 @@ const APPEND_ONLY_BLOCKED_METHODS = new Set([
 // outbox (#412): its envelope is immutable (also enforced by a database
 // trigger); only dispatch bookkeeping changes, e.g. an admin replay.
 const BOOKKEEPING_ONLY_MODELS = {
+  workspaceaccountmanagerinvocation: new Set(['deliveryState', 'deliveryCode', 'deliveredAt', 'suppressedAt', 'updatedAt']),
   gmailsendreceipt: new Set(['status', 'providerMessageId', 'providerThreadId', 'hubMessageId', 'errorCode', 'updatedAt', 'finishedAt']),
   domainevent: new Set([
     'status', 'attempts', 'nextAttemptAt', 'lastAttemptAt', 'lockedUntil',
@@ -93,7 +94,25 @@ const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platfor
 // redundant organizationId is not enough: the referenced parent must belong
 // to the same organization or the graph would span tenants.
 const DIRECT_PARENT_RELATIONS = {
+  workspaceaccountmanagerbinding: [
+    { relation: 'channel', field: 'channelId', model: 'workspacechatchannel', delegate: 'workspaceChatChannel', required: true },
+    { relation: 'client', field: 'clientId', model: 'client', delegate: 'client', required: true },
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project' },
+    { relation: 'profile', field: 'profileId', model: 'clientagentprofile', delegate: 'clientAgentProfile', required: true },
+    { relation: 'createdBy', field: 'createdById', model: 'user', delegate: 'user', required: true },
+    { relation: 'updatedBy', field: 'updatedById', model: 'user', delegate: 'user', required: true },
+  ],
+  workspaceaccountmanagerinvocation: [
+    { relation: 'binding', field: 'bindingId', model: 'workspaceaccountmanagerbinding', delegate: 'workspaceAccountManagerBinding', required: true },
+    { relation: 'sourceMessage', field: 'sourceMessageId', model: 'workspacechatmessage', delegate: 'workspaceChatMessage', required: true },
+    { relation: 'requestedBy', field: 'requestedById', model: 'user', delegate: 'user', required: true },
+    { relation: 'conversation', field: 'conversationId', model: 'clientagentconversation', delegate: 'clientAgentConversation', required: true },
+    { relation: 'run', field: 'runId', model: 'clientagentrun', delegate: 'clientAgentRun', required: true },
+  ],
+
   clientagentconversation: [
+    { relation: 'sourceChannel', field: 'sourceChannelId', model: 'workspacechatchannel', delegate: 'workspaceChatChannel' },
+    { relation: 'sourceBinding', field: 'sourceBindingId', model: 'workspaceaccountmanagerbinding', delegate: 'workspaceAccountManagerBinding' },
     { relation: 'client', field: 'clientId', model: 'client', delegate: 'client', required: true },
     { relation: 'createdBy', field: 'createdById', model: 'user', delegate: 'user', required: true },
   ],
