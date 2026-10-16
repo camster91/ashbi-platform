@@ -195,6 +195,7 @@ export const EXCLUDED_MODELS = Object.freeze({
   SlackInstallation: 'secret: encrypted Slack bot token',
   SlackChannelMapping: 'integration configuration that only works with the Slack installation',
   SlackEventReceipt: 'internal idempotency ledger of Slack events',
+  GmailIngestReceipt: 'internal Gmail ingestion replay and review-hold ledger; canonical messages and triage content are exported separately; exact deduplication state requires the full database backup',
   PushSubscription: 'secret: browser push subscription keys of individual devices',
   Notification: 'per-user in-app inbox derived from the exported records',
   ClientInvitation: 'secret: single-use client invitation tokens',

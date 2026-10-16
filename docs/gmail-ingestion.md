@@ -60,6 +60,11 @@ attachment, historical or migration completeness. No durable history cursor or
 full backfill is implemented, and `resultSizeEstimate` is not used as a count.
 
 Sources remain primary until independently verified and explicitly cut over.
+The operator offboarding export explicitly excludes the internal ingestion
+receipt ledger and records that exclusion in its manifest; canonical messages
+and email triage content remain exported. Full database backups retain native
+identities and replay tombstones. The offboarding format alone cannot restore
+the exact ingestion deduplication or review-hold state.
 Tests use synthetic local fixtures; live mailbox/provider acceptance is separate
 from implementation and CI.
 
