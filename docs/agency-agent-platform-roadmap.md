@@ -2,9 +2,15 @@
 
 Approved October 14, 2026. This is the agent/agency workstream under the [master delivery plan](master-app-delivery-plan.md), not a second release checklist. [Product status](product-status.md) distinguishes code, CI, deployment and target acceptance. Approval establishes product scope; it does not establish missing provider connections, choose unresolved retention policies or complete acceptance.
 
-## October 15 delivery overlay
+## Historical October 15 delivery overlay
 
 The W1 foundation is deployed in #608 at `37d02b304898ec5c621199f4a2a880ebd64a6372`: shared staff saved questions, governed no-tools runs, exact-intent recovery, status/cancellation and bounded deadline recovery. Required main CI [38808629217](https://github.com/camster91/ashbi-platform/actions/runs/38808629217) and 169 bounded live checks passed, including 47 agent CRUD checks; normal browser creation/reload persistence followed by separate API archive cleanup passed without Send/provider calls. Prior-turn memory, persisted context observation/source evidence and real-provider/team acceptance remain incomplete W1 work. Restricted tools/MCP actions, portal assistants and later bot/provider integrations remain follow-ups. This does not close the full agency roadmap, whole-app acceptance or source cutover; [#565](https://github.com/camster91/ashbi-platform/issues/565) owns the execution queue.
+
+Historical October 15 implementation note (superseded status, retained evidence): the first slice provided a staff preview, curated read-only `client-work` plugin and shared deterministic brief. The [staff profile/messages follow-up](workspace-messages.md) added persistent profile configuration and human company/direct conversations. Shared staff questions/durable runs were deployed as #608 at `37d02b3`; migrated CI and bounded CRUD/browser acceptance passed without a live model request. At that checkpoint prior-turn memory, persisted context evidence, restricted plugins, bot execution and mailbox/provider adapters remained follow-ups. The e7 implementation boundary below supersedes that dated build status; it does not relabel the older acceptance as e7 evidence.
+
+## Current execution reference — October 16, 2026
+
+The [master delivery plan](master-app-delivery-plan.md) is the single current status entrypoint, with [#565](https://github.com/camster91/ashbi-platform/issues/565) as its execution checklist. Its exact merged e7 source snapshot supersedes future-code statements in the dated overlay above. This roadmap preserves approved scope and acceptance criteria; its original sequence is not a queue to rebuild completed foundations.
 
 ## Product and architecture
 
@@ -14,7 +20,7 @@ Use a small harness over existing governed providers, tool execution and workers
 
 Plugins are reviewed, code-owned modules. A plugin declares identity/version, capabilities, tools, input schemas, role/scope requirements, external effects and approval requirements. Registration alone grants no access. Credentials stay server-side, external connections are explicitly mapped, and client-specific enablement must be enforced in backend services before execution. Arbitrary third-party plugin uploads, a marketplace and persistent per-client plugin configuration are not implemented by the first slice.
 
-## Delivery sequence and acceptance
+## Original delivery sequence and acceptance criteria
 
 | Order | Work | Required evidence |
 | --- | --- | --- |
@@ -40,11 +46,11 @@ Long work must survive closed chat sessions, expose durable run identifiers and 
 
 Keep asset origin, license/usage rights, supplied sources, AI involvement and approved versions. Content Credentials interoperability can be added where useful; provenance is not proof of factual accuracy, rights ownership or client approval.
 
-## Current implementation boundary
+## Implementation boundary at merged e7
 
-The first slice provides a staff preview, curated read-only `client-work` plugin and shared deterministic brief. The [staff profile/messages follow-up](workspace-messages.md) adds persistent profile configuration and human company/direct conversations, with code presence distinct from merge/production acceptance.
+Source `e7c7bed2654867146166c7303c1caa4e6405fd4a` includes staff profiles, saved conversations/runs, bounded source context/memory, human channels/attention, a default-disabled account-manager bot pilot, operation-specific OAuth writes/consent, native Gmail identity/bounded INBOX scanning, human portal handoffs and explicit document compare/manual reconciliation. They are implementation inputs to final release and real provider/team acceptance, not unfinished foundation builds. No new provider call or real ChatGPT grant is proved by that source snapshot.
 
-October 15, 2026 release boundary: [shared staff questions and durable runs](client-agent-conversations.md) are deployed as the #608 W1 foundation at `37d02b3`, with stored questions/results, status, cancellation and requester intent recovery. Migrated CI and bounded deployed CRUD/browser acceptance passed; no live model request was submitted. Prior-turn memory, persisted context observation/source evidence and real-provider/team acceptance remain open. Configurable provider plugin installations, app-wide bot execution, new mailbox connections, WhatsApp delivery and OpenSEO adapters remain unfinished. Existing task/finance/chat/email/portal code must be audited and extended before claiming any replacement is complete.
+Portal AI remains disabled by SQL/profile policy. WhatsApp transport and live OpenSEO reads are not implemented; saved service reports already are. Full Sent/history mailbox coverage, unified chat-attention/agent-run projection into the existing queue, trustworthy profit/currency definitions and invoice-view producer semantics retain the precise boundaries in the [seven current gaps](master-app-delivery-plan.md#validated-remaining-implementation-and-policy-gaps). Source-primary one-time input/cutover and real revenue, provider, accessible daily-use and recovery acceptance remain open. Realtime document convergence is not claimed by manual conflict recovery. Do not install another agent harness, queue or generic plugin uploader to recreate existing services.
 
 ## Standards references
 

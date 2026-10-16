@@ -10,7 +10,13 @@
 
 Prepared October 14, 2026 from three parallel read-only agent audits of main `80054ded43666a4988b3bcec03db17d14f0f4f14`. [Master delivery plan](../master-app-delivery-plan.md) remains the execution ledger; [product status](../product-status.md) owns capability classifications; [replacement readiness](../replacement-readiness-matrix.md) owns target acceptance. This document expands the approved [agency-agent roadmap](../agency-agent-platform-roadmap.md) into work packages.
 
-## Current execution overlay — October 15, 2026
+## Current execution reference — October 16, 2026
+
+Use the [master delivery/status entrypoint](../master-app-delivery-plan.md) and [GitHub #565](https://github.com/camster91/ashbi-platform/issues/565) for the current queue. Merged e7 (`e7c7bed2654867146166c7303c1caa4e6405fd4a`, PR #640) implements optional scoped OAuth actions, human attention/bot pilot, native Gmail identity/bounded INBOX ingestion, human portal handoffs and explicit manual document reconciliation in addition to earlier conversation/context/memory and task/report actions. Final deployment and provider/team acceptance remain separate. The seven validated implementation/policy gaps and source-primary input/cutover boundaries are centralized in that entrypoint.
+
+The W0–W14 sections below preserve the original implementation design and acceptance criteria. They do not requeue completed services or establish a new production claim. In particular, use current account-manager, receipt, Gmail, handoff and document services instead of implementing their historical proposed names again.
+
+## Historical execution overlay — October 15, 2026
 
 [Launch evidence](../launch-status.md) records verified production `37d02b304898ec5c621199f4a2a880ebd64a6372`, including #608 saved staff questions/durable runs, #609 unused-export cleanup and #606 retained document history. Required main CI 38808629217 and 169/169 bounded live API checks passed. Normal browser creation/full-reload persistence and separate API archive cleanup passed without Send or provider calls. This is the shipped W1 foundation, not complete W1 or whole-app acceptance.
 
@@ -20,7 +26,7 @@ For the shipped conversation/run foundation, the actual schema/service names and
 
 ## 1. Historical starting point — October 14 plan baseline
 
-The following list preserves the original planning baseline and earlier reconciliation notes. Its **Still missing** and **Release snapshot** entries are historical, not the current implementation queue; use the current overlay and delivery ledger above. The completion rule after the list still applies to remaining work.
+The following list preserves the original planning baseline and earlier reconciliation notes. Its **Still missing** and **Release snapshot** entries are historical, not the current implementation queue; use the current execution reference and master delivery ledger above. The completion rule after the list still applies to remaining work.
 
 - **Merged:** #592 Note audiences, #593 navigation simplification, #594 export repair and #595 client account-manager brief/plugin discovery. Do not reopen them as implementation TODOs.
 - **Already available:** project chat, threads, files/reactions, portal visibility rules, email inbox/draft workflows, Gmail transport, project communication history, workload/time/billing/reviews, governed AI sessions, action receipts, MCP and workers. Extend these modules rather than replacing them wholesale.
@@ -242,7 +248,7 @@ Retain source access/exports and a tested fallback. Switching work to Hub does n
 
 ## 4. Historical first execution checklist — superseded by #597/#598
 
-The foundation instructions below record the original work split and must not queue profiles/channels/timelines for rebuilding. Current execution starts with the pilot acceptance in #565, then the remaining gaps in the delivery ledger.
+The foundation instructions below record the original work split and must not queue profiles/channels/timelines for rebuilding. Current execution is recorded only in #565 and the master delivery ledger; the source-complete e7 foundations are acceptance inputs, not queued builds.
 
 1. Lead records the profile/run/channel/mailbox model contracts and intended audiences; agents review them before schema edits.
 2. Agent A adds focused failing profile ownership/revision tests, then the smallest service and migration-backed persistence slice. Prove save/reload through the client UI before extending model behavior.
