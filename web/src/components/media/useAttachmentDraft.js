@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { prepareUploadFile } from '../../lib/upload';
+import { attachmentKind, prepareUploadFile } from '../../lib/upload';
 
 export const MAX_MESSAGE_ATTACHMENTS = 10;
 
@@ -78,7 +78,7 @@ export function useAttachmentDraft({ upload, discard, max = MAX_MESSAGE_ATTACHME
       }
       const { file, error } = prepareUploadFile(raw, { fallbackBase });
       if (error) { problems.push(error); continue; }
-      const kind = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'file';
+      const kind = attachmentKind(file.type);
       added.push({
         localId: nextLocalId(),
         file,

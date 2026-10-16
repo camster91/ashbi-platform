@@ -1,0 +1,5 @@
+// Small synthetic originals for policy and disposable persistence fixtures.
+const box = (type, body) => { const header = Buffer.alloc(8); header.writeUInt32BE(body.length + 8); header.write(type, 4); return Buffer.concat([header, body]); };
+export const heicFixture = (brand = 'heic') => Buffer.concat([box('ftyp', Buffer.from(brand + '\0\0\0\0mif1heic')), box('meta', Buffer.concat([Buffer.alloc(4), ...['pitm', 'iinf', 'iloc', 'iprp'].map(type => box(type, Buffer.alloc(4)))])), box('mdat', Buffer.from('synthetic-encoded-item'))]);
+export const psdFixture = () => { const header = Buffer.alloc(26); header.write('8BPS'); header.writeUInt16BE(1, 4); header.writeUInt16BE(3, 12); header.writeUInt32BE(1, 14); header.writeUInt32BE(1, 18); header.writeUInt16BE(8, 22); header.writeUInt16BE(3, 24); return Buffer.concat([header, Buffer.alloc(14), Buffer.from([1, 2, 3])]); };
+export const utf16Fixture = (text, be = false) => { const bytes = Buffer.from(text, 'utf16le'); if (be) bytes.swap16(); return Buffer.concat([Buffer.from(be ? [0xfe, 0xff] : [0xff, 0xfe]), bytes]); };

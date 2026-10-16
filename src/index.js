@@ -8,6 +8,7 @@ import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
+import { MAX_UPLOAD_SIZE } from './security/file-upload-policy.js';
 import helmet from '@fastify/helmet';
 import { Server as SocketIO } from 'socket.io';
 import path from 'path';
@@ -159,7 +160,7 @@ await fastify.register(cors, {
   },
 });
 await fastify.register(cookie);
-await fastify.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
+await fastify.register(multipart, { limits: { fileSize: MAX_UPLOAD_SIZE } });
 const rateLimitRedis = createRateLimitRedis();
 if (rateLimitRedis) fastify.addHook('onClose', async () => { rateLimitRedis.disconnect(); });
 await fastify.register(rateLimit, {

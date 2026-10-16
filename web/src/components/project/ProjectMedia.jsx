@@ -581,7 +581,7 @@ export default function ProjectMedia({ projectId }) {
   const stopRecording = () => recorderRef.current?.stop();
 
   // Recording uses the shared capped recorder (lib/media-recorder.js), which
-  // stops itself at MAX_RECORDING_DURATION_MS or just before the 50 MB upload
+  // stops itself at MAX_RECORDING_DURATION_MS or just before the 64 MiB upload
   // cap (MAX_RECORDING_BYTES), whichever comes first.
   const startRecording = async () => {
     setRecordingError('');
@@ -603,9 +603,9 @@ export default function ProjectMedia({ projectId }) {
           recorderRef.current = null;
           setRecording(false);
           if (reason === 'duration') setRecordingNotice(`Recording reached the ${MAX_RECORDING_MINUTES}-minute limit, so it stopped and is being uploaded.`);
-          if (reason === 'size') setRecordingNotice('Recording reached the 50 MB upload limit, so it stopped and is being uploaded.');
+          if (reason === 'size') setRecordingNotice('Recording reached the 64 MiB upload limit, so it stopped and is being uploaded.');
           if (!blob.size) return setRecordingError('No recording data was captured.');
-          if (overLimit) return setRecordingError('This recording is over the 50 MB project upload limit. Record a shorter clip.');
+          if (overLimit) return setRecordingError('This recording is over the 64 MiB project upload limit. Record a shorter clip.');
           setUploading(true);
           try {
             const file = new File([blob], recordingFileName('screen-recording', mimeType), { type: mimeType });
@@ -660,7 +660,7 @@ export default function ProjectMedia({ projectId }) {
           {videoInputs.length > 0 && activeCameraId && <div className="flex flex-col gap-1"><label htmlFor={cameraSelectId} className="text-xs font-medium text-muted-foreground">Camera</label><select id={cameraSelectId} value={activeCameraId} onChange={(event) => switchDevice('videoinput', event.target.value)} className={selectClass}>{videoInputs.map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `Camera ${index + 1}`}</option>)}</select></div>}
         </div>}
         <p className="mt-2 text-xs text-muted-foreground">Turn camera off for an audio-only call. Your microphone and camera remain under your control throughout the call.</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><video ref={localVideoRef} muted autoPlay playsInline className="aspect-video w-full rounded-md bg-black object-cover" aria-label="Your camera preview" /><video ref={remoteVideoRef} autoPlay playsInline className="aspect-video w-full rounded-md bg-black object-cover" aria-label={remoteParticipant ? 'Call participant video' : 'Waiting for call participant video'} /></div></div>}
-      <div><h3 className="text-sm font-medium text-foreground">Screen recordings</h3><p className="mt-1 text-xs text-muted-foreground">Record a browser tab, window, or screen with the audio your browser makes available. Recordings stop automatically after {MAX_RECORDING_MINUTES} minutes or 50 MB, then upload to this project; they require an authenticated project session to access.</p>{recordings.length ? <ul className="mt-3 space-y-2">{recordings.map((item) => <li key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm"><span className="min-w-0 truncate">{item.originalName}</span><a className="min-h-11 inline-flex items-center rounded-lg px-3 text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/api/attachments/uploads/${encodeURIComponent(item.filename)}`} target="_blank" rel="noreferrer">Watch</a></li>)}</ul> : <p className="mt-3 text-sm text-muted-foreground">No screen recordings yet.</p>}</div>
+      <div><h3 className="text-sm font-medium text-foreground">Screen recordings</h3><p className="mt-1 text-xs text-muted-foreground">Record a browser tab, window, or screen with the audio your browser makes available. Recordings stop automatically after {MAX_RECORDING_MINUTES} minutes or 64 MiB, then upload to this project; they require an authenticated project session to access.</p>{recordings.length ? <ul className="mt-3 space-y-2">{recordings.map((item) => <li key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm"><span className="min-w-0 truncate">{item.originalName}</span><a className="min-h-11 inline-flex items-center rounded-lg px-3 text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/api/attachments/uploads/${encodeURIComponent(item.filename)}`} target="_blank" rel="noreferrer">Watch</a></li>)}</ul> : <p className="mt-3 text-sm text-muted-foreground">No screen recordings yet.</p>}</div>
       <p className="text-xs text-muted-foreground"><Mic className="mr-1 inline w-3.5 h-3.5" /><Video className="mr-1 inline w-3.5 h-3.5" />Calls use encrypted WebRTC media. This first release uses public STUN for discovery; add a managed TURN service before relying on calls across restrictive corporate networks.</p>
     </div>
   </section>;

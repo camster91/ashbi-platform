@@ -20,6 +20,7 @@ const {
 
 const PUBLIC_V4 = '93.184.216.34';
 const PUBLIC_V6 = '2606:2800:220:1:248:1893:25c8:1946';
+import { MAX_UPLOAD_SIZE } from '../../security/file-upload-policy.js';
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]);
 
 /** A dns.promises.lookup stand-in: host -> addresses. */
@@ -323,7 +324,7 @@ describe('captureWebPage', () => {
     await rejectsWith(captureWebPage({ url: 'https://example.com/' }, { launcher: fakeBrowser({ status: 404 }).launcher, lookup }), 'WEB_CAPTURE_FAILED');
     await rejectsWith(captureWebPage({ url: 'https://example.com/' }, { launcher: fakeBrowser({ finalUrl: 'data:text/html,x' }).launcher, lookup }), 'WEB_CAPTURE_FAILED');
     await rejectsWith(captureWebPage({ url: 'https://example.com/' }, { launcher: fakeBrowser({ png: Buffer.from('not a png') }).launcher, lookup }), 'WEB_CAPTURE_FAILED');
-    const huge = Buffer.alloc(50 * 1024 * 1024 + 1);
+    const huge = Buffer.alloc(MAX_UPLOAD_SIZE + 1);
     PNG.copy(huge);
     await rejectsWith(captureWebPage({ url: 'https://example.com/' }, { launcher: fakeBrowser({ png: huge }).launcher, lookup }), 'WEB_CAPTURE_TOO_LARGE');
   });

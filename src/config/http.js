@@ -6,7 +6,7 @@
  * holding sockets open forever; Fastify disables it by default. It is
  * server-wide and does not limit handler time, so long handlers (the 90s AI
  * session deadline, exports) are unaffected, but it must fit the slowest
- * legitimate upload: 50 MB multipart bodies need ~80s at 5 Mbit/s, hence the
+ * legitimate upload: 64 MiB multipart bodies need ~108s at 5 Mbit/s, hence the
  * 120s default. REQUEST_TIMEOUT_MS overrides it (10s..15min).
  */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;

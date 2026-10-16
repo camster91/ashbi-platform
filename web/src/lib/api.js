@@ -1,6 +1,6 @@
 // API client for Agency Hub
 
-import { uploadFileWithProgress } from './upload';
+import { prepareUploadFile, uploadFileWithProgress } from './upload';
 import { announceMfaEnrollmentRequired, MFA_ENROLLMENT_REQUIRED } from './mfa-enrollment';
 
 export { MFA_ENROLLMENT_REQUIRED };
@@ -751,11 +751,13 @@ export const api = {
   getIceServers: () => request('/realtime/ice-servers'),
   getAttachments: (entityType, entityId) =>
     request(`/attachments?entityType=${entityType}&entityId=${entityId}`),
-  uploadAttachment: async (file, entityType, entityId) => {
+  uploadAttachment: async (original, entityType, entityId) => {
+    const { file, error } = prepareUploadFile(original);
+    if (error) throw new Error(error);
     const form = new FormData();
-    form.append('file', file, file.name);
     form.append('entityType', entityType);
     form.append('entityId', entityId);
+    form.append('file', file, file.name);
     const response = await fetch(`${API_BASE}/attachments`, {
       method: 'POST', body: form, credentials: 'include',
     });

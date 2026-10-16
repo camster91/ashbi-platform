@@ -35,7 +35,7 @@ describe('project files upload', () => {
     expect(input.getAttribute('accept')).toContain('.pdf');
     expect(screen.getByRole('button', { name: 'Upload file' }).className).toMatch(/min-h-11/);
     expect(screen.getByText("Clients can't see new files until you share them.")).toBeInTheDocument();
-    expect(screen.getByText(/Up to 50 MB/)).toBeInTheDocument();
+    expect(screen.getByText(/Up to 64 MiB/)).toBeInTheDocument();
   });
 
   it('uploads to the project, shows progress, then refreshes the list', async () => {
@@ -62,14 +62,22 @@ describe('project files upload', () => {
     expect(screen.getByRole('checkbox', { name: 'Visible to client' })).not.toBeChecked();
   });
 
+  it('accepts an untyped HEIC original with the exact safe name in the staff picker', async () => {
+    api.getAttachments.mockResolvedValue([]);api.uploadAttachmentWithProgress.mockResolvedValue({id:'heic'});
+    renderPanel();const file=new File(['original'],'photo.final.v2.HEIC');
+    await userEvent.setup().upload(await screen.findByLabelText('Upload file'),file);
+    await waitFor(()=>expect(api.uploadAttachmentWithProgress).toHaveBeenCalled());
+    const sent=api.uploadAttachmentWithProgress.mock.calls[0][0];expect(sent.name).toBe(file.name);expect(sent.type).toBe('image/heic');expect(sent.size).toBe(file.size);
+  });
+
   it('refuses a file over the size limit without sending it', async () => {
     api.getAttachments.mockResolvedValue([]);
     renderPanel();
     const big = new File(['x'], 'huge.pdf', { type: 'application/pdf' });
-    Object.defineProperty(big, 'size', { value: 51 * 1024 * 1024 });
+    Object.defineProperty(big, 'size', { value: 65 * 1024 * 1024 });
     const user = userEvent.setup();
     await user.upload(await screen.findByLabelText('Upload file'), big);
-    expect(await screen.findByRole('alert')).toHaveTextContent('huge.pdf is larger than the 50 MB limit.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('huge.pdf is larger than the 64 MiB limit.');
     expect(api.uploadAttachmentWithProgress).not.toHaveBeenCalled();
   });
 

@@ -32,6 +32,24 @@ describe('client portal Documents tab failures', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('prepares untyped original files with the exact multi-period name before portal upload', async () => {
+    fetchMock.mockImplementation((url, options = {}) => String(url).endsWith('/upload') && options.method === 'POST' ? json({id:'uploaded'},201) : json([]));
+    render(<DocumentsTab projects={projects} token={null} />);
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading documents...' })).toBeNull());
+    fireEvent.change(screen.getByLabelText('Choose documents to upload'), {target:{files:[new File(['original'],'photo.archive.HEIC')]}});
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url,options])=>String(url).endsWith('/upload')&&options?.method==='POST')).toBe(true));
+    const sent=fetchMock.mock.calls.find(([url,options])=>String(url).endsWith('/upload')&&options?.method==='POST')[1].body.get('file');
+    expect(sent.name).toBe('photo.archive.HEIC');expect(sent.type).toBe('image/heic');expect(sent.size).toBe(8);
+  });
+
+  it('refuses an unsafe portal filename before any upload', async () => {
+    fetchMock.mockImplementation(()=>json([]));render(<DocumentsTab projects={projects} token={null} />);
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading documents...' })).toBeNull());
+    fireEvent.change(screen.getByLabelText('Choose documents to upload'),{target:{files:[new File(['x'],'../brief.pdf',{type:'application/pdf'})]}});
+    expect(await screen.findByRole('alert')).toHaveTextContent('failed to upload');
+    expect(fetchMock.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(0);
+  });
+
   it('announces failed downloads instead of failing silently', async () => {
     fetchMock.mockImplementation((url) => {
       if (String(url).endsWith('/download')) return json({ error: 'gone' }, 404);

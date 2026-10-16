@@ -32,7 +32,7 @@ describe('shared capped recorder (docs/chat-media.md)', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
-  it('stops itself just before the 50 MB upload cap', () => {
+  it('stops itself just before the 64 MiB upload cap', () => {
     const onStop = vi.fn();
     const maxBytes = 1000;
     startCappedRecording({}, { Recorder: FakeRecorder, maxBytes, onStop, mimeType: 'video/webm;codecs=vp8,opus' });
@@ -104,14 +104,14 @@ describe('upload preparation', () => {
     expect(pasted.file.name).toBe('pasted.png');
     expect(pasted.file.type).toBe('image/png');
     const dotted = prepareUploadFile(new File(['x'], 'Screen Shot 2026.09.29 at 10.00.png', { type: 'image/png' }));
-    expect(dotted.file.name).toBe('Screen Shot 2026-09-29 at 10-00.png');
+    expect(dotted.file.name).toBe('Screen Shot 2026.09.29 at 10.00.png');
     const untyped = prepareUploadFile(new File(['x'], 'notes.txt'));
     expect(untyped.file.type).toBe('text/plain');
     expect(prepareUploadFile(new File(['x'], 'movie.mov', { type: 'video/quicktime' })).error).toMatch(/not a supported file type/);
     expect(prepareUploadFile(new File([], 'empty.png', { type: 'image/png' })).error).toMatch(/empty/);
     const big = new File(['x'], 'big.mp4', { type: 'video/mp4' });
     Object.defineProperty(big, 'size', { value: MAX_UPLOAD_BYTES + 1 });
-    expect(prepareUploadFile(big).error).toMatch(/50 MB/);
+    expect(prepareUploadFile(big).error).toMatch(/64 MiB/);
   });
 
   it('classifies attachments for inline rendering', () => {

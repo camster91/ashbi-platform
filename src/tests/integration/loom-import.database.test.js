@@ -20,7 +20,7 @@ const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const importer = path.join(repoRoot, 'scripts', 'import-loom.mjs');
 const fixtures = path.join(repoRoot, 'src', 'tests', 'fixtures');
-const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+import { MAX_UPLOAD_SIZE } from '../../security/file-upload-policy.js';
 
 // The CLI runs in `workDir`, so stored uploads land in workDir/uploads.
 function runCli(args, workDir, { summary = true } = {}) {

@@ -10,7 +10,7 @@ import { cn } from '../../lib/utils';
 import usePortalLightTheme from '../../hooks/usePortalLightTheme';
 import { statusColor, statusLabel } from '../../lib/status';
 import { invoiceDisplayStatus } from '../../lib/invoice-status';
-import { uploadFileWithProgress } from '../../lib/upload';
+import { UPLOAD_ACCEPT, uploadFileWithProgress } from '../../lib/upload';
 import MessageAttachments from '../../components/media/MessageAttachments';
 import { AttachmentToolbar, AttachmentTray, useCaptureDialog, useDropAndPaste } from '../../components/media/ComposerAttachments';
 import { useAttachmentDraft } from '../../components/media/useAttachmentDraft';
@@ -384,6 +384,7 @@ export function PortalUploadZone({ inputRef, inputLabel, helpId, uploading, disa
       <input
         type="file"
         ref={inputRef}
+        accept={UPLOAD_ACCEPT}
         multiple
         className="sr-only"
         aria-label={inputLabel}
@@ -414,7 +415,7 @@ export function PortalUploadZone({ inputRef, inputLabel, helpId, uploading, disa
         <p className="mt-2 font-semibold text-foreground">
           {uploading ? 'Uploading...' : 'Drop files here or click to upload'}
         </p>
-        <p id={helpId} className="text-sm text-muted-foreground">PDF, images, documents — up to 50MB</p>
+        <p id={helpId} className="text-sm text-muted-foreground">Originals, PDF, images, Office files, ZIP and media — up to 64 MiB</p>
       </button>
     </>
   );

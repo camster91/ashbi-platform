@@ -70,7 +70,7 @@ at 16 MiB.
 
 Reviewed files must be **JPEG, PNG, GIF, WebP or PDF** and pass the same
 upload policy as every upload ([upload-security.md](upload-security.md)):
-extension, MIME type and file signature must agree, at most **50 MB** each.
+extension, MIME type and file signature must agree, at most **64 MiB** each.
 
 ## Mapping
 
@@ -128,7 +128,7 @@ code.
 | Reply whose parent is not in the CSV or the Hub (`PARENT_MISSING`) | `warnings` | no: imported as a top-level comment without a pin |
 | Reply with a page or coordinates (`REPLY_POSITION_IGNORED`) | `warnings` | no: imported as a reply |
 | Author email blank or not an active staff user (`UNKNOWN_AUTHOR`, once per author) | `users.unmapped`, `warnings` | no: imported by display name |
-| File type not reviewable (`UNSUPPORTED_TYPE`), over 50 MB (`FILE_TOO_LARGE`), or signature mismatch (`INVALID_CONTENT`) | `unsupported` | no: the file and its comments are reported, not imported |
+| File type not reviewable (`UNSUPPORTED_TYPE`), over 64 MiB (`FILE_TOO_LARGE`), or signature mismatch (`INVALID_CONTENT`) | `unsupported` | no: the file and its comments are reported, not imported |
 | Media scanner blocked the file (`MEDIA_BLOCKED`, live run only) | `unsupported` | no: reported, not imported |
 | Imported session or comment deleted in the Hub (`DELETED_IN_HUB`; it stays deleted) | `totals.deletedInHub`, `warnings` | no |
 | Imported session closed in the Hub by a newer version (`SESSION_CLOSED`) | `warnings` | no: new comments are not added |

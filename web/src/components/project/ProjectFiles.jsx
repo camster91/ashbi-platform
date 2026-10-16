@@ -298,7 +298,7 @@ export default function ProjectFiles({ projectId }) {
               : <Upload className="h-4 w-4" aria-hidden="true" />}
             {upload ? 'Uploading…' : 'Upload file'}
           </button>
-          <p id={`${id}-upload-limits`} className="text-xs text-muted-foreground">Up to 50 MB: images, PDF, Office files, text, CSV, ZIP, audio or video.</p>
+          <p id={`${id}-upload-limits`} className="text-xs text-muted-foreground">Up to 64 MiB: images, HEIC, PSD, PDF, Office files, JSON, text, CSV, ZIP, audio or video.</p>
         {showBulk && (
           <div className="flex shrink-0 flex-col sm:items-end">
             <Button

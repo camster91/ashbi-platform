@@ -286,7 +286,7 @@ everywhere in the portal.
 
 Staff enter a URL; the server renders it in headless Chromium, takes a
 full-page PNG screenshot, stores it as a project attachment (same storage,
-50 MB limit and PNG signature check as uploads), and opens a review session
+64 MiB limit and PNG signature check as uploads), and opens a review session
 on it with `sourceUrl` and `captureViewport`. **Recapture** (on the newest
 version) captures the same URL again as the next version, so the previous
 version's comments stay available read-only.
@@ -302,7 +302,7 @@ WEB_REVIEW_CAPTURE_DISABLED` and `GET /api/reviews/capabilities` reports
 | Viewports | `desktop` 1440 x 900 CSS px at 1x; `mobile` 390 x 844 CSS px at 2x, with touch and the mobile viewport meta tag honoured |
 | Deadline | 20 seconds for the whole capture (`504 WEB_CAPTURE_TIMEOUT`) |
 | Page height | Clamped to 16,000 device pixels (16,000 CSS px desktop, 8,000 mobile); the audit event records `captureTruncated` |
-| Size | PNG at most 50 MB (`422 WEB_CAPTURE_TOO_LARGE`); at most 100 MB transferred and 400 requests per capture |
+| Size | PNG at most 64 MiB (`422 WEB_CAPTURE_TOO_LARGE`); at most 100 MB transferred and 400 requests per capture |
 | Concurrency | 2 captures at a time per API process (`429 WEB_CAPTURE_BUSY`) |
 | Failure | Error status 400+ or navigation away from http(s): `502 WEB_CAPTURE_FAILED`; no browser: `503 WEB_CAPTURE_UNAVAILABLE` |
 | Session | A fresh browser context per capture: no cookies, storage, credentials, service workers or downloads; closed afterwards |

@@ -55,6 +55,15 @@ afterEach(() => {
 });
 
 describe('staff chat composer attachments', () => {
+  it('uploads HEIC as an original file without creating an unsupported inline preview', async () => {
+    const upload=vi.fn(async()=>({id:'heic-original'}));
+    const {result}=renderHook(()=>useAttachmentDraft({upload,discard:vi.fn(async()=>({}))}));
+    await act(async()=>{result.current.addFiles([new File(['original'],'photo.v2.HEIC',{type:'image/heic'})]);});
+    expect(upload).toHaveBeenCalledWith(expect.any(File),expect.any(Object));
+    expect(result.current.items[0]).toMatchObject({name:'photo.v2.HEIC',kind:'file',previewUrl:''});
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
   it('uploads a pasted screenshot first, blocks sending until it is ready, then sends its id with the message', async () => {
     const upload = deferred();
     api.uploadChatFile.mockReturnValue(upload.promise);

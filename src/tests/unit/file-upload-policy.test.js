@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateUploadedFile } from '../../security/file-upload-policy.js';
+import { validateUploadedFile, MAX_UPLOAD_SIZE } from '../../security/file-upload-policy.js';
 
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
 
@@ -41,7 +41,7 @@ test('every refusal carries a stable code for the upload.rejected audit event', 
     [['payload.svg', 'image/svg+xml', Buffer.from('<svg/>')], 'EXTENSION_NOT_ALLOWED'],
     [['proof.png', 'text/html', png], 'MIME_MISMATCH'],
     [['notes.txt', 'text/plain', Buffer.alloc(0)], 'EMPTY_FILE'],
-    [['proof.png', 'image/png', Buffer.alloc(50 * 1024 * 1024 + 1)], 'TOO_LARGE'],
+    [['proof.png', 'image/png', Buffer.alloc(MAX_UPLOAD_SIZE + 1)], 'TOO_LARGE'],
     [['proof.png', 'image/png', Buffer.from('<script>alert(1)</script>')], 'CONTENT_MISMATCH'],
   ]) {
     const result = validateUploadedFile(...args);

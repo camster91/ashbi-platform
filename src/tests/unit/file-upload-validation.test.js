@@ -98,7 +98,7 @@ describe('File Upload Validation', () => {
       }
 
       // Check for file size limit
-      const hasFileSizeLimit = content.includes('50000000') || content.includes('50MB') ||
+      const hasFileSizeLimit = content.includes('MAX_UPLOAD_SIZE') || content.includes('fileUpload.MAX_SIZE') ||
         content.includes('maxFileSize') || content.includes('limits');
 
       if (!hasFileSizeLimit) {

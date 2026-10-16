@@ -733,7 +733,7 @@ export default async function clientPortalRoutes(fastify) {
     if (!attachment) return reply.status(404).send({ error: 'File not found' });
     const mime = String(attachment.mimeType || '');
     const media = mime.startsWith('video/') || mime.startsWith('audio/');
-    const inline = media || mime.startsWith('image/');
+    const inline = media || ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mime);
     const sent = await sendStoredFile(request, reply, {
       filepath: path.join(UPLOAD_DIR, path.basename(attachment.filename)),
       mimeType: attachment.mimeType,

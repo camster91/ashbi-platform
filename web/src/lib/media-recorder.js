@@ -2,7 +2,7 @@
 // "Record screen" panel (components/project/ProjectMedia.jsx) and the chat
 // capture dialog (components/media/CaptureDialog.jsx).
 //
-// Uploads are capped at 50 MB and kept on local disk (owner decision), so a
+// Uploads are capped at 64 MiB and kept on local disk (owner decision), so a
 // recording stops itself at the size cap (with headroom for the final chunk)
 // or at the maximum duration, whichever comes first. Paused time does not
 // count toward the duration.
