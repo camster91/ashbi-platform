@@ -1,3 +1,4 @@
+import ProjectHumanHandoffs from '../components/ProjectHumanHandoffs';
 import ProjectBudget from '../components/ProjectBudget';
 import { useState } from 'react';
 import { embeddedAiEnabled } from '../lib/features';
@@ -313,6 +314,8 @@ export default function Project() {
           />
         </div>
       </div>
+
+      <ProjectHumanHandoffs projectId={id} />
 
       {/* AI Summary */}
       {embeddedAiEnabled && project.aiSummary && (

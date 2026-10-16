@@ -5,6 +5,7 @@ import { Alert, Button, Card, LoadingState } from '../../components/ui';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
 import { cn } from '../../lib/utils';
 import { portalFetch, downloadPortalDocument, deletePortalDocument, fmtRelative, projectStatusLabel, projectStatusColor, priorityLabel, priorityColor, Icons, useProjectChat, PortalChatComposer, PortalMessageAttachments, canSendPortalMessage, PortalProgress, PortalDocumentList, PortalUploadZone, StatusBadge, portalFieldStyles, pageTitleClass, sectionTitleClass, labelClass } from './shared';
+import PortalTeamRequests from '../../components/PortalTeamRequests';
 import { formatDate } from '../../lib/format';
 
 // The task board's columns, in order. The server maps every task status to
@@ -21,7 +22,7 @@ const TASK_COLUMNS = Object.freeze([
 const EMPTY_TASK_COLUMNS = Object.freeze(Object.fromEntries(TASK_COLUMNS.map(({ key }) => [key, []])));
 
 // ── Project Detail (Kanban + Chat + Documents) ────────────────────────────────
-export default function ProjectDetail({ projectId, token, onBack }) {
+export default function ProjectDetail({ projectId, token, onBack, handoffIdentity }) {
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState(EMPTY_TASK_COLUMNS);
   const [activeView, setActiveView] = useState('kanban'); // kanban | chat | documents
@@ -222,6 +223,8 @@ export default function ProjectDetail({ projectId, token, onBack }) {
           <StatusBadge color={projectStatusColor(project.status)}>{projectStatusLabel(project.status)}</StatusBadge>
         </div>
       </div>
+
+      <PortalTeamRequests projectId={projectId} token={token} identity={handoffIdentity} />
 
       {/* Progress */}
       <Card padding="none" className="px-5 py-4">

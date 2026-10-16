@@ -1175,6 +1175,9 @@ export const api = {
   updateProjectContext: (projectId, data) =>
     request(`/projects/${projectId}/context`, { method: 'POST', body: data }),
 
+  listPortalHandoffs: (params = {}) => request(`/portal-handoffs?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined))}`, { silent: true }),
+  transitionPortalHandoff: (id, operation, body) => request(`/portal-handoffs/${encodeURIComponent(id)}/${operation}`, { method: 'POST', body, silent: true }),
+
   // ===== GMAIL =====
   getGmailStatus: () =>
     request('/gmail/status'),
