@@ -1,6 +1,16 @@
 # Internal pilot launch status
 
-## Current execution overlay — October 15
+## Current execution overlay — October 16
+
+Verified October 16, 2026: production is `4130e804d610557bb4b8315cb3a674a53fdb5575` ([#622](https://github.com/camster91/ashbi-platform/pull/622)). [Exact-main CI 38846564863](https://github.com/camster91/ashbi-platform/actions/runs/38846564863) and [hosted artifact build 38847562286](https://github.com/camster91/ashbi-platform/actions/runs/38847562286) passed. The reviewed SSH controller deployed the verified image after a fresh encrypted off-server backup; API and worker are healthy on the same image, and exact-revision strict readiness passed. Previous containers/images remain available for rollback. This is not a restore-drill claim.
+
+Bounded live API QA passed **51/51** in the synthetic QA tenant, covering client task preview/confirmation/receipt, saved-report publication/CAS/role boundaries, own timesheets and ADMIN-only finance denial, with profile/fixture cleanup verified. Bounded Chrome 155 browser QA covered canonical channel drafts, own timesheets, finance denial, saved-report visibility/provenance and the actual unconfirmed task preview. The preserved bounded full browser run passed 34/35 checks and stopped at a helper selector mismatch; a subsequent task-only run passed 20/20 checks for the affected workflow and cleanup. These runs do not prove whole-app, mobile or human acceptance. The earlier 169 checks remain dated evidence on `37d02b3` and are not relabeled as rerun on `4130e80`. No model/provider requests, real email delivery or billing mutation were performed. Operational alert owner/destination remains unset. Sources stay primary until reviewed input/readback and final cutover.
+
+Newly deployed: persisted source context #614, bounded successful-exchange memory #615, stored-inbox email-to-task #616, default-off confirmed client task proposals #617, saved service-report mappings/publication and last-good data #618, canonical client/project channel creation #619, included-work retainer notes #620 and TEAM own Timesheets navigation #621. Saved reports are not a live OpenSEO adapter. Human chat does not establish bot participation or private bot memory. Real provider quality, ChatGPT connection acceptance and Cameron/Bianca daily use remain unverified.
+
+[#565](https://github.com/camster91/ashbi-platform/issues/565) remains the current execution queue. The following earlier records retain their original dates and revision attribution.
+
+## Historical execution overlay — October 15
 
 Verified production is `37d02b304898ec5c621199f4a2a880ebd64a6372`, including #608 shared staff questions/durable runs, #609 unused-export cleanup and #606 document history. Required main CI [38808629217](https://github.com/camster91/ashbi-platform/actions/runs/38808629217) passed 2,195 backend, 183 integration and 1,351 frontend tests plus required release gates.
 
