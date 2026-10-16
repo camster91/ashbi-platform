@@ -98,4 +98,3 @@ describe.each(['list', 'detail'])('%s invoice Undo workflow', page => {
     expect(api.undoInvoiceVoid).not.toHaveBeenCalled();
   });
 });
-
