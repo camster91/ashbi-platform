@@ -27,7 +27,7 @@
     "/api/agent/tools/publish_client_service_report_snapshot": {
       "post": {
         "operationId": "publish_client_service_report_snapshot",
-        "summary": "Prepare an administrator-supplied saved report snapshot for an existing canonical client mapping. Explicit confirmation is required. Complete/EMPTY snapshots permanently remove omitted saved reports; UNAVAILABLE preserves last-good reports. No provider request, verified origin or message delivery. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Prepare an administrator-supplied saved report snapshot for an existing canonical client mapping. Explicit confirmation is required. Complete/EMPTY snapshots permanently remove omitted saved reports; UNAVAILABLE preserves last-good reports. No provider request, verified origin or message delivery. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -490,6 +490,137 @@
         }
       }
     },
+    "/api/agent/tools/list_workspace_account_manager_requests": {
+      "post": {
+        "operationId": "list_workspace_account_manager_requests",
+        "summary": "Read bounded typed draft/status cards in one internal channel you currently belong to. This does not start inference, install or enable a bot, or send a human message.",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 20
+                  },
+                  "after": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "channelId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "channelId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Structured result or action preview/receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request refused or operation failed; inspect error.code before retrying"
+          }
+        }
+      }
+    },
+    "/api/agent/tools/get_workspace_account_manager_request": {
+      "post": {
+        "operationId": "get_workspace_account_manager_request",
+        "summary": "Read a private channel account-manager draft/status card with current membership. The draft is untrusted text, not an approval or completed action.",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "channelId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "invocationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "channelId",
+                  "invocationId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Structured result or action preview/receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request refused or operation failed; inspect error.code before retrying"
+          }
+        }
+      }
+    },
     "/api/agent/tools/list_workspace_chat_channels": {
       "post": {
         "operationId": "list_workspace_chat_channels",
@@ -760,7 +891,7 @@
     "/api/agent/tools/create_task_from_client_message": {
       "post": {
         "operationId": "create_task_from_client_message",
-        "summary": "Prepare a source-linked task from a stored client inbox message. Requires current staff access, an active canonical client project, and explicit human confirmation of the immutable preview. Project email history remains read-only. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Prepare a source-linked task from a stored client inbox message. Requires current staff access, an active canonical client project, and explicit human confirmation of the immutable preview. Project email history remains read-only. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -872,7 +1003,7 @@
     "/api/agent/tools/create_client_task": {
       "post": {
         "operationId": "create_client_task",
-        "summary": "Prepare an exact unassigned task proposal in an active canonical client project. The client Task proposals plugin must be explicitly enabled. Creates nothing until a human confirms the immutable preview; no model, messaging, billing or arbitrary tools are invoked. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Prepare an exact unassigned task proposal in an active canonical client project. The client Task proposals plugin must be explicitly enabled. Creates nothing until a human confirms the immutable preview; no model, messaging, billing or arbitrary tools are invoked. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -1165,7 +1296,7 @@
     "/api/agent/tools/set_workspace_page_access": {
       "post": {
         "operationId": "set_workspace_page_access",
-        "summary": "Set shared-team or restricted page access. Owner and organization administrators retain access; ancestor restrictions still apply. Requires observed access revision and human review; can change descendant visibility. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Set shared-team or restricted page access. Owner and organization administrators retain access; ancestor restrictions still apply. Requires observed access revision and human review; can change descendant visibility. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -1276,7 +1407,7 @@
     "/api/agent/tools/create_workspace_page": {
       "post": {
         "operationId": "create_workspace_page",
-        "summary": "Create shared Ashbi team knowledge without a client or project. Preview includes exact Markdown and parent; requires human confirmation. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Create shared Ashbi team knowledge without a client or project. Preview includes exact Markdown and parent; requires human confirmation. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -1373,7 +1504,7 @@
     "/api/agent/tools/update_workspace_page": {
       "post": {
         "operationId": "update_workspace_page",
-        "summary": "Edit, move, archive or restore one shared workspace knowledge page with its observed revision. Preview shows current and proposed content; requires human confirmation. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Edit, move, archive or restore one shared workspace knowledge page with its observed revision. Preview shows current and proposed content; requires human confirmation. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -1684,7 +1815,7 @@
     "/api/agent/tools/set_project_note_access": {
       "post": {
         "operationId": "set_project_note_access",
-        "summary": "Change a document audience after exact preview and human confirmation. Current ownership, ancestor rights, staff roles and audit are revalidated atomically. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Change a document audience after exact preview and human confirmation. Current ownership, ancestor rights, staff roles and audit are revalidated atomically. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -1872,7 +2003,7 @@
     "/api/agent/tools/set_task_board": {
       "post": {
         "operationId": "set_task_board",
-        "summary": "Move one task to an active board in its canonical project, or null for its default board. Preserves owner and billing; absent stageKey keeps lifecycle and clears the previous stage. Requires observed membership revision and human approval. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Move one task to an active board in its canonical project, or null for its default board. Preserves owner and billing; absent stageKey keeps lifecycle and clears the previous stage. Requires observed membership revision and human approval. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -1973,7 +2104,7 @@
     "/api/agent/tools/set_task_collaborators": {
       "post": {
         "operationId": "set_task_collaborators",
-        "summary": "Set an exact staff contributor roster, preserving the accountable owner. Requires the observed roster revision and human approval of its preview. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Set an exact staff contributor roster, preserving the accountable owner. Requires the observed roster revision and human approval of its preview. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -2065,7 +2196,7 @@
     "/api/agent/tools/set_task_recurrence": {
       "post": {
         "operationId": "set_task_recurrence",
-        "summary": "Configure or stop task calendar/completion recurrence with its observed revision. Human approval is required; this never replays completed history. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Configure or stop task calendar/completion recurrence with its observed revision. Human approval is required; this never replays completed history. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -2481,7 +2612,7 @@
     "/api/agent/tools/create_unbilled_invoice_draft": {
       "post": {
         "operationId": "create_unbilled_invoice_draft",
-        "summary": "Create a draft from the exact reviewed approved-work preview. Claims sources once with number, lines, original history and audit. No invoice send, payment link or charge. Requires human confirmation. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Create a draft from the exact reviewed approved-work preview. Claims sources once with number, lines, original history and audit. No invoice send, payment link or charge. Requires human confirmation. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -2658,7 +2789,7 @@
     "/api/agent/tools/release_unbilled_invoice_sources": {
       "post": {
         "operationId": "release_unbilled_invoice_sources",
-        "summary": "Release exactly the reviewed invoice-owned claims on an unpaid voided invoice after its undo window. Retains original history and does not reopen the invoice. Requires human confirmation. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Release exactly the reviewed invoice-owned claims on an unpaid voided invoice after its undo window. Retains original history and does not reopen the invoice. Requires human confirmation. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -3331,7 +3462,7 @@
     "/api/agent/tools/create_workspace_collection": {
       "post": {
         "operationId": "create_workspace_collection",
-        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -3544,7 +3675,7 @@
     "/api/agent/tools/update_workspace_collection": {
       "post": {
         "operationId": "update_workspace_collection",
-        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -3747,7 +3878,7 @@
     "/api/agent/tools/create_workspace_record": {
       "post": {
         "operationId": "create_workspace_record",
-        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -3942,7 +4073,7 @@
     "/api/agent/tools/update_workspace_record": {
       "post": {
         "operationId": "update_workspace_record",
-        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -4126,7 +4257,7 @@
     "/api/agent/tools/create_workspace_record_form": {
       "post": {
         "operationId": "create_workspace_record_form",
-        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -4300,7 +4431,7 @@
     "/api/agent/tools/update_workspace_record_form": {
       "post": {
         "operationId": "update_workspace_record_form",
-        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -4496,7 +4627,7 @@
     "/api/agent/tools/submit_workspace_record_form": {
       "post": {
         "operationId": "submit_workspace_record_form",
-        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Apply exactly the reviewed collection/record/form change. Rechecks stored staff role, schema/record revisions, relation scope and fingerprint; requires explicit human confirmation. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -5449,7 +5580,7 @@
     "/api/agent/tools/create_task": {
       "post": {
         "operationId": "create_task",
-        "summary": "Create a task in a project. Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Create a task in a project. Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -5543,7 +5674,7 @@
     "/api/agent/tools/create_calendar_event": {
       "post": {
         "operationId": "create_calendar_event",
-        "summary": "Create an Ashbi calendar event in a project (never synced to an external calendar). Prepares a preview only; requires confirm_action after human review.",
+        "summary": "Create an Ashbi calendar event in a project (never synced to an external calendar). Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,
@@ -5704,7 +5835,7 @@
     "/api/agent/tools/confirm_action": {
       "post": {
         "operationId": "confirm_action",
-        "summary": "Execute an action only after the human has reviewed its preview and explicitly authorized it. Never infer approval.",
+        "summary": "Execute a reviewed preview by explicit authenticated API confirmation. This does not prove a fresh human click. Never infer approval.",
         "x-openai-isConsequential": true,
         "requestBody": {
           "required": true,

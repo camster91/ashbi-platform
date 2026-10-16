@@ -25,7 +25,7 @@ def run():
     assert re.fullmatch(r'ashbi-full-\d{8}_\d{6}-[a-z0-9]{7}\.tar\.age', archive.name)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     assert digest == fields['BACKUP_SHA256'] and archive.stat().st_size == int(fields['BACKUP_BYTES'])
-    sql = "SELECT migration_name FROM public.\"_prisma_migrations\" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL AND migration_name IN ('20260927030000_chat_message_visibility', '20261016060000_mcp_action_binding')"
+    sql = "SELECT migration_name FROM public.\"_prisma_migrations\" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL AND migration_name IN ('20260927030000_chat_message_visibility', '20261016060000_mcp_action_binding', '20261016090000_workspace_account_manager_pilot')"
     applied = subprocess.run(['docker','exec','ashbi-hub-postgres','psql','-U','ashbihub','-d','ashbihub','-At','-c',sql], capture_output=True,text=True,check=True,timeout=30).stdout.splitlines()
     floor_file = Path('/opt/ashbi-platform/releases/rollback-floor')
     recorded = floor_file.read_text().splitlines() if floor_file.exists() else []

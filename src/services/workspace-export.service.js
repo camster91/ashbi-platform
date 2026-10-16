@@ -73,6 +73,8 @@ const orgUser = (org) => ({ organizationId: org });
 
 /** @type {readonly EntitySpec[]} */
 export const EXPORT_ENTITIES = Object.freeze([
+  { name: 'workspace_account_manager_bindings', model: 'WorkspaceAccountManagerBinding', category: 'communication', where: org => ({ organizationId: org }), description: 'Private channel pilot installations, including disabled bindings; organization-owner export only' },
+  { name: 'workspace_account_manager_invocations', model: 'WorkspaceAccountManagerInvocation', category: 'communication', where: org => ({ organizationId: org }), omit: ['idempotencyKey', 'inputHash'], description: 'Private channel source and typed delivery outcomes; organization-owner export only' },
   { name: 'client_service_projects', model: 'ClientServiceProject', category: 'workspace', where: (org) => ({ organizationId: org, client: activeClient(org) }), description: 'Saved report project mappings and publication status, including disabled mappings' },
   { name: 'client_service_reports', model: 'ClientServiceReport', category: 'workspace', where: (org) => ({ organizationId: org, client: activeClient(org), mapping: { organizationId: org, client: activeClient(org) } }), description: 'Administrator-supplied saved report metadata and source/storage timestamps' },
   { name: 'gmail_send_receipts', model: 'GmailSendReceipt', category: 'workspace', where: (org) => ({ organizationId: org }), omit: ['payloadHash', 'idempotencyKey'], description: 'Gmail delivery outcomes and bounded recovery snapshots; no OAuth credentials' },
@@ -150,7 +152,7 @@ export const EXPORT_ENTITIES = Object.freeze([
   { name: 'revenue_snapshots', model: 'RevenueSnapshot', category: 'finance', where: (org) => ({ client: activeClient(org) }), description: 'Monthly revenue snapshots per client' },
 
   // Communication
-  { name: 'client_agent_conversations', model: 'ClientAgentConversation', category: 'communication', where: (org) => ({ organizationId: org, client: activeClient(org) }), description: 'Shared staff client account-manager conversations, including archived conversations' },
+  { name: 'client_agent_conversations', model: 'ClientAgentConversation', category: 'communication', where: (org) => ({ organizationId: org, client: activeClient(org) }), description: 'Client account-manager conversations, including explicit private sourceChannelId/sourceBindingId audience and archived conversations; organization-owner export only' },
   { name: 'client_agent_runs', model: 'ClientAgentRun', category: 'communication', where: (org) => ({ organizationId: org, conversation: { organizationId: org, client: activeClient(org) } }), omit: ['idempotencyKey', 'inputHash', 'claimToken'], description: 'Stored client account-manager questions, answers and run outcomes; internal intent and worker tokens omitted' },
   { name: 'threads', model: 'Thread', category: 'communication', where: threadScope, omit: ['inboundDeliveryKey'], description: 'Email conversation threads' },
   { name: 'messages', model: 'Message', category: 'communication', where: (org) => ({ thread: threadScope(org) }), omit: ['rawEmail'], description: 'Email messages (parsed body and headers)' },

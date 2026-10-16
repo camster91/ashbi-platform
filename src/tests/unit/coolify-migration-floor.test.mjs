@@ -34,8 +34,7 @@ test('invalid persisted floor cannot become a migration path', () => fixture(asy
 }));
 
 
-test('OAuth confidentiality floor is retained by direct deploy, migration wrapper and backup catalog proof', async () => {
-  const name='20261016060000_mcp_action_binding';
+for (const name of ['20261016060000_mcp_action_binding', '20261016090000_workspace_account_manager_pilot']) test(`${name} confidentiality floor is retained by direct deploy, migration wrapper and backup catalog proof`, async () => {
   assert.ok(FLOOR_MIGRATIONS.includes(name));
   const direct=await fs.readFile(new URL('../../../scripts/deploy-vps-direct.sh',import.meta.url),'utf8');
   const backup=await fs.readFile(new URL('../../../scripts/deploy/verify-production-backup.py',import.meta.url),'utf8');
@@ -45,3 +44,22 @@ test('OAuth confidentiality floor is retained by direct deploy, migration wrappe
   assert.ok(sql.includes("'"+name+"'"));
   assert.ok(sql.includes("'20260927030000_chat_message_visibility'"));
 });
+
+test('combined confidentiality floor refuses a candidate carrying only one new security migration', () => fixture(async root => {
+  const oauth = '20261016060000_mcp_action_binding', pilot = '20261016090000_workspace_account_manager_pilot';
+  for (const missing of [oauth, pilot]) {
+    const candidate = path.join(root, missing);
+    await fs.mkdir(candidate);
+    for (const name of FLOOR_MIGRATIONS.filter(value => value !== missing)) await fs.mkdir(path.join(candidate, name));
+    let migrated = false;
+    await assert.rejects(migrateWithFloor({ stateDir: root, migrationDir: candidate, readApplied: async () => [oauth, pilot], migrate: async () => { migrated = true; } }), /below/);
+    assert.equal(migrated, false);
+  }
+}));
+test('pilot confidentiality floor refuses a pre-pilot candidate even when the older chat floor is present', () => fixture(async root => {
+  const pilot = '20261016090000_workspace_account_manager_pilot';assert.ok(FLOOR_MIGRATIONS.includes(pilot));
+  await fs.mkdir(path.join(root, FLOOR_MIGRATIONS[0]));
+  let migrated = false;
+  await assert.rejects(migrateWithFloor({ stateDir: root, migrationDir: root, readApplied: async () => [pilot], migrate: async () => { migrated = true; } }), /below/);
+  assert.equal(migrated, false);
+}));

@@ -1,3 +1,4 @@
+import { authorizeWorkspaceAgentRun, lockPilotChannel, settleWorkspaceAgentRun, claimWorkspaceAgentRun } from '../services/workspace-account-manager.service.js';
 import { buildClientAgentMemory, MAX_AGENT_PROMPT_BYTES } from '../services/client-agent-memory.service.js';
 import { randomUUID } from 'node:crypto';
 import { getProvider } from '../ai/providers/index.js';
@@ -42,8 +43,11 @@ export async function processClientAgentRun(prisma, { organizationId, runId }, {
     const current = await read();
     return { runId, status: current?.status ?? 'NOT_FOUND' };
   };
-  const expire = async (run, at) => {
-    await prisma.clientAgentRun.updateMany({ where: { ...where, status: 'RUNNING', claimToken: run.claimToken,
+  const sourceConversation = () => prisma.clientAgentConversation.findFirst({ where: { id: run.conversationId, organizationId } });
+  const expire = async (claimed, at) => {
+    const conversation = await sourceConversation();
+    if (conversation?.sourceChannelId) return settleWorkspaceAgentRun(prisma, run, conversation, { claimToken: claimed.claimToken, deadlineAt: claimed.deadlineAt ?? at, status: 'UNKNOWN', fields: { errorCode: 'RUN_DEADLINE_EXCEEDED' }, at });
+    await prisma.clientAgentRun.updateMany({ where: { ...where, status: 'RUNNING', claimToken: claimed.claimToken,
       deadlineAt: { lte: at } }, data: { status: 'UNKNOWN', errorCode: 'RUN_DEADLINE_EXCEEDED', finishedAt: at } });
     return result();
   };
@@ -60,11 +64,14 @@ export async function processClientAgentRun(prisma, { organizationId, runId }, {
   const deadlineAt = new Date(+startedAt + MAX_DURATION_MS);
   // This standalone CAS is committed before provider work. Never put inference
   // in a retryable transaction, and never change RUNNING back to QUEUED.
-  const claim = await prisma.clientAgentRun.updateMany({ where: { ...where, status: 'QUEUED' },
+  const claimConversation = await sourceConversation();
+  const claim = claimConversation?.sourceChannelId ? await claimWorkspaceAgentRun(prisma, run, claimConversation, { claimToken, startedAt, deadlineAt }) : await prisma.clientAgentRun.updateMany({ where: { ...where, status: 'QUEUED' },
     data: { status: 'RUNNING', claimToken, startedAt, deadlineAt, errorCode: null } });
   if (claim.count !== 1) return result();
   const settle = async (status, fields = {}) => {
     const at = now();
+    const conversation = await sourceConversation();
+    if (conversation?.sourceChannelId) return settleWorkspaceAgentRun(prisma, run, conversation, { claimToken, deadlineAt, status, fields, at });
     if (+at >= +deadlineAt) return expire({ claimToken }, at);
     await prisma.clientAgentRun.updateMany({ where: { ...where, status: 'RUNNING', claimToken, deadlineAt: { gt: at } },
       data: { status, ...fields, finishedAt: at } });
@@ -95,7 +102,10 @@ export async function processClientAgentRun(prisma, { organizationId, runId }, {
     // Normalize dates once so stored JSON and provider input are identical.
     context = JSON.parse(JSON.stringify(context));
     if (Buffer.byteLength(JSON.stringify(context), 'utf8') > 64_000) throw failure('CONTEXT_TOO_LARGE');
-    memorySnapshot = await buildClientAgentMemory(prisma, run);
+    if (conversation.sourceChannelId) {
+      await prisma.$transaction(async db => { await lockPilotChannel(db, organizationId, conversation.sourceChannelId);await authorizeWorkspaceAgentRun(db, run, conversation); }, { isolationLevel: 'Serializable' });
+      memorySnapshot = { version: 1, turns: [], truncated: false };
+    } else memorySnapshot = await buildClientAgentMemory(prisma, run);
     contextObservedAt = now();
     prompt = JSON.stringify({ observedAt: contextObservedAt.toISOString(), snapshot: context, memorySnapshot,
       preferences: { name: profile.name, instructions: profile.instructions }, question: run.prompt });
@@ -109,10 +119,20 @@ export async function processClientAgentRun(prisma, { organizationId, runId }, {
   if (current?.status !== 'RUNNING' || current.claimToken !== claimToken) return result();
   if (+now() >= +deadlineAt) return expire({ claimToken }, now());
   let prepared;
-  try { prepared = await prisma.clientAgentRun.updateMany({ where: { ...where, status: 'RUNNING', claimToken, contextObservedAt: null, deadlineAt: { gt: now() } },
+  try {
+    const prepare = async db => {
+      if (claimConversation?.sourceChannelId) { await lockPilotChannel(db, organizationId, claimConversation.sourceChannelId);await authorizeWorkspaceAgentRun(db, run, claimConversation); }
+      return db.clientAgentRun.updateMany({ where: { ...where, status: 'RUNNING', claimToken, contextObservedAt: null, deadlineAt: { gt: now() } },
     data: { profileRevision: profile.revision, contextObservedAt, contextSnapshot: { version: 1, snapshot: context }, memorySnapshot } });
+    };
+    prepared = claimConversation?.sourceChannelId ? await prisma.$transaction(prepare, { isolationLevel: 'Serializable' }) : await prepare(prisma);
   } catch { return settle('FAILED', { errorCode: 'RUN_PREFLIGHT_UNAVAILABLE' }); }
   if (prepared.count !== 1) return result();
+  const dispatchConversation = await sourceConversation();
+  if (dispatchConversation?.sourceChannelId) {
+    try { await prisma.$transaction(async db => { await lockPilotChannel(db, organizationId, dispatchConversation.sourceChannelId);await authorizeWorkspaceAgentRun(db, run, dispatchConversation); }, { isolationLevel: 'Serializable' }); }
+    catch { return settle('FAILED', { errorCode: 'SOURCE_AUTHORITY_REVOKED' }); }
+  }
   const remainingMs = +deadlineAt - +now();
   if (remainingMs <= 0) return expire({ claimToken }, now());
   const controller = new AbortController();
@@ -132,7 +152,7 @@ export async function processClientAgentRun(prisma, { organizationId, runId }, {
     const response = await Promise.race([deadline, Promise.resolve().then(() => {
       if (controller.signal.aborted) throw failure('RUN_DEADLINE_EXCEEDED');
       return requestStorage.run({ ...store, feature: 'client_agent_run' }, () => chat({
-        system: SYSTEM,
+        system: dispatchConversation?.sourceChannelId ? SYSTEM.replace('internal chat', 'other internal chat') + ' The question is one explicitly selected human workspace message. Draft only for this member-restricted channel; never promote it to shared client memory.' : SYSTEM,
         prompt,
         temperature: 0.2, maxTokens: 2048, feature: 'client_agent_run', singleAttempt: true,
         signal: controller.signal,

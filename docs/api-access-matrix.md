@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 9 |
-| staff | 452 |
+| staff | 460 |
 | staff (inline) | 1 |
-| **total** | 651 |
+| **total** | 659 |
 
 ## Routes by prefix
 
@@ -1138,6 +1138,14 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/workspace-chat/attention` | staff | scoped |  |
 | GET | `/api/workspace-chat/channels` | staff | scoped |  |
 | POST | `/api/workspace-chat/channels` | staff | scoped |  |
+| GET | `/api/workspace-chat/channels/:channelId/account-manager` | staff | scoped |  |
+| POST | `/api/workspace-chat/channels/:channelId/account-manager` | staff | scoped |  |
+| PATCH | `/api/workspace-chat/channels/:channelId/account-manager/:bindingId` | staff | scoped |  |
+| GET | `/api/workspace-chat/channels/:channelId/account-manager/requests` | staff | scoped |  |
+| POST | `/api/workspace-chat/channels/:channelId/account-manager/requests` | staff | scoped |  |
+| GET | `/api/workspace-chat/channels/:channelId/account-manager/requests/:invocationId` | staff | scoped |  |
+| POST | `/api/workspace-chat/channels/:channelId/account-manager/requests/:invocationId/cancel` | staff | scoped |  |
+| GET | `/api/workspace-chat/channels/:channelId/account-manager/requests/by-intent/:key` | staff | scoped |  |
 | POST | `/api/workspace-chat/channels/:channelId/attention/:attentionId/ack` | staff | scoped |  |
 | PATCH | `/api/workspace-chat/channels/:channelId/members/:userId` | staff | scoped |  |
 | GET | `/api/workspace-chat/channels/:channelId/messages` | staff | scoped |  |

@@ -17,7 +17,7 @@ function fixture() {
     { id: 'foreign-queue', organizationId: 'org-b', status: 'QUEUED', createdAt: new Date(+at - 600_001) },
   ];
   const calls = [];
-  const prisma = { clientAgentRun: { updateMany: async args => {
+  const prisma = { clientAgentRun: { findMany: async () => [], updateMany: async args => {
     calls.push(args); let count = 0;
     const field = args.where.deadlineAt ? 'deadlineAt' : 'createdAt';
     for (const row of rows) if (row.organizationId === args.where.organizationId && row.status === args.where.status
@@ -31,10 +31,10 @@ function fixture() {
 test('expiry finalizes only tenant expired RUNNING and ten-minute QUEUED rows without requeue', async () => {
   const f = fixture(), before = structuredClone(f.rows);
   assert.deepEqual(await f.expire(), { expired: 2, queueExpired: 2 });
-  assert.deepEqual(f.calls[0], { where: { organizationId: 'org-a', status: 'RUNNING', deadlineAt: { lte: at } },
+  assert.deepEqual(f.calls[0], { where: { organizationId: 'org-a', conversation: { sourceChannelId: null, sourceBindingId: null }, status: 'RUNNING', deadlineAt: { lte: at } },
     data: { status: 'UNKNOWN', errorCode: 'RUN_DEADLINE_EXCEEDED', finishedAt: at } });
   assert.equal(f.rows[0].claimToken, 'one'); assert.equal(f.rows[1].claimToken, 'two');
-  assert.deepEqual(f.calls[1], { where: { organizationId: 'org-a', status: 'QUEUED', createdAt: { lte: new Date(+at - 600_000) } },
+  assert.deepEqual(f.calls[1], { where: { organizationId: 'org-a', conversation: { sourceChannelId: null, sourceBindingId: null }, status: 'QUEUED', createdAt: { lte: new Date(+at - 600_000) } },
     data: { status: 'FAILED', errorCode: 'RUN_QUEUE_EXPIRED', finishedAt: at } });
   const expired = new Set(['expired', 'boundary', 'queue-expired', 'queue-boundary']);
   assert.deepEqual(f.rows.filter(row => !expired.has(row.id)), before.filter(row => !expired.has(row.id)));

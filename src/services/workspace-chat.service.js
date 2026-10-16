@@ -224,3 +224,12 @@ export async function setWorkspaceChatMember(prisma, user, channelId, userId, ac
     return { active };
   });
 }
+
+
+/** Reuse current human membership without granting a bot staff identity. */
+export async function authorizeWorkspaceChatMember(prisma, user, channelId, { lock = false } = {}) {
+  const current = await actorScope(prisma, user);
+  const channel = await channelForMember(current.db, current.actor, channelId);
+  if (lock) await lockChannel(current.db, current.actor, channel);
+  return { ...current, channel };
+}
