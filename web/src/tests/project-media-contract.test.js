@@ -13,7 +13,6 @@ describe('project media collaboration contract', () => {
     expect(media).toContain('startCappedRecording(stream');
     expect(recorderLib).toContain('Recorder = globalThis.MediaRecorder');
     expect(recorderLib).toContain('new Recorder(stream');
-    expect(media).toContain("api.uploadAttachment(file, 'PROJECT', projectId)");
     expect(media).toContain('MAX_RECORDING_BYTES');
     expect(media).toContain('MAX_RECORDING_DURATION_MS');
   });

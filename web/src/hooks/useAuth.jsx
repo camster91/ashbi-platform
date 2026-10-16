@@ -8,12 +8,13 @@ import { clearBrowserPushSubscription } from './usePushNotifications';
 
 const AuthContext = createContext(null);
 
-async function boundedBrowserCleanup(operation) {
+async function boundedBrowserCleanup(operation, controller = new AbortController()) {
   let timer;
-  const controller = new AbortController();
   try {
     await Promise.race([
-      Promise.resolve().then(() => operation(controller.signal)).catch(() => {}),
+      Promise.resolve().then(() => {
+        if (!controller.signal.aborted) return operation(controller.signal);
+      }).catch(() => {}),
       new Promise(resolve => { timer = setTimeout(resolve, 3000); }),
     ]);
   } finally { controller.abort(); clearTimeout(timer); }
@@ -124,12 +125,16 @@ export function AuthProvider({ children }) {
   const userRef = useRef(null);
   const retryTimerRef = useRef(null);
   const checkAuthRef = useRef(null);
+  const sessionExpiryCleanupRef = useRef(null);
+  // Failed sign-in/check attempts must not cancel a known session expiry.
+  const sessionIdentitySequenceRef = useRef(0);
   userRef.current = user;
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      sessionExpiryCleanupRef.current?.abort();
       authCheckSequenceRef.current += 1;
       clearTimeout(retryTimerRef.current);
     };
@@ -148,6 +153,8 @@ export function AuthProvider({ children }) {
     try {
       const userData = await api.me();
       if (isCurrentCheck()) {
+        sessionExpiryCleanupRef.current?.abort();
+        sessionIdentitySequenceRef.current += 1;
         setUser(userData);
         setAuthState({ status: 'authenticated', reason: null, message: '' });
       }
@@ -229,6 +236,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const finishSignIn = useCallback(async (userData, returnTo) => {
+    sessionExpiryCleanupRef.current?.abort();
+    sessionIdentitySequenceRef.current += 1;
     await purgePrivateCaches();
     if (mountedRef.current) {
       cancelPendingAuthCheck();
@@ -259,6 +268,8 @@ export function AuthProvider({ children }) {
   }, [cancelPendingAuthCheck, finishSignIn]);
 
   const logout = useCallback(async () => {
+    sessionExpiryCleanupRef.current?.abort();
+    sessionIdentitySequenceRef.current += 1;
     cancelPendingAuthCheck();
     try {
       // Revoke the session before touching browser APIs that can stall. The
@@ -279,9 +290,19 @@ export function AuthProvider({ children }) {
 
   const expireSession = useCallback(async (message = '', reason = sessionEndReason(message)) => {
     cancelPendingAuthCheck();
-    await clearBrowserPushSubscription();
-    await purgePrivateCaches();
-    if (!mountedRef.current) return;
+    const sequence = ++sessionIdentitySequenceRef.current;
+    sessionExpiryCleanupRef.current?.abort();
+    const controller = new AbortController();
+    sessionExpiryCleanupRef.current = controller;
+    // Expiry must reach sign-in even when browser storage or service workers
+    // stall. Abort late enumeration before it can touch a replacement session.
+    await boundedBrowserCleanup(signal => Promise.allSettled([
+      clearBrowserPushSubscription({ signal }), purgePrivateCaches({ signal }),
+    ]), controller);
+    if (!mountedRef.current || sequence !== sessionIdentitySequenceRef.current) return;
+    // A check started during browser cleanup predates this committed expiry.
+    // Its eventual result must not restore the user or replace the expiry notice.
+    cancelPendingAuthCheck();
     const returnTo = safeReturnPath(`${location.pathname}${location.search}${location.hash}`);
     setUser(null);
     setAuthState({ status: 'unauthenticated', reason, message });
@@ -304,6 +325,8 @@ export function AuthProvider({ children }) {
   // queries and the realtime connection refused while it was restricted
   // start fresh.
   const completeMfaEnrollment = useCallback(async (to = '/dashboard') => {
+    sessionExpiryCleanupRef.current?.abort();
+    sessionIdentitySequenceRef.current += 1;
     authCheckSequenceRef.current += 1;
     await purgePrivateCaches();
     reloadTo(to);
@@ -316,12 +339,16 @@ export function AuthProvider({ children }) {
   const startImpersonation = useCallback(async (member, reason) => {
     authCheckSequenceRef.current += 1;
     const result = await api.startImpersonation(member.id, reason);
+    sessionExpiryCleanupRef.current?.abort();
+    sessionIdentitySequenceRef.current += 1;
     await purgePrivateCaches();
     reloadTo(result?.session?.subject?.role === 'CLIENT' ? '/client/dashboard' : '/dashboard');
     return result;
   }, []);
 
   const stopImpersonation = useCallback(async ({ to = '/team' } = {}) => {
+    sessionExpiryCleanupRef.current?.abort();
+    sessionIdentitySequenceRef.current += 1;
     authCheckSequenceRef.current += 1;
     try {
       await api.stopImpersonation();
