@@ -197,7 +197,7 @@ test('migrated client agent conversations preserve tenant, intent, outbox and pe
       await assert.rejects(raw.clientAgentRun.update({ where: { id: saved.id }, data: { contextObservedAt: at, profileRevision: saved.profileRevision } }),
         rejectedBy(/must reference its canonical client|client_agent_runs_context_pair/));
       await assert.rejects(raw.clientAgentRun.update({ where: { id: saved.id }, data: { contextSnapshot: base, profileRevision: saved.profileRevision } }),
-        rejectedBy(/client_agent_runs_context_pair|New preparation requires explicit memory/));
+        rejectedBy(/client_agent_runs_context_pair/));
       await assert.rejects(raw.clientAgentRun.update({ where: { id: saved.id }, data: { ...preparation, contextObservedAt: new Date(+deadlineAt + 1) } }),
         rejectedBy(/write-once during its permanent claim/));
       const prepared = await raw.clientAgentRun.update({ where: { id: saved.id }, data: preparation });
@@ -208,6 +208,38 @@ test('migrated client agent conversations preserve tenant, intent, outbox and pe
         rejectedBy(/Prepared client agent profile revision is immutable/));
       await cancelClientAgentRun(scoped, staff, client.id, doc.id, saved.id);
       assert.deepEqual((await raw.clientAgentRun.findUnique({ where: { id: saved.id } })).contextSnapshot, base);
+    });
+
+    await t.test('additive memory migration permits previous and rollback workers without inventing memory evidence', async () => {
+      // These are the actual persisted updates from both supported predecessor
+      // contracts: the pre-context rollback worker, and the context-only worker.
+      // Neither knows or writes memorySnapshot. Both must settle after migration.
+      for (const retainsContext of [false, true]) {
+        const doc = await conversation(), saved = await start(doc);
+        const at = new Date(), claimToken = randomUUID();
+        const claimed = await raw.clientAgentRun.update({ where: { id: saved.id }, data: {
+          status: 'RUNNING', claimToken, startedAt: at, deadlineAt: new Date(+at + 120000), profileRevision: saved.profileRevision,
+        } });
+        assert.equal(claimed.memorySnapshot, null);
+        if (retainsContext) {
+          const contextSnapshot = { version: 1, snapshot: { client: { id: client.id, name: client.name, domain: null }, projects: [], truncated: false } };
+          const prepared = await raw.clientAgentRun.updateMany({ where: { id: saved.id, status: 'RUNNING', claimToken }, data: {
+            contextObservedAt: at, contextSnapshot, profileRevision: saved.profileRevision,
+          } });
+          assert.equal(prepared.count, 1, 'context-only worker preparation remains compatible');
+        }
+        const settled = await raw.clientAgentRun.updateMany({ where: { id: saved.id, status: 'RUNNING', claimToken }, data: {
+          status: 'SUCCEEDED', response: 'Previous worker answer', finishedAt: new Date(), claimToken: null,
+        } });
+        assert.equal(settled.count, 1, 'previous worker settles instead of remaining RUNNING');
+        const retained = await readClientAgentRun(scoped, colleague, client.id, doc.id, saved.id);
+        assert.equal(retained.status, 'SUCCEEDED'); assert.equal(retained.memorySnapshot, null);
+        assert.equal(retained.contextSnapshot !== null, retainsContext);
+        // NULL is honest missing evidence, never backfilled as empty memory.
+        await assert.rejects(raw.clientAgentRun.update({ where: { id: saved.id }, data: {
+          memorySnapshot: { version: 1, turns: [], truncated: false },
+        } }));
+      }
     });
 
     await t.test('bounded memory is committed with context, exact in provider input, projected and immutable', async () => {

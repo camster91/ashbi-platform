@@ -9,9 +9,10 @@ BEGIN
     RETURN NEW;
   END IF;
   IF NEW."memorySnapshot" IS NOT DISTINCT FROM OLD."memorySnapshot" THEN
-    IF OLD."contextSnapshot" IS NULL AND NEW."contextSnapshot" IS NOT NULL AND NEW."memorySnapshot" IS NULL THEN
-      RAISE EXCEPTION 'New preparation requires explicit memory';
-    END IF;
+    -- Additive rollout/rollback compatibility: previous workers do not know
+    -- memorySnapshot. Preserve NULL as evidence that memory was not captured;
+    -- never fabricate an empty snapshot or prevent their context preparation.
+    -- The context guard still enforces its claimed, write-once preparation.
     RETURN NEW;
   END IF;
   IF OLD."memorySnapshot" IS NOT NULL OR NEW."memorySnapshot" IS NULL OR OLD."contextSnapshot" IS NOT NULL
