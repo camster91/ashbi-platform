@@ -92,7 +92,7 @@ ACTUAL_IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')
 # applied, no image lacking it may serve again, not even as an automatic
 # rollback: the release fails closed instead. The floor is recorded per host.
 ROLLBACK_FLOOR_FILE="$RELEASE_DIR/rollback-floor"
-ROLLBACK_FLOOR_MIGRATIONS=(20260927030000_chat_message_visibility 20261016060000_mcp_action_binding 20261016090000_workspace_account_manager_pilot)
+ROLLBACK_FLOOR_MIGRATIONS=(20260927030000_chat_message_visibility 20261016060000_mcp_action_binding 20261016090000_workspace_account_manager_pilot 20261016120000_gmail_ingest_identity)
 # 0: the image carries the migration; 1: it confirmably does not (`test`
 # exited 1); 2: the probe itself could not run (daemon/runtime failure).
 # Every caller treats 2 as the unsafe answer (fail closed).

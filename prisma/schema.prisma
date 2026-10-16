@@ -31,6 +31,7 @@ model Organization {
   updatedAt DateTime @updatedAt
 
   // Relations
+  gmailIngestReceipts GmailIngestReceipt[]
   users              User[]
   taskCollaborations TaskCollaborator[]
   projectBoards      ProjectBoard[]
@@ -3480,4 +3481,24 @@ model WorkspaceAccountManagerInvocation {
   @@unique([runId, organizationId], map: "workspace_account_manager_invocations_runId_organizationId_key")
   @@index([organizationId, deliveryState, createdAt], map: "workspace_account_manager_invocations_organizationId_delive_idx")
   @@map("workspace_account_manager_invocations")
+}
+
+// Immutable provider identity survives target deletion to prevent resurrection.
+model GmailIngestReceipt {
+  id                String @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  mailbox           String
+  providerMessageId String
+  providerThreadId  String
+  outcome           String
+  clientId          String?
+  threadId          String?
+  messageId         String?
+  triageItemId      String?
+  createdAt         DateTime @default(now())
+
+  @@unique([organizationId, mailbox, providerMessageId])
+  @@index([organizationId, mailbox, providerThreadId, outcome])
+  @@map("gmail_ingest_receipts")
 }

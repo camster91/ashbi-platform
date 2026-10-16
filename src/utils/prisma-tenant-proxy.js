@@ -49,7 +49,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   // column of its own (migration 20261001130000_expense_organization).
   'expense', 'taskcollaborator', 'projectboard', 'workspacepage', 'workspacepagegrant',
   'workspacecollection', 'workspacerecord', 'workspacerecordform',
-  'clientagentprofile', 'workspacechatchannel', 'workspacechatmember', 'workspacechatmessage', 'workspacechatattention', 'gmailsendreceipt',
+  'clientagentprofile', 'workspacechatchannel', 'workspacechatmember', 'workspacechatmessage', 'workspacechatattention', 'gmailsendreceipt', 'gmailingestreceipt',
   'workspaceaccountmanagerbinding', 'workspaceaccountmanagerinvocation', 'clientagentconversation', 'clientagentrun', 'clientserviceproject', 'clientservicereport',
   'noterevision', 'workspacepagerevision'
 ]);
@@ -58,7 +58,7 @@ const DIRECT_SCOPED_MODELS = new Set([
 // no update/upsert/delete path for them; the database enforces the same rule
 // with triggers (see prisma/migrations/*_audit_events).
 const APPEND_ONLY_MODELS = new Set(['auditevent', 'reviewdecision']);
-const TRIGGER_OWNED_MODELS = new Set(['noterevision', 'workspacepagerevision']);
+const TRIGGER_OWNED_MODELS = new Set(['noterevision', 'workspacepagerevision', 'gmailingestreceipt']);
 const APPEND_ONLY_BLOCKED_METHODS = new Set([
   'update', 'updateMany', 'updateManyAndReturn', 'upsert', 'delete', 'deleteMany',
 ]);

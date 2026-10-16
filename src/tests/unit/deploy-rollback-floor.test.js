@@ -18,6 +18,7 @@ const shellQuote = value => `'${bashPath(value).replaceAll("'", "'\\''")}'`;
 const floorBlock = script.slice(script.indexOf('# --- rollback floor ---'), script.indexOf('# --- end rollback floor ---'));
 const CHAT = '20260927030000_chat_message_visibility';
 const OAUTH = '20261016060000_mcp_action_binding';
+const INGEST = '20261016120000_gmail_ingest_identity';
 
 function bash(releaseDir, images, body) {
   // An image named broken:* makes the probe itself fail (docker exits 125).
@@ -118,7 +119,7 @@ docker() { echo "$1" >> "$LOG"; case $1 in inspect) echo false ;; esac; }`;
 test('a probe that cannot run fails closed: the floor is still raised and the image is refused', () => {
   const { dir, images } = fixture();
   bash(dir, images, 'raise_rollback_floor broken:1');
-  assert.equal(fs.readFileSync(path.join(dir, 'rollback-floor'), 'utf8'), `${CHAT}\n${OAUTH}\n20261016090000_workspace_account_manager_pilot\n`, 'recorded despite the failed probe');
+  assert.equal(fs.readFileSync(path.join(dir, 'rollback-floor'), 'utf8'), `${CHAT}\n${OAUTH}\n20261016090000_workspace_account_manager_pilot\n${INGEST}\n`, 'recorded despite the failed probe');
   assert.equal(bash(dir, images, 'if missing=$(image_meets_floor broken:1); then echo allowed; else echo "blocked $missing"; fi'), `blocked ${CHAT}\n`);
   assert.equal(bash(dir, images, 'image_has_migration broken:1 x && echo 0 || echo $?'), '2\n');
 });
@@ -148,4 +149,20 @@ test('pilot confidentiality floor blocks otherwise chat-compatible older image',
   bash(dir, images, 'raise_rollback_floor pilot:1');
   assert.equal(bash(dir, images, 'if missing=$(image_meets_floor new:1); then echo allowed; else echo "blocked $missing"; fi'), `blocked ${pilot}\n`);
   assert.equal(bash(dir, images, 'image_meets_floor pilot:1 && echo ok'), 'ok\n');
+});
+
+
+test('combined rollback floor requires chat, OAuth binding, private pilot and Gmail receipt migrations in every serving image', () => {
+  const { dir, images } = fixture();
+  const all = [CHAT, OAUTH, '20261016090000_workspace_account_manager_pilot', INGEST];
+  fs.appendFileSync(images, all.map(name => `complete:1 /app/prisma/migrations/${name}\n`).join(''));
+  for (let index = 0; index < all.length; index++) {
+    fs.appendFileSync(images, all.filter(name => name !== all[index]).map(name => `missing:${index} /app/prisma/migrations/${name}\n`).join(''));
+  }
+  bash(dir, images, 'raise_rollback_floor complete:1');
+  assert.equal(fs.readFileSync(path.join(dir, 'rollback-floor'), 'utf8'), all.join('\n') + '\n');
+  assert.equal(bash(dir, images, 'image_meets_floor complete:1 && echo safe'), 'safe\n');
+  for (let index = 0; index < all.length; index++) {
+    assert.equal(bash(dir, images, `if missing=$(image_meets_floor missing:${index}); then echo allowed; else echo "blocked $missing"; fi`), `blocked ${all[index]}\n`);
+  }
 });

@@ -34,7 +34,7 @@ test('invalid persisted floor cannot become a migration path', () => fixture(asy
 }));
 
 
-for (const name of ['20261016060000_mcp_action_binding', '20261016090000_workspace_account_manager_pilot']) test(`${name} confidentiality floor is retained by direct deploy, migration wrapper and backup catalog proof`, async () => {
+for (const name of ['20261016060000_mcp_action_binding', '20261016090000_workspace_account_manager_pilot', '20261016120000_gmail_ingest_identity']) test(`${name} confidentiality floor is retained by direct deploy, migration wrapper and backup catalog proof`, async () => {
   assert.ok(FLOOR_MIGRATIONS.includes(name));
   const direct=await fs.readFile(new URL('../../../scripts/deploy-vps-direct.sh',import.meta.url),'utf8');
   const backup=await fs.readFile(new URL('../../../scripts/deploy/verify-production-backup.py',import.meta.url),'utf8');
@@ -50,7 +50,10 @@ test('combined confidentiality floor refuses a candidate carrying only one new s
   for (const missing of [oauth, pilot]) {
     const candidate = path.join(root, missing);
     await fs.mkdir(candidate);
-    for (const name of FLOOR_MIGRATIONS.filter(value => value !== missing)) await fs.mkdir(path.join(candidate, name));
+    for (const name of FLOOR_MIGRATIONS.filter(value => value !== missing)) {
+      await fs.mkdir(path.join(candidate, name));
+      await fs.writeFile(path.join(candidate, name, 'migration.sql'), '-- synthetic candidate');
+    }
     let migrated = false;
     await assert.rejects(migrateWithFloor({ stateDir: root, migrationDir: candidate, readApplied: async () => [oauth, pilot], migrate: async () => { migrated = true; } }), /below/);
     assert.equal(migrated, false);
@@ -63,3 +66,36 @@ test('pilot confidentiality floor refuses a pre-pilot candidate even when the ol
   await assert.rejects(migrateWithFloor({ stateDir: root, migrationDir: root, readApplied: async () => [pilot], migrate: async () => { migrated = true; } }), /below/);
   assert.equal(migrated, false);
 }));
+
+
+test('the complete applied or persisted union blocks every singly missing migration and permits a complete candidate', () => fixture(async root => {
+  const expected = ['20260927030000_chat_message_visibility', '20261016060000_mcp_action_binding', '20261016090000_workspace_account_manager_pilot', '20261016120000_gmail_ingest_identity'];
+  assert.deepEqual(FLOOR_MIGRATIONS, expected);
+  for (const source of ['applied', 'persisted']) {
+    if (source === 'persisted') await fs.writeFile(path.join(root, 'rollback-floor'), expected.join('\n') + '\n');
+    for (const missing of [...expected, null]) {
+      const candidate = path.join(root, `${source}-${missing ?? 'complete'}`);
+      await fs.mkdir(candidate);
+      for (const name of expected.filter(value => value !== missing)) {
+        await fs.mkdir(path.join(candidate, name));
+        await fs.writeFile(path.join(candidate, name, 'migration.sql'), '-- synthetic local candidate');
+      }
+      let migrations = 0;
+      const operation = migrateWithFloor({ stateDir: root, migrationDir: candidate,
+        readApplied: async () => source === 'applied' ? expected : [], migrate: async () => { migrations++; } });
+      if (missing) { await assert.rejects(operation, /below/); assert.equal(migrations, 0); }
+      else { assert.deepEqual(await operation, expected); assert.equal(migrations, 1); }
+    }
+    await fs.rm(path.join(root, 'rollback-floor'), { force: true });
+  }
+}));
+
+test('the direct image floor, hosted migration floor and backup catalog query carry exactly the same complete union', async () => {
+  const direct = await fs.readFile(new URL('../../../scripts/deploy-vps-direct.sh', import.meta.url), 'utf8');
+  const backup = await fs.readFile(new URL('../../../scripts/deploy/verify-production-backup.py', import.meta.url), 'utf8');
+  const directFloor = direct.match(/ROLLBACK_FLOOR_MIGRATIONS=\(([^)]+)\)/)[1].trim().split(/\s+/);
+  const query = backup.split('    sql = ')[1].split('\n')[0];
+  const backupFloor = [...query.matchAll(/'(\d{14}_[a-z0-9_]+)'/g)].map(match => match[1]);
+  assert.deepEqual(directFloor, FLOOR_MIGRATIONS);
+  assert.deepEqual(backupFloor, FLOOR_MIGRATIONS);
+});

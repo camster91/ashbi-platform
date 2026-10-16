@@ -220,6 +220,29 @@ async function withExport(setup, rowsByModel, check) {
 
 const codes = (result) => result.manifest.exceptions.map((exception) => `${exception.recordId}:${exception.code}`).sort();
 
+test('offboarding declares ingestion receipt exclusion without reading replay identities and retains canonical email content', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-ingest-export-'));
+  const outputDir = path.join(root, 'export');
+  const canonical = {
+    Message: [{ id: 'message-1', threadId: 'thread-1', direction: 'INBOUND', senderEmail: 'synthetic@example.invalid', bodyText: 'Synthetic stored message' }],
+    EmailTriageItem: [{ id: 'triage-1', organizationId: 'org1', subject: 'Synthetic review', bodyText: 'Synthetic stored triage' }],
+  };
+  const prisma = new Proxy(fakePrisma(canonical), { get(target, key) {
+    if (key === 'gmailIngestReceipt') throw new Error('Internal replay ledger must not be read for offboarding');
+    return target[key];
+  } });
+  try {
+    const result = await exportWorkspace({ prisma, organizationId: 'org1', outputDir, includeFiles: false, snapshot: false });
+    const exclusion = result.manifest.exclusions.find(item => item.scope === 'model' && item.model === 'GmailIngestReceipt');
+    assert.ok(exclusion, 'manifest must disclose the omitted ingestion state');
+    assert.match(exclusion.reason, /deduplication state requires the full database backup/);
+    assert.equal(fs.existsSync(path.join(outputDir, 'data', 'gmail_ingest_receipts.jsonl')), false);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(outputDir, 'data', 'messages.jsonl'), 'utf8')).bodyText, canonical.Message[0].bodyText);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(outputDir, 'data', 'email_triage_items.jsonl'), 'utf8')).bodyText, canonical.EmailTriageItem[0].bodyText);
+    assert.equal((await verifyWorkspaceExportDirectory(outputDir)).valid, true);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('exportWorkspace copies safe files and records unsafe ones as exceptions without aborting', async () => {
   await withExport(({ uploads, outside }) => {
     fs.writeFileSync(path.join(uploads, 'ok.png'), 'ok');
