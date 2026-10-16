@@ -41,8 +41,10 @@ function formatWeekRange(weekStart) {
   const we = new Date(weekStart);
   we.setDate(we.getDate() + 6);
   const opts = { month: 'short', day: 'numeric' };
-  const yr = ws.getFullYear();
-  return `${ws.toLocaleDateString(opts)} – ${we.toLocaleDateString({ ...opts, year: we.getFullYear() !== yr ? 'numeric' : undefined })}, ${yr}`;
+  const crossesYear = ws.getFullYear() !== we.getFullYear();
+  const start = ws.toLocaleDateString(undefined, { ...opts, ...(crossesYear ? { year: 'numeric' } : {}) });
+  const end = we.toLocaleDateString(undefined, { ...opts, year: 'numeric' });
+  return `${start} – ${end}`;
 }
 
 export default function Timesheets() {
