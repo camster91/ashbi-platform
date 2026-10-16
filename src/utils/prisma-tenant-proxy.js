@@ -679,7 +679,10 @@ export function createScopedPrisma(prisma, organizationId) {
                 queryArgs.update = { ...queryArgs.update, organizationId };
               } else if (methodName === 'update' || methodName === 'delete' || methodName === 'deleteMany' || BULK_UPDATE_METHODS.has(methodName)) {
                 queryArgs.where = { ...queryArgs.where, organizationId };
-                if (queryArgs.data) {
+                // Bookkeeping identities are immutable. Their WHERE remains
+                // tenant-scoped; injecting identity into DATA would make a
+                // second scoped layer reject our own otherwise-valid update.
+                if (queryArgs.data && !bookkeepingFields) {
                   queryArgs.data = { ...queryArgs.data, organizationId };
                 }
               }

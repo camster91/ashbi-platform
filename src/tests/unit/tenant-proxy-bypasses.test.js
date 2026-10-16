@@ -13,6 +13,31 @@ import { tenantRelationMap } from '../../utils/tenant-relations.js';
 // ownership resolved by the fake's findFirst (only org-a rows exist as "own").
 const OWN = new Set(['user-a', 'task-a', 'task-a2', 'project-a', 'client-a', 'milestone-a', 'thread-a']);
 
+test('nested scoped bookkeeping updates preserve tenant WHERE without writing immutable identity', async () => {
+  for (const [model, data] of [
+    ['workspaceChatAttention', { acknowledgedAt: new Date() }],
+    ['portalHandoffRequest', { revision: { increment: 1 } }],
+    ['workspaceAccountManagerInvocation', { deliveryState: 'SUPPRESSED' }],
+    ['gmailSendReceipt', { status: 'SENT' }],
+    ['domainEvent', { attempts: { increment: 1 } }],
+  ]) {
+    for (const method of ['update', 'updateMany']) {
+      const writes = [];
+      const raw = { [model]: { [method]: async args => { writes.push(args); return { count: 1 }; } } };
+      const nested = createScopedPrisma(createScopedPrisma(raw, 'org-a'), 'org-a');
+      await nested[model][method]({ where: { id: 'own', organizationId: 'foreign' }, data: { ...data } });
+      assert.equal(writes.length, 1);
+      assert.deepEqual(writes[0].where, { id: 'own', organizationId: 'org-a' });
+      assert.deepEqual(writes[0].data, data);
+      for (const organizationId of ['org-a', 'foreign']) {
+        await assert.rejects(nested[model][method]({ where: { id: 'own' }, data: { ...data, organizationId } }), /immutable/);
+      }
+      await assert.rejects(nested[model][method]({ where: { id: 'own' }, data: { id: 'replacement' } }), /immutable/);
+      assert.equal(writes.length, 1);
+    }
+  }
+});
+
 function fakeDb() {
   const writes = [];
   const delegate = (name) => ({
