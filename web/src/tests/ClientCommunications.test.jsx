@@ -6,6 +6,7 @@ import ClientCommunications from '../components/ClientCommunications';
 
 const { api } = vi.hoisted(() => ({ api: { listClientCommunications: vi.fn(), getClientCommunication: vi.fn() } }));
 vi.mock('../lib/api', () => ({ api }));
+vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'staff', organizationId: 'org', role: 'TEAM' } }) }));
 const item = { id: 'e1', source: 'inbox', subject: 'Website request', sender: 'client@example.test', direction: 'INBOUND', receivedAt: '2026-10-14T10:00:00Z', threadId: 't1', snippet: 'Please review the website.' };
 const page = (items = [item], rest = {}) => ({ items, nextCursor: null, coverage: { kind: 'stored-history', complete: false }, warnings: [], ...rest });
 function setup(clientId = 'c1') {
