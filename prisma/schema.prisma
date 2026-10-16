@@ -13,6 +13,7 @@ datasource db {
 // ==================== TENANCY ====================
 
 model Organization {
+  portalHandoffRequests PortalHandoffRequest[]
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
@@ -230,6 +231,7 @@ model FormDraft {
 }
 
 model Client {
+  portalHandoffRequests PortalHandoffRequest[]
   id                  String       @id @default(cuid())
   organizationId      String
   organization        Organization @relation(fields: [organizationId], references: [id])
@@ -321,6 +323,7 @@ model Contact {
 }
 
 model Project {
+  portalHandoffRequests PortalHandoffRequest[]
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
@@ -398,6 +401,39 @@ model Project {
   workspaceChatChannels WorkspaceChatChannel[]
   workspaceAccountManagerBindings WorkspaceAccountManagerBinding[]
   @@unique([id, organizationId])
+}
+
+// Human requests only. Requester/contact ids are immutable provenance without
+// parent FKs so revoking/removing a portal contact never becomes impossible.
+model PortalHandoffRequest {
+  id String @id @default(cuid())
+  organizationId String
+  clientId String
+  projectId String
+  requestedById String
+  contactId String
+  creationSessionVersion Int
+  question String
+  idempotencyKey String
+  inputHash String
+  status String @default("PENDING")
+  revision Int @default(1)
+  ownerId String?
+  changedById String
+  requeueReason String?
+  claimedAt DateTime?
+  resolvedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  client Client @relation(fields: [clientId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  project Project @relation(fields: [projectId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@unique([organizationId, requestedById, contactId, idempotencyKey], map: "portal_handoffs_principal_intent_key")
+  @@index([organizationId, projectId, status, id], map: "portal_handoffs_project_status_id_idx")
+  @@index([organizationId, requestedById, contactId, id], map: "portal_handoffs_principal_id_idx")
+  @@index([clientId, organizationId])
+  @@index([projectId, organizationId])
+  @@map("portal_handoff_requests")
 }
 
 model Task {

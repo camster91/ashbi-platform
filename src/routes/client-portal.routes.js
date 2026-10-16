@@ -11,6 +11,7 @@ import { CLIENT_SESSION_TOKEN_TYPE, isCurrentUserSession, revokeUserSessions, se
 import { MAGIC_LINK_TOKEN_TYPE, redeemMagicLink } from '../auth/magic-link.js';
 import { accountThrottle } from '../auth/credential-throttle.js';
 import { resolvePortalPrincipal } from '../auth/portal-principal.js';
+import { portalHandoffRoutes } from './portal-handoff.routes.js';
 import { revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
 import { clearStaleSessionCookie } from '../auth/request-session.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
@@ -382,6 +383,8 @@ export default async function clientPortalRoutes(fastify) {
 
   // GET /api/client-portal/me
   fastify.get('/me', { preHandler: clientAuth }, async (request, reply) => {
+    const principal = await resolvePortalPrincipal(request.prisma, request.clientUser);
+    if (!principal) return reply.status(401).send({ error: 'Session expired or revoked' });
     const { contactId, clientId } = request.clientUser;
 
     const [contact, client] = await Promise.all([
@@ -395,7 +398,7 @@ export default async function clientPortalRoutes(fastify) {
 
     // The agency's name and public logo for the portal header.
     const brand = publicBrand(await resolveBrandingForClient(request.prisma, clientId));
-    return { client, contact, brand };
+    return { client, contact, brand, handoffIdentity: { organizationId: principal.client.organizationId, userId: principal.user.id, contactId: principal.contact.id } };
   });
 
   // ── Projects ─────────────────────────────────────────────────────────────────
@@ -1186,4 +1189,5 @@ export default async function clientPortalRoutes(fastify) {
   // Media review for the client's own projects (docs/media-review.md
   // "Client portal reviews"), behind this plugin's clientAuth guard.
   await fastify.register(clientPortalReviewRoutes, { prefix: '/reviews', clientAuth });
+  await fastify.register(portalHandoffRoutes, { clientAuth });
 }

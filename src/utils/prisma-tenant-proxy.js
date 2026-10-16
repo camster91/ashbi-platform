@@ -30,6 +30,7 @@ import { relationsFor } from './tenant-relations.js';
 // Models that have a direct `organizationId` column. These get the
 // `where.organizationId = <jwt.orgId>` auto-inject (same as before).
 const DIRECT_SCOPED_MODELS = new Set([
+  'portalhandoffrequest',
   'client', 'project', 'user', 'integration', 'trasheditem', 'attachment', 'formdraft',
   'wpsite', 'wpbackup', 'wpreport', 'wpalert', 'wpfleetop',
   'wpmagicloginlog', 'wpbridgenonce', 'supporthourentry',
@@ -67,6 +68,7 @@ const APPEND_ONLY_BLOCKED_METHODS = new Set([
 // outbox (#412): its envelope is immutable (also enforced by a database
 // trigger); only dispatch bookkeeping changes, e.g. an admin replay.
 const BOOKKEEPING_ONLY_MODELS = {
+  portalhandoffrequest: new Set(['status', 'ownerId', 'claimedAt', 'resolvedAt', 'changedById', 'requeueReason', 'revision', 'updatedAt']),
   workspacechatattention: new Set(['acknowledgedAt']),
   workspaceaccountmanagerinvocation: new Set(['deliveryState', 'deliveryCode', 'deliveredAt', 'suppressedAt', 'updatedAt']),
   gmailsendreceipt: new Set(['status', 'providerMessageId', 'providerThreadId', 'hubMessageId', 'errorCode', 'updatedAt', 'finishedAt']),
@@ -95,6 +97,10 @@ const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platfor
 // redundant organizationId is not enough: the referenced parent must belong
 // to the same organization or the graph would span tenants.
 const DIRECT_PARENT_RELATIONS = {
+  portalhandoffrequest: [
+    { relation: 'client', field: 'clientId', model: 'client', delegate: 'client', required: true },
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true },
+  ],
   workspaceaccountmanagerbinding: [
     { relation: 'channel', field: 'channelId', model: 'workspacechatchannel', delegate: 'workspaceChatChannel', required: true },
     { relation: 'client', field: 'clientId', model: 'client', delegate: 'client', required: true },

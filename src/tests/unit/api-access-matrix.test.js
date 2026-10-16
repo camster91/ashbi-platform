@@ -101,6 +101,11 @@ const INTENTIONALLY_PUBLIC_ROUTES = {
  * @type {Record<string, string>}
  */
 const REVIEWED_UNSCOPED_ROUTES = {
+  'GET /api/portal-handoffs': 'Fresh ADMIN/TEAM identity and organization; canonical request/client/project SQL join scopes before cursor/limit.',
+  'GET /api/portal-handoffs/:requestId': 'Fresh ADMIN/TEAM identity and organization; exact canonical request/client/project join before receipt read.',
+  'POST /api/portal-handoffs/:requestId/claim': 'Serializable fresh ADMIN/TEAM identity and canonical organization/client/project; self-claim only with revision CAS and required audit.',
+  'POST /api/portal-handoffs/:requestId/resolve': 'Serializable fresh owner or ADMIN in the canonical organization/client/project; revision CAS and required audit.',
+  'POST /api/portal-handoffs/:requestId/requeue': 'Serializable fresh ADMIN in the canonical organization/client/project; bounded reason, revision CAS and required audit.',
   'GET /api/health/details': 'Staff or container-loopback infrastructure probe: runs SELECT 1 and reads Redis queue counters; reads no tenant data.',
   'GET /api/auth/me': 'Reads and returns only the caller\'s own user record.',
   'PUT /api/auth/me': 'Updates only the caller\'s own user record.',
