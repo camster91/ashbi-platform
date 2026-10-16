@@ -7,6 +7,8 @@ import ClientAssistantPreview from './ClientAssistantPreview';
 import ClientAgentSettings from './ClientAgentSettings';
 import { useAuth } from '../hooks/useAuth';
 
+const ClientAgentTaskAction = lazy(() => import('./ClientAgentTaskAction'));
+
 const ClientAgentConversations = lazy(() => import('./ClientAgentConversations'));
 
 function SavedConversations({ clientId }) {
@@ -24,6 +26,18 @@ function SavedConversationsProfile({ clientId }) {
     {profile.isError && <div role="alert"><p>Account manager settings could not be checked. Saved conversations remain available; sending is paused.</p><Button type="button" variant="outline" onClick={() => profile.refetch()}>Retry account manager settings</Button></div>}
     <Suspense fallback={<p role="status">Loading saved conversations…</p>}><ClientAgentConversations clientId={clientId} profileEnabled={profileEnabled} /></Suspense>
   </div>;
+}
+
+function TaskProposals({ clientId }) {
+  const { user } = useAuth();
+  if (!user?.id || !user.organizationId || !['ADMIN', 'TEAM'].includes(user.role)) return null;
+  return <TaskProposalsProfile key={`${user.organizationId}:${user.id}:${user.role}:${clientId}`} clientId={clientId} user={user} />;
+}
+
+function TaskProposalsProfile({ clientId, user }) {
+  const profile = useQuery({ queryKey: ['client-agent-profile', clientId], queryFn: () => api.getClientAgentProfile(clientId), retry: false, staleTime: 0, refetchOnMount: 'always', refetchOnWindowFocus: false });
+  const enabled = !profile.isError && !profile.isFetching && Boolean(profile.data?.enabled && profile.data.pluginIds?.includes('client-task-actions'));
+  return <Suspense fallback={<p role="status">Loading task proposals...</p>}><ClientAgentTaskAction clientId={clientId} user={user} enabled={enabled} /></Suspense>;
 }
 
 const VIEWS = [
@@ -129,6 +143,7 @@ export default function ClientAccountManager({ clientId, clientName, role }) {
         )}
         <Link className="inline-flex min-h-11 items-center text-sm underline underline-offset-4" to={`/queue?clientId=${encodeURIComponent(clientId || '')}`}>Open client work queue</Link>
         {open && clientId && <ClientAgentSettings key={`settings-${clientId}`} clientId={clientId} />}
+        {open && clientId && <TaskProposals clientId={clientId} />}
         {open && clientId && <ClientAssistantPreview key={clientId} clientId={clientId} clientName={clientName} />}
         {open && clientId && <details className="rounded-lg border border-border p-3" onToggle={(event) => { if (event.target === event.currentTarget) setConversationsOpen(event.currentTarget.open); }}>
           <summary className="min-h-11 cursor-pointer font-medium">Saved conversations</summary>

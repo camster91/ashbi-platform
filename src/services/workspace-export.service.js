@@ -73,6 +73,8 @@ const orgUser = (org) => ({ organizationId: org });
 
 /** @type {readonly EntitySpec[]} */
 export const EXPORT_ENTITIES = Object.freeze([
+  { name: 'client_service_projects', model: 'ClientServiceProject', category: 'workspace', where: (org) => ({ organizationId: org, client: activeClient(org) }), description: 'Saved report project mappings and publication status, including disabled mappings' },
+  { name: 'client_service_reports', model: 'ClientServiceReport', category: 'workspace', where: (org) => ({ organizationId: org, client: activeClient(org), mapping: { organizationId: org, client: activeClient(org) } }), description: 'Administrator-supplied saved report metadata and source/storage timestamps' },
   { name: 'gmail_send_receipts', model: 'GmailSendReceipt', category: 'workspace', where: (org) => ({ organizationId: org }), omit: ['payloadHash', 'idempotencyKey'], description: 'Gmail delivery outcomes and bounded recovery snapshots; no OAuth credentials' },
   { name: 'client_agent_profiles', model: 'ClientAgentProfile', category: 'workspace', where: (org) => ({ organizationId: org }), description: 'Staff account-manager preferences and plugin settings' },
   { name: 'workspace_chat_channels', model: 'WorkspaceChatChannel', category: 'workspace', where: (org) => ({ organizationId: org }), description: 'Company, client, project and direct staff message channels' },

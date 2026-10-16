@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import WorkspaceMessages from '../pages/WorkspaceMessages';
 
-const { api, auth } = vi.hoisted(() => ({ api: Object.fromEntries(['listWorkspaceChatChannels', 'listWorkspaceChatPeople', 'createWorkspaceChatChannel', 'getWorkspaceChatMessages', 'postWorkspaceChatMessage', 'markWorkspaceChatRead'].map((key) => [key, vi.fn()])), auth: { user: { id: 'u1', role: 'ADMIN' } } }));
+const { api, auth } = vi.hoisted(() => ({ api: Object.fromEntries(['listWorkspaceChatChannels', 'listWorkspaceChatPeople', 'createWorkspaceChatChannel', 'getWorkspaceChatMessages', 'postWorkspaceChatMessage', 'markWorkspaceChatRead', 'getClients', 'getProjects'].map((key) => [key, vi.fn()])), auth: { user: { id: 'u1', role: 'ADMIN' } } }));
 vi.mock('../lib/api', () => ({ api }));
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => auth }));
 const channels = [{ id: 'a', name: 'Agency', kind: 'COMPANY' }, { id: 'b', name: 'Client work', kind: 'CLIENT' }];
@@ -19,6 +19,8 @@ beforeEach(() => {
   api.listWorkspaceChatPeople.mockResolvedValue({ items: [{ id: 'u1', name: 'Cameron' }, { id: 'u2', name: 'Bianca' }] });
   api.getWorkspaceChatMessages.mockResolvedValue({ items: [message], nextCursor: null });
   api.markWorkspaceChatRead.mockResolvedValue({});
+  api.getClients.mockResolvedValue({ clients: [{ id: 'c1', name: 'Client One' }, { id: 'c2', name: 'Client Two' }], total: 2 });
+  api.getProjects.mockResolvedValue({ projects: [{ id: 'p1', clientId: 'c1', name: 'Client Project' }], total: 1 });
 });
 
 describe('workspace messages', () => {
@@ -146,7 +148,8 @@ describe('workspace messages', () => {
   it('keeps team users out of company channel creation and denies guest queries', async () => {
     auth.user = { id: 'u1', role: 'TEAM' };
     const view = setup(); await screen.findByRole('button', { name: /Agency/ });
-    expect(screen.queryByLabelText('Conversation type')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Conversation type')).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Company channel' })).not.toBeInTheDocument();
     view.unmount(); vi.clearAllMocks(); auth.user = { id: 'guest', role: 'CLIENT' };
     setup(); expect(screen.getByRole('alert')).toHaveTextContent('staff only');
     expect(api.listWorkspaceChatChannels).not.toHaveBeenCalled();
@@ -159,4 +162,65 @@ describe('workspace messages', () => {
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
     expect(screen.queryByText(/private details/)).not.toBeInTheDocument();
   });
+  it.each(['ADMIN', 'TEAM'])('creates an explicitly selected canonical client channel as %s', async (role) => {
+    auth.user.role = role; api.createWorkspaceChatChannel.mockResolvedValue({ channel: { ...channels[1], id: 'new-client' } });
+    setup(); await screen.findByRole('button', { name: /Agency/ });
+    expect(api.getClients).not.toHaveBeenCalled(); fireEvent.click(screen.getByText('New conversation'));
+    fireEvent.change(screen.getByLabelText('Conversation type'), { target: { value: 'CLIENT' } });
+    await screen.findByRole('option', { name: 'Client One' });
+    fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'c1' } });
+    fireEvent.change(screen.getByLabelText('Channel name'), { target: { value: 'Client planning' } });
+    fireEvent.click(screen.getByLabelText('Bianca'));
+    expect(api.createWorkspaceChatChannel).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Create conversation' }));
+    await waitFor(() => expect(api.createWorkspaceChatChannel).toHaveBeenCalledExactlyOnceWith({ kind: 'CLIENT', clientId: 'c1', name: 'Client planning', memberIds: ['u2'] }));
+    expect(api.getProjects).not.toHaveBeenCalled();
+  });
+
+  it('binds project choices to the selected client, rejects mismapped data and resets selection on client change', async () => {
+    api.getProjects.mockResolvedValueOnce({ projects: [{ id: 'p1', clientId: 'c1', name: 'Client Project' }, { id: 'foreign', clientId: 'c2', name: 'Wrong client' }, { id: 'deleted', clientId: 'c1', name: 'Deleted', deletedAt: 'today' }], total: 3 }).mockResolvedValue({ projects: [], total: 0 });
+    setup(); await screen.findByRole('button', { name: /Agency/ }); fireEvent.click(screen.getByText('New conversation'));
+    fireEvent.change(screen.getByLabelText('Conversation type'), { target: { value: 'PROJECT' } });
+    await screen.findByRole('option', { name: 'Client One' }); fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'c1' } });
+    await screen.findByRole('option', { name: 'Client Project' });
+    expect(api.getProjects).toHaveBeenCalledWith({ clientId: 'c1', limit: 100, offset: 0 });
+    expect(screen.queryByRole('option', { name: 'Wrong client' })).not.toBeInTheDocument(); expect(screen.queryByRole('option', { name: 'Deleted' })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'p1' } }); fireEvent.change(screen.getByLabelText('Channel name'), { target: { value: 'Project planning' } });
+    fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'c2' } });
+    await screen.findByText('This client has no available projects.');
+    expect(screen.getByRole('button', { name: 'Create conversation' })).toBeDisabled();
+    expect(screen.queryByRole('option', { name: 'Client Project' })).not.toBeInTheDocument(); expect(api.createWorkspaceChatChannel).not.toHaveBeenCalled();
+  });
+
+  it('creates a project channel with its canonical client and explicit membership', async () => {
+    auth.user.role = 'TEAM'; api.createWorkspaceChatChannel.mockResolvedValue({ channel: { id: 'project-chat', kind: 'PROJECT', name: 'Design room' } });
+    setup(); await screen.findByRole('button', { name: /Agency/ }); fireEvent.click(screen.getByText('New conversation'));
+    fireEvent.change(screen.getByLabelText('Conversation type'), { target: { value: 'PROJECT' } });
+    await screen.findByRole('option', { name: 'Client One' }); fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'c1' } });
+    await screen.findByRole('option', { name: 'Client Project' }); fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'p1' } }); fireEvent.change(screen.getByLabelText('Channel name'), { target: { value: 'Design room' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create conversation' }));
+    await waitFor(() => expect(api.createWorkspaceChatChannel).toHaveBeenCalledExactlyOnceWith({ kind: 'PROJECT', clientId: 'c1', projectId: 'p1', name: 'Design room', memberIds: [] }));
+  });
+
+  it('preserves an uncertain creation draft and checks channels without repeating the request', async () => {
+    api.createWorkspaceChatChannel.mockRejectedValue(new Error('private details'));
+    setup(); await screen.findByRole('button', { name: /Agency/ }); fireEvent.click(screen.getByText('New conversation'));
+    fireEvent.change(screen.getByLabelText('Conversation type'), { target: { value: 'CLIENT' } }); await screen.findByRole('option', { name: 'Client One' });
+    fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'c1' } }); fireEvent.change(screen.getByLabelText('Channel name'), { target: { value: 'Preserved draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create conversation' })); await screen.findByText(/creation could not be confirmed/);
+    expect(screen.getByLabelText('Channel name')).toHaveValue('Preserved draft'); expect(screen.getByRole('button', { name: 'Create conversation' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Reload conversations' })); await waitFor(() => expect(api.listWorkspaceChatChannels).toHaveBeenCalledTimes(2));
+    expect(api.createWorkspaceChatChannel).toHaveBeenCalledTimes(1); expect(screen.queryByText('private details')).not.toBeInTheDocument();
+  });
+
+  it('loads further client pages explicitly and leaves creation blocked on project lookup errors', async () => {
+    api.getClients.mockResolvedValueOnce({ clients: [{ id: 'c1', name: 'Client One' }], total: 2 }).mockResolvedValueOnce({ clients: [{ id: 'c2', name: 'Client Two' }], total: 2 });
+    api.getProjects.mockRejectedValue(new Error('private scope details'));
+    setup(); await screen.findByRole('button', { name: /Agency/ }); fireEvent.click(screen.getByText('New conversation')); fireEvent.change(screen.getByLabelText('Conversation type'), { target: { value: 'PROJECT' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Load more clients' })); await screen.findByRole('option', { name: 'Client Two' });
+    expect(api.getClients).toHaveBeenLastCalledWith({ limit: 100, offset: 1 });
+    fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'c2' } }); await screen.findByText('Projects could not be loaded.');
+    expect(screen.getByRole('button', { name: 'Create conversation' })).toBeDisabled(); expect(api.createWorkspaceChatChannel).not.toHaveBeenCalled(); expect(screen.queryByText('private scope details')).not.toBeInTheDocument();
+  });
+
 });

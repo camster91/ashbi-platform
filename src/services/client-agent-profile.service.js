@@ -9,7 +9,7 @@ export const clientAgentProfileUpdateSchema = z.object({
   name: z.string().trim().min(1).max(100),
   instructions: z.string().trim().max(2000),
   enabled: z.boolean(),
-  pluginIds: z.array(z.literal('client-work')).max(1).refine(ids => new Set(ids).size === ids.length),
+  pluginIds: z.array(z.enum(['client-work', 'client-task-actions'])).max(2).refine(ids => new Set(ids).size === ids.length),
 }).strict();
 
 const fail = (code, message, statusCode) => { throw new ToolError(code, message, { statusCode }); };
@@ -24,7 +24,7 @@ function parse(schema, input) {
 function project(row) {
   return { id: row.id, clientId: row.clientId, name: row.name, instructions: row.instructions,
     enabled: row.enabled, portalEnabled: false, revision: row.revision,
-    pluginIds: Array.isArray(row.pluginIds) ? row.pluginIds.filter(id => id === 'client-work') : [],
+    pluginIds: Array.isArray(row.pluginIds) ? row.pluginIds.filter(id => ['client-work', 'client-task-actions'].includes(id)) : [],
     ...(row.updatedAt ? { updatedAt: row.updatedAt } : {}) };
 }
 export async function authorizeClientAgentStaff(prisma, user, clientId) {

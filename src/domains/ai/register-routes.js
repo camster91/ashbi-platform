@@ -1,3 +1,4 @@
+import clientServicePanelRoutes from '../../routes/client-service-panels.routes.js';
 import aiRoutes from '../../routes/ai.routes.js';
 import aiBridgeRoutes from '../../routes/ai-bridge.routes.js';
 import semanticSearchRoutes from '../../routes/semantic-search.routes.js';
@@ -36,6 +37,7 @@ export async function registerAiRoutes(fastify) {
   await fastify.register(aiConnectionRoutes, { prefix: '/api/ai-connections' });
   await fastify.register(aiToolRoutes, { prefix: '/api/ai-tools' });
   await fastify.register(clientAssistantRoutes, { prefix: '/api/client-assistants' });
+  await fastify.register(clientServicePanelRoutes, { prefix: '/api/clients' });
   await fastify.register(clientAgentProfileRoutes, { prefix: '/api/client-assistants' });
   await fastify.register(clientAgentConversationRoutes, { prefix: '/api' });
 }

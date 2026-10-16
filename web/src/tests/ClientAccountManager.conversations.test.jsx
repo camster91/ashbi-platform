@@ -40,7 +40,8 @@ describe('account manager saved conversations integration', () => {
     expect(api.listClientAgentConversations).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText('Account manager'));
     await waitFor(() => expect(api.getClientAccountManagerBrief).toHaveBeenCalled());
-    expect(api.getClientAgentProfile).not.toHaveBeenCalled();
+    // Read settings to decide whether the opt-in task proposal control is available.
+    expect(api.getClientAgentProfile).toHaveBeenCalledWith('client-1');
     expect(api.listClientAgentConversations).not.toHaveBeenCalled();
     expect(screen.getByText('Account manager settings')).toBeInTheDocument();
     expect(screen.getByText('Ask the account manager')).toBeInTheDocument();

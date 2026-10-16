@@ -92,6 +92,8 @@ model Organization {
   breakGlassGrants      BreakGlassGrant[]
 
   @@map("organizations")
+  clientServiceProjects ClientServiceProject[]
+  clientServiceReports ClientServiceReport[]
   clientAgentProfiles ClientAgentProfile[]
   clientAgentConversations ClientAgentConversation[]
   clientAgentRuns ClientAgentRun[]
@@ -284,6 +286,9 @@ model Client {
   @@index([status])
   @@index([organizationId])
   @@map("clients")
+  serviceProjects ClientServiceProject[]
+  serviceReports ClientServiceReport[]
+  @@unique([id, organizationId])
   agentProfiles ClientAgentProfile[]
   agentConversations ClientAgentConversation[]
   workspaceChatChannels WorkspaceChatChannel[]
@@ -3275,4 +3280,50 @@ model WorkspaceChatMessage {
   @@index([authorId, organizationId])
   @@index([parentId])
   @@map("workspace_chat_messages")
+}
+
+
+model ClientServiceProject {
+  id String @id @default(cuid())
+  organizationId String
+  clientId String
+  provider String @default("OPENSEO")
+  providerProjectId String
+  displayLabel String
+  enabled Boolean @default(true)
+  revision Int @default(1)
+  lastAttemptAt DateTime?
+  lastSuccessAt DateTime?
+  lastOutcome String?
+  failureCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  reports ClientServiceReport[]
+  @@unique([organizationId, clientId, provider, providerProjectId], map: "service_project_provider_key")
+  @@unique([id, organizationId, clientId])
+  @@index([organizationId, clientId, enabled])
+  @@index([clientId, organizationId])
+  @@map("client_service_projects")
+}
+
+model ClientServiceReport {
+  id String @id @default(cuid())
+  organizationId String
+  clientId String
+  mappingId String
+  providerReportId String
+  title String
+  summary String
+  sourceReportedAt DateTime?
+  hubStoredAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  mapping ClientServiceProject @relation(fields: [mappingId, organizationId, clientId], references: [id, organizationId, clientId], onDelete: Cascade)
+  @@unique([mappingId, providerReportId])
+  @@index([organizationId, clientId, hubStoredAt])
+  @@index([clientId, organizationId])
+  @@index([mappingId, organizationId, clientId])
+  @@map("client_service_reports")
 }

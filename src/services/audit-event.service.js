@@ -21,6 +21,9 @@ const ACTOR_TYPE_SET = new Set(AUDIT_ACTOR_TYPES);
  * listed for the action are dropped.
  */
 export const AUDIT_EVENT_CATALOG = Object.freeze({
+  'client_service_project.created': { entityType: 'client_service_project', metadata: ['clientId', 'revision', 'enabled'] },
+  'client_service_project.updated': { entityType: 'client_service_project', metadata: ['clientId', 'revision', 'enabled'] },
+  'client_service_project.published': { entityType: 'client_service_project', metadata: ['clientId', 'revision', 'outcome', 'reportCount', 'complete'] },
   'client_agent_conversation.created': { entityType: 'client_agent_conversation', metadata: ['clientId', 'revision'] },
   'client_agent_conversation.archived': { entityType: 'client_agent_conversation', metadata: ['clientId', 'revision'] },
   'client_agent_run.requested': { entityType: 'client_agent_run', metadata: ['clientId', 'conversationId', 'runId'] },

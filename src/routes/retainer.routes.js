@@ -57,6 +57,7 @@ export default async function retainerRoutes(fastify) {
       hoursPerMonth,
       monthlyAmountUsd,
       monthlyAmountCad,
+      serviceDescription,
     } = request.body;
 
     if (!clientId || !hoursPerMonth) {
@@ -67,6 +68,7 @@ export default async function retainerRoutes(fastify) {
       where: { clientId },
       create: {
         clientId,
+        ...(serviceDescription !== undefined ? { serviceDescription } : {}),
         tier: tier || 'custom',
         hoursPerMonth: parseInt(hoursPerMonth),
         monthlyAmountUsd: monthlyAmountUsd != null ? parseFloat(monthlyAmountUsd) : null,
@@ -74,6 +76,7 @@ export default async function retainerRoutes(fastify) {
         billingCycleStart: new Date(),
       },
       update: {
+        ...(serviceDescription !== undefined ? { serviceDescription } : {}),
         tier: tier || 'custom',
         hoursPerMonth: parseInt(hoursPerMonth),
         monthlyAmountUsd: monthlyAmountUsd != null ? parseFloat(monthlyAmountUsd) : null,
@@ -95,9 +98,10 @@ export default async function retainerRoutes(fastify) {
     }
 
     const { clientId } = request.params;
-    const { tier, hoursPerMonth, monthlyAmountUsd, monthlyAmountCad, resetHours } = request.body;
+    const { tier, hoursPerMonth, monthlyAmountUsd, monthlyAmountCad, resetHours, serviceDescription } = request.body;
 
     const data = {};
+    if (serviceDescription !== undefined) data.serviceDescription = serviceDescription;
     if (tier !== undefined) data.tier = tier;
     if (hoursPerMonth !== undefined) data.hoursPerMonth = parseInt(hoursPerMonth);
     if (monthlyAmountUsd !== undefined) data.monthlyAmountUsd = monthlyAmountUsd === null ? null : parseFloat(monthlyAmountUsd);

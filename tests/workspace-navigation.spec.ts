@@ -41,10 +41,11 @@ test('staff navigation retains daily work and excludes administrator destination
   await page.goto('/dashboard');
   const nav = page.getByRole('navigation', { name: 'Workspace navigation' });
   await expect(nav.getByRole('link', { name: 'Daily Queue', exact: true })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'Timesheets', exact: true })).toBeVisible();
   for (const area of ['Clients', 'Knowledge', 'Finance', 'Settings']) {
     await nav.getByRole('button', { name: `Expand ${area}`, exact: true }).click();
   }
-  for (const name of ['Team', 'Credentials', 'Trash', 'Retainers', 'Rate Cards', 'Timesheets', 'Approvals']) {
+  for (const name of ['Team', 'Credentials', 'Trash', 'Retainers', 'Rate Cards', 'Approvals']) {
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
   }
   await expect(nav.getByRole('link', { name: 'Settings', exact: true })).toBeVisible();
@@ -69,4 +70,20 @@ test('phone navigation uses the same areas and keeps Inbox discoverable', async 
   await expect(page).toHaveURL(/\/inbox$/);
   await expect(menu).toHaveCount(0);
   await expect(nav.getByRole('link', { name: 'Clients', exact: true })).toHaveAttribute('aria-current', 'page');
+});
+
+
+test('staff can open personal timesheets from phone navigation', async ({ page }) => {
+  await staffSession(page, 'TEAM');
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/dashboard');
+  await page.getByRole('button', { name: 'Open Settings navigation options' }).click();
+  const menu = page.getByRole('menu');
+  const timesheets = menu.getByRole('menuitem', { name: 'Timesheets', exact: true });
+  await timesheets.scrollIntoViewIfNeeded();
+  await expect(timesheets).toBeVisible();
+  await timesheets.click();
+  await expect(page).toHaveURL(/\/timesheets$/);
+  await expect(page.getByRole('heading', { name: 'Timesheets', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Approve|Reject/ })).toHaveCount(0);
 });

@@ -49,7 +49,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'expense', 'taskcollaborator', 'projectboard', 'workspacepage', 'workspacepagegrant',
   'workspacecollection', 'workspacerecord', 'workspacerecordform',
   'clientagentprofile', 'workspacechatchannel', 'workspacechatmember', 'workspacechatmessage', 'gmailsendreceipt',
-  'clientagentconversation', 'clientagentrun',
+  'clientagentconversation', 'clientagentrun', 'clientserviceproject', 'clientservicereport',
   'noterevision', 'workspacepagerevision'
 ]);
 
