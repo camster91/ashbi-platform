@@ -8,7 +8,11 @@ export function useTheme(scopeId = null) {
 
   useEffect(() => {
     applyTheme(theme);
-    localStorage.setItem(themeStorageKey(scopeId), theme);
+    try {
+      localStorage.setItem(themeStorageKey(scopeId), theme);
+    } catch {
+      // Theme switching remains usable when optional browser storage is blocked.
+    }
   }, [scopeId, theme]);
 
   const toggle = () => setTheme(t => t === 'dark' ? 'light' : 'dark');

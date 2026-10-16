@@ -17,7 +17,7 @@ describe('destructive action recovery contract', () => {
   it('offers entity-specific note undo and reports restore failure', () => {
     expect(api).toContain('restoreTrashItem: (trashId)');
     expect(notes).toContain('label: `Undo delete ${title}`');
-    expect(notes).toContain('restoreMutation.mutate(result.trashId)');
+    expect(notes).toContain('restoreMutation.mutateAsync(result.trashId)');
     expect(notes).toContain("title: 'Could not restore note'");
   });
 
@@ -44,7 +44,7 @@ describe('destructive action recovery contract', () => {
     expect(milestones).toContain('Delete “${milestoneToDelete.name}”? You can undo this action for 10 seconds.');
     expect(milestones).toContain('Former tasks will be restored only if they remain unassigned.');
     expect(milestones).toContain('label: `Undo delete ${name}`');
-    expect(milestones).toContain('restoreMutation.mutate(result.trashId)');
+    expect(milestones).toContain('restoreMutation.mutateAsync(result.trashId)');
     expect(milestones).toContain("title: 'Could not restore milestone'");
     expect(milestones).toContain('disabled={isDeleting}');
   });
