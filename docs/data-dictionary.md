@@ -3544,14 +3544,14 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Tenant-scoped: yes (`organizationId`)
 - Soft-deletable: no
 - Constraints and indexes:
-  - `@@unique([id, organizationId])`
-  - `@@unique([organizationId, channelId])`
-  - `@@index([channelId, organizationId])`
-  - `@@index([clientId, organizationId])`
-  - `@@index([projectId, organizationId])`
-  - `@@index([profileId, organizationId])`
-  - `@@index([createdById, organizationId])`
-  - `@@index([updatedById, organizationId])`
+  - `@@unique([id, organizationId], map: "workspace_account_manager_bindings_id_organizationId_key")`
+  - `@@unique([organizationId, channelId], map: "workspace_account_manager_bindings_organizationId_channelId_key")`
+  - `@@index([channelId, organizationId], map: "workspace_account_manager_bindings_channelId_organizationId_idx")`
+  - `@@index([clientId, organizationId], map: "workspace_account_manager_bindings_clientId_organizationId_idx")`
+  - `@@index([projectId, organizationId], map: "workspace_account_manager_bindings_projectId_organizationId_idx")`
+  - `@@index([profileId, organizationId], map: "workspace_account_manager_bindings_profileId_organizationId_idx")`
+  - `@@index([createdById, organizationId], map: "workspace_account_manager_bindings_createdById_organization_idx")`
+  - `@@index([updatedById, organizationId], map: "workspace_account_manager_bindings_updatedById_organization_idx")`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -3583,14 +3583,14 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Tenant-scoped: yes (`organizationId`)
 - Soft-deletable: no
 - Constraints and indexes:
-  - `@@unique([organizationId, sourceMessageId, bindingId])`
-  - `@@unique([organizationId, requestedById, idempotencyKey])`
-  - `@@index([bindingId, organizationId])`
-  - `@@index([sourceMessageId, organizationId])`
-  - `@@index([requestedById, organizationId])`
-  - `@@unique([conversationId, organizationId])`
-  - `@@unique([runId, organizationId])`
-  - `@@index([organizationId, deliveryState, createdAt])`
+  - `@@unique([organizationId, sourceMessageId, bindingId], map: "workspace_account_manager_invocations_organizationId_source_key")`
+  - `@@unique([organizationId, requestedById, idempotencyKey], map: "workspace_account_manager_invocations_organizationId_reques_key")`
+  - `@@index([bindingId, organizationId], map: "workspace_account_manager_invocations_bindingId_organizatio_idx")`
+  - `@@index([sourceMessageId, organizationId], map: "workspace_account_manager_invocations_sourceMessageId_organ_idx")`
+  - `@@index([requestedById, organizationId], map: "workspace_account_manager_invocations_requestedById_organiz_idx")`
+  - `@@unique([conversationId, organizationId], map: "workspace_account_manager_invocations_conversationId_organi_key")`
+  - `@@unique([runId, organizationId], map: "workspace_account_manager_invocations_runId_organizationId_key")`
+  - `@@index([organizationId, deliveryState, createdAt], map: "workspace_account_manager_invocations_organizationId_delive_idx")`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
