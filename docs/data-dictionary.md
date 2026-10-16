@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-128 models, 0 enums, 74 tenant-scoped, 13 soft-deletable.
+129 models, 0 enums, 75 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -63,6 +63,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [EventAttendee](#model-eventattendee) | `event_attendees` | no | no | 7 |
 | [Expense](#model-expense) | `expenses` | yes | yes | 22 |
 | [FormDraft](#model-formdraft) | `form_drafts` | yes | no | 13 |
+| [GmailIngestReceipt](#model-gmailingestreceipt) | `gmail_ingest_receipts` | yes | no | 12 |
 | [GmailSendReceipt](#model-gmailsendreceipt) | `gmail_send_receipts` | yes | no | 17 |
 | [GoogleCalendarConnection](#model-googlecalendarconnection) | `google_calendar_connections` | yes | no | 14 |
 | [ImpersonationSession](#model-impersonationsession) | `impersonation_sessions` | yes | no | 13 |
@@ -85,7 +86,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 83 |
+| [Organization](#model-organization) | `organizations` | no | no | 84 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -1338,6 +1339,30 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 
+### Model GmailIngestReceipt
+
+- Table: `gmail_ingest_receipts`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([organizationId, mailbox, providerMessageId])`
+  - `@@index([organizationId, mailbox, providerThreadId, outcome])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `mailbox` | String | required |  |  |  |
+| `providerMessageId` | String | required |  |  |  |
+| `providerThreadId` | String | required |  |  |  |
+| `outcome` | String | required |  |  |  |
+| `clientId` | String | optional |  |  |  |
+| `threadId` | String | optional |  |  |  |
+| `messageId` | String | optional |  |  |  |
+| `triageItemId` | String | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+
 ### Model GmailSendReceipt
 
 - Table: `gmail_send_receipts`
@@ -1963,6 +1988,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `mfaRequired` | Boolean | required | `false` |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `gmailIngestReceipts` | GmailIngestReceipt[] | list, required |  | → GmailIngestReceipt |  |
 | `users` | User[] | list, required |  | → User |  |
 | `taskCollaborations` | TaskCollaborator[] | list, required |  | → TaskCollaborator |  |
 | `projectBoards` | ProjectBoard[] | list, required |  | → ProjectBoard |  |

@@ -26,27 +26,35 @@ export function senderDomainMatches(senderDomain, clientDomain) {
 
 /**
  * The client of `organizationId` a sender belongs to, or null.
- * 1. a contact of a live client of the organization with this address (any case);
+ * 1. contacts of live clients of the organization with this address (any case);
+ *    addresses shared across clients require review, never an arbitrary first match;
  * 2. a live client of the organization whose domain is the sender's domain;
  * 3. a live client of the organization whose domain the sender's domain is a
  *    subdomain of (the most specific domain wins).
  * @param {any} prisma raw Prisma client
  * @param {string} organizationId the synced mailbox's organization
  * @param {string} senderEmail
- * @returns {Promise<{ client: any, contact: any, confidence: number } | null>}
+ * @returns {Promise<any>}
  */
 export async function matchSenderToClient(prisma, organizationId, senderEmail) {
   if (!organizationId) throw new Error('matchSenderToClient: organizationId is required');
   const email = String(senderEmail || '').trim();
   const domain = email.split('@')[1]?.toLowerCase();
   if (!domain) return null;
-  const liveClient = { organizationId, deletedAt: null };
+  const liveClient = { organizationId, deletedAt: null, status: { in: ['ACTIVE', 'PROSPECT'] }, relationshipStatus: { notIn: ['ARCHIVED', 'CHURNED'] } };
 
-  const contact = await prisma.contact.findFirst({
-    where: { email: insensitiveEquals(email), client: liveClient },
+  const contacts = await prisma.contact.findMany({
+    // An exact historical/ineligible contact is a review signal. Filtering it
+    // out here could leak the body to a different client's matching domain.
+    where: { email: insensitiveEquals(email), client: { organizationId } },
     include: { client: true },
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 501,
   });
+  if (contacts.length > 500) return { ambiguous: true };
+  if (contacts.some(({ client }) => client.deletedAt || !['ACTIVE', 'PROSPECT'].includes(client.status)
+    || ['ARCHIVED', 'CHURNED'].includes(client.relationshipStatus))) return { ambiguous: true };
+  if (new Set(contacts.map(contact => contact.client.id)).size > 1) return { ambiguous: true };
+  const contact = contacts[0];
   if (contact) return { client: contact.client, contact, confidence: 1.0 };
 
   if (isFreeEmailDomain(domain)) return null;
