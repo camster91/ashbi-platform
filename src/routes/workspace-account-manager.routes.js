@@ -22,12 +22,12 @@ const handle = operation => async (request, reply) => {
 export default async function workspaceAccountManagerRoutes(fastify) {
   const onRequest = [fastify.authenticate, requireStaff];
   const options = (params, body, query) => ({ onRequest, preHandler: [validateParams(params), ...(body ? [validateBody(body)] : []), ...(query ? [validateQuery(query)] : [])], config: { rateLimit: { max: 30, timeWindow: '1 minute' } } });
-  fastify.get('/channels/:channelId/account-manager', options(channel), handle(r => readWorkspaceAccountManager(r.prisma, r.user, r.params.channelId)));
-  fastify.post('/channels/:channelId/account-manager', options(channel, accountManagerInstallSchema), handle(r => installWorkspaceAccountManager(r.prisma, r.user, r.params.channelId, r.body)));
-  fastify.patch('/channels/:channelId/account-manager/:bindingId', options(binding, accountManagerUpdateSchema), handle(r => updateWorkspaceAccountManager(r.prisma, r.user, r.params.channelId, r.params.bindingId, r.body)));
-  fastify.get('/channels/:channelId/account-manager/requests', options(channel, null, accountManagerPageSchema), handle(r => listWorkspaceAccountManagerInvocations(r.prisma, r.user, r.params.channelId, r.query)));
-  fastify.post('/channels/:channelId/account-manager/requests', options(channel, accountManagerRequestSchema), handle(r => requestWorkspaceAccountManager(r.prisma, r.user, r.params.channelId, r.body)));
-  fastify.get('/channels/:channelId/account-manager/requests/by-intent/:key', options(intent), handle(r => getWorkspaceAccountManagerByIntent(r.prisma, r.user, r.params.channelId, r.params.key)));
-  fastify.get('/channels/:channelId/account-manager/requests/:invocationId', options(invocation), handle(r => readWorkspaceAccountManagerInvocation(r.prisma, r.user, r.params.channelId, r.params.invocationId)));
-  fastify.post('/channels/:channelId/account-manager/requests/:invocationId/cancel', options(invocation, z.object({}).strict()), handle(r => cancelWorkspaceAccountManagerInvocation(r.prisma, r.user, r.params.channelId, r.params.invocationId)));
+  fastify.get('/channels/:channelId/account-manager', { ...options(channel), onRequest }, handle(r => readWorkspaceAccountManager(r.prisma, r.user, r.params.channelId)));
+  fastify.post('/channels/:channelId/account-manager', { ...options(channel, accountManagerInstallSchema), onRequest }, handle(r => installWorkspaceAccountManager(r.prisma, r.user, r.params.channelId, r.body)));
+  fastify.patch('/channels/:channelId/account-manager/:bindingId', { ...options(binding, accountManagerUpdateSchema), onRequest }, handle(r => updateWorkspaceAccountManager(r.prisma, r.user, r.params.channelId, r.params.bindingId, r.body)));
+  fastify.get('/channels/:channelId/account-manager/requests', { ...options(channel, null, accountManagerPageSchema), onRequest }, handle(r => listWorkspaceAccountManagerInvocations(r.prisma, r.user, r.params.channelId, r.query)));
+  fastify.post('/channels/:channelId/account-manager/requests', { ...options(channel, accountManagerRequestSchema), onRequest }, handle(r => requestWorkspaceAccountManager(r.prisma, r.user, r.params.channelId, r.body)));
+  fastify.get('/channels/:channelId/account-manager/requests/by-intent/:key', { ...options(intent), onRequest }, handle(r => getWorkspaceAccountManagerByIntent(r.prisma, r.user, r.params.channelId, r.params.key)));
+  fastify.get('/channels/:channelId/account-manager/requests/:invocationId', { ...options(invocation), onRequest }, handle(r => readWorkspaceAccountManagerInvocation(r.prisma, r.user, r.params.channelId, r.params.invocationId)));
+  fastify.post('/channels/:channelId/account-manager/requests/:invocationId/cancel', { ...options(invocation, z.object({}).strict()), onRequest }, handle(r => cancelWorkspaceAccountManagerInvocation(r.prisma, r.user, r.params.channelId, r.params.invocationId)));
 }
