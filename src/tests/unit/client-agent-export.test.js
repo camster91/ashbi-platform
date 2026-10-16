@@ -9,9 +9,10 @@ test('agent transcript export preserves archived history while scoping canonical
   assert.deepEqual(runs.where('org-a'), { organizationId: 'org-a', conversation: { organizationId: 'org-a', client: { organizationId: 'org-a', deletedAt: null } } });
   assert.deepEqual(omitArgs(runs), { idempotencyKey: true, inputHash: true, claimToken: true });
   const archivedAt = new Date('2026-10-15T00:00:00.000Z');
+  const memorySnapshot = { version: 1, turns: [], truncated: false };
   const contextSnapshot = { version: 1, snapshot: { client: { id: 'client-a', name: 'Historical client', domain: null }, projects: [], truncated: false } };
   const expected = [{ id: 'run-a', prompt: 'Stored question', response: 'Stored answer', archivedAt,
-    contextObservedAt: archivedAt, contextSnapshot }];
+    contextObservedAt: archivedAt, contextSnapshot, memorySnapshot }];
   const db = { clientAgentRun: { findMany: async args => {
     assert.deepEqual(args.where, runs.where('org-a'));
     assert.deepEqual(args.omit, omitArgs(runs));

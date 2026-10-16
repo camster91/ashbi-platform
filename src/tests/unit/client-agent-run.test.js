@@ -84,11 +84,12 @@ test('same key with changed question or canonical conversation conflicts without
 test('status and requester intent expose retained evidence without internal tokens or profile instructions', async () => {
   const f = fixture(); const saved = await f.start();
   const contextObservedAt = new Date('2026-10-16T00:00:00.000Z');
+  const memorySnapshot = { version: 1, turns: [], truncated: false };
   const contextSnapshot = { version: 1, snapshot: { client: { id: client.id, name: 'Historical', domain: null }, projects: [], truncated: false } };
-  Object.assign(f.state.runs[0], { contextObservedAt, contextSnapshot, status: 'SUCCEEDED', response: 'Stored', instructions: 'Private' });
+  Object.assign(f.state.runs[0], { contextObservedAt, contextSnapshot, memorySnapshot, status: 'SUCCEEDED', response: 'Stored', instructions: 'Private' });
   for (const row of [await f.service.read(f.db, user, client.id, conversation.id, saved.id),
     await f.service.byIntent(f.db, user, client.id, conversation.id, input.idempotencyKey)]) {
-    assert.deepEqual(row.contextSnapshot, contextSnapshot); assert.deepEqual(row.contextObservedAt, contextObservedAt);
+    assert.deepEqual(row.memorySnapshot, memorySnapshot); assert.deepEqual(row.contextSnapshot, contextSnapshot); assert.deepEqual(row.contextObservedAt, contextObservedAt);
     assert.doesNotMatch(JSON.stringify(row), /claimToken|inputHash|idempotencyKey|instructions|Private/);
   }
   f.state.actor.role = 'CLIENT';
