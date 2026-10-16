@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 5 |
-| staff | 439 |
+| staff | 443 |
 | staff (inline) | 1 |
-| **total** | 634 |
+| **total** | 638 |
 
 ## Routes by prefix
 
@@ -388,6 +388,10 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/clients/:clientId/assistant/conversations/:conversationId/runs/:runId` | staff | scoped |  |
 | POST | `/api/clients/:clientId/assistant/conversations/:conversationId/runs/:runId/cancel` | staff | scoped |  |
 | GET | `/api/clients/:clientId/assistant/conversations/:conversationId/runs/by-intent/:idempotencyKey` | staff | scoped |  |
+| GET | `/api/clients/:clientId/service-panels` | staff | scoped |  |
+| POST | `/api/clients/:clientId/service-panels` | staff | scoped |  |
+| PATCH | `/api/clients/:clientId/service-panels/:mappingId` | staff | scoped |  |
+| POST | `/api/clients/:clientId/service-panels/:mappingId/snapshots` | staff | scoped |  |
 | GET | `/api/clients/:id` | staff | scoped |  |
 | PUT | `/api/clients/:id` | staff | scoped |  |
 | GET | `/api/clients/:id/contacts` | staff | scoped |  |
