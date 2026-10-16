@@ -33,6 +33,8 @@ const TYPE_LABELS = {
   proposal: 'Proposal',
   contract: 'Contract',
   invoice: 'Invoice',
+  workspace_attention: 'Attention request',
+  portal_handoff: 'Client question',
 };
 
 const SOURCE_LABELS = {
@@ -42,6 +44,8 @@ const SOURCE_LABELS = {
   proposals: 'Proposals',
   contracts: 'Contracts',
   invoices: 'Invoices',
+  workspace_chat_attention: 'Workspace attention',
+  portal_handoffs: 'Client questions',
 };
 
 const VIEW_BADGE = {
@@ -159,7 +163,7 @@ export default function WorkQueue() {
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground">Daily queue</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            What needs attention across client delivery. Open a row to act on it in its own record.
+            What needs attention across client delivery. Open a row to act on it in its own record. Attention requests always show requests sent to you.
           </p>
           {!isAdmin && (
             <p className="mt-1 text-xs text-muted-foreground" data-testid="queue-scope-note">

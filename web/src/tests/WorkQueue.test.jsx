@@ -104,6 +104,54 @@ describe('WorkQueue page', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/invoices/i1');
   });
 
+  it.each(['ADMIN', 'TEAM'])('labels own workspace attention for %s and opens Team messages without an acknowledgment action', async (role) => {
+    const user = userEvent.setup();
+    authState.user = { id: 'u1', name: 'Ada', role };
+    api.getWorkQueue.mockResolvedValue({
+      ...QUEUE,
+      rows: [row({ type: 'workspace_attention', id: 'attention-1', title: 'A teammate requested your attention', sourceUrl: '/messages', nextAction: 'Open Team messages to review and acknowledge', owner: { id: 'u1', name: 'Ada', role }, dueAt: null, dueKind: null })],
+      counts: { ...QUEUE.counts, needs_action: 1 }, sources: ['workspace_chat_attention'],
+    });
+    api.getClients.mockResolvedValue({ clients: [] });
+    renderQueue('/queue?owner=everyone');
+
+    const attention = await screen.findByRole('link', { name: 'Attention request: A teammate requested your attention. Open Team messages to review and acknowledge' });
+    expect(attention).toHaveAttribute('href', '/messages');
+    expect(within(attention).getByText('Attention request')).toBeInTheDocument();
+    expect(attention).toHaveTextContent('Owner: Ada');
+    expect(screen.getByText(/Attention requests always show requests sent to you/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /acknowledge/i })).not.toBeInTheDocument();
+    await user.click(attention);
+    expect(screen.getByTestId('location')).toHaveTextContent('/messages');
+    expect(api.getWorkQueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('labels client questions and both named partial sources while retaining loaded rows', async () => {
+    api.getWorkQueue.mockResolvedValue({
+      ...QUEUE,
+      rows: [row({ type: 'portal_handoff', id: 'handoff-1', title: 'Client requested an account manager', sourceUrl: '/project/p1', nextAction: 'Claim the human request', owner: null })],
+      partial: true, failedSources: ['workspace_chat_attention', 'portal_handoffs'],
+    });
+    api.getClients.mockResolvedValue({ clients: [] });
+    renderQueue();
+
+    const question = await screen.findByRole('link', { name: 'Client question: Client requested an account manager. Claim the human request' });
+    expect(question).toHaveAttribute('href', '/project/p1');
+    expect(within(question).getByText('Client question')).toBeInTheDocument();
+    expect(screen.getByText('Some queue sources did not load: Workspace attention, Client questions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry Workspace attention, Client questions' })).toBeInTheDocument();
+    expect(screen.queryByText(/workspace_chat_attention|portal_handoffs/)).not.toBeInTheDocument();
+  });
+
+  it('names attention and client-question truncation without hiding other queue rows', async () => {
+    api.getWorkQueue.mockResolvedValue({ ...QUEUE, truncatedSources: ['workspace_chat_attention', 'portal_handoffs'] });
+    api.getClients.mockResolvedValue({ clients: [] });
+    renderQueue();
+
+    expect(await screen.findByRole('note')).toHaveTextContent('Showing the first 100 items from Workspace attention, Client questions. Filter by client to see the rest.');
+    expect(screen.getByRole('link', { name: /Task: Write homepage copy/ })).toBeInTheDocument();
+  });
+
   it('moves between tabs with the arrow, Home and End keys', async () => {
     const user = userEvent.setup();
     api.getWorkQueue.mockResolvedValue(QUEUE);

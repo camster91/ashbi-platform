@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import prismaPkg from '@prisma/client';
 import { z } from 'zod';
 import { ToolError } from '../ai/tools/registry.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
@@ -168,6 +169,38 @@ export async function listWorkspaceChatAttention(prisma, user, input = {}) {
   const scanned = rows.slice(0, limit);
   const items = scanned.filter(row => canonicalProject(row.channel));
   return { items, nextCursor: rows.length > limit ? scanned.at(-1).id : null, pendingCount: items.length, countScope: 'page' };
+}
+
+/** Safe queue projection only: no message body, channel title or bot results.
+ * Apply the complete current audience and canonical-parent predicates BEFORE
+ * LIMIT so inaccessible rows cannot consume the queue's truncation sentinel.
+ */
+export async function listWorkspaceChatAttentionForQueue(prisma, user, { clientId, projectId, limit = 101 } = {}) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 101) refuse('INVALID_INPUT', 400);
+  for (const value of [clientId, projectId]) if (value !== undefined) parse(id, value);
+  const { db, actor, organizationId } = await actorScope(prisma, user);
+  const args = JSON.stringify({ organizationId, actorId: actor.id, clientId, projectId });
+  const items = await db.$queryRaw(prismaPkg.Prisma.sql`
+    WITH args AS (SELECT ${args}::jsonb AS x)
+    SELECT a.id, a."createdAt", a."recipientId",
+      c.id AS "clientId", c.name AS "clientName", p.id AS "projectId", p.name AS "projectName"
+    FROM workspace_chat_attention a
+    JOIN workspace_chat_channels ch ON ch.id=a."channelId" AND ch."organizationId"=a."organizationId"
+    JOIN workspace_chat_messages m ON m.id=a."messageId" AND m."organizationId"=a."organizationId" AND m."channelId"=ch.id
+    JOIN workspace_chat_members cm ON cm."channelId"=ch.id AND cm."organizationId"=a."organizationId" AND cm."userId"=a."recipientId" AND cm."leftAt" IS NULL
+    JOIN users u ON u.id=a."recipientId" AND u."organizationId"=a."organizationId" AND u."isActive" AND u.role IN ('ADMIN','TEAM')
+    LEFT JOIN clients c ON c.id=ch."clientId" AND c."organizationId"=a."organizationId" AND c."deletedAt" IS NULL
+    LEFT JOIN projects p ON p.id=ch."projectId" AND p."organizationId"=a."organizationId" AND p."clientId"=ch."clientId" AND p."deletedAt" IS NULL
+    CROSS JOIN args
+    WHERE a."organizationId"=args.x->>'organizationId' AND a."recipientId"=args.x->>'actorId'
+      AND a."acknowledgedAt" IS NULL AND ch."archivedAt" IS NULL
+      AND a."recipientId"=ANY(m."attentionRecipientIds") AND a."recipientId"<>m."authorId"
+      AND (ch."clientId" IS NULL OR c.id IS NOT NULL)
+      AND (ch."projectId" IS NULL OR p.id IS NOT NULL)
+      AND (args.x->>'clientId' IS NULL OR ch."clientId"=args.x->>'clientId')
+      AND (args.x->>'projectId' IS NULL OR ch."projectId"=args.x->>'projectId')
+    ORDER BY a.id ASC LIMIT ${limit}`);
+  return { items, actor };
 }
 
 export async function acknowledgeWorkspaceChatAttention(prisma, user, channelId, attentionId) {
