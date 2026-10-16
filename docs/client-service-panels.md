@@ -14,7 +14,10 @@ GET `/api/clients/:clientId/service-panels` and read-only MCP
 20 and permits 1–50 reports per mapping; truncation flags are explicit. Refresh
 reads Hub storage only. Status is never-fetched, ready, empty or unavailable.
 Hub `lastSuccessAt`/`hubStoredAt` are distinct from nullable administrator-supplied
-source timestamps. `sourceFreshness` is unknown without source time; supplied source
+source timestamps. `sourceFreshness` is unknown without source time or when
+reports are omitted by the bounded read (with `sourceObservedAt: null`); a
+Hub-storage-ordered page cannot establish the newest source date for the complete
+mapping. Supplied source
 time is not provider authenticity evidence. Hub storage staleness uses 24 hours.
 No source links are emitted in this slice.
 

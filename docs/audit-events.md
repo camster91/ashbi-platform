@@ -306,7 +306,8 @@ payloads are included. See [gmail-send-receipts.md](gmail-send-receipts.md).
 
 ### Saved service reports
 
-`client_service_project.created` and `.updated` retain clientId, revision and enabled.
+`client_service_project.created` and `client_service_project.updated` retain
+clientId, revision and enabled.
 `client_service_project.published` retains clientId, revision, outcome, reportCount
 and complete. Report text, external identifiers and credentials are excluded.
 A failed audit insert rolls back mapping/report changes.

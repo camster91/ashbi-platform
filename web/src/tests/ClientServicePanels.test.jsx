@@ -48,8 +48,11 @@ describe('saved service reports', () => {
     expect(screen.getByText(/first 50 mappings/)).toBeInTheDocument();
   });
   it('marks report truncation and no mapping separately', async () => {
-    api.getClientServicePanels.mockResolvedValueOnce(payload([{ ...mapping, hasMoreReports: true }]));
-    setup(); await open(); await screen.findByText(/Additional reports are omitted/);
+    api.getClientServicePanels.mockResolvedValueOnce(payload([{ ...mapping, hasMoreReports: true, sourceFreshness: 'unknown', sourceObservedAt: null }]));
+    setup(); await open(); await screen.findByText('Showing a limited selection of saved reports. Additional reports are omitted.');
+    expect(screen.getByText(/newest source date and mapping freshness cannot be verified/)).toBeInTheDocument();
+    expect(screen.queryByText(/latest published attempt was unavailable/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/source report date is older than/)).not.toBeInTheDocument();
     api.getClientServicePanels.mockResolvedValueOnce(payload([])); fireEvent.click(screen.getByRole('button', { name: 'Reload saved reports' }));
     await screen.findByText('No service project mappings have been saved for this client.');
   });

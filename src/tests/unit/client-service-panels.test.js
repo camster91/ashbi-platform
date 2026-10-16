@@ -64,6 +64,25 @@ test('complete/partial/empty/unavailable snapshots retain explicit provenance an
   await publishClientServiceSnapshot(db, user, 'client-a', mapping.id, snapshot(3, { complete: false, reports: [{ ...report, providerReportId: 'report-b' }] })); assert.equal(state.reports.length, 2);
   await publishClientServiceSnapshot(db, user, 'client-a', mapping.id, snapshot(4, { outcome: 'EMPTY', reports: [] })); assert.equal(state.reports.length, 0); assert.equal((await readClientServicePanels(db, user, 'client-a')).projects[0].status, 'empty');
 });
+test('bounded Hub-storage pages never claim the whole mapping source freshness', async () => {
+  const { db } = fixture(); const mapping = await createClientServiceMapping(db, user, 'client-a', mappingInput);
+  const old = new Date(Date.now() - 3 * 86400000).toISOString();
+  const recent = new Date(Date.now() - 60000).toISOString();
+  // The newest source date may be beyond both the visible page and its sentinel:
+  // storage order is independent from source report chronology.
+  await publishClientServiceSnapshot(db, user, 'client-a', mapping.id, snapshot(1, { reports: [
+    { ...report, providerReportId: 'stored-first', sourceReportedAt: old },
+    { ...report, providerReportId: 'sentinel', sourceReportedAt: old },
+    { ...report, providerReportId: 'source-newest', sourceReportedAt: recent },
+  ] }));
+  const limited = (await readClientServicePanels(db, user, 'client-a', { limit: 1 })).projects[0];
+  assert.equal(limited.hasMoreReports, true); assert.equal(limited.sourceObservedAt, null); assert.equal(limited.sourceFreshness, 'unknown');
+  assert.equal(limited.reports.length, 1); assert.equal(limited.reports[0].sourceReportedAt.toISOString(), old);
+  assert.equal(limited.status, 'ready', 'completeness uncertainty is not provider failure');
+  const complete = (await readClientServicePanels(db, user, 'client-a', { limit: 3 })).projects[0];
+  assert.equal(complete.hasMoreReports, false); assert.equal(complete.sourceObservedAt.toISOString(), recent); assert.equal(complete.sourceFreshness, 'recent');
+});
+
 test('strict publication rejects duplicate IDs, arbitrary URLs, HTML, future times and wrong mapping project', async () => {
   const { db, state } = fixture(); const mapping = await createClientServiceMapping(db, user, 'client-a', mappingInput);
   for (const input of [snapshot(1, { reports: [report, report] }), snapshot(1, { reports: [{ ...report, sourceUrl: 'https://attacker.invalid' }] }), snapshot(1, { reports: [{ ...report, summary: '<b>Unsafe</b>' }] }), snapshot(1, { reports: [{ ...report, sourceReportedAt: '2999-01-01T00:00:00Z' }] }), snapshot(1, { providerProjectIdMatch: 'different' }), snapshot(1, { outcome: 'EMPTY', complete: false, reports: [] })]) await assert.rejects(publishClientServiceSnapshot(db, user, 'client-a', mapping.id, input));

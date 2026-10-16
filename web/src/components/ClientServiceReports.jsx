@@ -92,7 +92,7 @@ export default function ClientServiceReports({ clientId, user }) {
       {mapping.status === 'empty' && <p role="status">The last complete snapshot contained no reports.</p>}
       {mapping.status === 'unavailable' && <p role="status">The latest published attempt was unavailable.{mapping.reports.length ? ' Showing retained last-good reports.' : ' No saved reports are available.'}</p>}
       {mapping.stale && mapping.lastSuccessAt && <p role="status">Saved reports are stale: the last successful snapshot was stored more than {data.staleAfterHours} hours ago.</p>}
-      {mapping.sourceFreshness === 'unknown' && <p className="text-sm text-muted-foreground">The source report date is unknown; freshness cannot be verified.</p>}
+      {mapping.sourceFreshness === 'unknown' && <p className="text-sm text-muted-foreground">{mapping.hasMoreReports ? 'Additional reports are omitted, so the newest source date and mapping freshness cannot be verified from this selection.' : 'The source report date is unknown; freshness cannot be verified.'}</p>}
       {mapping.sourceFreshness === 'stale' && <p role="status">The source report date is older than {data.staleAfterHours} hours. A recent Hub save does not make the source report current.</p>}
       <p className="text-xs text-muted-foreground">Last Hub attempt: <DateValue value={mapping.lastAttemptAt} />  -  Last successful Hub snapshot: <DateValue value={mapping.lastSuccessAt} /></p>
       {mapping.hasMoreReports && <p role="status">Showing a limited selection of saved reports. Additional reports are omitted.</p>}

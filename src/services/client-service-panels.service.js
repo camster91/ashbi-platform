@@ -36,12 +36,15 @@ async function audit(tx, actor, row, action, metadata = {}) {
   if (!saved) fail('SERVICE_PANEL_AUDIT_UNAVAILABLE', 'Saved reports could not be updated with an audit record.', 503);
 }
 function projection(row, limit, now) {
-  const latest = row.reports.reduce((result, report) => report.sourceReportedAt && (!result || report.sourceReportedAt > result) ? report.sourceReportedAt : result, null);
+  const hasMoreReports = row.reports.length > limit;
+  // A Hub-storage-ordered bounded page cannot establish the newest source date
+  // for the whole mapping. Keep completeness uncertainty explicit.
+  const latest = hasMoreReports ? null : row.reports.reduce((result, report) => report.sourceReportedAt && (!result || report.sourceReportedAt > result) ? report.sourceReportedAt : result, null);
   return { id: row.id, provider: row.provider, providerProjectId: row.providerProjectId, displayLabel: row.displayLabel,
     enabled: row.enabled, revision: row.revision, status: !row.lastAttemptAt ? 'never-fetched' : row.lastOutcome === 'UNAVAILABLE' ? 'unavailable' : row.reports.length ? 'ready' : 'empty',
     lastAttemptAt: row.lastAttemptAt, lastSuccessAt: row.lastSuccessAt, lastOutcome: row.lastOutcome, failureCode: row.failureCode,
     stale: !row.lastSuccessAt || now - new Date(row.lastSuccessAt).getTime() > 86400000,
-    sourceObservedAt: latest, sourceFreshness: latest ? (now - new Date(latest).getTime() > 86400000 ? 'stale' : 'recent') : 'unknown', hasMoreReports: row.reports.length > limit,
+    sourceObservedAt: latest, sourceFreshness: latest ? (now - new Date(latest).getTime() > 86400000 ? 'stale' : 'recent') : 'unknown', hasMoreReports,
     reports: row.reports.slice(0, limit).map(report => ({ id: report.id, providerReportId: report.providerReportId,
       title: report.title, summary: report.summary, sourceReportedAt: report.sourceReportedAt, hubStoredAt: report.hubStoredAt, sourceUrl: null })) };
 }

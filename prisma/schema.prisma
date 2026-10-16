@@ -3303,6 +3303,7 @@ model ClientServiceProject {
   @@unique([organizationId, clientId, provider, providerProjectId], map: "service_project_provider_key")
   @@unique([id, organizationId, clientId])
   @@index([organizationId, clientId, enabled])
+  @@index([clientId, organizationId])
   @@map("client_service_projects")
 }
 
@@ -3321,5 +3322,7 @@ model ClientServiceReport {
   mapping ClientServiceProject @relation(fields: [mappingId, organizationId, clientId], references: [id, organizationId, clientId], onDelete: Cascade)
   @@unique([mappingId, providerReportId])
   @@index([organizationId, clientId, hubStoredAt])
+  @@index([clientId, organizationId])
+  @@index([mappingId, organizationId, clientId])
   @@map("client_service_reports")
 }

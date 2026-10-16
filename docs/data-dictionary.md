@@ -894,6 +894,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@unique([organizationId, clientId, provider, providerProjectId], map: "service_project_provider_key")`
   - `@@unique([id, organizationId, clientId])`
   - `@@index([organizationId, clientId, enabled])`
+  - `@@index([clientId, organizationId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -923,6 +924,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Constraints and indexes:
   - `@@unique([mappingId, providerReportId])`
   - `@@index([organizationId, clientId, hubStoredAt])`
+  - `@@index([clientId, organizationId])`
+  - `@@index([mappingId, organizationId, clientId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
