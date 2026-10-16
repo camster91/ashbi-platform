@@ -1,3 +1,5 @@
+import { MCP_OAUTH_ACTION_SCOPES } from '../auth/mcp-oauth-scopes.js';
+import { assertMcpActionAuthority } from '../auth/mcp-action-authority.js';
 import { WORKSPACE_SERVICE_PUBLICATION_TOOLS } from './workspace-service-publication-tools.js';
 import { servicePublicationInputSchema, authorizeServicePublicationReceipt } from '../services/client-service-publication.service.js';
 import { isWorkspaceBoundAction } from './workspace-bound-actions.js';
@@ -159,19 +161,22 @@ export function createWorkspaceTools(options = {}) {
     return ['ADMIN', 'TEAM'].includes(ctx.user?.role) && Boolean(ctx.user?.organizationId)
       && ctx.scopes?.includes(scope);
   }
+  function actionAllowed(ctx, tool) {
+    return ctx.oauth ? ctx.user?.role === 'ADMIN' && Boolean(MCP_OAUTH_ACTION_SCOPES[tool.name]) && ctx.scopes?.includes(MCP_OAUTH_ACTION_SCOPES[tool.name]) : allowed(ctx, 'workspace:actions');
+  }
   function list(ctx) {
-    const tools = registry.list().filter(tool => tool.roles.includes(ctx.user?.role) && allowed(ctx, scopeFor(tool)))
+    const tools = registry.list().filter(tool => tool.roles.includes(ctx.user?.role) && (tool.class === 'read' ? allowed(ctx, scopeFor(tool)) : actionAllowed(ctx, tool)))
       .map(tool => ({
-        name: tool.name, description: tool.class === 'read' ? tool.description : `${tool.description} Prepares a preview only; requires confirm_action after human review.`,
+        name: tool.name, description: tool.class === 'read' ? tool.description : `${tool.description} Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.`,
         inputSchema: zodToJsonSchema(tool.class === 'read' ? tool.inputSchema : z.object({
           input: tool.inputSchema, idempotencyKey: z.string().regex(/^[A-Za-z0-9._:-]{8,128}$/),
         }).strict(), { $refStrategy: 'none' }),
         annotations: { readOnlyHint: tool.class === 'read', destructiveHint: tool.irreversible, idempotentHint: true, openWorldHint: false },
       }));
-    if (allowed(ctx, 'workspace:actions')) {
+    if (ctx.oauth ? Object.keys(MCP_OAUTH_ACTION_SCOPES).some(name => registry.get(name) && actionAllowed(ctx, registry.get(name))) : allowed(ctx, 'workspace:actions')) {
       for (const name of ['get_action', 'confirm_action', 'reject_action']) tools.push({
         name, description: name === 'confirm_action'
-          ? 'Execute an action only after the human has reviewed its preview and explicitly authorized it. Never infer approval.'
+          ? 'Execute a reviewed preview by explicit authenticated API confirmation. This does not prove a fresh human click. Never infer approval.'
           : name === 'get_action' ? 'Read your action preview, status and execution receipt. Use after a lost response before retrying.' : 'Reject a pending action without executing it.',
         inputSchema: zodToJsonSchema(controlSchema, { $refStrategy: 'none' }),
         annotations: { readOnlyHint: name === 'get_action', destructiveHint: false, idempotentHint: name !== 'reject_action', openWorldHint: false },
@@ -190,6 +195,7 @@ export function createWorkspaceTools(options = {}) {
       if (!action || !registry.get(action.action) || action.source !== 'ai_bridge') {
         throw new ToolError('NOT_FOUND', 'Workspace action not found', { statusCode: 404 });
       }
+      await assertMcpActionAuthority(ctx.prisma, ctx, action.action, action);
       if (!registry.get(action.action).roles.includes(ctx.user.role)) throw new ToolError('ROLE_DENIED', 'Your role cannot access this action', { statusCode: 403 });
       if (WORKSPACE_BILLING_TOOLS.some(tool => tool.name === action.action)) await billingAdmin(ctx);
       if (WORKSPACE_RECORD_TOOLS.some(tool => tool.name === action.action)) await recordToolCall(() => currentRecordStaff(ctx.prisma, ctx.user));
@@ -199,8 +205,9 @@ export function createWorkspaceTools(options = {}) {
       if (name === 'get_action') return { kind: 'receipt', action: receipt(action) };
       // ownerOnly prevents a key from approving another user's proposal.
       const result = name === 'confirm_action'
-        ? await executor.approve(ctx, parsed.data.actionId, { method: options.approvalMethod ?? 'api_key_confirm', ownerOnly: true })
-        : await executor.reject(ctx, parsed.data.actionId, { reason: 'not_needed', ownerOnly: true, method: options.approvalMethod ?? 'api_key_confirm' });
+        ? await executor.approve(ctx, parsed.data.actionId, { method: ctx.oauth ? 'oauth_confirm' : (options.approvalMethod ?? 'api_key_confirm'), ownerOnly: true })
+        : await executor.reject(ctx, parsed.data.actionId, { reason: 'not_needed', ownerOnly: true, method: ctx.oauth ? 'oauth_confirm' : (options.approvalMethod ?? 'api_key_confirm') });
+      if (result.action) await assertMcpActionAuthority(ctx.prisma, ctx, result.action.action, result.action);
       if (result.action?.action === 'create_client_task') await authorizeClientTaskReceipt(ctx.prisma, ctx.user, result.action);
       if (result.action?.action === 'publish_client_service_report_snapshot') await authorizeServicePublicationReceipt(ctx.prisma, ctx.user, result.action);
       return { kind: 'receipt', action: receipt(result.action), idempotent: result.idempotent };
@@ -231,6 +238,7 @@ export function createWorkspaceTools(options = {}) {
       await authorizeServicePublicationReceipt(ctx.prisma, ctx.user, { input: parsed.data });
     }
     const result = await executor.invoke(ctx, { tool: name, input, idempotencyKey, source: 'ai_bridge' });
+    if (result.action) await assertMcpActionAuthority(ctx.prisma, ctx, result.action.action, result.action);
     if (result.action?.action === 'create_client_task') await authorizeClientTaskReceipt(ctx.prisma, ctx.user, result.action);
     if (result.action?.action === 'publish_client_service_report_snapshot') await authorizeServicePublicationReceipt(ctx.prisma, ctx.user, result.action);
     return result.action ? { ...result, action: receipt(result.action) } : result;

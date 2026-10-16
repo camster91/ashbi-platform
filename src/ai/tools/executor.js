@@ -26,6 +26,7 @@
 // timestamps. A database trigger makes it immutable once terminal.
 
 import crypto from 'node:crypto';
+import { assertMcpActionAuthority, oauthActionBinding } from '../../auth/mcp-action-authority.js';
 import defaultLogger from '../../utils/logger.js';
 import { actorTypeForRole, recordAuditEvent } from '../../services/audit-event.service.js';
 import { LOG_REDACT_PATHS } from '../../utils/log-redaction.js';
@@ -218,6 +219,7 @@ export function createToolExecutor(options = {}) {
     const parsed = tool.inputSchema.safeParse(input);
     if (!parsed.success) return denyWith(new ToolError('INVALID_INPUT', `Invalid ${tool.name} input`, { statusCode: 400 }));
     const normalized = parsed.data;
+    if (ctx.oauth && APPROVAL_CLASSES.includes(tool.class)) await assertMcpActionAuthority(ctx.prisma, ctx, tool.name);
     if (!tool.roles.includes(ctx.user?.role)) {
       return denyWith(new ToolError('ROLE_DENIED', 'Your role cannot use this tool', { statusCode: 403 }));
     }
@@ -236,6 +238,7 @@ export function createToolExecutor(options = {}) {
       hash = toolInputHash(tool.name, normalized);
       const existing = await ctx.prisma.aiBridgeAction.findFirst({ where: { userId: ctx.user.id, idempotencyKey } });
       if (existing) {
+        await assertMcpActionAuthority(ctx.prisma, ctx, existing.action, existing);
         if (existing.action !== tool.name || existing.inputHash !== hash) {
           return denyWith(new ToolError('IDEMPOTENCY_CONFLICT', 'Idempotency key was already used for another action', { statusCode: 409 }));
         }
@@ -273,23 +276,28 @@ export function createToolExecutor(options = {}) {
 
     let record;
     try {
-      record = await ctx.prisma.aiBridgeAction.create({
-        data: {
-          organizationId: ctx.user.organizationId,
-          userId: ctx.user.id,
-          action: tool.name,
-          idempotencyKey,
-          input: normalized,
-          inputHash: hash,
-          preview,
-          status: PENDING_STATUS,
-          expiresAt: new Date(now().getTime() + approvalTtlMs),
-          source,
-          toolClass: tool.class,
-          correlationId: ctx.requestId ?? null,
-          inputScope: scope?.ids ?? {},
-        },
-      });
+      const createRecord = async prisma => {
+        await assertMcpActionAuthority(prisma, ctx, tool.name);
+        return prisma.aiBridgeAction.create({
+          data: {
+            organizationId: ctx.user.organizationId,
+            userId: ctx.user.id,
+            action: tool.name,
+            idempotencyKey,
+            input: normalized,
+            inputHash: hash,
+            preview,
+            status: PENDING_STATUS,
+            expiresAt: new Date(now().getTime() + approvalTtlMs),
+            source,
+            toolClass: tool.class,
+            correlationId: ctx.requestId ?? null,
+            inputScope: scope?.ids ?? {},
+            ...(ctx.oauth ? { authorizationBinding: oauthActionBinding(ctx, tool.name) } : {}),
+          },
+        });
+      };
+      record = ctx.oauth ? await ctx.prisma.$transaction(createRecord, { isolationLevel: 'Serializable' }) : await createRecord(ctx.prisma);
     } catch (error) {
       // Two concurrent calls with one key: the loser answers like a replay.
       if (error?.code !== 'P2002') throw error;
@@ -297,6 +305,7 @@ export function createToolExecutor(options = {}) {
       if (!winner || winner.action !== tool.name || winner.inputHash !== hash) {
         return denyWith(new ToolError('IDEMPOTENCY_CONFLICT', 'Idempotency key was already used for another action', { statusCode: 409 }));
       }
+      await assertMcpActionAuthority(ctx.prisma, ctx, winner.action, winner);
       return { kind: 'pending', action: winner, idempotent: true };
     }
     await emit(ctx, 'ai.tool_prepared', {
@@ -314,6 +323,7 @@ export function createToolExecutor(options = {}) {
   async function load(ctx, actionId, scope) {
     const record = await ctx.prisma.aiBridgeAction.findFirst({ where: { id: actionId, ...scope } });
     if (!record) throw new ToolError('NOT_FOUND', 'Action not found', { statusCode: 404 });
+    await assertMcpActionAuthority(ctx.prisma, ctx, record.action, record);
     return record;
   }
 
@@ -356,10 +366,11 @@ export function createToolExecutor(options = {}) {
    *
    * @param {{ prisma: any, user: any, requestId?: string | null, ip?: string | null }} ctx
    * @param {string} actionId
-   * @param {{ method?: 'api_key_confirm' | 'session_step_up' | 'session_confirm', reauthenticated?: boolean, ownerOnly?: boolean }} [approval]
+   * @param {{ method?: 'oauth_confirm' | 'api_key_confirm' | 'session_step_up' | 'session_confirm', reauthenticated?: boolean, ownerOnly?: boolean }} [approval]
    * @returns {Promise<{ action: any, idempotent: boolean }>}
    */
   async function approve(ctx, actionId, { method = 'session_step_up', reauthenticated = false, ownerOnly = false } = {}) {
+    if (ctx.oauth) { method = 'oauth_confirm'; reauthenticated = false; ownerOnly = true; }
     const scope = ownerWhere(ctx, { ownerOnly });
     const initial = await load(ctx, actionId, scope);
     if (initial.status === 'EXECUTED') return { action: initial, idempotent: true };
@@ -410,6 +421,7 @@ export function createToolExecutor(options = {}) {
       return parsed.data;
     };
     const claim = async (tx) => {
+      await assertMcpActionAuthority(tx, ctx, initial.action, initial);
       const claimed = await tx.aiBridgeAction.updateMany({ where: claimWhere, data: { status: 'EXECUTING', ...approval } });
       if (claimed.count !== 1) throw unavailable('Action is already being processed');
     };
@@ -454,6 +466,9 @@ export function createToolExecutor(options = {}) {
         completed = await transition(ctx, initial.id, 'EXECUTING', succeeded(result));
       }
     } catch (error) {
+      // A grant revoked before the transaction claim has no authority to write
+      // approval/failure evidence either. The pending receipt remains intact.
+      if (ctx.oauth && error instanceof ToolError && error.code === 'NOT_FOUND') throw error;
       if (error instanceof ToolError && error.code === 'ACTION_UNAVAILABLE') {
         if (!error.action) error.action = await ctx.prisma.aiBridgeAction.findFirst({ where: { id: initial.id, ...scope } });
         throw error;
@@ -488,9 +503,10 @@ export function createToolExecutor(options = {}) {
    * an ADMIN may reject any in the organization.
    * @param {{ prisma: any, user: any, requestId?: string | null, ip?: string | null }} ctx
    * @param {string} actionId
-   * @param {{ reason?: string, reauthenticated?: boolean, ownerOnly?: boolean, method?: 'session_step_up' | 'api_key_confirm' | 'session_confirm' }} [rejection]
+   * @param {{ reason?: string, reauthenticated?: boolean, ownerOnly?: boolean, method?: 'oauth_confirm' | 'session_step_up' | 'api_key_confirm' | 'session_confirm' }} [rejection]
    */
   async function reject(ctx, actionId, { reason = 'other', reauthenticated = false, ownerOnly = false, method = 'session_step_up' } = {}) {
+    if (ctx.oauth) { method = 'oauth_confirm'; reauthenticated = false; ownerOnly = true; }
     const scope = ownerWhere(ctx, { ownerOnly });
     const initial = await load(ctx, actionId, scope);
     if (initial.status !== PENDING_STATUS) {
@@ -498,17 +514,21 @@ export function createToolExecutor(options = {}) {
     }
     const rejectedAt = now();
     const safeReason = REJECTION_REASONS.includes(reason) ? reason : 'other';
-    const claim = await ctx.prisma.aiBridgeAction.updateMany({
-      where: { id: initial.id, ...scope, status: PENDING_STATUS },
-      data: {
-        status: 'REJECTED', rejectedAt, approverId: ctx.user.id,
-        approvalEvidence: {
-          method, decision: 'rejected', reason: safeReason, approverRole: ctx.user.role,
-          requesterApproved: ctx.user.id === initial.userId, reauthenticated: Boolean(reauthenticated),
-          rejectedAt: rejectedAt.toISOString(), requestId: ctx.requestId ?? null,
+    const rejectRecord = async prisma => {
+      await assertMcpActionAuthority(prisma, ctx, initial.action, initial);
+      return prisma.aiBridgeAction.updateMany({
+        where: { id: initial.id, ...scope, status: PENDING_STATUS },
+        data: {
+          status: 'REJECTED', rejectedAt, approverId: ctx.user.id,
+          approvalEvidence: {
+            method, decision: 'rejected', reason: safeReason, approverRole: ctx.user.role,
+            requesterApproved: ctx.user.id === initial.userId, reauthenticated: Boolean(reauthenticated),
+            rejectedAt: rejectedAt.toISOString(), requestId: ctx.requestId ?? null,
+          },
         },
-      },
-    });
+      });
+    };
+    const claim = ctx.oauth ? await ctx.prisma.$transaction(rejectRecord, { isolationLevel: 'Serializable' }) : await rejectRecord(ctx.prisma);
     if (claim.count !== 1) throw new ToolError('ACTION_UNAVAILABLE', 'Action is already being processed', { statusCode: 409 });
     await emit(ctx, 'ai.tool_rejected', { entityId: initial.id, metadata: eventMetadata(initial, { reason: safeReason }) });
     return { action: await load(ctx, actionId, scope) };

@@ -225,3 +225,64 @@ test('disabled OAuth keeps guarded UI routes while exposing no authorization ser
     assert.equal((await app.inject('/.well-known/oauth-authorization-server')).statusCode, 404);
   } finally { await app.close(); }
 });
+
+
+test('optional scopes require explicit requested ADMIN opt-in; default consent remains read-only', async () => {
+  const write = 'workspace:client-tasks:write';
+  const f = fixture();
+  const requested = ['workspace:read', write, 'workspace:service-reports:publish'];
+  const ticket = await f.pending({ scopes: requested });
+  const preview = await f.provider.preview(ticket, f.user);
+  assert.deepEqual(preview.scopes, ['workspace:read']);
+  assert.deepEqual(preview.requestedScopes, requested);
+  assert.equal(preview.optionalScopes.length, 2);
+  const code = new URL((await f.provider.consent(ticket, preview.nonce, f.user, true, ['workspace:read', write])).redirect).searchParams.get('code');
+  const token = await f.exchange(code);
+  assert.equal(token.scope, 'workspace:read '+write);
+  assert.equal(f.keys[0].name, 'ChatGPT (scoped MCP actions)');
+  assert.deepEqual((await f.provider.verifyAccessToken(token.access_token)).extra.oauth.scopes, ['workspace:read', write]);
+  assert.match(f.audits[0].metadata.scopes, /workspace:client-tasks:write/);
+  const g = fixture(); const ticket2 = await g.pending({ scopes: requested });
+  const preview2 = await g.provider.preview(ticket2, g.user);
+  const code2 = new URL((await g.provider.consent(ticket2, preview2.nonce, g.user, true)).redirect).searchParams.get('code');
+  assert.equal((await g.exchange(code2)).scope, 'workspace:read');
+});
+
+test('old grants and read-only consent cannot escalate; optional refresh cannot widen or silently narrow', async () => {
+  const f = fixture(); const ticket = await f.pending(); const preview = await f.provider.preview(ticket, f.user);
+  await assert.rejects(f.provider.consent(ticket, preview.nonce, f.user, true, ['workspace:read','workspace:client-tasks:write']));
+  const token = await f.exchange(await f.code());
+  await assert.rejects(f.provider.exchangeRefreshToken(client, token.refresh_token, ['workspace:read','workspace:service-reports:publish'], resource));
+  assert.equal((await f.provider.exchangeRefreshToken(client, token.refresh_token, undefined, resource)).scope, 'workspace:read');
+  for (const scopes of [['workspace:actions'], ['workspace:read','unknown'], ['workspace:client-tasks:write']]) await assert.rejects(f.pending({scopes}));
+});
+
+test('write grants require current ADMIN at consent, exchange, access and refresh; changed stored scopes deny', async () => {
+  const scopes=['workspace:read','workspace:client-tasks:write'];
+  const f=fixture();f.user.role='TEAM';const ticket=await f.pending({scopes});
+  await assert.rejects(f.provider.preview(ticket,f.user));
+  for (const stage of ['consent','exchange','verify','refresh','keyscope']) {
+    const g=fixture();const t=await g.pending({scopes});const p=await g.provider.preview(t,g.user);
+    if(stage==='consent'){g.user.role='TEAM';await assert.rejects(g.provider.consent(t,p.nonce,g.user,true,scopes));continue;}
+    const c=new URL((await g.provider.consent(t,p.nonce,g.user,true,scopes)).redirect).searchParams.get('code');
+    if(stage==='exchange'){g.user.role='TEAM';await assert.rejects(g.exchange(c));assert.equal(g.keys.length,0);continue;}
+    const token=await g.exchange(c);
+    if(stage==='keyscope')g.keys[0].scopes=['workspace:read'];else g.user.role='TEAM';
+    await assert.rejects(g.provider.verifyAccessToken(token.access_token));
+    await assert.rejects(g.provider.exchangeRefreshToken(client,token.refresh_token,undefined,resource));
+  }
+});
+
+
+test('transaction-time demotion prevents write grant issuance and refresh rotation', async () => {
+  const scopes=['workspace:read','workspace:client-tasks:write'];
+  for(const during of ['exchange','refresh']) {
+    const f=fixture();const t=await f.pending({scopes});const p=await f.provider.preview(t,f.user);
+    const c=new URL((await f.provider.consent(t,p.nonce,f.user,true,scopes)).redirect).searchParams.get('code');
+    let token;if(during==='refresh')token=await f.exchange(c);
+    const transaction=f.prisma.$transaction;
+    f.prisma.$transaction=callback=>transaction(async tx=>{f.user.role='TEAM';return callback(tx);});
+    if(during==='exchange'){await assert.rejects(f.exchange(c));assert.equal(f.keys.length,0);}
+    else {const oldHash=f.keys[0].key;await assert.rejects(f.provider.exchangeRefreshToken(client,token.refresh_token,undefined,resource));assert.equal(f.keys[0].key,oldHash);}
+  }
+});

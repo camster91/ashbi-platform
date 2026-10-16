@@ -17,6 +17,7 @@ const bashPath = value => process.platform === 'win32' ? value.replaceAll('\\', 
 const shellQuote = value => `'${bashPath(value).replaceAll("'", "'\\''")}'`;
 const floorBlock = script.slice(script.indexOf('# --- rollback floor ---'), script.indexOf('# --- end rollback floor ---'));
 const CHAT = '20260927030000_chat_message_visibility';
+const OAUTH = '20261016060000_mcp_action_binding';
 
 function bash(releaseDir, images, body) {
   // An image named broken:* makes the probe itself fail (docker exits 125).
@@ -117,7 +118,7 @@ docker() { echo "$1" >> "$LOG"; case $1 in inspect) echo false ;; esac; }`;
 test('a probe that cannot run fails closed: the floor is still raised and the image is refused', () => {
   const { dir, images } = fixture();
   bash(dir, images, 'raise_rollback_floor broken:1');
-  assert.equal(fs.readFileSync(path.join(dir, 'rollback-floor'), 'utf8'), `${CHAT}\n`, 'recorded despite the failed probe');
+  assert.equal(fs.readFileSync(path.join(dir, 'rollback-floor'), 'utf8'), `${CHAT}\n${OAUTH}\n`, 'recorded despite the failed probe');
   assert.equal(bash(dir, images, 'if missing=$(image_meets_floor broken:1); then echo allowed; else echo "blocked $missing"; fi'), `blocked ${CHAT}\n`);
   assert.equal(bash(dir, images, 'image_has_migration broken:1 x && echo 0 || echo $?'), '2\n');
 });
@@ -129,4 +130,14 @@ test('container_image distinguishes a missing container from an unreadable one',
   assert.equal(run('docker() { echo "error: no such object: api" >&2; return 1; }'), '[]');
   assert.equal(run('docker() { echo "Error response from daemon: No such container: api" >&2; return 1; }'), '[]');
   assert.equal(run('docker() { echo "Cannot connect to the Docker daemon" >&2; return 1; }'), '[unknown]');
+});
+
+
+test('OAuth-bound receipt migration raises the confidentiality floor and excludes pre-binding rollback images', () => {
+  const { dir, images } = fixture();
+  fs.appendFileSync(images, `oauth:1 /app/prisma/migrations/${CHAT}\noauth:1 /app/prisma/migrations/${OAUTH}\n`);
+  bash(dir, images, 'raise_rollback_floor oauth:1');
+  assert.equal(fs.readFileSync(path.join(dir, 'rollback-floor'), 'utf8'), `${CHAT}\n${OAUTH}\n`);
+  assert.equal(bash(dir, images, 'if missing=$(image_meets_floor new:1); then echo allowed; else echo "blocked $missing"; fi'), `blocked ${OAUTH}\n`);
+  assert.equal(bash(dir, images, 'image_meets_floor oauth:1 && echo safe'), 'safe\n');
 });
