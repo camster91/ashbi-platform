@@ -58,10 +58,10 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | bot-secret | 40 |
 | client-portal | 27 |
 | public | 51 |
-| recent-auth + staff | 6 |
-| staff | 442 |
+| recent-auth + staff | 9 |
+| staff | 445 |
 | staff (inline) | 1 |
-| **total** | 638 |
+| **total** | 644 |
 
 ## Routes by prefix
 
@@ -392,6 +392,12 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/clients/:clientId/assistant/conversations/:conversationId/runs/:runId` | staff | scoped |  |
 | POST | `/api/clients/:clientId/assistant/conversations/:conversationId/runs/:runId/cancel` | staff | scoped |  |
 | GET | `/api/clients/:clientId/assistant/conversations/:conversationId/runs/by-intent/:idempotencyKey` | staff | scoped |  |
+| POST | `/api/clients/:clientId/assistant/task-actions` | staff | scoped |  |
+| GET | `/api/clients/:clientId/assistant/task-actions/:actionId` | staff | scoped |  |
+| POST | `/api/clients/:clientId/assistant/task-actions/:actionId/confirm` | recent-auth + staff | scoped |  |
+| POST | `/api/clients/:clientId/assistant/task-actions/:actionId/reject` | recent-auth + staff | scoped |  |
+| GET | `/api/clients/:clientId/assistant/task-actions/by-intent/:key` | staff | scoped |  |
+| POST | `/api/clients/:clientId/assistant/task-actions/by-intent/:key/reject` | recent-auth + staff | scoped |  |
 | GET | `/api/clients/:id` | staff | scoped |  |
 | PUT | `/api/clients/:id` | staff | scoped |  |
 | GET | `/api/clients/:id/contacts` | staff | scoped |  |

@@ -37,7 +37,7 @@ test('brief is bounded, links source records and selects no private project cont
   assert.equal(result.counts.at_risk, 2); assert.equal(result.rows[0].sourceUrl, '/task/t-a');
   assert.equal(result.partial, false); assert.equal(result.scopeMismatch, false);
   assert.deepEqual(result.context.client, { id: client.id, name: client.name, domain: client.domain });
-  assert.deepEqual(result.plugins.map(p => p.id), ['client-work']);
+  assert.deepEqual(result.plugins.map(p => p.id), ['client-work', 'client-task-actions']);
   assert.ok(Number.isFinite(Date.parse(result.generatedAt)));
   assert.deepEqual(reads.find(([key]) => key === 'actor')[1].where, { id: user.id, organizationId: user.organizationId, isActive: true });
   const query = reads.find(([key]) => key === 'tasks')[1];

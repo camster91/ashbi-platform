@@ -1,3 +1,4 @@
+import { WORKSPACE_BOUND_ACTIONS, isWorkspaceBoundAction } from '../integrations/workspace-bound-actions.js';
 import aiClient from '../ai/client.js';
 import { isAiControlError } from '../ai/errors.js';
 import { decrypt } from '../utils/crypto.js';
@@ -15,10 +16,9 @@ const requireActionsScope = requireApiKeyScope('ai_bridge:actions');
 
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 12000;
-const SOURCE_BOUND_ACTION = 'create_task_from_client_message';
 
 function actionResponse(action) {
-  if (action.action === SOURCE_BOUND_ACTION) throw new ToolError('NOT_FOUND', 'Action not found', { statusCode: 404 });
+  if (isWorkspaceBoundAction(action.action)) throw new ToolError('NOT_FOUND', 'Action not found', { statusCode: 404 });
   return {
     id: action.id, action: action.action, status: action.status, preview: action.preview,
     result: action.result ?? null, expiresAt: action.expiresAt, confirmedAt: action.confirmedAt ?? null,
@@ -36,7 +36,7 @@ function sendActionError(request, reply, error, action) {
     return reply.status(error.statusCode).send({ error: { message: error.message, type: 'ai_control_error', code: error.code } });
   }
   if (!(error instanceof ToolError)) throw error;
-  if (error.action?.action === SOURCE_BOUND_ACTION) return reply.status(404).send({ error: { message: 'Action not found', type: 'not_found_error' } });
+  if (isWorkspaceBoundAction(error.action?.action)) return reply.status(404).send({ error: { message: 'Action not found', type: 'not_found_error' } });
   const withAction = error.action ? { action: actionResponse(error.action) } : {};
   switch (error.code) {
     case 'INVALID_INPUT':
@@ -185,12 +185,12 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
     if (request.body?.confirm !== true) return reply.status(400).send({ error: { message: 'Set confirm to true to execute this action', type: 'confirmation_required' } });
     try {
       // The API key's owner confirms their own action: the bridge contract.
-      // The legacy bridge cannot authorize a source-bound inbox receipt.
+      // The legacy bridge cannot authorize client/source-bound receipts.
       const sourceBound = await request.prisma.aiBridgeAction.findFirst({ where: {
         id: request.params.actionId, organizationId: request.user.organizationId,
-        userId: request.user.id, action: SOURCE_BOUND_ACTION,
+        userId: request.user.id, action: { in: WORKSPACE_BOUND_ACTIONS },
       }, select: { id: true, action: true } });
-      if (sourceBound?.action === SOURCE_BOUND_ACTION) throw new ToolError('NOT_FOUND', 'Action not found', { statusCode: 404 });
+      if (isWorkspaceBoundAction(sourceBound?.action)) throw new ToolError('NOT_FOUND', 'Action not found', { statusCode: 404 });
       const { action, idempotent } = await executor.approve(toolContext(request), request.params.actionId, { method: 'api_key_confirm', ownerOnly: true });
       return { action: actionResponse(action), idempotent };
     } catch (error) {

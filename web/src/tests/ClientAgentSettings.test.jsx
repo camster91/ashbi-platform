@@ -87,4 +87,16 @@ describe('client agent settings', () => {
     expect(api.updateClientAgentProfile).toHaveBeenCalledWith('a', expect.objectContaining({ pluginIds: [] }));
     expect(screen.getByLabelText('Enable client work plugin')).not.toBeChecked();
   });
+  it('keeps task proposals off until explicitly selected and preserves other plugins', async () => {
+    api.updateClientAgentProfile.mockImplementation(async (_, value) => ({ ...value, revision: 1 }));
+    setup(); fireEvent.click(screen.getByText('Account manager settings'));
+    const proposals = await screen.findByLabelText('Task proposals (requires confirmation)');
+    expect(proposals).not.toBeChecked();
+    fireEvent.click(proposals); fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+    await screen.findByText('Profile saved.');
+    expect(api.updateClientAgentProfile).toHaveBeenLastCalledWith('a', expect.objectContaining({ pluginIds: ['client-work', 'client-task-actions'] }));
+    fireEvent.click(screen.getByLabelText('Enable client work plugin')); fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+    await waitFor(() => expect(api.updateClientAgentProfile).toHaveBeenLastCalledWith('a', expect.objectContaining({ pluginIds: ['client-task-actions'] })));
+  });
+
 });

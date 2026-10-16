@@ -1,3 +1,6 @@
+import { isWorkspaceBoundAction } from './workspace-bound-actions.js';
+import { WORKSPACE_CLIENT_AGENT_ACTIONS } from './workspace-client-agent-actions.js';
+import { clientTaskInputSchema, clientTaskScope, authorizeClientTaskReceipt } from '../services/client-agent-action.service.js';
 import { WORKSPACE_NOTE_TOOLS } from './workspace-note-tools.js';
 import { visibleNoteIds } from '../services/note-access.service.js';
 import { z } from 'zod';
@@ -59,6 +62,7 @@ export const workspaceRegistry = createToolRegistry([
   ...WORKSPACE_CHAT_TOOLS,
   ...WORKSPACE_CLIENT_COMMUNICATIONS_TOOLS,
   ...WORKSPACE_COMMUNICATION_ACTIONS,
+  ...WORKSPACE_CLIENT_AGENT_ACTIONS,
   {
     name: 'get_workspace_page_access', description: 'Read current page audience, staff grants and observed access revision. Only the page owner or organization administrator may inspect this roster; parent restrictions still apply.', class: 'read', roles: ['ADMIN', 'TEAM'], timeoutMs: 5000,
     inputSchema: z.object({ pageId: z.string().min(1).max(80) }).strict(), resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
@@ -185,11 +189,13 @@ export function createWorkspaceTools(options = {}) {
       if (WORKSPACE_BILLING_TOOLS.some(tool => tool.name === action.action)) await billingAdmin(ctx);
       if (WORKSPACE_RECORD_TOOLS.some(tool => tool.name === action.action)) await recordToolCall(() => currentRecordStaff(ctx.prisma, ctx.user));
       if (WORKSPACE_COMMUNICATION_ACTIONS.some(tool => tool.name === action.action)) await communicationTaskScope({ prisma: ctx.prisma, user: ctx.user, input: action.input });
+      if (WORKSPACE_CLIENT_AGENT_ACTIONS.some(tool => tool.name === action.action)) await authorizeClientTaskReceipt(ctx.prisma, ctx.user, action);
       if (name === 'get_action') return { kind: 'receipt', action: receipt(action) };
       // ownerOnly prevents a key from approving another user's proposal.
       const result = name === 'confirm_action'
         ? await executor.approve(ctx, parsed.data.actionId, { method: options.approvalMethod ?? 'api_key_confirm', ownerOnly: true })
         : await executor.reject(ctx, parsed.data.actionId, { reason: 'not_needed', ownerOnly: true, method: options.approvalMethod ?? 'api_key_confirm' });
+      if (result.action?.action === 'create_client_task') await authorizeClientTaskReceipt(ctx.prisma, ctx.user, result.action);
       return { kind: 'receipt', action: receipt(result.action), idempotent: result.idempotent };
     }
     const tool = registry.get(name);
@@ -207,10 +213,21 @@ export function createWorkspaceTools(options = {}) {
       if (!parsed.success) throw new ToolError('INVALID_INPUT', 'Invalid communication task input');
       await communicationTaskScope({ prisma: ctx.prisma, user: ctx.user, input: parsed.data });
     }
+    if (WORKSPACE_CLIENT_AGENT_ACTIONS.some(tool => tool.name === name)) {
+      const parsed = clientTaskInputSchema.safeParse(input);
+      if (!parsed.success) throw new ToolError('INVALID_INPUT', 'Invalid client task input');
+      await clientTaskScope({ prisma: ctx.prisma, user: ctx.user, input: parsed.data });
+    }
     const result = await executor.invoke(ctx, { tool: name, input, idempotencyKey, source: 'ai_bridge' });
+    if (result.action?.action === 'create_client_task') await authorizeClientTaskReceipt(ctx.prisma, ctx.user, result.action);
     return result.action ? { ...result, action: receipt(result.action) } : result;
   }
-  return { list, call };
+  return { list, call: async (...args) => {
+    try { return await call(...args); } catch (error) {
+      if (isWorkspaceBoundAction(error.action?.action)) delete error.action;
+      throw error;
+    }
+  } };
 }
 
 async function billingAdmin(ctx) {
