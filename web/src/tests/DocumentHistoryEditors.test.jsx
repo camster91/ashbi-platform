@@ -24,6 +24,9 @@ function mount(editor) {
 async function openHistory() {
   fireEvent.click(screen.getByRole('button', { name: 'Version history', exact: true }));
   const dialog = await screen.findByRole('dialog', { name: 'Version history' });
+  // A cold lazy import can expose the dialog before its passive keyboard/focus
+  // effect has run. Wait for keyboard readiness before sending Escape.
+  await waitFor(() => expect(dialog).toContainElement(document.activeElement));
   expect(screen.getAllByRole('dialog')).toHaveLength(1);
   return dialog;
 }
