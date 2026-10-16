@@ -35,10 +35,28 @@ reports. Explicit complete EMPTY clears reports. UNAVAILABLE preserves the last
 successful reports and source data, recording only a stable failure code and attempt.
 No UI read or refresh invokes publication or an upstream fetch.
 
-MCP publication is deliberately not exposed until the shared executor has a closed,
-client-bound preview/confirmation/receipt policy. No generic write bypass is added.
-Future work: verified provider adapters, approved origins/source links, scoped MCP
-publication, provider acceptance and source-specific report projections.
+API keys with `workspace:actions` can prepare `publish_client_service_report_snapshot`
+with `{ input: { clientId, mappingId, snapshot }, idempotencyKey }`; `snapshot` is
+exactly the existing strict publication body. The existing 16 KiB serialized-tool
+input ceiling still applies (and the schema permits no more than 50 reports).
+A fresh administrator is required at preparation and confirmation. The tool returns
+a reviewed canonical destination, exact report text, replacement/deletion counts
+and a warning that complete/EMPTY snapshots irreversibly remove omitted reports.
+Only an explicit `confirm_action` commits publication, audit and receipt together
+inside one Serializable transaction. `get_action` and idempotent replays recover
+receipts after the mapping revision advances; they still require current admin,
+client and mapping/provider-project authority. Generic AI approval/receipt and
+legacy bridge routes exclude this client-bound action.
+
+This internal irreversible operation has one explicit literal entry in the closed
+registry allowlist and advertises `destructiveHint: true`; it is never retried.
+There is no upstream HTTP request, verified provider origin or public delivery.
+Existing ChatGPT OAuth grants and consent remain read-only (`workspace:read`);
+this tool is unavailable to them and no grant is silently upgraded. Confirmation
+uses the existing API-key action confirmation evidence, not a session step-up
+cookie; recent-auth JWT routes and their guards are unchanged.
+Future work: verified provider adapters, approved origins/source links, separately
+consented OAuth writes, provider acceptance and source-specific report projections.
 
 Tests cover API/MCP projection parity, current roles, tenant/deleted-client guards,
 revision conflict, immutable mapping fields, strict report validation, failed audit

@@ -1,3 +1,5 @@
+import { WORKSPACE_SERVICE_PUBLICATION_TOOLS } from './workspace-service-publication-tools.js';
+import { servicePublicationInputSchema, authorizeServicePublicationReceipt } from '../services/client-service-publication.service.js';
 import { isWorkspaceBoundAction } from './workspace-bound-actions.js';
 import { WORKSPACE_CLIENT_AGENT_ACTIONS } from './workspace-client-agent-actions.js';
 import { clientTaskInputSchema, clientTaskScope, authorizeClientTaskReceipt } from '../services/client-agent-action.service.js';
@@ -59,6 +61,7 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 }
 
 export const workspaceRegistry = createToolRegistry([
+  ...WORKSPACE_SERVICE_PUBLICATION_TOOLS,
   ...WORKSPACE_SERVICE_PANEL_TOOLS,
   ...WORKSPACE_ACCOUNT_MANAGER_TOOLS,
   ...WORKSPACE_CHAT_TOOLS,
@@ -163,7 +166,7 @@ export function createWorkspaceTools(options = {}) {
         inputSchema: zodToJsonSchema(tool.class === 'read' ? tool.inputSchema : z.object({
           input: tool.inputSchema, idempotencyKey: z.string().regex(/^[A-Za-z0-9._:-]{8,128}$/),
         }).strict(), { $refStrategy: 'none' }),
-        annotations: { readOnlyHint: tool.class === 'read', destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        annotations: { readOnlyHint: tool.class === 'read', destructiveHint: tool.irreversible, idempotentHint: true, openWorldHint: false },
       }));
     if (allowed(ctx, 'workspace:actions')) {
       for (const name of ['get_action', 'confirm_action', 'reject_action']) tools.push({
@@ -192,12 +195,14 @@ export function createWorkspaceTools(options = {}) {
       if (WORKSPACE_RECORD_TOOLS.some(tool => tool.name === action.action)) await recordToolCall(() => currentRecordStaff(ctx.prisma, ctx.user));
       if (WORKSPACE_COMMUNICATION_ACTIONS.some(tool => tool.name === action.action)) await communicationTaskScope({ prisma: ctx.prisma, user: ctx.user, input: action.input });
       if (WORKSPACE_CLIENT_AGENT_ACTIONS.some(tool => tool.name === action.action)) await authorizeClientTaskReceipt(ctx.prisma, ctx.user, action);
+      if (WORKSPACE_SERVICE_PUBLICATION_TOOLS.some(tool => tool.name === action.action)) await authorizeServicePublicationReceipt(ctx.prisma, ctx.user, action);
       if (name === 'get_action') return { kind: 'receipt', action: receipt(action) };
       // ownerOnly prevents a key from approving another user's proposal.
       const result = name === 'confirm_action'
         ? await executor.approve(ctx, parsed.data.actionId, { method: options.approvalMethod ?? 'api_key_confirm', ownerOnly: true })
         : await executor.reject(ctx, parsed.data.actionId, { reason: 'not_needed', ownerOnly: true, method: options.approvalMethod ?? 'api_key_confirm' });
       if (result.action?.action === 'create_client_task') await authorizeClientTaskReceipt(ctx.prisma, ctx.user, result.action);
+      if (result.action?.action === 'publish_client_service_report_snapshot') await authorizeServicePublicationReceipt(ctx.prisma, ctx.user, result.action);
       return { kind: 'receipt', action: receipt(result.action), idempotent: result.idempotent };
     }
     const tool = registry.get(name);
@@ -220,8 +225,14 @@ export function createWorkspaceTools(options = {}) {
       if (!parsed.success) throw new ToolError('INVALID_INPUT', 'Invalid client task input');
       await clientTaskScope({ prisma: ctx.prisma, user: ctx.user, input: parsed.data });
     }
+    if (name === 'publish_client_service_report_snapshot') {
+      const parsed = servicePublicationInputSchema.safeParse(input);
+      if (!parsed.success) throw new ToolError('INVALID_INPUT', 'Invalid saved report snapshot');
+      await authorizeServicePublicationReceipt(ctx.prisma, ctx.user, { input: parsed.data });
+    }
     const result = await executor.invoke(ctx, { tool: name, input, idempotencyKey, source: 'ai_bridge' });
     if (result.action?.action === 'create_client_task') await authorizeClientTaskReceipt(ctx.prisma, ctx.user, result.action);
+    if (result.action?.action === 'publish_client_service_report_snapshot') await authorizeServicePublicationReceipt(ctx.prisma, ctx.user, result.action);
     return result.action ? { ...result, action: receipt(result.action) } : result;
   }
   return { list, call: async (...args) => {

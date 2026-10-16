@@ -76,7 +76,12 @@ undone from Ashbi: sending email, publishing, billing, deletion, credential
 access, third-party account changes) is rejected at registration unless its
 name is on `EXTERNAL_TOOL_ALLOWLIST`.
 
-*Proposal*: the allowlist holds only `send_slack_message`. It was already
+The closed allowlist contains `send_slack_message` and
+`publish_client_service_report_snapshot`. The report action is internal and
+irreversible because complete/EMPTY snapshots remove omitted saved reports. It
+requires a current administrator, an exact reviewed preview and explicit
+confirmation; it has no provider transport or OAuth scope expansion. The Slack
+post was already
 confirm-gated by the AI bridge before this registry existed, it only posts to
 a channel an admin explicitly mapped to the project, and a failed delivery is
 kept for manual reconciliation, never retried
@@ -370,7 +375,7 @@ arrives.
 
 | Setting | Proposed value | Where |
 | --- | --- | --- |
-| External/irreversible allowlist | `send_slack_message` only | `EXTERNAL_TOOL_ALLOWLIST` |
+| External/irreversible allowlist | `send_slack_message`, `publish_client_service_report_snapshot` | `EXTERNAL_TOOL_ALLOWLIST` |
 | Approval window | 10 minutes | `APPROVAL_TTL_MS` |
 | Requester may approve their own action | Yes for every current tool (the bridge contract); per-tool `requesterMayApprove` | `approval` in each tool |
 | Who may approve others' actions | ADMIN only | `executor.approve` |
