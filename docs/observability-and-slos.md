@@ -49,8 +49,12 @@ issue:
 3. Deploy a wrong-revision test candidate and confirm automatic rollback.
 4. Point the alert webhook at a controlled failing endpoint and confirm the
    delivery failure is visible to the telemetry provider.
-5. Run `EXPECTED_REVISION=<full-sha> npm run smoke:production-health -- <url>`
-   and retain the redacted output.
+5. Run this Bash command, replacing both placeholders, and retain the
+   redacted output:
+
+   ```bash
+   HEALTHCHECK_URL="<url>" EXPECTED_REVISION="<full-sha>" npm run smoke:production-health
+   ```
 
 Never perform destructive failure drills against live client workloads.
 
