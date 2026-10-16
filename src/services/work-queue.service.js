@@ -7,6 +7,7 @@ import logger from '../utils/logger.js';
 import { UNPAID_INVOICE_STATUSES } from '../utils/invoice-balance.js';
 import { REVIEW_STAFF_ROLES } from './media-review.service.js';
 import { authorizeHandoffStaff, canonicalHandoffIds } from './portal-handoff.service.js';
+import { listWorkspaceChatAttentionForQueue } from './workspace-chat.service.js';
 
 export const WORK_QUEUE_VIEWS = Object.freeze(['needs_action', 'awaiting_approval', 'waiting_on_client', 'at_risk']);
 
@@ -276,6 +277,21 @@ export function countByView(rows) {
  * admin-only.
  */
 export const WORK_QUEUE_SOURCES = Object.freeze([
+  {
+    key: 'workspace_chat_attention', roles: ['ADMIN', 'TEAM'],
+    async load(prisma, { filters, user, now }) {
+      // Everyone never broadens an attention request's recipient audience.
+      const { items, actor } = await listWorkspaceChatAttentionForQueue(prisma, user, {
+        clientId: filters.clientId, projectId: filters.projectId, limit: WORK_QUEUE_SOURCE_LIMIT + 1,
+      });
+      return items.map(row => ({ type: 'workspace_attention', id: row.id, title: 'A teammate requested your attention', sourceUrl: '/messages',
+        client: row.clientId ? { id: row.clientId, name: row.clientName } : null,
+        project: row.projectId ? { id: row.projectId, name: row.projectName } : null,
+        owner: { id: actor.id, name: actor.name, role: actor.role }, state: 'PENDING',
+        nextAction: 'Open Team messages to review and acknowledge', dueAt: null, dueKind: null,
+        ageDays: ageInDays(row.createdAt, now), view: 'needs_action' }));
+    },
+  },
   {
     key: 'portal_handoffs', roles: ['ADMIN', 'TEAM'],
     async load(prisma, { filters, user, now }) {

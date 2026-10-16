@@ -73,7 +73,7 @@ for (const clientResult of [null, { ...client, organizationId: 'org-b' }, { ...c
 test('stored TEAM role overrides stale ADMIN claims and omits approval/financial sources', async () => {
   const { prisma, reads } = fixture({ actor: { ...user, role: 'TEAM', isActive: true } });
   const result = await readClientAccountManagerBrief(prisma, user, { clientId: client.id });
-  assert.equal(result.owner, 'me'); assert.deepEqual(result.sources, ['portal_handoffs', 'tasks', 'reviews']);
+  assert.equal(result.owner, 'me'); assert.deepEqual(result.sources, ['workspace_chat_attention', 'portal_handoffs', 'tasks', 'reviews']);
   assert.equal(reads.find(([key]) => key === 'tasks')[1].where.AND[0].assigneeId, user.id);
   assert.equal(reads.find(([key]) => key === 'reviews')[1].where.createdById, user.id);
   assert.ok(!reads.some(([key]) => ['approvals', 'invoices', 'contracts', 'proposals'].includes(key)));
@@ -108,6 +108,10 @@ test('strict schemas refuse injected scope and invalid bounds without reads', as
 
 test('real MCP SDK discovers curated read tools and returns a scoped brief without inference', async () => {
   const { prisma } = fixture({ tasks: [task()] });
+  prisma.$queryRaw = async sql => sql.text.includes('FROM workspace_chat_attention') ? [{
+    id: 'own-attention', recipientId: user.id, createdAt: new Date(), clientId: client.id, clientName: client.name,
+    projectId: project.id, projectName: project.name, content: 'PRIVATE MESSAGE BODY', channelName: 'PRIVATE CHANNEL TITLE',
+  }] : [];
   const service = createWorkspaceTools();
   const ctx = { user, prisma, scopes: ['workspace:read'], oauthEnabled: true };
   const server = createWorkspaceMcp(service, ctx);
@@ -120,7 +124,10 @@ test('real MCP SDK discovers curated read tools and returns a scoped brief witho
     assert.equal(briefTool.annotations.readOnlyHint, true);
     assert.equal(briefTool.inputSchema.properties.clientId.type, 'string');
     const result = await clientSdk.callTool({ name: briefTool.name, arguments: { clientId: client.id } });
-    assert.equal(result.isError, undefined); assert.equal(result.structuredContent.output.total, 1);
+    assert.equal(result.isError, undefined); assert.equal(result.structuredContent.output.total, 2);
+    const attention = result.structuredContent.output.rows.find(row => row.type === 'workspace_attention');
+    assert.equal(attention.title, 'A teammate requested your attention');assert.equal(attention.sourceUrl, '/messages');
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE MESSAGE BODY|PRIVATE CHANNEL TITLE/);
     const plugins = await clientSdk.callTool({ name: 'list_account_manager_plugins', arguments: {} });
     assert.equal(plugins.structuredContent.output.plugins[0].id, 'client-work');
     const profile = await clientSdk.callTool({ name: 'get_client_agent_profile', arguments: { clientId: client.id } });
