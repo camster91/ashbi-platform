@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { paginatedItems } from '../lib/paginated-items';
 import Button from './ui/Button';
+import CommunicationTaskDialog from './CommunicationTaskDialog';
+import { useAuth } from '../hooks/useAuth';
 
 function MessageDate({ value }) {
   const date = value && new Date(value);
@@ -12,7 +14,8 @@ function MessageDate({ value }) {
     : <span>Date unavailable</span>;
 }
 
-function StoredMessage({ clientId, item }) {
+function StoredMessage({ clientId, item, user }) {
+  const [taskOpen, setTaskOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const supported = ['inbox', 'project'].includes(item.source);
   const detail = useQuery({
@@ -44,13 +47,15 @@ function StoredMessage({ clientId, item }) {
         {!detail.isError && detail.data && <>
           {detail.data.bodyTruncated && <p role="status" className="text-xs text-muted-foreground">Only part of this stored message is shown. Open the source record to review more if available.</p>}
           <p className="whitespace-pre-wrap break-words text-sm">{detail.data.bodyText || 'No stored message body is available.'}</p>
+          {item.source === 'inbox' && ['ADMIN', 'TEAM'].includes(user?.role) && <Button type="button" variant="outline" onClick={() => setTaskOpen(true)}>Create task</Button>}
         </>}
       </div>}
     </details>}
+    {taskOpen && !detail.isError && detail.data && ['ADMIN', 'TEAM'].includes(user?.role) && <CommunicationTaskDialog clientId={clientId} message={{ ...item, ...detail.data }} user={user} onClose={() => setTaskOpen(false)} />}
   </li>;
 }
 
-function Communications({ clientId }) {
+function Communications({ clientId, user }) {
   const [open, setOpen] = useState(false);
   const history = useInfiniteQuery({
     queryKey: ['client-communications', clientId],
@@ -75,7 +80,7 @@ function Communications({ clientId }) {
       {!history.isError && history.data && <>
         {exclusions.length > 0 && <div className="space-y-1 text-sm text-muted-foreground"><p className="font-medium">History coverage exclusions</p><ul className="list-disc space-y-1 pl-5">{exclusions.map((entry) => <li key={entry}>{entry}</li>)}</ul></div>}
         {partial && <div role="status" className="space-y-2 text-sm"><p>Some stored sources could not be loaded. The records shown may omit additional email.</p><Button type="button" variant="outline" disabled={history.isFetching} onClick={() => history.refetch()}>Retry missing sources</Button></div>}
-        {items.length > 0 ? <ul aria-label="Stored client email" className="space-y-3">{items.map((item) => <StoredMessage key={`${clientId}:${item.source}:${item.id}`} clientId={clientId} item={item} />)}</ul> : <p className="text-sm text-muted-foreground">No stored email records were returned. This does not mean the client has no email history.</p>}
+        {items.length > 0 ? <ul aria-label="Stored client email" className="space-y-3">{items.map((item) => <StoredMessage key={`${clientId}:${item.source}:${item.id}`} clientId={clientId} item={item} user={user} />)}</ul> : <p className="text-sm text-muted-foreground">No stored email records were returned. This does not mean the client has no email history.</p>}
         {history.hasNextPage && <Button type="button" variant="outline" loading={history.isFetchingNextPage} onClick={() => history.fetchNextPage()}>Load more email</Button>}
       </>}
     </div>}
@@ -83,5 +88,6 @@ function Communications({ clientId }) {
 }
 
 export default function ClientCommunications({ clientId }) {
-  return clientId ? <Communications key={clientId} clientId={clientId} /> : null;
+  const { user } = useAuth();
+  return clientId ? <Communications key={`${user?.organizationId}:${user?.id}:${clientId}`} clientId={clientId} user={user} /> : null;
 }

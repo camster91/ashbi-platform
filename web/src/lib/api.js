@@ -337,6 +337,10 @@ export const api = {
     request(`/clients/${id}`),
   listClientCommunications: (id, params = {}) => request(`/client-communications/${encodeURIComponent(id)}?${new URLSearchParams(Object.entries(params).filter(([, value]) => value != null))}`),
   getClientCommunication: (clientId, source, id) => request(`/client-communications/${encodeURIComponent(clientId)}/${encodeURIComponent(source)}/${encodeURIComponent(id)}`),
+  prepareCommunicationTask: (clientId, messageId, data) => request(`/client-communications/${encodeURIComponent(clientId)}/inbox/${encodeURIComponent(messageId)}/task-actions`, { method: 'POST', body: data, silent: true }),
+  getCommunicationTaskByIntent: (clientId, messageId, key) => request(`/client-communications/${encodeURIComponent(clientId)}/inbox/${encodeURIComponent(messageId)}/task-actions/by-intent/${encodeURIComponent(key)}`, { silent: true }),
+  getCommunicationTaskAction: (clientId, messageId, actionId) => request(`/client-communications/${encodeURIComponent(clientId)}/inbox/${encodeURIComponent(messageId)}/task-actions/${encodeURIComponent(actionId)}`, { silent: true }),
+  confirmCommunicationTask: (clientId, messageId, actionId) => request(`/client-communications/${encodeURIComponent(clientId)}/inbox/${encodeURIComponent(messageId)}/task-actions/${encodeURIComponent(actionId)}/confirm`, { method: 'POST', body: { confirm: true }, silent: true }),
   getClientAgentProfile: (id) => request(`/client-assistants/${encodeURIComponent(id)}/profile`),
   updateClientAgentProfile: (id, data) => request(`/client-assistants/${encodeURIComponent(id)}/profile`, { method: 'PATCH', body: data }),
   listClientAgentConversations: (clientId, params = {}) => {
