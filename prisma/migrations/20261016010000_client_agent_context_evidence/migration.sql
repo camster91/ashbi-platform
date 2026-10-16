@@ -21,7 +21,7 @@ BEGIN
   FOR project IN SELECT * FROM jsonb_array_elements(snapshot->'projects') LOOP
     IF jsonb_typeof(project) IS DISTINCT FROM 'object' OR project - ARRAY['id', 'name', 'status', 'startDate', 'endDate'] <> '{}'::jsonb THEN RETURN false; END IF;
     FOREACH field IN ARRAY ARRAY['id', 'name', 'status'] LOOP
-      IF jsonb_typeof(project->field) IS DISTINCT FROM 'string' OR length(project->>field) > CASE WHEN field = 'name' THEN 2000 ELSE 100 END
+      IF jsonb_typeof(project->field) IS DISTINCT FROM 'string' OR length(project->>field) > (CASE WHEN field = 'name' THEN 2000 ELSE 100 END)
           OR (field = 'id' AND length(project->>field) = 0) THEN RETURN false; END IF;
     END LOOP;
     FOREACH field IN ARRAY ARRAY['startDate', 'endDate'] LOOP
