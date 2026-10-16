@@ -58,14 +58,27 @@ export default async function clientCommunicationsRoutes(fastify, options = {}) 
   const onRequest = [fastify.authenticate, requireStaff];
   const executor = options.toolExecutor ?? createToolExecutor({ registry: workspaceRegistry, governance: { assertAllowed: async () => {} } });
   const context = r => ({ prisma: r.prisma, user: r.user, requestId: r.id, ip: r.ip });
-  async function ownedAction(r, byIntent = false) {
+  async function ownedAction(r, byIntent = false, rejectUnavailable = false) {
     await communicationTaskSource(r.prisma, r.user, r.params);
     const row = await r.prisma.aiBridgeAction.findFirst({ where: {
       organizationId: r.user.organizationId, userId: r.user.id, action: taskActionName, source: 'ai_bridge',
       ...(byIntent ? { idempotencyKey: r.params.key } : { id: r.params.actionId }),
     } });
     if (!row || row.input?.clientId !== r.params.clientId || row.input?.source !== 'inbox' || row.input?.messageId !== r.params.messageId) throw new ToolError('NOT_FOUND', 'Action not found', { statusCode: 404 });
-    await communicationTaskScope({ prisma: r.prisma, user: r.user, input: row.input });
+    try {
+      await communicationTaskScope({ prisma: r.prisma, user: r.user, input: row.input });
+    } catch (error) {
+      if (error?.code !== 'TARGET_UNAVAILABLE') throw error;
+      // A source-authorized terminal refusal needs no private destination data.
+      // The executor's pending-only CAS prevents cancellation of an executing
+      // or completed request, including a concurrently claimed confirmation.
+      if (rejectUnavailable && row.status === 'PENDING_CONFIRMATION') {
+        const rejected = await executor.reject(context(r), row.id, { reason: 'incorrect', reauthenticated: true, ownerOnly: true });
+        return { ...rejected.action, preview: null, result: null };
+      }
+      if (row.status === 'REJECTED') return { ...row, preview: null, result: null };
+      throw error;
+    }
     return row;
   }
   const taskBase = '/:clientId/inbox/:messageId/task-actions';
@@ -81,7 +94,8 @@ export default async function clientCommunicationsRoutes(fastify, options = {}) 
   fastify.get(`${taskBase}/by-intent/:key`, { onRequest, preHandler: [validateParams(intentPathSchema), validateQuery(z.object({}).strict())] }, actionHandle(async r => ({ action: actionView(await ownedAction(r, true)) })));
   fastify.get(`${taskBase}/:actionId`, { onRequest, preHandler: [validateParams(actionPathSchema), validateQuery(z.object({}).strict())] }, actionHandle(async r => ({ action: actionView(await ownedAction(r)) })));
   fastify.post(`${taskBase}/:actionId/confirm`, { onRequest, preHandler: [requireRecentAuth, validateParams(actionPathSchema), validateBody(z.object({ confirm: z.literal(true) }).strict())] }, actionHandle(async r => {
-    await ownedAction(r);
+    const row = await ownedAction(r, false, true);
+    if (row.status === 'REJECTED') return { action: actionView(row), idempotent: true };
     const result = await executor.approve(context(r), r.params.actionId, { method: 'session_step_up', reauthenticated: true, ownerOnly: true });
     return { action: actionView(result.action), idempotent: result.idempotent };
   }));

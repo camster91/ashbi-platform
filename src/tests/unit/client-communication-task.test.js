@@ -226,6 +226,30 @@ test('generic response and error projections fail closed for a source-bound acti
   }
 });
 
+test('confirmation rejects a stale pending destination atomically and recovery exposes no private preview', async t => {
+  const f = fixture(); const pending = await f.prepare('stale-project-refusal');
+  const before = f.db.tables.task.length;
+  const app = Fastify(); await app.register(cookie);
+  app.decorate('authenticate', async r => { r.user = withSession(f.ctx.user); r.prisma = f.db; });
+  await app.register(routes, { prefix: '/api/client-communications', toolExecutor: f.executor }); t.after(() => app.close());
+  const base = '/api/client-communications/client-a/inbox/message-a/task-actions';
+  f.db.tables.project.find(row => row.id === 'project-a').status = 'CANCELLED';
+  const response = await app.inject({ method: 'POST', url: `${base}/${pending.action.id}/confirm`, payload: { confirm: true }, cookies: reauthCookies(f.ctx.user) });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(response.json().action.status, 'REJECTED');
+  assert.equal(response.json().action.preview, null);
+  assert.equal(f.db.tables.task.length, before);
+  for (const path of [`${base}/${pending.action.id}`, `${base}/by-intent/stale-project-refusal`]) {
+    const recovery = await app.inject(path);
+    assert.equal(recovery.statusCode, 200, recovery.body);
+    assert.equal(recovery.json().action.status, 'REJECTED');
+    assert.equal(recovery.json().action.preview, null);
+    assert.doesNotMatch(recovery.body, /Client artwork|client@example/);
+  }
+  f.state.thread.assignedToId = 'team2-a';
+  assert.equal((await app.inject(`${base}/${pending.action.id}`)).statusCode, 404);
+});
+
 test('dedicated confirmation refusals omit private receipts and raw messages after transactional access revocation', async t => {
   const f = fixture(); const pending = await f.prepare('dedicated-private-refusal', { title: 'PRIVATE SOURCE PREVIEW' });
   const app = Fastify(); await app.register(cookie);
