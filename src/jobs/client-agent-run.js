@@ -71,6 +71,7 @@ export async function processClientAgentRun(prisma, { organizationId, runId }, {
 
   let profile;
   let context;
+  let contextObservedAt;
   try {
     if (typeof run.prompt !== 'string' || !run.prompt.trim() || run.prompt.length > 2000) throw failure('RUN_INPUT_INVALID');
     const conversation = await prisma.clientAgentConversation.findFirst({
@@ -87,7 +88,10 @@ export async function processClientAgentRun(prisma, { organizationId, runId }, {
     if (!profile.pluginIds.includes('client-work')) throw failure('CLIENT_AGENT_PLUGIN_DISABLED');
     context = await buildClientAssistantContext(prisma, { organizationId, clientId: conversation.clientId });
     if (!context) throw failure('RECORD_NOT_FOUND');
-    if (JSON.stringify(context).length > 64_000) throw failure('CONTEXT_TOO_LARGE');
+    // Normalize dates once so stored JSON and provider input are identical.
+    context = JSON.parse(JSON.stringify(context));
+    if (Buffer.byteLength(JSON.stringify(context), 'utf8') > 64_000) throw failure('CONTEXT_TOO_LARGE');
+    contextObservedAt = now();
   } catch (error) {
     return settle('FAILED', { errorCode: PRE_DISPATCH_CODES.has(error?.code) ? error.code : 'RUN_PREFLIGHT_UNAVAILABLE' });
   }
@@ -96,8 +100,8 @@ export async function processClientAgentRun(prisma, { organizationId, runId }, {
   const current = await read();
   if (current?.status !== 'RUNNING' || current.claimToken !== claimToken) return result();
   if (+now() >= +deadlineAt) return expire({ claimToken }, now());
-  const prepared = await prisma.clientAgentRun.updateMany({ where: { ...where, status: 'RUNNING', claimToken, deadlineAt: { gt: now() } },
-    data: { profileRevision: profile.revision } });
+  const prepared = await prisma.clientAgentRun.updateMany({ where: { ...where, status: 'RUNNING', claimToken, contextObservedAt: null, deadlineAt: { gt: now() } },
+    data: { profileRevision: profile.revision, contextObservedAt, contextSnapshot: { version: 1, snapshot: context } } });
   if (prepared.count !== 1) return result();
   const remainingMs = +deadlineAt - +now();
   if (remainingMs <= 0) return expire({ claimToken }, now());
@@ -119,7 +123,7 @@ export async function processClientAgentRun(prisma, { organizationId, runId }, {
       if (controller.signal.aborted) throw failure('RUN_DEADLINE_EXCEEDED');
       return requestStorage.run({ ...store, feature: 'client_agent_run' }, () => chat({
         system: SYSTEM,
-        prompt: JSON.stringify({ observedAt: now().toISOString(), snapshot: context,
+        prompt: JSON.stringify({ observedAt: contextObservedAt.toISOString(), snapshot: context,
           preferences: { name: profile.name, instructions: profile.instructions }, question: run.prompt }),
         temperature: 0.2, maxTokens: 2048, feature: 'client_agent_run', singleAttempt: true,
         signal: controller.signal,

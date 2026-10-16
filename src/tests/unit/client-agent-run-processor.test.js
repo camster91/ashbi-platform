@@ -83,6 +83,57 @@ test('processor running replay never calls provider and expired claim becomes UN
   await f.process(); assert.equal(f.state.calls.length, 0);
 });
 
+test('prepared evidence is committed before dispatch and exactly matches prompt after clock and source changes', async () => {
+  const f = fixture();
+  f.state.projects[0].startDate = new Date('2026-10-01T00:00:00.000Z');
+  let prepared;
+  const update = f.prisma.clientAgentRun.updateMany;
+  f.prisma.clientAgentRun.updateMany = async args => {
+    const result = await update(args);
+    if (args.data.contextSnapshot) {
+      prepared = structuredClone(f.state.run);
+      f.state.time = new Date(+f.state.time + 5000);
+      f.state.client.name = 'Changed after observation';
+    }
+    return result;
+  };
+  await f.process({ chat: async options => {
+    const prompt = JSON.parse(options.prompt);
+    assert.equal(prompt.observedAt, prepared.contextObservedAt.toISOString());
+    assert.deepEqual(prompt.snapshot, prepared.contextSnapshot.snapshot);
+    assert.equal(prepared.contextSnapshot.version, 1);
+    assert.equal(prompt.snapshot.client.name, 'Example');
+    assert.equal(prompt.snapshot.projects[0].startDate, '2026-10-01T00:00:00.000Z');
+    assert.doesNotMatch(JSON.stringify(prepared.contextSnapshot), /instructions|PRIVATE|contacts|budget/);
+    return 'Stored evidence answer';
+  } });
+  assert.equal(f.state.run.status, 'SUCCEEDED');
+  assert.deepEqual(f.state.run.contextSnapshot, prepared.contextSnapshot);
+});
+
+test('lost preparation CAS prevents provider dispatch and evidence is never reconstructed on replay', async () => {
+  const f = fixture(); const update = f.prisma.clientAgentRun.updateMany;
+  f.prisma.clientAgentRun.updateMany = async args => args.data.contextSnapshot ? { count: 0 } : update(args);
+  await f.process();
+  assert.deepEqual(f.state.calls, []); assert.equal(f.state.run.contextSnapshot, undefined);
+  f.state.run.status = 'UNKNOWN';
+  await f.process(); assert.equal(f.state.run.contextObservedAt, undefined);
+});
+
+test('prepared evidence survives governed denial, ambiguous failure and cancellation without implying dispatch', async () => {
+  for (const mode of ['denied', 'unknown', 'cancelled']) {
+    const f = fixture();
+    await f.process({ chat: async () => {
+      if (mode === 'cancelled') { f.state.run.status = 'CANCELLED'; return 'Late'; }
+      throw Object.assign(Error('private failure'), { code: mode === 'denied' ? 'AI_DISABLED' : 'ETIMEDOUT' });
+    } });
+    assert.equal(f.state.run.status, { denied: 'FAILED', unknown: 'UNKNOWN', cancelled: 'CANCELLED' }[mode]);
+    assert.equal(f.state.run.contextSnapshot.snapshot.client.id, 'client-a');
+    const evidence = structuredClone(f.state.run.contextSnapshot);
+    await f.process(); assert.deepEqual(f.state.run.contextSnapshot, evidence);
+  }
+});
+
 for (const status of ['SUCCEEDED', 'FAILED', 'CANCELLED', 'UNKNOWN']) {
   test(`processor terminal ${status} replay performs no writes or inference`, async () => {
     const f = fixture(); f.state.run.status = status;
@@ -122,6 +173,15 @@ test('processor unexpected preflight failure is sanitized and never dispatches',
   await f.process(); assert.equal(f.state.run.status, 'FAILED');
   assert.equal(f.state.run.errorCode, 'RUN_PREFLIGHT_UNAVAILABLE');
   assert.doesNotMatch(JSON.stringify(f.state.run), /password/); assert.deepEqual(f.state.calls, []);
+});
+
+test('processor enforces total UTF-8 bytes before retaining or dispatching multibyte evidence', async () => {
+  const f = fixture();
+  f.state.projects = Array.from({ length: 17 }, (_, index) => ({ ...f.state.projects[0], id: `project-${index}`, name: 'é'.repeat(2000) }));
+  assert.ok(JSON.stringify(f.state.projects).length < 64_000);
+  await f.process();
+  assert.equal(f.state.run.status, 'FAILED'); assert.equal(f.state.run.errorCode, 'CONTEXT_TOO_LARGE');
+  assert.equal(f.state.run.contextSnapshot, undefined); assert.deepEqual(f.state.calls, []);
 });
 
 test('processor cancellation during context reads prevents dispatch', async () => {

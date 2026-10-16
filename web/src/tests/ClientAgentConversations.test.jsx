@@ -2,6 +2,7 @@ import { webcrypto } from 'node:crypto';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
 
 const { api, auth } = vi.hoisted(() => ({ api: Object.fromEntries(['listClientAgentConversations', 'createClientAgentConversation', 'getClientAgentConversation', 'startClientAgentRun', 'getClientAgentRun', 'getClientAgentRunByIntent', 'cancelClientAgentRun'].map((name) => [name, vi.fn()])), auth: { user: { id: 'staff-1', organizationId: 'org-1', role: 'TEAM' } } }));
 vi.mock('../lib/api', () => ({ api }));
@@ -10,6 +11,14 @@ const { default: ClientAgentConversations } = await import('../components/Client
 const conversation = { id: 'conversation-1', title: 'Client planning', revision: 0, createdById: 'staff-1', archivedAt: null };
 const terminalRun = { id: 'run-1', prompt: 'Saved question', response: '<img src=x onerror=alert(1)>', status: 'SUCCEEDED', requestedById: 'staff-1', createdAt: '2026-10-15T12:00:00Z' };
 const clients = [];
+const retainedContext = {
+  contextObservedAt: '2026-10-15T11:59:58.000Z',
+  contextSnapshot: { version: 1, snapshot: {
+    client: { id: 'client-1', name: 'Client name at request time', domain: 'old.example.invalid' },
+    projects: [{ id: 'project-old', name: 'Archived project name', status: 'IN_PROGRESS', startDate: '2026-09-01T00:00:00.000Z', endDate: null }],
+    truncated: false,
+  } },
+};
 
 function setup(props = {}) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -41,6 +50,113 @@ beforeEach(() => {
 afterEach(() => { cleanup(); for (const client of clients.splice(0)) client.clear(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('ClientAgentConversations', () => {
+  it('retains exact historical context across reloads without resolving current source records', async () => {
+    api.getClientAgentConversation.mockResolvedValue({ scope: 'SHARED_STAFF', conversation, runs: [{ ...terminalRun, ...retainedContext }], nextCursor: null });
+    const first = setup();
+    await openConversation();
+    const summary = screen.getByText('Retained context for this run');
+    expect(summary.tagName).toBe('SUMMARY');
+    expect(summary.closest('details')).not.toHaveAttribute('open');
+    await userEvent.click(summary);
+    expect(summary.closest('details')).toHaveAttribute('open');
+    expect(screen.getByText(retainedContext.contextObservedAt)).toHaveAttribute('datetime', retainedContext.contextObservedAt);
+    expect(screen.getByRole('link', { name: 'Client name at request time' })).toHaveAttribute('href', '/client/client-1');
+    expect(screen.getByRole('link', { name: 'Archived project name' })).toHaveAttribute('href', '/project/project-old');
+    expect(screen.getByText('Status: IN_PROGRESS')).toBeInTheDocument();
+    expect(screen.getByText('2026-09-01T00:00:00.000Z')).toBeInTheDocument();
+    expect(screen.getByText(/Source links open current records/)).toHaveTextContent('become unavailable');
+    expect(api.getClientAgentRun).not.toHaveBeenCalled();
+    first.unmount();
+    setup();
+    await openConversation();
+    await userEvent.click(screen.getByText('Retained context for this run'));
+    expect(screen.getByRole('link', { name: 'Archived project name' })).toBeInTheDocument();
+    expect(api.startClientAgentRun).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['legacy', { contextObservedAt: null, contextSnapshot: null }],
+    ['unknown version', { ...retainedContext, contextSnapshot: { ...retainedContext.contextSnapshot, version: 2 } }],
+    ['malformed project', { ...retainedContext, contextSnapshot: { version: 1, snapshot: { ...retainedContext.contextSnapshot.snapshot, projects: [{ id: {}, name: 'Unsafe source' }] } } }],
+    ['malformed timestamp', { ...retainedContext, contextObservedAt: 'not-a-date' }],
+    ['unsafe source identifier', { ...retainedContext, contextSnapshot: { version: 1, snapshot: { ...retainedContext.contextSnapshot.snapshot, client: { id: '../settings', name: 'Unsafe source', domain: null } } } }],
+  ])('keeps %s evidence unavailable without fabricating current context', async (_label, fields) => {
+    api.getClientAgentConversation.mockResolvedValue({ scope: 'SHARED_STAFF', conversation, runs: [{ ...terminalRun, ...fields }], nextCursor: null });
+    setup();
+    await openConversation();
+    expect(screen.getByText(/Retained context evidence is unavailable/)).toHaveTextContent('Current records are not substituted');
+    expect(screen.queryByText('Retained context for this run')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.getByText('Saved question')).toBeInTheDocument();
+    expect(api.startClientAgentRun).not.toHaveBeenCalled();
+  });
+
+  it.each(['UNKNOWN', 'FAILED', 'CANCELLED'])('labels %s context as prepared rather than proof of provider execution', async (status) => {
+    api.getClientAgentConversation.mockResolvedValue({ scope: 'SHARED_STAFF', conversation, runs: [{ ...terminalRun, ...retainedContext, status, response: null }], nextCursor: null });
+    setup({ profileEnabled: false });
+    await openConversation();
+    await userEvent.click(screen.getByText('Retained context for this run'));
+    expect(screen.getByText(/Stored context prepared for this request/)).toHaveTextContent('does not confirm that a provider received it');
+    expect(api.startClientAgentRun).not.toHaveBeenCalled();
+  });
+
+  it.each([2001, 2048, 2049])('honours the retained domain contract at %s characters', async (length) => {
+    const domain = 'x'.repeat(length);
+    api.getClientAgentConversation.mockResolvedValue({ scope: 'SHARED_STAFF', conversation, runs: [{ ...terminalRun, ...retainedContext, contextSnapshot: { version: 1, snapshot: { ...retainedContext.contextSnapshot.snapshot, client: { ...retainedContext.contextSnapshot.snapshot.client, domain } } } }], nextCursor: null });
+    setup();
+    await openConversation();
+    if (length <= 2048) {
+      await userEvent.click(screen.getByText('Retained context for this run'));
+      expect(screen.getByRole('link', { name: 'Client name at request time' }).parentElement).toHaveTextContent(domain);
+      expect(screen.queryByText(/Retained context evidence is unavailable/)).not.toBeInTheDocument();
+    } else {
+      expect(screen.getByText(/Retained context evidence is unavailable/)).toBeInTheDocument();
+      expect(screen.queryByText('Retained context for this run')).not.toBeInTheDocument();
+    }
+    expect(api.startClientAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('makes the native context disclosure keyboard reachable and shows bounded project context safely', async () => {
+    api.getClientAgentConversation.mockResolvedValue({ scope: 'SHARED_STAFF', conversation, runs: [{ ...terminalRun, ...retainedContext, contextSnapshot: { version: 1, snapshot: { ...retainedContext.contextSnapshot.snapshot, client: { id: 'client-1', name: '<script>old name</script>', domain: null }, projects: [], truncated: true } } }], nextCursor: null });
+    setup();
+    await openConversation();
+    const summary = screen.getByText('Retained context for this run');
+    await userEvent.click(screen.getByRole('button', { name: 'Client planning' }));
+    await userEvent.tab();
+    await userEvent.tab();
+    expect(summary).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    // Native details/summary provides browser keyboard activation; jsdom's
+    // keyboard default action is incomplete, so exercise disclosure via click.
+    if (!summary.closest('details').open) await userEvent.click(summary);
+    expect(screen.getByText(/Context was limited to 25 projects/)).toBeInTheDocument();
+    expect(screen.getByText('No projects were included in this context.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '<script>old name</script>' })).toHaveTextContent('<script>old name</script>');
+    expect(document.querySelector('script')).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Retained project context' })).not.toBeInTheDocument();
+  });
+
+  it('loads older retained context without replacing it with the newest run context', async () => {
+    const older = { ...terminalRun, id: 'older-run', prompt: 'Earlier question', ...retainedContext };
+    const newest = { ...terminalRun, id: 'newest-run', prompt: 'Later question', contextObservedAt: null, contextSnapshot: null };
+    api.getClientAgentConversation.mockResolvedValueOnce({ scope: 'SHARED_STAFF', conversation, runs: [older], nextCursor: 'older-run' })
+      .mockResolvedValueOnce({ scope: 'SHARED_STAFF', conversation, runs: [newest], nextCursor: null });
+    const view = setup();
+    await openConversation();
+    fireEvent.click(screen.getByRole('button', { name: 'Load more saved questions' }));
+    await screen.findByText('Later question');
+    expect(screen.getAllByText('Retained context for this run')).toHaveLength(1);
+    expect(screen.getAllByText(/Retained context evidence is unavailable/)).toHaveLength(1);
+    await userEvent.click(screen.getByText('Retained context for this run'));
+    expect(screen.getByRole('link', { name: 'Archived project name' })).toBeInTheDocument();
+    api.getClientAgentConversation.mockRejectedValue({ status: 403 });
+    await act(async () => { await view.cache.invalidateQueries({ queryKey: ['client-agent-conversation'] }); });
+    await screen.findByRole('alert');
+    expect(screen.queryByText('Retained context for this run')).not.toBeInTheDocument();
+    expect(screen.queryByText('Archived project name')).not.toBeInTheDocument();
+    expect(api.startClientAgentRun).not.toHaveBeenCalled();
+  });
+
   it('loads saved history after mounting and never starts inference without Send', async () => {
     api.getClientAgentConversation.mockResolvedValue({ scope: 'SHARED_STAFF', conversation, runs: [terminalRun], nextCursor: null });
     const first = setup();
