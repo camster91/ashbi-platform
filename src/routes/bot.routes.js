@@ -1,5 +1,6 @@
 // Bot API routes - external bot integration with ultra-fast caching
 
+import { summarizeLabor } from '../services/labor-summary.js';
 import env from '../config/env.js';
 import { prisma as basePrisma } from '../config/db.js';
 import { onboardClient } from '../services/onboarding.service.js';
@@ -10,6 +11,13 @@ import { safeEqual } from '../utils/crypto.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../utils/request-context.js';
 import { validateBody, botTaskUpdateSchema } from '../validators/schemas.js';
+
+// Amounts are rate-derived with unspecified currency, never verified profit/cost.
+function laborView(labor) {
+  return { knownRateAmount: Math.round(labor.knownRateAmount * 100) / 100,
+    missingRateMinutes: labor.missingRateMinutes, missingRateEntries: labor.missingRateEntries,
+    complete: labor.missingRateEntries === 0, currency: null, currencyVerified: false };
+}
 
 // Ultra-fast in-memory cache for AI requests
 const aiCache = {
@@ -459,10 +467,7 @@ export default async function botRoutes(fastify) {
 
     const projectSummaries = projects.map(p => {
       const loggedHours = p.timeEntries.reduce((sum, te) => sum + te.duration / 60, 0);
-      const costToDate = p.timeEntries.reduce((sum, te) => {
-        const rate = te.hourlyRate || te.user.hourlyRate || 0;
-        return sum + (te.duration / 60) * rate;
-      }, 0);
+      const labor = summarizeLabor(p.timeEntries);
       const estimatedHours = p.hourlyBudget || 0;
       const percentUsed = estimatedHours > 0 ? Math.round((loggedHours / estimatedHours) * 100) : 0;
       const overBudget = estimatedHours > 0 && loggedHours > estimatedHours;
@@ -473,7 +478,8 @@ export default async function botRoutes(fastify) {
         clientName: p.client?.name,
         estimatedHours,
         loggedHours: Math.round(loggedHours * 100) / 100,
-        costToDate: Math.round(costToDate * 100) / 100,
+        costToDate: labor.missingRateEntries ? null : Math.round(labor.knownRateAmount * 100) / 100,
+        labor: laborView(labor),
         percentUsed,
         overBudget
       };
@@ -505,30 +511,17 @@ export default async function botRoutes(fastify) {
 
     const estimatedHours = project.hourlyBudget || 0;
     const loggedHours = project.timeEntries.reduce((sum, te) => sum + te.duration / 60, 0);
-    const costToDate = project.timeEntries.reduce((sum, te) => {
-      const rate = te.hourlyRate || te.user.hourlyRate || 0;
-      return sum + (te.duration / 60) * rate;
-    }, 0);
+    const labor = summarizeLabor(project.timeEntries);
     const budgetRemaining = estimatedHours > 0 ? estimatedHours - loggedHours : null;
     const percentUsed = estimatedHours > 0 ? Math.round((loggedHours / estimatedHours) * 100) : 0;
     const overBudget = estimatedHours > 0 && loggedHours > estimatedHours;
 
-    // Group by user
-    const userMap = {};
-    for (const te of project.timeEntries) {
-      if (!userMap[te.user.id]) {
-        userMap[te.user.id] = { userId: te.user.id, userName: te.user.name, hours: 0, cost: 0 };
-      }
-      const hours = te.duration / 60;
-      const rate = te.hourlyRate || te.user.hourlyRate || 0;
-      userMap[te.user.id].hours += hours;
-      userMap[te.user.id].cost += hours * rate;
-    }
-
-    const breakdown = Object.values(userMap).map(u => ({
-      ...u,
-      hours: Math.round(u.hours * 100) / 100,
-      cost: Math.round(u.cost * 100) / 100
+    const breakdown = labor.costByUser.map(group => ({
+      userId: group.user?.id,
+      userName: group.user?.name,
+      hours: Math.round(group.hours * 100) / 100,
+      cost: group.cost === null ? null : Math.round(group.cost * 100) / 100,
+      ...laborView(group),
     }));
 
     return {
@@ -537,7 +530,8 @@ export default async function botRoutes(fastify) {
       clientName: project.client?.name,
       estimatedHours,
       loggedHours: Math.round(loggedHours * 100) / 100,
-      costToDate: Math.round(costToDate * 100) / 100,
+      costToDate: labor.missingRateEntries ? null : Math.round(labor.knownRateAmount * 100) / 100,
+      labor: laborView(labor),
       budgetRemaining: budgetRemaining !== null ? Math.round(budgetRemaining * 100) / 100 : null,
       percentUsed,
       overBudget,
