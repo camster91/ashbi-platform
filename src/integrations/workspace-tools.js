@@ -29,6 +29,8 @@ import { wikiToolCall } from './workspace-wiki-tool-errors.js';
 import { WORKSPACE_ACCOUNT_MANAGER_TOOLS } from './workspace-account-manager-tools.js';
 import { WORKSPACE_CHAT_TOOLS } from './workspace-chat-tools.js';
 import { WORKSPACE_CLIENT_COMMUNICATIONS_TOOLS } from './workspace-client-communications-tools.js';
+import { WORKSPACE_COMMUNICATION_ACTIONS } from './workspace-communication-actions.js';
+import { communicationTaskInputSchema, communicationTaskScope } from '../services/client-communication-task.service.js';
 
 const pageSchema = z.object({
   limit: z.number().int().min(1).max(50).default(25),
@@ -58,6 +60,7 @@ export const workspaceRegistry = createToolRegistry([
   ...WORKSPACE_ACCOUNT_MANAGER_TOOLS,
   ...WORKSPACE_CHAT_TOOLS,
   ...WORKSPACE_CLIENT_COMMUNICATIONS_TOOLS,
+  ...WORKSPACE_COMMUNICATION_ACTIONS,
   {
     name: 'get_workspace_page_access', description: 'Read current page audience, staff grants and observed access revision. Only the page owner or organization administrator may inspect this roster; parent restrictions still apply.', class: 'read', roles: ['ADMIN', 'TEAM'], timeoutMs: 5000,
     inputSchema: z.object({ pageId: z.string().min(1).max(80) }).strict(), resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }),
@@ -183,6 +186,7 @@ export function createWorkspaceTools(options = {}) {
       if (!registry.get(action.action).roles.includes(ctx.user.role)) throw new ToolError('ROLE_DENIED', 'Your role cannot access this action', { statusCode: 403 });
       if (WORKSPACE_BILLING_TOOLS.some(tool => tool.name === action.action)) await billingAdmin(ctx);
       if (WORKSPACE_RECORD_TOOLS.some(tool => tool.name === action.action)) await recordToolCall(() => currentRecordStaff(ctx.prisma, ctx.user));
+      if (WORKSPACE_COMMUNICATION_ACTIONS.some(tool => tool.name === action.action)) await communicationTaskScope({ prisma: ctx.prisma, user: ctx.user, input: action.input });
       if (name === 'get_action') return { kind: 'receipt', action: receipt(action) };
       // ownerOnly prevents a key from approving another user's proposal.
       const result = name === 'confirm_action'
@@ -199,6 +203,11 @@ export function createWorkspaceTools(options = {}) {
       const parsed = z.object({ input: z.unknown(), idempotencyKey: z.string().regex(/^[A-Za-z0-9._:-]{8,128}$/) }).strict().safeParse(args);
       if (!parsed.success) throw new ToolError('INVALID_INPUT', 'Expected input and an idempotencyKey of 8-128 characters');
       ({ input, idempotencyKey } = parsed.data);
+    }
+    if (WORKSPACE_COMMUNICATION_ACTIONS.some(tool => tool.name === name)) {
+      const parsed = communicationTaskInputSchema.safeParse(input);
+      if (!parsed.success) throw new ToolError('INVALID_INPUT', 'Invalid communication task input');
+      await communicationTaskScope({ prisma: ctx.prisma, user: ctx.user, input: parsed.data });
     }
     const result = await executor.invoke(ctx, { tool: name, input, idempotencyKey, source: 'ai_bridge' });
     return result.action ? { ...result, action: receipt(result.action) } : result;

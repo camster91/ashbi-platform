@@ -341,6 +341,10 @@ export const api = {
   createClientServiceMapping: (clientId, data) => request(`/clients/${encodeURIComponent(clientId)}/service-panels`, { method: 'POST', body: data, silent: true, notifyUnauthorized: true }),
   updateClientServiceMapping: (clientId, mappingId, data) => request(`/clients/${encodeURIComponent(clientId)}/service-panels/${encodeURIComponent(mappingId)}`, { method: 'PATCH', body: data, silent: true, notifyUnauthorized: true }),
   publishClientServiceSnapshot: (clientId, mappingId, data) => request(`/clients/${encodeURIComponent(clientId)}/service-panels/${encodeURIComponent(mappingId)}/snapshots`, { method: 'POST', body: data, silent: true, notifyUnauthorized: true }),
+  prepareCommunicationTask: (clientId, messageId, data) => request(`/client-communications/${encodeURIComponent(clientId)}/inbox/${encodeURIComponent(messageId)}/task-actions`, { method: 'POST', body: data, silent: true }),
+  getCommunicationTaskByIntent: (clientId, messageId, key) => request(`/client-communications/${encodeURIComponent(clientId)}/inbox/${encodeURIComponent(messageId)}/task-actions/by-intent/${encodeURIComponent(key)}`, { silent: true }),
+  getCommunicationTaskAction: (clientId, messageId, actionId) => request(`/client-communications/${encodeURIComponent(clientId)}/inbox/${encodeURIComponent(messageId)}/task-actions/${encodeURIComponent(actionId)}`, { silent: true }),
+  confirmCommunicationTask: (clientId, messageId, actionId) => request(`/client-communications/${encodeURIComponent(clientId)}/inbox/${encodeURIComponent(messageId)}/task-actions/${encodeURIComponent(actionId)}/confirm`, { method: 'POST', body: { confirm: true }, silent: true }),
   getClientAgentProfile: (id) => request(`/client-assistants/${encodeURIComponent(id)}/profile`),
   updateClientAgentProfile: (id, data) => request(`/client-assistants/${encodeURIComponent(id)}/profile`, { method: 'PATCH', body: data }),
   listClientAgentConversations: (clientId, params = {}) => {
