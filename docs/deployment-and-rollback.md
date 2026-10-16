@@ -55,16 +55,20 @@ ssh root@HOST "bash /opt/ashbi-platform/releases/deploy-vps-direct.sh \
 After the public route is switched, run the revision-aware synthetic check:
 
 ```bash
-EXPECTED_REVISION="$REVISION" npm run smoke:production-health -- https://hub.ashbi.ca
+HEALTHCHECK_URL="https://hub.ashbi.ca" EXPECTED_REVISION="$REVISION" npm run smoke:production-health
 ```
 
 See `docs/observability-and-slos.md` for ownership, alert drills, telemetry
 data handling, and initial service objectives.
 
 The script appends every deployment, readiness failure, and rollback to
-`/opt/ashbi-platform/releases/history.tsv`. Upload archives may be deleted
-after public verification because the immutable image and retained rollback
-container remain on the host.
+`/opt/ashbi-platform/releases/history.tsv`. Public verification alone does
+not authorize deleting upload archives. Preserve archives protected by the
+current release/retention ledger, including serving and approved rollback
+candidates. Remove only an explicitly approved redundant archive after
+migration/floor compatibility and the retained off-server copy's full
+identity, hash and readback proof are verified. Preserve required restore
+evidence; never prune automatically because an image or container remains.
 
 Use `--environment staging` or `--environment rehearsal` for non-production
 records; the environment is included in every history outcome field.
