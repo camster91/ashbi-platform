@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ClipboardCheck, Globe } from 'lucide-react';
@@ -93,16 +93,23 @@ export default function ProjectReviews({ projectId }) {
   const titleRef = useRef(null);
 
   const sessionsQuery = useQuery({ queryKey: ['review-sessions', projectId], queryFn: () => api.getReviewSessions(projectId) });
-  const filesQuery = useQuery({ queryKey: ['review-files', projectId], queryFn: () => api.getAttachments('PROJECT', projectId) });
+  const filesQuery = useQuery({ queryKey: ['project-files', projectId], queryFn: () => api.getAttachments('PROJECT', projectId) });
   const capabilities = useQuery({ queryKey: ['review-capabilities'], queryFn: () => api.getReviewCapabilities(), staleTime: 5 * 60 * 1000 });
   const webCaptureEnabled = Boolean(capabilities.data?.webCapture?.enabled);
   const sessions = sessionsQuery.data?.sessions || [];
   const files = useMemo(() => (Array.isArray(filesQuery.data) ? filesQuery.data : []).filter((file) => REVIEWABLE.test(file.mimeType || '')), [filesQuery.data]);
   const versionable = sessions.filter((session) => !session.nextSessionId);
+  useEffect(() => {
+    if (filesQuery.isSuccess && !filesQuery.isFetching && attachmentId && !files.some((file) => file.id === attachmentId)) {
+      setAttachmentId('');
+    }
+  }, [attachmentId, files, filesQuery.isSuccess, filesQuery.isFetching]);
 
   const start = async (event) => {
     event.preventDefault();
-    if (!attachmentId) {
+    const currentFiles = queryClient.getQueryData(['project-files', projectId]);
+    if (!attachmentId || filesQuery.error || !Array.isArray(currentFiles)
+      || !currentFiles.some((file) => file.id === attachmentId && REVIEWABLE.test(file.mimeType || ''))) {
       setError('Choose a file to review.');
       fileRef.current?.focus();
       return;
@@ -200,7 +207,7 @@ export default function ProjectReviews({ projectId }) {
               projectId={projectId}
               onCreated={async (session) => {
                 await queryClient.invalidateQueries({ queryKey: ['review-sessions', projectId] });
-                await queryClient.invalidateQueries({ queryKey: ['review-files', projectId] });
+                await queryClient.invalidateQueries({ queryKey: ['project-files', projectId] });
                 navigate(`/review/${session.id}`);
               }}
             />
