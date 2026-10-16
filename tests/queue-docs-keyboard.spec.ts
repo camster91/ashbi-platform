@@ -47,8 +47,15 @@ test('queue panel keeps a visible keyboard focus indicator after roving tabs', a
   await expect(first).toBeVisible();
   await keyboardReach(page, first);
   await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('tab', {name:/Awaiting approval/})).toBeFocused();
+  const awaiting = page.getByRole('tab', {name:/Awaiting approval/});
+  await expect(awaiting).toBeFocused();
+  // selectTab focuses synchronously, while the router commits selection later.
+  // Finish the destination transition before issuing another navigation key.
+  await expect(page).toHaveURL(/\bview=awaiting_approval(?:&|$)/);
+  await expect(awaiting).toHaveAttribute('aria-selected','true');
+  await expect(awaiting).toHaveAttribute('tabindex','0');
   await page.keyboard.press('Home');
+  await expect(page).toHaveURL(/\bview=needs_action(?:&|$)/);
   await expect(first).toHaveAttribute('aria-selected','true');
   await expect(first).toHaveAttribute('tabindex','0');
   await expect(first).toBeFocused();
