@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClientAgentTaskAction from '../components/ClientAgentTaskAction';
 
 
-const { api, auth } = vi.hoisted(() => ({ api: Object.fromEntries(['getProjects', 'prepareClientTaskAction', 'getClientTaskActionByIntent', 'getClientTaskAction', 'confirmClientTaskAction', 'listClientCommunications', 'getClientCommunication'].map((name) => [name, vi.fn()])), auth: { user: { id: 'staff', organizationId: 'org', role: 'TEAM' } } }));
+const { api, auth } = vi.hoisted(() => ({ api: Object.fromEntries(['getProjects', 'prepareClientTaskAction', 'getClientTaskActionByIntent', 'getClientTaskAction', 'confirmClientTaskAction', 'rejectClientTaskAction', 'listClientCommunications', 'getClientCommunication'].map((name) => [name, vi.fn()])), auth: { user: { id: 'staff', organizationId: 'org', role: 'TEAM' } } }));
 vi.mock('../lib/api', () => ({ api }));
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => auth }));
 const message = { subject: 'Website request' };
@@ -155,6 +155,57 @@ describe('client task proposals', () => {
     api.prepareClientTaskAction.mockResolvedValue({ action: { ...pendingAction, status, expired } });
     setup(); await preview(); expect(screen.queryByRole('button', { name: 'Confirm create task' })).not.toBeInTheDocument();
     expect(screen.getByText(text)).toBeInTheDocument(); expect(api.confirmClientTaskAction).not.toHaveBeenCalled();
+  });
+
+  it('explicitly discards a revoked pending intent, retaining storage until the minimal server result', async () => {
+    const first = setup(); await preview(); const saved = sessionStorage.getItem(sessionStorage.key(0)); first.unmount();
+    api.getClientTaskActionByIntent.mockRejectedValue({ status: 409, data: { code: 'TARGET_UNAVAILABLE' } });
+    api.rejectClientTaskAction.mockResolvedValue({ action: { id: 'action1', status: 'REJECTED' } });
+    setup(); const discard = await screen.findByRole('button', { name: 'Discard unavailable request' });
+    expect(screen.queryByRole('region', { name: 'Task preview' })).not.toBeInTheDocument();
+    expect(api.rejectClientTaskAction).not.toHaveBeenCalled(); expect(sessionStorage.getItem(sessionStorage.key(0))).toBe(saved);
+    fireEvent.click(discard); await screen.findByRole('button', { name: 'Start another task' });
+    expect(api.rejectClientTaskAction).toHaveBeenCalledExactlyOnceWith('client1', JSON.parse(saved).key);
+    expect(sessionStorage.getItem(sessionStorage.key(0))).toBe(saved);
+    fireEvent.click(screen.getByRole('button', { name: 'Start another task' }));
+    expect(sessionStorage.length).toBe(0); expect(api.confirmClientTaskAction).not.toHaveBeenCalled();
+  });
+
+  it.each([{status:404},new Error('network'),{status:403,data:{code:'ROLE_DENIED'}}])('never offers discard for ordinary missing, network or permission failures: %s', async failure => {
+    const first = setup(); await preview(); first.unmount(); api.getClientTaskActionByIntent.mockRejectedValue(failure);
+    setup(); await screen.findByText(/saved request could not be checked/);
+    expect(screen.queryByRole('button', { name: 'Discard unavailable request' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start another task' })).not.toBeInTheDocument(); expect(api.rejectClientTaskAction).not.toHaveBeenCalled();
+  });
+
+  it('retains revoked intent after reauth cancellation or a pending-to-executing discard race', async () => {
+    const first = setup(); await preview(); const saved = sessionStorage.getItem(sessionStorage.key(0)); first.unmount();
+    api.getClientTaskActionByIntent.mockRejectedValue({ status:409,data:{code:'TARGET_UNAVAILABLE'} });
+    api.rejectClientTaskAction.mockRejectedValueOnce({status:403,data:{code:'REAUTH_REQUIRED'}}).mockRejectedValueOnce({status:409,data:{code:'ACTION_UNAVAILABLE'}});
+    setup(); fireEvent.click(await screen.findByRole('button', {name:'Discard unavailable request'}));
+    await screen.findByText(/Confirm your identity to discard/); expect(sessionStorage.getItem(sessionStorage.key(0))).toBe(saved);
+    expect(screen.queryByRole('button', {name:'Start another task'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name:'Discard unavailable request'})); await screen.findByText(/request could not be safely discarded/);
+    expect(sessionStorage.getItem(sessionStorage.key(0))).toBe(saved); expect(screen.queryByRole('button', {name:'Start another task'})).not.toBeInTheDocument();
+  });
+
+  it('reports a task already executed using only terminal status after revoked-intent recovery', async () => {
+    const first = setup(); await preview(); first.unmount();
+    api.getClientTaskActionByIntent.mockRejectedValue({status:409,data:{code:'TARGET_UNAVAILABLE'}});
+    api.rejectClientTaskAction.mockResolvedValue({action:{id:'action1',status:'EXECUTED'}});
+    setup(); fireEvent.click(await screen.findByRole('button', {name:'Discard unavailable request'}));
+    await screen.findByText(/This request already created a task/);
+    expect(screen.queryByRole('link', {name:'Open created task'})).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name:'Start another task'})).toBeInTheDocument();
+  });
+
+  it('allows a new intent only after a proven failed transaction is recovered minimally',async()=>{
+    const first=setup();await preview();first.unmount();
+    api.getClientTaskActionByIntent.mockRejectedValue({status:409,data:{code:'TARGET_UNAVAILABLE'}});
+    api.rejectClientTaskAction.mockResolvedValue({action:{id:'action1',status:'FAILED',outcome:'failed'}});
+    setup();fireEvent.click(await screen.findByRole('button',{name:'Discard unavailable request'}));
+    expect(await screen.findByRole('button',{name:'Start another task'})).toBeInTheDocument();
+    expect(screen.queryByRole('region',{name:'Task preview'})).not.toBeInTheDocument();
   });
 
 });

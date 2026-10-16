@@ -754,6 +754,7 @@
   "POST /api/clients/:id|:clientId/assistant/task-actions",
   "POST /api/clients/:id|:clientId/assistant/task-actions/:actionId/confirm",
   "POST /api/clients/:id|:clientId/assistant/task-actions/:actionId/reject",
+  "POST /api/clients/:id|:clientId/assistant/task-actions/by-intent/:key/reject",
   "POST /api/clients/:id|:clientId/contacts",
   "POST /api/clients/:id|:clientId/notes",
   "POST /api/collections",

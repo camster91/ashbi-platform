@@ -345,6 +345,7 @@ export const api = {
   getClientTaskActionByIntent: (clientId, key) => request(`/clients/${encodeURIComponent(clientId)}/assistant/task-actions/by-intent/${encodeURIComponent(key)}`, { silent: true, notifyUnauthorized: true }),
   getClientTaskAction: (clientId, actionId) => request(`/clients/${encodeURIComponent(clientId)}/assistant/task-actions/${encodeURIComponent(actionId)}`, { silent: true, notifyUnauthorized: true }),
   confirmClientTaskAction: (clientId, actionId) => request(`/clients/${encodeURIComponent(clientId)}/assistant/task-actions/${encodeURIComponent(actionId)}/confirm`, { method: 'POST', body: { confirm: true }, silent: true, notifyUnauthorized: true }),
+  rejectClientTaskAction: (clientId, key) => request(`/clients/${encodeURIComponent(clientId)}/assistant/task-actions/by-intent/${encodeURIComponent(key)}/reject`, { method: 'POST', body: {}, silent: true, notifyUnauthorized: true }),
   getClientAgentProfile: (id) => request(`/client-assistants/${encodeURIComponent(id)}/profile`),
   updateClientAgentProfile: (id, data) => request(`/client-assistants/${encodeURIComponent(id)}/profile`, { method: 'PATCH', body: data }),
   listClientAgentConversations: (clientId, params = {}) => {

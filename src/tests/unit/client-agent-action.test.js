@@ -180,3 +180,75 @@ test('generic response and error projections fail closed for a source-bound acti
   }
 });
 
+
+test('revoked pending intent can be withdrawn with fresh ownership without exposing its old preview', async t => {
+  const f = fixture(); const pending = await f.prepare(); const before = f.db.tables.task.length;
+  f.profile.revision++; f.profile.enabled = false; f.db.tables.project[0].clientId = 'client-b';
+  const app = Fastify(); await app.register(cookie);
+  app.decorate('authenticate', async r => { r.user = withSession(f.ctx.user); r.prisma = f.db; });
+  await app.register(routes, { prefix: '/api/clients' }); t.after(() => app.close());
+  const base = '/api/clients/client-a/assistant/task-actions'; const url = `${base}/by-intent/client-task-intent-1/reject`;
+  assert.equal((await app.inject(`${base}/${pending.action.id}`)).json().code, 'TARGET_UNAVAILABLE');
+  assert.equal((await app.inject({ method: 'POST', url, payload: {} })).json().code, 'REAUTH_REQUIRED');
+  assert.equal(f.db.tables.aiBridgeAction[0].status, 'PENDING_CONFIRMATION');
+  const response = await app.inject({ method: 'POST', url, payload: {}, cookies: reauthCookies(f.ctx.user) });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(response.json(), { action: { id: pending.action.id, status: 'REJECTED' } });
+  assert.doesNotMatch(response.body, /preview|result|input|Review artwork|project-a|profileRevision/);
+  assert.equal(f.db.tables.task.length, before);
+  assert.equal((await app.inject({ method: 'POST', url: `${base}/${pending.action.id}/reject`, payload: {}, cookies: reauthCookies(f.ctx.user) })).json().action.status, 'REJECTED');
+  assert.equal((await app.inject(`${base}/${pending.action.id}`)).json().code, 'TARGET_UNAVAILABLE');
+});
+
+test('narrow discard denies foreign owners, clients, tenants, demotion and deleted clients without an ADMIN bypass', async t => {
+  for (const change of [f => { f.ctx.user.role = 'ADMIN'; f.db.tables.user.find(row => row.id === f.ctx.user.id).role = 'ADMIN'; f.db.tables.aiBridgeAction[0].userId = 'admin-a'; }, f => { f.db.tables.aiBridgeAction[0].organizationId = 'org-b'; }, f => { f.db.tables.aiBridgeAction[0].input.clientId = 'client-b'; }, f => { f.db.tables.user.find(row => row.id === f.ctx.user.id).role = 'CLIENT'; }, f => { f.db.tables.user.find(row => row.id === f.ctx.user.id).isActive = false; }, f => { f.db.tables.client[0].deletedAt = new Date(); }]) {
+    const f = fixture(); await f.prepare(); change(f);
+    const app = Fastify(); await app.register(cookie);
+    app.decorate('authenticate', async r => { r.user = withSession(f.ctx.user); r.prisma = f.db; });
+    await app.register(routes, { prefix: '/api/clients' }); t.after(() => app.close());
+    const response = await app.inject({ method: 'POST', url: '/api/clients/client-a/assistant/task-actions/by-intent/client-task-intent-1/reject', payload: {}, cookies: reauthCookies(f.ctx.user) });
+    assert.ok([403, 404].includes(response.statusCode), response.body);
+    assert.equal(f.db.tables.aiBridgeAction[0].status, 'PENDING_CONFIRMATION'); assert.doesNotMatch(response.body, /preview|result|Review artwork/);
+  }
+});
+
+test('discard reports only proven terminal status and never cancels executing or unknown failed work', async t => {
+  for (const status of ['EXECUTED', 'REJECTED', 'EXPIRED', 'EXECUTING', 'FAILED']) {
+    const f = fixture(); const pending = await f.prepare(); f.profile.revision++;
+    f.db.tables.aiBridgeAction[0].status = status; f.db.tables.aiBridgeAction[0].outcome = 'unknown';
+    const app = Fastify(); await app.register(cookie);
+    app.decorate('authenticate', async r => { r.user = withSession(f.ctx.user); r.prisma = f.db; });
+    let rejects = 0;
+    await app.register(routes, { prefix: '/api/clients', toolExecutor: { ...f.executor, reject: async () => { rejects++; throw new Error('Must not reject terminal/executing'); } } }); t.after(() => app.close());
+    const response = await app.inject({ method: 'POST', url: `/api/clients/client-a/assistant/task-actions/${pending.action.id}/reject`, payload: {}, cookies: reauthCookies(f.ctx.user) });
+    if (['EXECUTED', 'REJECTED', 'EXPIRED'].includes(status)) {
+      assert.equal(response.statusCode, 200, response.body); assert.deepEqual(response.json(), { action: { id: pending.action.id, status } });
+    } else { assert.equal(response.statusCode, 409); assert.equal(response.json().code, 'ACTION_UNAVAILABLE'); }
+    assert.equal(rejects, 0); assert.equal(f.db.tables.aiBridgeAction[0].status, status); assert.doesNotMatch(response.body, /"preview"|"result"|"input"|Review artwork/);
+  }
+});
+
+test('discard racing an execution claim preserves unknown outcome and omits private executor receipts', async t => {
+  const f = fixture(); const pending = await f.prepare(); f.profile.revision++;
+  const app = Fastify(); await app.register(cookie);
+  app.decorate('authenticate', async r => { r.user = withSession(f.ctx.user); r.prisma = f.db; });
+  const reject = async (...args) => {
+    // Claim changed after route load: the executor CAS must fail, never reclassify it.
+    f.db.tables.aiBridgeAction[0].status = 'EXECUTING';
+    return f.executor.reject(...args);
+  };
+  await app.register(routes, { prefix: '/api/clients', toolExecutor: { ...f.executor, reject } }); t.after(() => app.close());
+  const response = await app.inject({ method: 'POST', url: `/api/clients/client-a/assistant/task-actions/${pending.action.id}/reject`, payload: {}, cookies: reauthCookies(f.ctx.user) });
+  assert.equal(response.statusCode, 409, response.body); assert.doesNotMatch(response.body, /"preview"|"result"|"input"|Review artwork/);
+  assert.notEqual(f.db.tables.aiBridgeAction[0].status, 'REJECTED');
+});
+
+
+test('discard returns safe failed outcome only for a proven transactional failure', async t => {
+  const f = fixture(); const pending = await f.prepare(); f.profile.enabled = false;
+  f.db.tables.aiBridgeAction[0].status = 'FAILED'; f.db.tables.aiBridgeAction[0].outcome = 'failed';
+  const app = Fastify(); await app.register(cookie); app.decorate('authenticate', async r => {r.user=withSession(f.ctx.user);r.prisma=f.db;});
+  await app.register(routes,{prefix:'/api/clients'});t.after(()=>app.close());
+  const response=await app.inject({method:'POST',url:'/api/clients/client-a/assistant/task-actions/by-intent/client-task-intent-1/reject',payload:{},cookies:reauthCookies(f.ctx.user)});
+  assert.equal(response.statusCode,200,response.body);assert.deepEqual(response.json(),{action:{id:pending.action.id,status:'FAILED',outcome:'failed'}});
+});

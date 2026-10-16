@@ -7,6 +7,7 @@ import Button from './ui/Button';
 const activeProjectStatuses = ['STARTING_UP', 'DESIGN_DEV', 'ADDING_CONTENT', 'FINALIZING', 'ACTIVE'];
 const fieldClass = 'w-full rounded-lg border border-input bg-background p-3 text-sm';
 const needsReauth = (error) => error?.data?.code === 'REAUTH_REQUIRED' || error?.code === 'REAUTH_REQUIRED';
+const targetUnavailable = error => (error?.data?.code ?? error?.code) === 'TARGET_UNAVAILABLE';
 const denied = (error) => !needsReauth(error) && [401, 403].includes(error?.status ?? error?.statusCode);
 const definitive = (action) => (action?.status === 'PENDING_CONFIRMATION' && action.expired === true) || ['EXECUTED', 'REJECTED', 'EXPIRED'].includes(action?.status) || (action?.status === 'FAILED' && action.outcome === 'failed');
 const storageName = (user, clientId) => `ashbi:client-task:${[user.organizationId, user.id, clientId, 'create_client_task'].map(encodeURIComponent).join(':')}`;
@@ -32,7 +33,7 @@ async function clientProjects(clientId) {
   return [...new Map(rows.map((project) => [project.id, project])).values()];
 }
 
-function TaskAction({ clientId, user }) {
+function TaskAction({ clientId, user, enabled }) {
   const name = storageName(user, clientId);
   const [recovery, setRecovery] = useState(() => { try { return { intent: savedIntent(name), blocked: false }; } catch { return { intent: null, blocked: true }; } });
   const [title, setTitle] = useState('');
@@ -45,10 +46,11 @@ function TaskAction({ clientId, user }) {
   const [error, setError] = useState('');
   const [forbidden, setForbidden] = useState(false);
   const [confirmationUnknown, setConfirmationUnknown] = useState(false);
+  const [revoked, setRevoked] = useState(false);
   const busy = useRef(false);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const projects = useQuery({ queryKey: ['client-task-projects', user.organizationId, user.id, clientId], queryFn: () => clientProjects(clientId), retry: false, refetchOnWindowFocus: false });
+  const projects = useQuery({ queryKey: ['client-task-projects', user.organizationId, user.id, clientId], queryFn: () => clientProjects(clientId), enabled, retry: false, refetchOnWindowFocus: false });
 
   async function recover() {
     if (busy.current || !recovery.intent || recovery.blocked || forbidden) return;
@@ -57,10 +59,11 @@ function TaskAction({ clientId, user }) {
       const receipt = action?.id
         ? await api.getClientTaskAction(clientId, action.id)
         : await api.getClientTaskActionByIntent(clientId, recovery.intent.key);
-      if (alive.current) { setAction(receipt.action); setConfirmationUnknown(false); }
+      if (alive.current) { setAction(receipt.action); setConfirmationUnknown(false); setRevoked(false); }
     } catch (failure) {
       if (!alive.current) return;
       if (denied(failure)) { setForbidden(true); setAction(null); }
+      if (targetUnavailable(failure)) { setRevoked(true); setAction(null); setConfirmationUnknown(true); }
       setError('The saved request could not be checked. Keep this request and check again before creating another task.');
     } finally { busy.current = false; if (alive.current) setPending(false); }
   }
@@ -75,7 +78,7 @@ function TaskAction({ clientId, user }) {
   }
   async function prepare(event) {
     event.preventDefault();
-    if (busy.current || forbidden || recovery.blocked || action || !title.trim() || !projects.data?.some((project) => project.id === projectId)) return;
+    if (!enabled || busy.current || revoked || forbidden || recovery.blocked || action || !title.trim() || !projects.data?.some((project) => project.id === projectId)) return;
     busy.current = true; setPending(true); setError('');
     try {
       const input = { projectId, title: title.trim(), description: description.trim(), priority, ...(dueDate ? { dueDate: `${dueDate}T00:00:00.000Z` } : {}) };
@@ -90,11 +93,12 @@ function TaskAction({ clientId, user }) {
     } catch (failure) {
       if (!alive.current) return;
       if (denied(failure)) { setForbidden(true); setAction(null); }
+      if (targetUnavailable(failure)) { setRevoked(true); setAction(null); setConfirmationUnknown(true); }
       setError('The preview could not be confirmed. Check the saved request, or retry the exact same details.');
     } finally { busy.current = false; if (alive.current) setPending(false); }
   }
   async function confirmTask() {
-    if (busy.current || forbidden || confirmationUnknown || !action?.preview || action.preview.destination?.clientId !== clientId || action.status !== 'PENDING_CONFIRMATION' || action.expired || recovery.blocked) return;
+    if (!enabled || busy.current || forbidden || confirmationUnknown || !action?.preview || action.preview.destination?.clientId !== clientId || action.status !== 'PENDING_CONFIRMATION' || action.expired || recovery.blocked) return;
     busy.current = true; setPending(true); setError('');
     try {
       const receipt = await api.confirmClientTaskAction(clientId, action.id);
@@ -106,8 +110,24 @@ function TaskAction({ clientId, user }) {
         return;
       }
       if (denied(failure)) { setForbidden(true); setAction(null); }
+      if (targetUnavailable(failure)) { setRevoked(true); setAction(null); setConfirmationUnknown(true); }
       setConfirmationUnknown(true);
       setError('Task creation could not be confirmed. Check the saved status before trying again.');
+    } finally { busy.current = false; if (alive.current) setPending(false); }
+  }
+  async function discardRevoked() {
+    if (busy.current || !revoked || !recovery.intent || recovery.blocked || forbidden) return;
+    busy.current = true; setPending(true); setError('');
+    try {
+      const receipt = await api.rejectClientTaskAction(clientId, recovery.intent.key);
+      if (!alive.current) return;
+      if (!receipt.action?.id || !(['EXECUTED', 'REJECTED', 'EXPIRED'].includes(receipt.action.status) || (receipt.action.status === 'FAILED' && receipt.action.outcome === 'failed'))) throw new Error('Unconfirmed outcome');
+      setAction({ id: receipt.action.id, status: receipt.action.status, ...(receipt.action.status === 'FAILED' ? { outcome: 'failed' } : {}) });
+      setRevoked(false); setConfirmationUnknown(false);
+    } catch (failure) {
+      if (!alive.current) return;
+      if (denied(failure)) { setForbidden(true); setAction(null); }
+      setError(needsReauth(failure) ? 'Confirm your identity to discard this request. The saved request is retained.' : 'The request could not be safely discarded. Keep it and check again; its outcome may still be unknown.');
     } finally { busy.current = false; if (alive.current) setPending(false); }
   }
   function newRequest() {
@@ -115,18 +135,20 @@ function TaskAction({ clientId, user }) {
     try {
       sessionStorage.removeItem(name);
       if (sessionStorage.getItem(name) !== null) throw new Error('Storage unavailable');
-      setRecovery({ intent: null, blocked: false }); setAction(null); setError('');
+      setRecovery({ intent: null, blocked: false }); setAction(null); setError(''); setRevoked(false); setConfirmationUnknown(false);
     } catch { setRecovery((value) => ({ ...value, blocked: true })); }
   }
-  const preview = !forbidden && action?.preview?.destination?.clientId === clientId && action.preview;
+  if (!enabled && !recovery.intent) return null;
+  const preview = enabled && !forbidden && action?.preview?.destination?.clientId === clientId && action.preview;
   return <section aria-label="Task proposals">
     <div className="space-y-4 p-4">
-      <p className="text-sm text-muted-foreground">Review the task details before confirming creation.</p>
+      <p className="text-sm text-muted-foreground">{enabled ? 'Review the task details before confirming creation.' : 'Task proposals are paused. You can check or safely withdraw your saved request; new tasks and confirmations are unavailable.'}</p>
       {error && <p role="alert">{error}</p>}
       {recovery.blocked && <p role="alert">This browser cannot safely recover the request. Task creation is unavailable.</p>}
       {forbidden ? <p role="alert">You no longer have access to this request.</p> : <>
         {recovery.intent && <div className="space-y-2"><p role="status">A saved request is retained. Checking its status does not create a task.</p><Button type="button" variant="outline" disabled={pending || recovery.blocked} onClick={recover}>Check saved status</Button></div>}
-        {!action && <form onSubmit={prepare} className="space-y-3">
+        {revoked && <div className="space-y-2"><p role="status">This request is unavailable under the current profile or project. Discarding only withdraws a pending request; it cannot undo a created task.</p><Button type="button" variant="outline" disabled={pending || recovery.blocked} onClick={discardRevoked}>Discard unavailable request</Button></div>}
+        {enabled && !action && !revoked && <form onSubmit={prepare} className="space-y-3">
           {projects.isPending && <p role="status">Loading client projects…</p>}
           {projects.isError && <div role="alert"><p>Client projects could not be loaded.</p><Button type="button" variant="outline" onClick={() => projects.refetch()}>Retry projects</Button></div>}
           {projects.data?.length === 0 && <p role="status">This client has no active projects. Add an active project before creating a task.</p>}
@@ -144,14 +166,18 @@ function TaskAction({ clientId, user }) {
         </section>}
         {action?.status === 'EXECUTED' && action.result?.task?.id && preview && action.result.task.projectId === preview.destination.projectId && <div role="status"><p>Task created.</p><Link className="inline-flex min-h-11 items-center underline" to={`/task/${encodeURIComponent(action.result.task.id)}`}>Open created task</Link></div>}
         {action && action.status !== 'PENDING_CONFIRMATION' && action.status !== 'EXECUTED' && <p role="status">{action.status === 'EXECUTING' || action.outcome === 'unknown' ? 'The outcome is not yet confirmed. Check the saved status before starting another request.' : 'This request did not create a confirmed task.'}</p>}
+        {action?.status === 'EXECUTED' && !preview && <p role="status">This request already created a task. Its details are unavailable under the current profile.</p>}
         {action?.expired && <p role="status">This preview has expired.</p>}
-        {definitive(action) && <Button type="button" variant="outline" disabled={pending || recovery.blocked} onClick={newRequest}>Start another task</Button>}
+        {definitive(action) && <Button type="button" variant="outline" disabled={pending || recovery.blocked} onClick={newRequest}>{enabled ? 'Start another task' : 'Clear completed request'}</Button>}
       </>}
     </div>
   </section>;
 }
 
 export default function ClientAgentTaskAction({ clientId, user, enabled }) {
-  if (!enabled || !clientId || !user?.id || !user.organizationId || !['ADMIN', 'TEAM'].includes(user.role)) return null;
-  return <TaskAction key={`${user.organizationId}:${user.id}:${user.role}:${clientId}`} clientId={clientId} user={user} />;
+  if (!clientId || !user?.id || !user.organizationId || !['ADMIN', 'TEAM'].includes(user.role)) return null;
+  if (!enabled) {
+    try { if (!savedIntent(storageName(user, clientId))) return null; } catch { return null; }
+  }
+  return <TaskAction enabled={enabled} key={`${user.organizationId}:${user.id}:${user.role}:${clientId}`} clientId={clientId} user={user} />;
 }

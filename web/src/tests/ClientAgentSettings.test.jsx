@@ -90,7 +90,7 @@ describe('client agent settings', () => {
   it('keeps task proposals off until explicitly selected and preserves other plugins', async () => {
     api.updateClientAgentProfile.mockImplementation(async (_, value) => ({ ...value, revision: 1 }));
     setup(); fireEvent.click(screen.getByText('Account manager settings'));
-    const proposals = await screen.findByLabelText('Task proposals – requires confirmation');
+    const proposals = await screen.findByLabelText('Task proposals (requires confirmation)');
     expect(proposals).not.toBeChecked();
     fireEvent.click(proposals); fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
     await screen.findByText('Profile saved.');

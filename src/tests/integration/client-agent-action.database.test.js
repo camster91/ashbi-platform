@@ -1,3 +1,7 @@
+import Fastify from 'fastify';
+import cookie from '@fastify/cookie';
+import routes from '../../routes/client-agent-action.routes.js';
+import { reauthCookies, withSession } from '../helpers/reauth.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -60,6 +64,35 @@ test('client task plugin PostgreSQL concurrency, revocation and task/receipt rol
       await raw.project.update({ where: { id: projects[0].id }, data: { clientId: clients[0].id } });
       await raw.user.update({ where: { id: users[0].id }, data: { role: 'ADMIN' } });
     }
+    // A revoked preview remains withdrawable without exposing its saved fields.
+    const revokedIntent = randomUUID(); const revoked = await prepare(revokedIntent);
+    await raw.clientAgentProfile.updateMany({ where: { clientId: clients[0].id }, data: { revision: { increment: 1 } } });
+    const app = Fastify(); await app.register(cookie);
+    app.decorate('authenticate', async request => { request.user = withSession(ctx.user); request.prisma = ctx.prisma; });
+    await app.register(routes, { prefix: '/api/clients' });
+    const base = `/api/clients/${clients[0].id}/assistant/task-actions`;
+    const cookies = reauthCookies(ctx.user);
+    try {
+      assert.equal((await app.inject(`${base}/${revoked.action.id}`)).json().code, 'TARGET_UNAVAILABLE');
+      const discarded = await app.inject({ method: 'POST', url: `${base}/by-intent/${revokedIntent}/reject`, payload: {}, cookies });
+      assert.equal(discarded.statusCode, 200, discarded.body);
+      assert.deepEqual(discarded.json(), { action: { id: revoked.action.id, status: 'REJECTED' } });
+      assert.equal(await count(), 1);
+      // Real PostgreSQL competing claims: cancellation and execution cannot both win.
+      const racing = await prepare();
+      await Promise.allSettled([
+        executor.approve(ctx, racing.action.id, { ownerOnly: true }),
+        app.inject({ method: 'POST', url: `${base}/${racing.action.id}/reject`, payload: {}, cookies }),
+      ]);
+      const final = await raw.aiBridgeAction.findUnique({ where: { id: racing.action.id } });
+      assert.ok(['EXECUTED', 'REJECTED'].includes(final.status), `Unexpected competing claim status ${final.status}`);
+      const created = await raw.task.count({ where: { id: final.result?.task?.id ?? 'no-created-task', projectId: projects[0].id } });
+      assert.equal(created, final.status === 'EXECUTED' ? 1 : 0);
+      if (final.status === 'EXECUTED') {
+        // Keep the existing suite's one-task baseline for later rollback assertions.
+        await raw.task.delete({ where: { id: final.result.task.id } });
+      }
+    } finally { await app.close(); }
     const expired = await prepare(); await raw.aiBridgeAction.update({ where: { id: expired.action.id }, data: { expiresAt: new Date(0) } });
     await assert.rejects(executor.approve(ctx, expired.action.id), { code: 'ACTION_EXPIRED' });
     const rollback = await prepare();

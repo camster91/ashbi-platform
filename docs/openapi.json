@@ -17595,6 +17595,82 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/clients/{clientId}/assistant/task-actions/by-intent/{key}/reject": {
+      "post": {
+        "operationId": "post_api_clients_clientId_assistant_task_actions_by_intent_key_reject",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9._:-]{8,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/clients/:clientId/assistant/task-actions/by-intent/:key/reject",
+        "tags": [
+          "clients"
+        ],
+        "x-access": "recent-auth + staff",
+        "x-requires-recent-auth": true,
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/clients/{clientId}/assistant/task-actions/{actionId}": {
       "get": {
         "operationId": "get_api_clients_clientId_assistant_task_actions_actionId",

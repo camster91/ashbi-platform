@@ -37,7 +37,7 @@ function TaskProposals({ clientId }) {
 function TaskProposalsProfile({ clientId, user }) {
   const profile = useQuery({ queryKey: ['client-agent-profile', clientId], queryFn: () => api.getClientAgentProfile(clientId), retry: false, staleTime: 0, refetchOnMount: 'always', refetchOnWindowFocus: false });
   const enabled = !profile.isError && !profile.isFetching && Boolean(profile.data?.enabled && profile.data.pluginIds?.includes('client-task-actions'));
-  return enabled ? <Suspense fallback={<p role="status">Loading task proposals...</p>}><ClientAgentTaskAction clientId={clientId} user={user} enabled /></Suspense> : null;
+  return <Suspense fallback={<p role="status">Loading task proposals...</p>}><ClientAgentTaskAction clientId={clientId} user={user} enabled={enabled} /></Suspense>;
 }
 
 const VIEWS = [

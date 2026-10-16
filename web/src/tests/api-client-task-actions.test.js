@@ -25,3 +25,10 @@ describe('client task action API', () => {
     expect(fetch).toHaveBeenCalledTimes(1); expect(errorToast).not.toHaveBeenCalled();
   });
 });
+
+it('withdraws a revoked opaque intent through its encoded recent-auth route without private input', async () => {
+  await api.rejectClientTaskAction('c/a', 'intent/b');
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch.mock.calls[0][0]).toBe('/api/clients/c%2Fa/assistant/task-actions/by-intent/intent%2Fb/reject');
+  expect(fetch.mock.calls[0][1].method).toBe('POST'); expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({});
+});
