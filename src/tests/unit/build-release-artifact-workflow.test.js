@@ -1,10 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, readdirSync, rmSync, rmdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import YAML from 'yaml';
 
 const source = readFileSync(new URL('../../../.github/workflows/build-release-artifact.yml', import.meta.url), 'utf8');
@@ -27,9 +25,9 @@ test('manual main-only source artifact build grants no deployment or registry pe
 
 test('secret scan precedes immutable amd64 build and only the bounded archive metadata is uploaded', () => {
   const scan = steps.findIndex(step => step.run === 'node scripts/check-secrets.mjs .');
-  const build = steps.findIndex(step => step.name === 'Build exact amd64 image');
+  const build = steps.findIndex(step => step.name === 'Build exact amd64 OCI gzip image');
   assert.ok(scan >= 0 && scan < build);
-  assert.match(steps[build].run, /docker buildx build --load --platform linux\/amd64/);
+  assert.match(steps[build].run, /docker buildx build --platform linux\/amd64/);
   assert.match(steps[build].run, /--build-arg "APP_REVISION=\$RELEASE_REVISION"/);
   assert.match(steps[build].run, /--tag "ashbi-platform:\$RELEASE_REVISION"/);
   assert.match(steps.find(step => step.name === 'Verify source revision').run, /\^\[0-9a-f\]\{40\}\$/);
@@ -42,34 +40,23 @@ test('secret scan precedes immutable amd64 build and only the bounded archive me
   assert.ok(ignore.includes('.env')); assert.ok(ignore.includes('.env.*'));
 });
 
-// Execute only the actual embedded metadata verifier with synthetic inspection
-// JSON and archive bytes. No Docker daemon, image build or network is invoked.
-const script = steps.find(step => step.name === 'Verify and save immutable image').run.split("python3 - <<'PY'\n")[1].split('\nPY')[0];
-function verify(t, overrides = {}) {
-  const dir = mkdtempSync(path.join(tmpdir(), 'ashbi-artifact-contract-'));
-  mkdirSync(path.join(dir, 'release-artifact'));
-  t.after(() => { for (const entry of readdirSync(path.join(dir, 'release-artifact'))) rmSync(path.join(dir, 'release-artifact', entry)); rmdirSync(path.join(dir, 'release-artifact')); rmSync(path.join(dir, 'inspect.json')); rmdirSync(dir); });
-  const revision = 'a'.repeat(40), archive = `release-artifact/ashbi-platform-${revision}.tar`;
-  const bytes = Buffer.from('synthetic saved image archive'); writeFileSync(path.join(dir, archive), bytes);
-  const info = { Id: `sha256:${'b'.repeat(64)}`, Architecture: 'amd64', Os: 'linux', Size: 999,
-    Config: { Env: [`APP_REVISION=${revision}`], Labels: { 'org.opencontainers.image.revision': revision } }, ...overrides };
-  writeFileSync(path.join(dir, 'inspect.json'), JSON.stringify([info]));
-  const result = spawnSync(process.platform === 'win32' ? 'python' : 'python3', ['-c', script], { cwd: dir, encoding: 'utf8', env: { ...process.env, RELEASE_REVISION: revision, IMAGE: `ashbi-platform:${revision}`, INSPECT_PATH: path.join(dir, 'inspect.json'), ARCHIVE: archive } });
-  return { result, dir, revision, bytes };
-}
 
-test('actual metadata verifier binds revision, architecture, archive bytes and checksums', t => {
-  const { result, dir, revision, bytes } = verify(t); assert.equal(result.status, 0, result.stderr);
-  const metadata = JSON.parse(readFileSync(path.join(dir, 'release-artifact/metadata.json'), 'utf8'));
-  assert.deepEqual(metadata, { revision, image: `ashbi-platform:${revision}`, imageId: `sha256:${'b'.repeat(64)}`, size: 999, architecture: 'amd64', archiveSha256: createHash('sha256').update(bytes).digest('hex'), archiveBytes: bytes.length });
-  const sums = readFileSync(path.join(dir, 'release-artifact/SHA256SUMS'), 'utf8');
-  assert.ok(sums.includes(`${metadata.archiveSha256}  ashbi-platform-${revision}.tar`));
-  const metadataHash = createHash('sha256').update(readFileSync(path.join(dir, 'release-artifact/metadata.json'))).digest('hex');
-  assert.ok(sums.includes(`${metadataHash}  metadata.json`));
+
+test('OCI exporter disables extra attestations, uses gzip and never loads or pushes an image', () => {
+  const build=steps.find(step=>step.name==='Build exact amd64 OCI gzip image').run;
+  assert.match(build,/--provenance=false --sbom=false/);
+  assert.match(build,/type=oci,dest=.*compression=gzip,force-compression=true,oci-mediatypes=true/);
+  assert.doesNotMatch(build,/--load|--push/);
+  const validate=steps.find(step=>step.name==='Validate and canonicalize OCI artifact').run;
+  assert.match(validate,/python3 scripts\/deploy\/prepare-oci-artifact.py/);
+  assert.match(validate,/--revision "\$RELEASE_REVISION"/);
+  assert.match(validate,/--builder-run-id "\$GITHUB_RUN_ID" --repository "\$GITHUB_REPOSITORY"/);
 });
 
-for (const overrides of [ { Architecture: 'arm64' }, { Id: 'mutable-tag' }, { Config: { Env: ['APP_REVISION=unknown'], Labels: {} } }, { Config: { Env: [`APP_REVISION=${'a'.repeat(40)}`], Labels: { 'org.opencontainers.image.revision': 'b'.repeat(40) } } } ]) {
-  test(`actual metadata verifier refuses mismatched image evidence ${JSON.stringify(overrides)}`, t => {
-    const { result } = verify(t, overrides); assert.notEqual(result.status, 0);
-  });
-}
+test('actual offline OCI validator accepts canonical identity and rejects malformed synthetic archives', () => {
+  const script=fileURLToPath(new URL('../../../scripts/deploy/test_prepare_oci_artifact.py',import.meta.url));
+  const result=spawnSync(process.platform==='win32'?'python':'python3',['-B',script],{encoding:'utf8',timeout:30000});
+  assert.equal(result.status,0,result.stderr);
+  assert.match(result.stderr,/Ran 12 tests/);
+  assert.match(result.stderr,/OK/);
+});

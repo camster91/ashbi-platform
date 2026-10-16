@@ -12,6 +12,21 @@ const viewports = [
 ];
 
 test.describe('Client portal accessibility', () => {
+  test.beforeEach(async ({ page }) => {
+    // These login checks start without a portal or staff cookie session. Later
+    // per-test authenticated routes take precedence over this default fixture.
+    await page.route('**/api/**', async route => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      const anonymousSessionCheck = request.method() === 'GET'
+        && ['/api/client-portal/me', '/api/auth/me'].includes(pathname);
+      return route.fulfill({
+        status: anonymousSessionCheck ? 401 : 501,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: anonymousSessionCheck ? 'Not authenticated' : 'Unmocked API request' }),
+      });
+    });
+  });
   test('exchanges and removes magic tokens, uses the cookie session, and performs server logout', async ({ page }) => {
     let exchangedToken = '';
     let logoutCalled = false;

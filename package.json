@@ -134,7 +134,8 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.1",
     "vitest": "^4.1.11",
-    "yaml": "^2.9.1"
+    "yaml": "^2.9.1",
+    "proxy-agent": "8.0.2"
   },
   "engines": {
     "node": ">=22.12.0"
