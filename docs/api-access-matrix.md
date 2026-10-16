@@ -58,10 +58,10 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | bot-secret | 40 |
 | client-portal | 27 |
 | public | 51 |
-| recent-auth + staff | 5 |
-| staff | 439 |
+| recent-auth + staff | 6 |
+| staff | 442 |
 | staff (inline) | 1 |
-| **total** | 634 |
+| **total** | 638 |
 
 ## Routes by prefix
 
@@ -339,6 +339,10 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | --- | --- | --- | --- | --- |
 | GET | `/api/client-communications/:clientId` | staff | scoped |  |
 | GET | `/api/client-communications/:clientId/:source/:messageId` | staff | scoped |  |
+| POST | `/api/client-communications/:clientId/inbox/:messageId/task-actions` | staff | scoped |  |
+| GET | `/api/client-communications/:clientId/inbox/:messageId/task-actions/:actionId` | staff | scoped |  |
+| POST | `/api/client-communications/:clientId/inbox/:messageId/task-actions/:actionId/confirm` | recent-auth + staff | scoped |  |
+| GET | `/api/client-communications/:clientId/inbox/:messageId/task-actions/by-intent/:key` | staff | scoped |  |
 
 ### /api/client-portal
 

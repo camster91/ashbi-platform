@@ -37,6 +37,10 @@ import {
 } from '../validators/schemas.js';
 
 const STAFF_ROLES = ['ADMIN', 'TEAM'];
+// Source-bound inbox receipts are visible only through their current-source
+// authorized routes/MCP controls, including after execution or reassignment.
+const SOURCE_BOUND_ACTION = 'create_task_from_client_message';
+const genericAction = row => row?.action !== SOURCE_BOUND_ACTION;
 
 /**
  * Assistant sessions each staff member may start. Proposal
@@ -106,6 +110,7 @@ async function requireStaffRole(request, reply) {
 
 /** The receipt as the API shows it: no raw input, no secrets. */
 export function receiptView(row, at = new Date()) {
+  if (!genericAction(row)) throw new ToolError('NOT_FOUND', 'Action not found', { statusCode: 404 });
   const tool = toolRegistry.get(row.action);
   return {
     id: row.id,
@@ -139,6 +144,7 @@ export function receiptView(row, at = new Date()) {
 function sendToolError(reply, error) {
   if (isAiControlError(error)) return sendAiError(reply, error);
   if (!(error instanceof ToolError)) throw error;
+  if (error.action && !genericAction(error.action)) return reply.status(404).send({ error: 'Action not found', code: 'NOT_FOUND' });
   return reply.status(error.statusCode).send({
     error: error.message,
     code: error.code,
@@ -166,6 +172,13 @@ export default async function aiToolRoutes(fastify, options = {}) {
   const visibleTo = (request) => (request.user.role === 'ADMIN' ? {} : { userId: request.user.id });
   const context = (request) => ({ prisma: request.prisma, user: request.user, requestId: request.id, ip: request.ip });
   const withRequester = { user: { select: { name: true } } };
+  async function assertGenericAction(request) {
+    const row = await request.prisma.aiBridgeAction.findFirst({ where: {
+      id: request.params.id, organizationId: request.user.organizationId,
+      action: { not: SOURCE_BOUND_ACTION }, ...visibleTo(request),
+    }, select: { id: true, action: true } });
+    if (!row || !genericAction(row)) throw new ToolError('NOT_FOUND', 'Action not found', { statusCode: 404 });
+  }
 
   // The closed tool catalogue (docs/ai-tool-registry.md).
   fastify.get('/catalog', { onRequest: [fastify.authenticate], preHandler: [requireStaffRole] }, async () => ({
@@ -177,13 +190,13 @@ export default async function aiToolRoutes(fastify, options = {}) {
     preHandler: [requireStaffRole, validateQuery(aiToolApprovalListQuerySchema)],
   }, async (request) => {
     const rows = await request.prisma.aiBridgeAction.findMany({
-      where: { status: PENDING_STATUS, ...visibleTo(request) },
+      where: { status: PENDING_STATUS, action: { not: SOURCE_BOUND_ACTION }, ...visibleTo(request) },
       include: withRequester,
       orderBy: { createdAt: 'desc' },
       take: request.query.limit,
     });
     const at = now();
-    return { approvals: rows.map((row) => receiptView(row, at)) };
+    return { approvals: rows.filter(genericAction).map((row) => receiptView(row, at)) };
   });
 
   fastify.get('/approvals/:id', {
@@ -191,10 +204,10 @@ export default async function aiToolRoutes(fastify, options = {}) {
     preHandler: [requireStaffRole, validateParams(aiToolActionParamsSchema)],
   }, async (request, reply) => {
     const row = await request.prisma.aiBridgeAction.findFirst({
-      where: { id: request.params.id, ...visibleTo(request) },
+      where: { id: request.params.id, action: { not: SOURCE_BOUND_ACTION }, ...visibleTo(request) },
       include: withRequester,
     });
-    if (!row) return reply.status(404).send({ error: 'Action not found', code: 'NOT_FOUND' });
+    if (!row || !genericAction(row)) return reply.status(404).send({ error: 'Action not found', code: 'NOT_FOUND' });
     return { action: receiptView(row, now()) };
   });
 
@@ -203,6 +216,7 @@ export default async function aiToolRoutes(fastify, options = {}) {
     preHandler: [requireStaffRole, requireRecentAuth, validateParams(aiToolActionParamsSchema), validateBody(aiToolApproveSchema)],
   }, async (request, reply) => {
     try {
+      await assertGenericAction(request);
       const { action, idempotent } = await executor.approve(context(request), request.params.id, {
         method: 'session_step_up', reauthenticated: true,
       });
@@ -217,6 +231,7 @@ export default async function aiToolRoutes(fastify, options = {}) {
     preHandler: [requireStaffRole, requireRecentAuth, validateParams(aiToolActionParamsSchema), validateBody(aiToolRejectSchema)],
   }, async (request, reply) => {
     try {
+      await assertGenericAction(request);
       const { action } = await executor.reject(context(request), request.params.id, {
         reason: request.body?.reason ?? 'other', reauthenticated: true,
       });
@@ -237,7 +252,7 @@ export default async function aiToolRoutes(fastify, options = {}) {
       where: {
         status: status ?? { not: PENDING_STATUS },
         ...(outcome ? { outcome } : {}),
-        ...(tool ? { action: tool } : {}),
+        action: tool ? { in: tool === SOURCE_BOUND_ACTION ? [] : [tool] } : { not: SOURCE_BOUND_ACTION },
         ...(source ? { source } : {}),
         ...(requesterId ? { userId: requesterId } : {}),
         ...(before ? { createdAt: { lt: new Date(before) } } : {}),
@@ -248,7 +263,7 @@ export default async function aiToolRoutes(fastify, options = {}) {
       take: limit,
     });
     const at = now();
-    const receipts = rows.map((row) => receiptView(row, at));
+    const receipts = rows.filter(genericAction).map((row) => receiptView(row, at));
     return { receipts, nextBefore: rows.length === limit ? rows[rows.length - 1].createdAt : null };
   });
 
