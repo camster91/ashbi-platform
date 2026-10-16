@@ -178,12 +178,12 @@ export default function InvoiceDetail() {
     mutationFn: () => api.deleteInvoice(id),
     onSuccess: (result) => {
       setShowVoidConfirm(false);
-      const duration = Math.max(1000, new Date(result.undoExpiresAt).getTime() - Date.now());
       toast.success({
         title: `${invoice.invoiceNumber} voided`,
-        duration,
+        duration: 10000,
         action: {
           label: `Undo void ${invoice.invoiceNumber}`,
+          expiresAt: result.undoExpiresAt,
           onClick: async () => {
             try {
               await api.undoInvoiceVoid(id);
@@ -199,6 +199,7 @@ export default function InvoiceDetail() {
                 message: error.message,
                 duration: 0,
               });
+              if (error.status !== 410) throw error;
             }
           },
         },

@@ -33,14 +33,28 @@ function Toast({ id, type = 'info', title, message, action, duration, timer, now
   const isError = type === 'error';
   const actionPending = useRef(false);
   const [isActionPending, setIsActionPending] = useState(false);
+  const [expiredAtClick, setExpiredAtClick] = useState(false);
+  // Action validity follows the server clock deadline, independently of the
+  // notification's pausable dismissal timer. An explicit invalid value fails closed.
+  const hasDeadline = action && Object.prototype.hasOwnProperty.call(action, 'expiresAt');
+  const deadline = typeof action?.expiresAt === 'number' ? action.expiresAt
+    : typeof action?.expiresAt === 'string' && action.expiresAt.trim() ? Date.parse(action.expiresAt) : NaN;
+  const actionExpired = hasDeadline && (expiredAtClick || !Number.isFinite(deadline) || Date.now() >= deadline);
   const isPaused = Boolean(timer && !timer.timeout);
   const elapsed = timer?.timeout ? now - timer.startedAt : 0;
-  const remainingSeconds = timer
+  const remainingSeconds = hasDeadline
+    ? Math.max(0, Math.ceil((deadline - Math.max(now, Date.now())) / 1000))
+    : timer
     ? Math.max(0, Math.ceil((timer.remaining - elapsed) / 1000))
     : 0;
 
   const runAction = () => {
     if (actionPending.current) return;
+    // A click can arrive after the deadline but before the next render tick.
+    if (hasDeadline && (!Number.isFinite(deadline) || Date.now() >= deadline)) {
+      setExpiredAtClick(true);
+      return;
+    }
     actionPending.current = true;
     setIsActionPending(true);
     try {
@@ -84,24 +98,24 @@ function Toast({ id, type = 'info', title, message, action, duration, timer, now
       <div className="flex-1 min-w-0">
         {title && <p className="font-semibold text-sm">{title}</p>}
         {message && <p className={cn('text-sm', title ? 'mt-0.5' : '')}>{message}</p>}
-        {timer && action?.label && (
+        {(timer || hasDeadline) && action?.label && (
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
-            <span>Undo available for {remainingSeconds} {remainingSeconds === 1 ? 'second' : 'seconds'}</span>
-            <button
+            <span>{actionExpired ? 'Undo window expired' : <>Undo available for {remainingSeconds} {remainingSeconds === 1 ? 'second' : 'seconds'}</>}</span>
+            {timer && <button
               type="button"
               aria-label={isPaused ? 'Resume notification timer' : 'Pause notification timer'}
               onClick={() => (isPaused ? onResume(id) : onPause(id))}
               className="min-h-11 min-w-11 rounded p-1 inline-flex items-center justify-center hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current dark:hover:bg-white/10"
             >
               {isPaused ? <Play className="h-3.5 w-3.5" aria-hidden="true" /> : <Pause className="h-3.5 w-3.5" aria-hidden="true" />}
-            </button>
+            </button>}
           </div>
         )}
         {action?.label && typeof action.onClick === 'function' && (
           <button
             type="button"
             onClick={runAction}
-            disabled={isActionPending}
+            disabled={isActionPending || actionExpired}
             className="mt-2 min-h-11 rounded-full border border-current px-3 py-1 text-left text-xs font-semibold whitespace-normal hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 dark:hover:bg-white/10"
           >
             {action.label}
@@ -146,7 +160,7 @@ export function ToastProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!toasts.some(({ duration }) => duration > 0)) return undefined;
+    if (!toasts.some(({ duration, action }) => duration > 0 || (action && Object.prototype.hasOwnProperty.call(action, 'expiresAt')))) return undefined;
     const interval = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(interval);
   }, [toasts]);
