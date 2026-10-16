@@ -1,5 +1,6 @@
 import { useClientPages } from '../hooks/useClients';
-import { useEffect, useId, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
+const WorkspaceAccountManager = lazy(() => import('../components/WorkspaceAccountManager'));
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -7,6 +8,7 @@ import { paginatedItems } from '../lib/paginated-items';
 import { useAuth } from '../hooks/useAuth';
 import Button from '../components/ui/Button';
 import Input, { inputStyles } from '../components/ui/Input';
+import WorkspaceChatAttention, { AttentionAcknowledgement } from '../components/WorkspaceChatAttention';
 
 function conversationName(channel, userId) {
   if (channel.kind === 'DIRECT') {
@@ -16,19 +18,42 @@ function conversationName(channel, userId) {
   return channel.name || 'Direct message';
 }
 
-function Conversation({ channel, userId }) {
+function readMessageIntent(name) {
+  try {
+    const raw = sessionStorage.getItem(name);
+    if (!raw) return { intent: null, blocked: false };
+    const value = JSON.parse(raw);
+    if (!/^[a-zA-Z0-9-]{8,128}$/.test(value.key || '') || !/^[a-f0-9]{64}$/.test(value.fingerprint || '')) throw Error('Invalid saved intent');
+    return { intent: { key: value.key, fingerprint: value.fingerprint }, blocked: false };
+  } catch { return { intent: null, blocked: true }; }
+}
+async function messageFingerprint(input) {
+  const payload = { content: input.content, parentId: input.parentId ?? null, attentionRecipientIds: [...input.attentionRecipientIds].sort() };
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(payload)));
+  return [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join('');
+}
+function Conversation({ channel, user }) {
+  const userId = user.id;
+  const storageKey = `ashbi:chat-message:${[user.organizationId, userId, channel.id].map(encodeURIComponent).join(':')}`;
+  const [recovery] = useState(() => readMessageIntent(storageKey));
+  const [storageBlocked, setStorageBlocked] = useState(recovery.blocked);
   const cache = useQueryClient();
   const [content, setContent] = useState('');
   const [reply, setReply] = useState(null);
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState(false);
-  const intent = useRef(null);
+  const [attentionRecipients, setAttentionRecipients] = useState([]);
+  const [uncertain, setUncertain] = useState(Boolean(recovery.intent));
+  const intent = useRef(recovery.intent);
   const busy = useRef(false);
   const id = useId();
   const queryKey = ['workspace-chat-messages', userId, channel.id];
   const history = useInfiniteQuery({ queryKey, initialPageParam: undefined, queryFn: ({ pageParam }) => api.getWorkspaceChatMessages(channel.id, { limit: 30, ...(pageParam ? { after: pageParam } : {}) }), getNextPageParam: (page) => page.nextCursor || undefined, retry: false, refetchInterval: 10000, refetchOnWindowFocus: true });
   const messages = history.isError ? [] : paginatedItems((history.data?.pages || []).slice().reverse(), (message) => message.id);
   const latestId = messages.at(-1)?.id;
+  const frozen = pending || (uncertain && Boolean(intent.current?.input)) || storageBlocked;
+  const currentMembers = history.isError ? [] : (history.data?.pages?.[0]?.channel?.members || []).filter(member => !member.leftAt && member.userId !== userId && member.user?.isActive === true && ['ADMIN', 'TEAM'].includes(member.user.role)).slice(0, 29);
+  const unavailableSelection = attentionRecipients.some(value => !currentMembers.some(member => member.userId === value));
   useEffect(() => {
     if (!latestId || history.isError) return;
     // Read tracking is advisory. Failure never hides the actual conversation.
@@ -37,12 +62,35 @@ function Conversation({ channel, userId }) {
 
   async function send(event) {
     event.preventDefault();
-    if (busy.current || !content.trim() || content.length > 4000 || history.isError) return;
-    if (!intent.current) intent.current = crypto.randomUUID();
+    if (busy.current || !content.trim() || content.length > 4000 || history.isError || storageBlocked || (unavailableSelection && !uncertain)) return;
     busy.current = true; setPending(true); setFailure(false);
     try {
-      await api.postWorkspaceChatMessage(channel.id, { content: content.trim(), ...(reply ? { parentId: reply.id } : {}), idempotencyKey: intent.current });
-      setContent(''); setReply(null); intent.current = null;
+      const input = intent.current?.input || { content: content.trim(), ...(reply ? { parentId: reply.id } : {}), attentionRecipientIds: [...attentionRecipients].sort() };
+      const fingerprint = await messageFingerprint(input);
+      if (intent.current?.fingerprint && intent.current.fingerprint !== fingerprint) { setFailure(true); return; }
+      if (!intent.current) intent.current = { key: crypto.randomUUID(), fingerprint };
+      try {
+        const saved = JSON.stringify({ key: intent.current.key, fingerprint });
+        sessionStorage.setItem(storageKey, saved);
+        if (sessionStorage.getItem(storageKey) !== saved) throw Error('Storage unavailable');
+      } catch { setStorageBlocked(true); return; }
+      intent.current.input = input;
+      await api.postWorkspaceChatMessage(channel.id, { ...intent.current.input, idempotencyKey: intent.current.key });
+      sessionStorage.removeItem(storageKey);
+      setContent(''); setReply(null); setAttentionRecipients([]); setUncertain(false); intent.current = null;
+      await Promise.all([cache.invalidateQueries({ queryKey }), cache.invalidateQueries({ queryKey: ['workspace-chat-attention'] })]);
+    } catch (error) { setFailure(true); if (uncertain || ![400, 401, 403, 404, 409, 429].includes(error?.status ?? error?.statusCode)) setUncertain(true); else { try { sessionStorage.removeItem(storageKey); } catch { setStorageBlocked(true); } intent.current = null; setUncertain(false); } }
+    finally { busy.current = false; setPending(false); }
+  }
+
+  async function checkDelivery() {
+    if (!intent.current || busy.current) return;
+    busy.current = true; setPending(true);
+    try {
+      const result = await api.getWorkspaceChatMessageIntent(channel.id, intent.current.key);
+      if (!result.message?.id || result.message.clientKey !== intent.current.key || result.message.intentHash !== intent.current.fingerprint) throw Error('Unconfirmed delivery');
+      sessionStorage.removeItem(storageKey);
+      setContent(''); setReply(null); setAttentionRecipients([]); setUncertain(false); setFailure(false); intent.current = null;
       await cache.invalidateQueries({ queryKey });
     } catch { setFailure(true); }
     finally { busy.current = false; setPending(false); }
@@ -57,19 +105,32 @@ function Conversation({ channel, userId }) {
       {history.hasNextPage && <Button variant="outline" disabled={history.isFetchingNextPage} onClick={() => history.fetchNextPage()}>Load older messages</Button>}
       {!messages.length && <p className="text-sm text-muted-foreground">No messages yet. Start the conversation.</p>}
       <ol aria-label="Messages" className="space-y-3">
-        {messages.map((message) => <li key={message.id} className="rounded-lg border border-border p-3">
+        {messages.map((message) => <li key={message.id} id={`workspace-message-${message.id}`} className="rounded-lg border border-border p-3">
           <div className="flex flex-wrap items-center gap-2 text-sm"><span className="font-medium">{message.author?.name || 'Team member'}</span><time className="text-xs text-muted-foreground" dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString()}</time></div>
           {message.parentId && <p className="text-xs text-muted-foreground">Reply to {messages.find((parent) => parent.id === message.parentId)?.author?.name || 'an earlier message'}</p>}
           <p className="whitespace-pre-wrap break-words text-sm">{message.content}</p>
-          <Button type="button" size="sm" variant="ghost" disabled={pending} aria-label={`Reply to ${message.author?.name || 'team member'}: ${message.content.slice(0, 40)}`} onClick={() => { setReply(message); intent.current = null; }}>Reply</Button>
+          {message.attention?.length > 0 && <ul aria-label="Requested attention">{message.attention.map(attention => <li key={attention.id} className="space-y-1 text-sm">
+            <span>{attention.recipient?.name || 'Team member'}: {attention.acknowledgedAt ? 'Acknowledged' : 'Attention requested'}</span>
+            {attention.recipientId === userId && !attention.acknowledgedAt && <AttentionAcknowledgement attention={attention} channelId={channel.id} />}
+          </li>)}</ul>}
+          <Button type="button" size="sm" variant="ghost" disabled={frozen} aria-label={`Reply to ${message.author?.name || 'team member'}: ${message.content.slice(0, 40)}`} onClick={() => { setReply(message); if (!uncertain) intent.current = null; }}>Reply</Button>
         </li>)}
       </ol>
+      {history.data?.pages[0]?.channel && <Suspense fallback={<p role="status">Loading channel account manager…</p>}><WorkspaceAccountManager channel={history.data.pages[0].channel} user={user} messages={messages} /></Suspense>}
       <form onSubmit={send} className="space-y-2">
-        {reply && <div className="text-sm"><p>Replying to {reply.author?.name || 'team member'}: {reply.content.slice(0, 80)}</p><Button type="button" variant="ghost" disabled={pending} onClick={() => { setReply(null); intent.current = null; }}>Cancel reply</Button></div>}
+        {reply && <div className="text-sm"><p>Replying to {reply.author?.name || 'team member'}: {reply.content.slice(0, 80)}</p><Button type="button" variant="ghost" disabled={frozen} onClick={() => { setReply(null); if (!uncertain) intent.current = null; }}>Cancel reply</Button></div>}
         <label htmlFor={id}>Message</label>
-        <textarea id={id} className={inputStyles('min-h-24')} maxLength={4000} value={content} disabled={pending} onChange={(event) => { setContent(event.target.value); intent.current = null; setFailure(false); }} />
-        {failure && <p role="alert">Message delivery could not be confirmed. Your draft is preserved. Retry sends this same message safely.</p>}
-        <Button type="submit" loading={pending} disabled={!content.trim()}>Send message</Button>
+        <textarea id={id} className={inputStyles('min-h-24')} maxLength={4000} value={content} disabled={frozen} onChange={(event) => { setContent(event.target.value); if (!uncertain) intent.current = null; setFailure(false); }} />
+        {currentMembers.length > 0 && <fieldset disabled={frozen} className="space-y-2"><legend>Request attention from current members (optional)</legend>
+          <p className="text-xs text-muted-foreground">Select people explicitly. Typing @names does not request attention, assign work, or run a bot.</p>
+          {currentMembers.map(member => <label key={member.userId} className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={attentionRecipients.includes(member.userId)} onChange={event => { setAttentionRecipients(current => event.target.checked ? [...current, member.userId] : current.filter(value => value !== member.userId)); if (!uncertain) intent.current = null; }} />{member.user.name}</label>)}
+        </fieldset>}
+        {unavailableSelection && !uncertain && <div role="alert"><p>A selected recipient is no longer an active member. Review and clear the selection before sending.</p><Button type="button" variant="outline" disabled={pending || storageBlocked} onClick={() => { setAttentionRecipients([]); intent.current = null; }}>Clear attention selection</Button></div>}
+        {failure && <p role="alert">{uncertain ? 'Message delivery could not be confirmed. Your draft and recipients are frozen. Check saved status or retry this same message; a missing receipt does not prove failure.' : 'Message was refused. Review the current members and draft before trying again.'}</p>}
+        {uncertain && <Button type="button" variant="outline" disabled={pending} onClick={checkDelivery}>Check saved message status</Button>}
+        {uncertain && !intent.current?.input && <p role="status">A delivery intent was recovered without its private message text. Check saved status, or re-enter the exact message, reply and recipients to retry the same intent.</p>}
+        {storageBlocked && <p role="alert">This browser cannot safely retain delivery intent. Sending is unavailable.</p>}
+        <Button type="submit" loading={pending} disabled={!content.trim() || storageBlocked || (unavailableSelection && !uncertain)}>{uncertain ? 'Retry same message' : 'Send message'}</Button>
       </form>
     </>}
   </section>;
@@ -84,6 +145,7 @@ async function projectPage(params) {
 function StaffMessages({ user }) {
   const cache = useQueryClient();
   const [selected, setSelected] = useState(null);
+  const [attentionChannel, setAttentionChannel] = useState(null);
   const [kind, setKind] = useState('DIRECT');
   const [name, setName] = useState('');
   const [members, setMembers] = useState([]);
@@ -101,7 +163,7 @@ function StaffMessages({ user }) {
   const channels = useInfiniteQuery({ queryKey: channelQueryKey, initialPageParam: undefined, queryFn: ({ pageParam }) => api.listWorkspaceChatChannels({ limit: 50, ...(pageParam ? { after: pageParam } : {}) }), getNextPageParam: (page) => page.nextCursor || undefined, retry: false });
   const people = useQuery({ queryKey: ['workspace-chat-people', user.id], queryFn: () => api.listWorkspaceChatPeople(), retry: false });
   const channelItems = paginatedItems(channels.data?.pages, (item) => item.id);
-  const channel = channels.isError ? null : channelItems.find((item) => item.id === selected);
+  const channel = channels.isError ? null : channelItems.find((item) => item.id === selected) || (attentionChannel?.id === selected ? attentionChannel : null);
   const scopedKind = kind === 'CLIENT' || kind === 'PROJECT';
   const clients = useClientPages({ enabled: newOpen && scopedKind, limit: 100, scope: [user.organizationId, user.id, user.role] });
   const clientItems = clients.isError ? [] : paginatedItems(clients.data?.pages.map(page => ({ items: page.clients })), item => item.id).filter(item => !item.deletedAt && (!item.organizationId || item.organizationId === user.organizationId));
@@ -135,6 +197,7 @@ function StaffMessages({ user }) {
 
   return <div className="space-y-5 p-4 sm:p-6">
     <header><h1 className="text-2xl font-semibold">Team messages</h1><p className="text-sm text-muted-foreground">Shared conversations for your team. Messages stay inside Hub.</p><Link to="/chat" className="inline-flex min-h-11 items-center text-sm underline">Open Ash AI</Link></header>
+    <WorkspaceChatAttention user={user} onOpen={source => { setAttentionChannel(source); setSelected(source.id); }} />
     <div className="grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
       <aside className="space-y-4 rounded-xl border border-border bg-card p-4" aria-label="Conversations">
         <h2 className="font-semibold">Channels and direct messages</h2>
@@ -164,7 +227,7 @@ function StaffMessages({ user }) {
           </form>
         </details>
       </aside>
-      {channel ? <Conversation key={`${user.id}-${channel.id}`} channel={channel} userId={user.id} /> : <p role="status" className="p-4 text-muted-foreground">Choose a conversation to see its messages.</p>}
+      {channel ? <Conversation key={`${user.organizationId}-${user.id}-${channel.id}`} channel={channel} user={user} /> : <p role="status" className="p-4 text-muted-foreground">Choose a conversation to see its messages.</p>}
     </div>
   </div>;
 }
@@ -172,5 +235,5 @@ function StaffMessages({ user }) {
 export default function WorkspaceMessages() {
   const { user } = useAuth();
   if (!['ADMIN', 'TEAM'].includes(user?.role)) return <p role="alert" className="p-6">Team messages are available to staff only.</p>;
-  return <StaffMessages key={user.id} user={user} />;
+  return <StaffMessages key={`${user.organizationId}:${user.id}:${user.role}`} user={user} />;
 }

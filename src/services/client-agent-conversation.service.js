@@ -1,3 +1,4 @@
+import { authorizeSourceConversation, conversationAudience, sharedConversationWhere } from './client-agent-source-authority.service.js';
 import { z } from 'zod';
 import { ToolError, recordNotFound } from '../ai/tools/registry.js';
 import { withStageTransaction } from './task-stages.service.js';
@@ -12,7 +13,7 @@ export const clientAgentConversationQuerySchema = z.object({
   includeArchived: z.union([z.boolean(), z.literal('true'), z.literal('false')]).default(false).transform(value => value === true || value === 'true'),
 }).strict();
 const conversationSelect = { id: true, organizationId: true, clientId: true, title: true, createdById: true,
-  revision: true, archivedAt: true, createdAt: true, updatedAt: true };
+  sourceChannelId: true, sourceBindingId: true, revision: true, archivedAt: true, createdAt: true, updatedAt: true };
 const runSelect = { id: true, organizationId: true, conversationId: true, requestedById: true,
   prompt: true, response: true, status: true, profileRevision: true, startedAt: true, finishedAt: true,
   errorCode: true, contextObservedAt: true, contextSnapshot: true, memorySnapshot: true, createdAt: true, updatedAt: true };
@@ -31,6 +32,7 @@ async function conversation(db, actor, clientId, conversationId, includeArchived
     organizationId: actor.organizationId, ...(includeArchived ? {} : { archivedAt: null }) }, select: conversationSelect });
   if (!row || row.id !== conversationId || row.organizationId !== actor.organizationId || row.clientId !== clientId
     || (!includeArchived && row.archivedAt != null)) throw recordNotFound('Conversation not found');
+  await authorizeSourceConversation(db, actor, row);
   return row;
 }
 async function guard(work) {
@@ -66,12 +68,12 @@ export function createClientAgentConversationService({ recordAudit = recordAudit
       const { limit, after, includeArchived } = parse(clientAgentConversationQuerySchema, input);
       return guard(() => withStageTransaction(prisma, async db => {
         const actor = await authorize(db, user, clientId);
-        const rows = await db.clientAgentConversation.findMany({ where: { organizationId: actor.organizationId, clientId,
+        const rows = await db.clientAgentConversation.findMany({ where: { organizationId: actor.organizationId, clientId, ...sharedConversationWhere(),
           ...(includeArchived ? {} : { archivedAt: null }), ...(after ? { id: { gt: after } } : {}) },
         select: conversationSelect, orderBy: { id: 'asc' }, take: limit + 1 });
         const scanned = rows.slice(0, limit);
         return { scope: 'SHARED_STAFF', items: scanned.filter(row => row.organizationId === actor.organizationId
-          && row.clientId === clientId && (includeArchived || row.archivedAt == null)).map(row => project(row, conversationSelect)),
+          && !row.sourceChannelId && !row.sourceBindingId && row.clientId === clientId && (includeArchived || row.archivedAt == null)).map(row => project(row, conversationSelect)),
         nextCursor: rows.length > limit ? scanned.at(-1).id : null };
       }));
     },
@@ -90,7 +92,7 @@ export function createClientAgentConversationService({ recordAudit = recordAudit
         const active = activeRows.find(run => run.organizationId === actor.organizationId && run.conversationId === conversationId
           && ['QUEUED', 'RUNNING'].includes(run.status));
         const scanned = rows.slice(0, limit);
-        return { scope: 'SHARED_STAFF', conversation: project(row, conversationSelect),
+        return { scope: conversationAudience(row), conversation: { ...project(row, conversationSelect), scope: conversationAudience(row) },
           activeRun: active ? project(active, runSelect) : null,
           runs: scanned.filter(run => run.organizationId === actor.organizationId && run.conversationId === conversationId)
             .map(run => project(run, runSelect)), nextCursor: rows.length > limit ? scanned.at(-1).id : null };
@@ -102,6 +104,7 @@ export function createClientAgentConversationService({ recordAudit = recordAudit
       return guard(() => withStageTransaction(prisma, async db => {
         const actor = await authorize(db, user, clientId);
         const row = await conversation(db, actor, clientId, conversationId, true);
+        await authorizeSourceConversation(db, actor, row, { lock: true });
         if (actor.role !== 'ADMIN' && row.createdById !== actor.id) refuse('ROLE_DENIED', 'Only an administrator or the creator can archive this conversation.', 403);
         if (row.archivedAt != null || row.revision !== revision) conflict();
         const changed = await db.clientAgentConversation.updateMany({ where: { id: conversationId, clientId,
@@ -110,7 +113,7 @@ export function createClientAgentConversationService({ recordAudit = recordAudit
         const saved = await conversation(db, actor, clientId, conversationId, true);
         if (saved.revision !== revision + 1 || saved.archivedAt == null || saved.createdById !== row.createdById) conflict();
         await audit(db, actor, clientId, saved, 'client_agent_conversation.archived');
-        return { ...project(saved, conversationSelect), scope: 'SHARED_STAFF' };
+        return { ...project(saved, conversationSelect), scope: conversationAudience(saved) };
       }));
     },
   };

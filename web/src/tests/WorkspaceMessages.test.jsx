@@ -1,29 +1,138 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { webcrypto } from 'node:crypto';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import WorkspaceMessages from '../pages/WorkspaceMessages';
 
-const { api, auth } = vi.hoisted(() => ({ api: Object.fromEntries(['listWorkspaceChatChannels', 'listWorkspaceChatPeople', 'createWorkspaceChatChannel', 'getWorkspaceChatMessages', 'postWorkspaceChatMessage', 'markWorkspaceChatRead', 'getClients', 'getProjects'].map((key) => [key, vi.fn()])), auth: { user: { id: 'u1', role: 'ADMIN' } } }));
+const { api, auth } = vi.hoisted(() => ({ api: Object.fromEntries(['listWorkspaceChatChannels', 'listWorkspaceChatPeople', 'createWorkspaceChatChannel', 'getWorkspaceChatMessages', 'postWorkspaceChatMessage', 'markWorkspaceChatRead', 'getClients', 'getProjects', 'listWorkspaceChatAttention', 'acknowledgeWorkspaceChatAttention', 'getWorkspaceChatMessageIntent', 'getWorkspaceAccountManager', 'listWorkspaceAccountManagerRequests', 'getClientAgentProfile', 'requestWorkspaceAccountManager'].map((key) => [key, vi.fn()])), auth: { user: { id: 'u1', role: 'ADMIN' } } }));
 vi.mock('../lib/api', () => ({ api }));
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => auth }));
 const channels = [{ id: 'a', name: 'Agency', kind: 'COMPANY' }, { id: 'b', name: 'Client work', kind: 'CLIENT' }];
 const message = { id: 'm1', content: 'Review the draft', author: { id: 'u2', name: 'Bianca' }, createdAt: '2026-10-14T12:00:00Z' };
 function setup() {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={cache}><MemoryRouter><WorkspaceMessages /></MemoryRouter></QueryClientProvider>);
+  return { ...render(<QueryClientProvider client={cache}><MemoryRouter><WorkspaceMessages /></MemoryRouter></QueryClientProvider>), cache };
 }
 beforeEach(() => {
-  vi.resetAllMocks(); auth.user = { id: 'u1', role: 'ADMIN' };
+  sessionStorage.clear(); vi.stubGlobal('crypto', webcrypto);
+  vi.resetAllMocks(); auth.user = { id: 'u1', organizationId: 'org', role: 'ADMIN' };
   api.listWorkspaceChatChannels.mockResolvedValue({ items: channels });
   api.listWorkspaceChatPeople.mockResolvedValue({ items: [{ id: 'u1', name: 'Cameron' }, { id: 'u2', name: 'Bianca' }] });
   api.getWorkspaceChatMessages.mockResolvedValue({ items: [message], nextCursor: null });
   api.markWorkspaceChatRead.mockResolvedValue({});
+  api.listWorkspaceChatAttention.mockResolvedValue({ items: [], nextCursor: null, pendingCount: 0, countScope: 'page' });
   api.getClients.mockResolvedValue({ clients: [{ id: 'c1', name: 'Client One' }, { id: 'c2', name: 'Client Two' }], total: 2 });
   api.getProjects.mockResolvedValue({ projects: [{ id: 'p1', clientId: 'c1', name: 'Client Project' }], total: 1 });
 });
 
 describe('workspace messages', () => {
+  const members = [
+    { userId: 'u1', user: { id: 'u1', name: 'Cameron', role: 'ADMIN', isActive: true } },
+    { userId: 'u2', user: { id: 'u2', name: 'Bianca', role: 'TEAM', isActive: true } },
+    { userId: 'bot', user: { id: 'bot', name: 'Bot', role: 'BOT', isActive: true } },
+    { userId: 'inactive', user: { id: 'inactive', name: 'Inactive', role: 'TEAM', isActive: false } },
+  ];
+  it('offers only current active human members and stores intent metadata without message text', async () => {
+    api.getWorkspaceChatMessages.mockResolvedValue({ channel: { ...channels[0], members }, items: [message] });
+    api.postWorkspaceChatMessage.mockRejectedValue(new Error('unknown'));
+    setup(); fireEvent.click(await screen.findByRole('button', { name: /Agency/ }));
+    expect(await screen.findByRole('checkbox', { name: 'Bianca' })).not.toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: 'Bot' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Inactive' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Cameron' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Bianca' }));
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: '@Bianca private draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await screen.findByRole('alert');
+    expect(api.postWorkspaceChatMessage).toHaveBeenCalledWith('a', expect.objectContaining({ attentionRecipientIds: ['u2'] }));
+    const stored = JSON.parse(sessionStorage.getItem(sessionStorage.key(0)));
+    expect(Object.keys(stored).sort()).toEqual(['fingerprint', 'key']);
+    expect(stored.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(stored)).not.toContain('private draft');
+    expect(screen.getByRole('checkbox', { name: 'Bianca' })).toBeDisabled();
+  });
+
+  it('recovers an uncertain intent after reload, retains it on404 and blocks changed payloads', async () => {
+    api.getWorkspaceChatMessages.mockResolvedValue({ channel: { ...channels[0], members }, items: [message] });
+    api.postWorkspaceChatMessage.mockRejectedValueOnce(new Error('unknown')).mockResolvedValueOnce({ message });
+    api.getWorkspaceChatMessageIntent.mockRejectedValue(Object.assign(new Error('not found'), { status: 404 }));
+    const first = setup(); fireEvent.click(await screen.findByRole('button', { name: /Agency/ }));
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'Exact draft' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Bianca' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' })); await screen.findByRole('alert');
+    const stored = sessionStorage.getItem(sessionStorage.key(0)); first.unmount();
+    setup(); fireEvent.click(await screen.findByRole('button', { name: /Agency/ }));
+    await screen.findByText(/delivery intent was recovered/);
+    expect(api.postWorkspaceChatMessage).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Check saved message status' })); await screen.findByRole('alert');
+    expect(sessionStorage.getItem(sessionStorage.key(0))).toBe(stored);
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Changed draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry same message' })); await screen.findByRole('alert');
+    expect(api.postWorkspaceChatMessage).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Exact draft' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Bianca' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry same message' }));
+    await waitFor(() => expect(api.postWorkspaceChatMessage).toHaveBeenCalledTimes(2));
+    expect(api.postWorkspaceChatMessage.mock.calls[0]).toEqual(api.postWorkspaceChatMessage.mock.calls[1]);
+  });
+
+  it('shows source attention and lets only the current recipient acknowledge it', async () => {
+    const own = { id: 'attention-own', channelId: 'a', recipientId: 'u1', acknowledgedAt: null, channel: channels[0], message };
+    api.listWorkspaceChatAttention.mockResolvedValueOnce({ items: [own], nextCursor: null }).mockResolvedValue({ items: [], nextCursor: null });
+    api.acknowledgeWorkspaceChatAttention.mockResolvedValue({ attention: { ...own, acknowledgedAt: '2026-10-16T10:00:00Z' } });
+    api.getWorkspaceChatMessages.mockResolvedValue({ items: [{ ...message, attention: [{ id: 'other', recipientId: 'u2', recipient: { name: 'Bianca' }, acknowledgedAt: null }] }] });
+    setup(); await screen.findByText('1 pending requests loaded.');
+    fireEvent.click(screen.getByRole('button', { name: 'Open source conversation' }));
+    await screen.findByText('Bianca: Attention requested');
+    expect(screen.getAllByRole('button', { name: 'Acknowledge attention' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Acknowledge attention' }));
+    await screen.findByText('0 pending requests loaded.');
+    expect(api.acknowledgeWorkspaceChatAttention).toHaveBeenCalledWith('a', 'attention-own');
+  });
+
+  it('hides cached attention content when a refresh loses access', async () => {
+    api.listWorkspaceChatAttention.mockResolvedValueOnce({ items: [{ id: 'att', channelId: 'a', recipientId: 'u1', channel: channels[0], message }], nextCursor: null }).mockRejectedValue(new Error('private details'));
+    setup(); await screen.findByText('Review the draft');
+    fireEvent.click(screen.getByRole('button', { name: 'Reload attention' }));
+    await screen.findByRole('alert');
+    expect(screen.queryByText('Review the draft')).not.toBeInTheDocument();
+    expect(screen.queryByText('private details')).not.toBeInTheDocument();
+  });
+
+  it('keeps acknowledgement unknown until confirmed without claiming completion', async () => {
+    api.listWorkspaceChatAttention.mockResolvedValue({ items: [{ id: 'att', channelId: 'a', recipientId: 'u1', channel: channels[0], message }], nextCursor: null });
+    api.acknowledgeWorkspaceChatAttention.mockRejectedValue(new Error('private details'));
+    setup(); fireEvent.click(await screen.findByRole('button', { name: 'Acknowledge attention' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not be confirmed');
+    expect(screen.getByText('1 pending requests loaded.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Acknowledge attention' })).toBeEnabled();
+    expect(screen.queryByText('private details')).not.toBeInTheDocument();
+  });
+
+  it('requires explicit clearing when a selected recipient disappears before send', async () => {
+    api.getWorkspaceChatMessages.mockResolvedValueOnce({ channel: { ...channels[0], members }, items: [message] }).mockResolvedValue({ channel: { ...channels[0], members: [] }, items: [message] });
+    const view = setup(); fireEvent.click(await screen.findByRole('button', { name: /Agency/ }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Bianca' }));
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Review this' } });
+    await act(async () => view.cache.invalidateQueries({ queryKey: ['workspace-chat-messages'] }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('no longer an active member');
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear attention selection' }));
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled();
+    expect(api.postWorkspaceChatMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not post when opaque intent cannot be stored safely', async () => {
+    setup(); fireEvent.click(await screen.findByRole('button', { name: /Agency/ }));
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'Private draft' } });
+    const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => { throw Error('blocked'); });
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('cannot safely retain');
+      expect(api.postWorkspaceChatMessage).not.toHaveBeenCalled();
+    } finally { storage.mockRestore(); }
+  });
   it('loads additional conversations explicitly and deduplicates overlapping pages', async () => {
     api.listWorkspaceChatChannels.mockResolvedValueOnce({ items: [channels[0]], nextCursor: 'a' }).mockResolvedValueOnce({ items: channels, nextCursor: null });
     setup(); await screen.findByRole('button', { name: /Agency/ });
@@ -71,7 +180,7 @@ describe('workspace messages', () => {
     fireEvent.click(screen.getByRole('button', { name: /Reply to Bianca/ }));
     fireEvent.change(screen.getByLabelText('Message'), { target: { value: '<b>Looks good</b>' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
-    await waitFor(() => expect(api.postWorkspaceChatMessage).toHaveBeenCalledWith('a', { content: '<b>Looks good</b>', parentId: 'm1', idempotencyKey: expect.any(String) }));
+    await waitFor(() => expect(api.postWorkspaceChatMessage).toHaveBeenCalledWith('a', { content: '<b>Looks good</b>', parentId: 'm1', attentionRecipientIds: [], idempotencyKey: expect.any(String) }));
     await waitFor(() => expect(screen.getByLabelText('Message')).toHaveValue(''));
   });
 
@@ -82,7 +191,8 @@ describe('workspace messages', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
     await screen.findByRole('alert');
     expect(screen.getByLabelText('Message')).toHaveValue('Keep me');
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(screen.getByLabelText('Message')).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry same message' }));
     await waitFor(() => expect(api.postWorkspaceChatMessage).toHaveBeenCalledTimes(2));
     expect(api.postWorkspaceChatMessage.mock.calls[0]).toEqual(api.postWorkspaceChatMessage.mock.calls[1]);
     expect(screen.queryByText('secret')).not.toBeInTheDocument();
@@ -98,7 +208,7 @@ describe('workspace messages', () => {
     fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Send once' } });
     const form = screen.getByLabelText('Message').closest('form');
     fireEvent.submit(form); fireEvent.submit(form);
-    expect(api.postWorkspaceChatMessage).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(api.postWorkspaceChatMessage).toHaveBeenCalledTimes(1));
     expect(screen.getByLabelText('Message')).toBeDisabled();
     await act(async () => resolve({ message }));
     expect(screen.getByLabelText('Message')).toHaveValue('');
@@ -223,4 +333,30 @@ describe('workspace messages', () => {
     expect(screen.getByRole('button', { name: 'Create conversation' })).toBeDisabled(); expect(api.createWorkspaceChatChannel).not.toHaveBeenCalled(); expect(screen.queryByText('private scope details')).not.toBeInTheDocument();
   });
 
+});
+
+describe('combined human attention and account manager channel UI', () => {
+  it('preserves explicit human recipients while the separate draft source picker is open', async () => {
+    const channel = { ...channels[1], clientId: 'c1', members: [
+      { userId: 'u1', user: { id: 'u1', name: 'Cameron', role: 'ADMIN', isActive: true } },
+      { userId: 'u2', user: { id: 'u2', name: 'Bianca', role: 'TEAM', isActive: true } },
+    ] };
+    api.getWorkspaceChatMessages.mockResolvedValue({ channel, items: [message] });
+    api.getWorkspaceAccountManager.mockResolvedValue({ binding: { id: 'binding', enabled: true, revision: 1 } });
+    api.listWorkspaceAccountManagerRequests.mockResolvedValue({ items: [], nextCursor: null });
+    api.getClientAgentProfile.mockResolvedValue({ id: 'profile', enabled: true, pluginIds: ['client-work'] });
+    api.postWorkspaceChatMessage.mockResolvedValue({ message });
+    const view = setup(); fireEvent.click(await screen.findByRole('button', { name: /Client work/ }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Bianca' }));
+    fireEvent.click(await screen.findByText('Channel account manager', { exact: true }));
+    const source = await screen.findByLabelText('Source message for AI draft'); fireEvent.change(source, { target: { value: 'm1' } });
+    expect(screen.getByRole('checkbox', { name: 'Bianca' })).toBeChecked();
+    expect(view.container.querySelector('#workspace-message-m1')).toHaveTextContent('Review the draft');
+    fireEvent.change(screen.getByLabelText('Message', { exact: true }), { target: { value: 'Please review @Bianca' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message', exact: true }));
+    await waitFor(() => expect(api.postWorkspaceChatMessage).toHaveBeenCalledWith('b', expect.objectContaining({ content: 'Please review @Bianca', attentionRecipientIds: ['u2'] })));
+    expect(api.requestWorkspaceAccountManager).not.toHaveBeenCalled();
+    expect(source).toHaveValue('m1');
+    expect(api.getWorkspaceAccountManager).toHaveBeenCalledWith('b');
+  });
 });

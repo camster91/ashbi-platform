@@ -102,7 +102,10 @@ model Organization {
   workspaceChatChannels WorkspaceChatChannel[]
   workspaceChatMembers WorkspaceChatMember[]
   workspaceChatMessages WorkspaceChatMessage[]
+  workspaceChatAttention WorkspaceChatAttention[]
   gmailSendReceipts GmailSendReceipt[]
+  workspaceAccountManagerBindings WorkspaceAccountManagerBinding[]
+  workspaceAccountManagerInvocations WorkspaceAccountManagerInvocation[]
 }
 
 model User {
@@ -180,7 +183,11 @@ model User {
   createdWorkspaceChatChannels WorkspaceChatChannel[] @relation("WorkspaceChatCreator")
   workspaceChatMemberships WorkspaceChatMember[]
   workspaceChatMessages WorkspaceChatMessage[] @relation("WorkspaceChatAuthor")
+  workspaceChatAttention WorkspaceChatAttention[]
   gmailSendReceipts GmailSendReceipt[]
+  workspaceAccountManagerBindings WorkspaceAccountManagerBinding[] @relation("WorkspaceBotInstaller")
+  workspaceAccountManagerBindingUpdates WorkspaceAccountManagerBinding[] @relation("WorkspaceBotEditor")
+  workspaceAccountManagerInvocations WorkspaceAccountManagerInvocation[]
 }
 
 model OnboardingProgress {
@@ -292,6 +299,7 @@ model Client {
   agentProfiles ClientAgentProfile[]
   agentConversations ClientAgentConversation[]
   workspaceChatChannels WorkspaceChatChannel[]
+  workspaceAccountManagerBindings WorkspaceAccountManagerBinding[]
 }
 
 model Contact {
@@ -388,6 +396,8 @@ model Project {
   @@index([organizationId, portfolio])
   @@map("projects")
   workspaceChatChannels WorkspaceChatChannel[]
+  workspaceAccountManagerBindings WorkspaceAccountManagerBinding[]
+  @@unique([id, organizationId])
 }
 
 model Task {
@@ -2372,6 +2382,7 @@ model AiBridgeAction {
   source           String    @default("ai_bridge") // ai_bridge, assistant
   toolClass        String    @default("execute") // prepare, execute
   correlationId    String?
+  authorizationBinding Json? // Immutable optional MCP OAuth grant binding; NULL for existing API-key/session actions
   inputScope       Json? // Record ids the scope resolver proved belong to the organization
   approverId       String? // No foreign key: the receipt outlives the approver's account
   approvalEvidence Json? // { method, approverRole, requesterApproved, reauthenticated }
@@ -3151,6 +3162,13 @@ model ClientAgentConversation {
   @@index([clientId])
   @@index([createdById, organizationId])
   @@map("client_agent_conversations")
+  sourceChannelId String?
+  sourceBindingId String?
+  sourceChannel WorkspaceChatChannel? @relation(fields: [sourceChannelId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  sourceBinding WorkspaceAccountManagerBinding? @relation(fields: [sourceBindingId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  workspaceInvocation WorkspaceAccountManagerInvocation?
+  @@index([sourceChannelId, organizationId])
+  @@index([sourceBindingId, organizationId])
 }
 
 model ClientAgentRun {
@@ -3184,6 +3202,8 @@ model ClientAgentRun {
   @@index([organizationId, status, deadlineAt])
   @@index([requestedById, organizationId])
   @@map("client_agent_runs")
+  workspaceInvocation WorkspaceAccountManagerInvocation?
+  @@unique([id, organizationId])
 }
 
 model ClientAgentProfile {
@@ -3210,6 +3230,7 @@ model ClientAgentProfile {
   @@index([createdById, organizationId])
   @@index([updatedById, organizationId])
   @@map("client_agent_profiles")
+  workspaceAccountManagerBindings WorkspaceAccountManagerBinding[]
 }
 
 // Company channels/DMs coexist with legacy project/portal ChatMessage records.
@@ -3232,6 +3253,7 @@ model WorkspaceChatChannel {
   createdBy User @relation("WorkspaceChatCreator", fields: [createdById, organizationId], references: [id, organizationId], onDelete: Restrict)
   members WorkspaceChatMember[]
   messages WorkspaceChatMessage[]
+  attention WorkspaceChatAttention[]
   @@unique([id, organizationId])
   @@unique([organizationId, directKey])
   @@index([organizationId, updatedAt])
@@ -3239,6 +3261,8 @@ model WorkspaceChatChannel {
   @@index([projectId])
   @@index([createdById, organizationId])
   @@map("workspace_chat_channels")
+  accountManagerBindings WorkspaceAccountManagerBinding[]
+  sourceAgentConversations ClientAgentConversation[]
 }
 
 model WorkspaceChatMember {
@@ -3267,6 +3291,8 @@ model WorkspaceChatMessage {
   content String
   parentId String?
   clientKey String?
+  attentionRecipientIds String[] @default([])
+  intentHash String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -3274,12 +3300,35 @@ model WorkspaceChatMessage {
   author User @relation("WorkspaceChatAuthor", fields: [authorId, organizationId], references: [id, organizationId], onDelete: Restrict)
   parent WorkspaceChatMessage? @relation("WorkspaceChatReplies", fields: [parentId], references: [id], onDelete: SetNull)
   replies WorkspaceChatMessage[] @relation("WorkspaceChatReplies")
+  attention WorkspaceChatAttention[]
+  @@unique([id, organizationId])
   @@unique([channelId, clientKey])
   @@index([organizationId, channelId, createdAt, id])
   @@index([channelId, organizationId])
   @@index([authorId, organizationId])
   @@index([parentId])
   @@map("workspace_chat_messages")
+  accountManagerInvocations WorkspaceAccountManagerInvocation[]
+}
+
+model WorkspaceChatAttention {
+  id String @id @default(cuid())
+  organizationId String
+  channelId String
+  messageId String
+  recipientId String
+  acknowledgedAt DateTime?
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  channel WorkspaceChatChannel @relation(fields: [channelId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  message WorkspaceChatMessage @relation(fields: [messageId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  recipient User @relation(fields: [recipientId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@unique([messageId, recipientId])
+  @@index([organizationId, recipientId, acknowledgedAt, id])
+  @@index([channelId, organizationId])
+  @@index([messageId, organizationId])
+  @@index([recipientId, organizationId])
+  @@map("workspace_chat_attention")
 }
 
 
@@ -3326,4 +3375,73 @@ model ClientServiceReport {
   @@index([clientId, organizationId])
   @@index([mappingId, organizationId, clientId])
   @@map("client_service_reports")
+}
+
+
+model WorkspaceAccountManagerBinding {
+  id String @id @default(cuid())
+  organizationId String
+  channelId String
+  clientId String
+  projectId String?
+  profileId String
+  createdById String
+  updatedById String
+  enabled Boolean @default(false)
+  revision Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "workspace_account_manager_bindings_organizationId_fkey")
+  channel WorkspaceChatChannel @relation(fields: [channelId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade, map: "workspace_account_manager_bindings_channelId_organizationI_fkey")
+  client Client @relation(fields: [clientId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade, map: "workspace_account_manager_bindings_clientId_organizationId_fkey")
+  project Project? @relation(fields: [projectId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade, map: "workspace_account_manager_bindings_projectId_organizationI_fkey")
+  profile ClientAgentProfile @relation(fields: [profileId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade, map: "workspace_account_manager_bindings_profileId_organizationI_fkey")
+  createdBy User @relation("WorkspaceBotInstaller", fields: [createdById, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade, map: "workspace_account_manager_bindings_createdById_organizatio_fkey")
+  updatedBy User @relation("WorkspaceBotEditor", fields: [updatedById, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade, map: "workspace_account_manager_bindings_updatedById_organizatio_fkey")
+  conversations ClientAgentConversation[]
+  invocations WorkspaceAccountManagerInvocation[]
+  @@unique([id, organizationId], map: "workspace_account_manager_bindings_id_organizationId_key")
+  @@unique([organizationId, channelId], map: "workspace_account_manager_bindings_organizationId_channelId_key")
+  @@index([channelId, organizationId], map: "workspace_account_manager_bindings_channelId_organizationId_idx")
+  @@index([clientId, organizationId], map: "workspace_account_manager_bindings_clientId_organizationId_idx")
+  @@index([projectId, organizationId], map: "workspace_account_manager_bindings_projectId_organizationId_idx")
+  @@index([profileId, organizationId], map: "workspace_account_manager_bindings_profileId_organizationId_idx")
+  @@index([createdById, organizationId], map: "workspace_account_manager_bindings_createdById_organization_idx")
+  @@index([updatedById, organizationId], map: "workspace_account_manager_bindings_updatedById_organization_idx")
+  @@map("workspace_account_manager_bindings")
+}
+
+model WorkspaceAccountManagerInvocation {
+  id String @id @default(cuid())
+  organizationId String
+  bindingId String
+  sourceMessageId String
+  requestedById String
+  conversationId String @unique(map: "workspace_account_manager_invocations_conversationId_key")
+  runId String @unique(map: "workspace_account_manager_invocations_runId_key")
+  idempotencyKey String
+  inputHash String
+  bindingRevision Int
+  profileRevision Int
+  deliveryState String @default("PENDING")
+  deliveryCode String?
+  deliveredAt DateTime?
+  suppressedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "workspace_account_manager_invocations_organizationId_fkey")
+  binding WorkspaceAccountManagerBinding @relation(fields: [bindingId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade, map: "workspace_account_manager_invocations_bindingId_organizati_fkey")
+  sourceMessage WorkspaceChatMessage @relation(fields: [sourceMessageId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade, map: "workspace_account_manager_invocations_sourceMessageId_orga_fkey")
+  requestedBy User @relation(fields: [requestedById, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade, map: "workspace_account_manager_invocations_requestedById_organi_fkey")
+  conversation ClientAgentConversation @relation(fields: [conversationId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade, map: "workspace_account_manager_invocations_conversationId_organ_fkey")
+  run ClientAgentRun @relation(fields: [runId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade, map: "workspace_account_manager_invocations_runId_organizationId_fkey")
+  @@unique([organizationId, sourceMessageId, bindingId], map: "workspace_account_manager_invocations_organizationId_source_key")
+  @@unique([organizationId, requestedById, idempotencyKey], map: "workspace_account_manager_invocations_organizationId_reques_key")
+  @@index([bindingId, organizationId], map: "workspace_account_manager_invocations_bindingId_organizatio_idx")
+  @@index([sourceMessageId, organizationId], map: "workspace_account_manager_invocations_sourceMessageId_organ_idx")
+  @@index([requestedById, organizationId], map: "workspace_account_manager_invocations_requestedById_organiz_idx")
+  @@unique([conversationId, organizationId], map: "workspace_account_manager_invocations_conversationId_organi_key")
+  @@unique([runId, organizationId], map: "workspace_account_manager_invocations_runId_organizationId_key")
+  @@index([organizationId, deliveryState, createdAt], map: "workspace_account_manager_invocations_organizationId_delive_idx")
+  @@map("workspace_account_manager_invocations")
 }

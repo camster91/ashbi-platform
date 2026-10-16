@@ -1,3 +1,4 @@
+import workspaceAccountManagerRoutes from '../../routes/workspace-account-manager.routes.js';
 import clientAgentActionRoutes from '../../routes/client-agent-action.routes.js';
 import brandRoutes from '../../routes/brand.routes.js';
 import timeTrackingRoutes from '../../routes/time-tracking.routes.js';
@@ -38,6 +39,7 @@ export async function registerClientWorkspaceRoutes(fastify) {
   await fastify.register(documentHistoryRoutes, { prefix: '/api/document-history' });
   await fastify.register(workspaceWikiRoutes, { prefix: '/api/wiki' });
   await fastify.register(workspaceRecordsRoutes, { prefix: '/api/collections' });
+  await fastify.register(workspaceAccountManagerRoutes, { prefix: '/api/workspace-chat' });
   await fastify.register(workspaceChatRoutes, { prefix: '/api/workspace-chat' });
   await fastify.register(clientAgentActionRoutes, { prefix: '/api/clients' });
   await fastify.register(clientCommunicationsRoutes, { prefix: '/api/client-communications' });

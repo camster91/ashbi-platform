@@ -290,7 +290,10 @@ and export boundaries are described in [client-agent-conversations.md](client-ag
 `projectId`; `workspace_chat.membership_changed` records `channelId`,
 `memberUserId` and `active`, both for entity `workspace_chat_channel`.
 `workspace_chat.message_created` uses entity `workspace_chat_message` and
-records only `channelId` and `parentId`. No message body is audited.
+records only `channelId`, `parentId` and `attentionCount`. No message body is audited.
+`workspace_chat.attention_acknowledged` uses entity `workspace_chat_attention`
+and records only `channelId` and `messageId`. The actor is the recipient;
+acknowledgement replay does not append another event.
 These mutations require successful audit evidence in the same transaction.
 
 ## Gmail send receipts
@@ -311,3 +314,10 @@ clientId, revision and enabled.
 `client_service_project.published` retains clientId, revision, outcome, reportCount
 and complete. Report text, external identifiers and credentials are excluded.
 A failed audit insert rolls back mapping/report changes.
+
+
+Workspace account-manager pilot records `workspace_agent.installed`,
+`workspace_agent.updated`, `workspace_agent.requested`, `workspace_agent.delivered`
+and `workspace_agent.suppressed`. Metadata contains canonical IDs, enablement and
+run status only, never selected message text, preferences, prompts or answers.
+Request and settlement fail closed if the associated audit cannot be written.

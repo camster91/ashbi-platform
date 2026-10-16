@@ -21,6 +21,11 @@ const ACTOR_TYPE_SET = new Set(AUDIT_ACTOR_TYPES);
  * listed for the action are dropped.
  */
 export const AUDIT_EVENT_CATALOG = Object.freeze({
+  'workspace_agent.installed': { entityType: 'workspace_account_manager_binding', metadata: ['channelId', 'clientId', 'profileId'] },
+  'workspace_agent.updated': { entityType: 'workspace_account_manager_binding', metadata: ['channelId', 'enabled'] },
+  'workspace_agent.requested': { entityType: 'workspace_account_manager_invocation', metadata: ['channelId', 'sourceMessageId', 'runId'] },
+  'workspace_agent.delivered': { entityType: 'client_agent_run', metadata: ['channelId', 'runId', 'status'] },
+  'workspace_agent.suppressed': { entityType: 'client_agent_run', metadata: ['channelId', 'runId', 'status'] },
   'client_service_project.created': { entityType: 'client_service_project', metadata: ['clientId', 'revision', 'enabled'] },
   'client_service_project.updated': { entityType: 'client_service_project', metadata: ['clientId', 'revision', 'enabled'] },
   'client_service_project.published': { entityType: 'client_service_project', metadata: ['clientId', 'revision', 'outcome', 'reportCount', 'complete'] },
@@ -36,7 +41,8 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'client_agent_profile.created': { entityType: 'client_agent_profile', metadata: ['revision', 'clientId', 'enabled', 'pluginIds'] },
   'client_agent_profile.updated': { entityType: 'client_agent_profile', metadata: ['revision', 'clientId', 'enabled', 'pluginIds'] },
   'workspace_chat.channel_created': { entityType: 'workspace_chat_channel', metadata: ['kind', 'memberCount', 'clientId', 'projectId'] },
-  'workspace_chat.message_created': { entityType: 'workspace_chat_message', metadata: ['channelId', 'parentId'] },
+  'workspace_chat.message_created': { entityType: 'workspace_chat_message', metadata: ['channelId', 'parentId', 'attentionCount'] },
+  'workspace_chat.attention_acknowledged': { entityType: 'workspace_chat_attention', metadata: ['channelId', 'messageId'] },
   'workspace_chat.membership_changed': { entityType: 'workspace_chat_channel', metadata: ['channelId', 'memberUserId', 'active'] },
   'workspace_collection.created': { entityType: 'workspace_collection', metadata: ['revision', 'schemaRevision'] },
   'workspace_collection.updated': { entityType: 'workspace_collection', metadata: ['revision', 'schemaRevision', 'archived'] },

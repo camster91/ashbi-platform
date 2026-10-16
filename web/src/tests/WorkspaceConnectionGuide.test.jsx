@@ -12,6 +12,11 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('Workspace connection setup', () => {
+  it('explains read-only defaults and explicit new consent for optional OAuth actions', () => {
+    render(<WorkspaceConnectionGuide oauthEnabled />);
+    expect(screen.getByText(/Access defaults to read-only/)).toHaveTextContent('select them explicitly');
+    expect(screen.getByText(/Existing connections remain read-only/)).toHaveTextContent('optional actions require a new consent');
+  });
   it('copies the current host MCP URL without including credentials', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.spyOn(navigator, 'clipboard', 'get').mockReturnValue({ writeText });

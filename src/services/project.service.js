@@ -1,5 +1,6 @@
 // Project service - Enterprise Logic Layer
 
+import { summarizeLabor } from './labor-summary.js';
 import aiClient from '../ai/client.js';
 import { normalizeInvoiceCurrency } from '../utils/money.js';
 import { buildReplanProjectPrompt } from '../ai/prompts/replanProject.js';
@@ -60,27 +61,7 @@ export async function getProjectBudgetMetrics(prisma, projectId) {
   const billableMinutes = timeEntries.filter(e => e.billable).reduce((s, e) => s + e.duration, 0);
   const billableHours = billableMinutes / 60;
 
-  const costByUser = {};
-  let knownRateAmount = 0, missingRateMinutes = 0, missingRateEntries = 0;
-  for (const entry of timeEntries) {
-    // A stored entry override, including zero, takes precedence. An invalid
-    // explicit value is unknown rather than silently replaced by a user rate.
-    const rate = entry.hourlyRate ?? entry.user?.hourlyRate;
-    const known = Number.isFinite(rate) && rate >= 0;
-    const hours = entry.duration / 60;
-    const uid = entry.userId;
-    if (!costByUser[uid]) costByUser[uid] = { user: entry.user, hours: 0, cost: 0, knownRateAmount: 0, missingRateMinutes: 0, missingRateEntries: 0 };
-    const group = costByUser[uid];
-    group.hours += hours;
-    if (known) {
-      const amount = hours * rate;
-      knownRateAmount += amount; group.knownRateAmount += amount;
-    } else {
-      missingRateMinutes += entry.duration; missingRateEntries++;
-      group.missingRateMinutes += entry.duration; group.missingRateEntries++;
-    }
-  }
-  for (const group of Object.values(costByUser)) group.cost = group.missingRateEntries ? null : group.knownRateAmount;
+  const { costByUser, knownRateAmount, missingRateMinutes, missingRateEntries } = summarizeLabor(timeEntries);
 
   const expenses = await prisma.expense.findMany({ where: { projectId } });
   const byCurrency = {};
@@ -112,7 +93,7 @@ export async function getProjectBudgetMetrics(prisma, projectId) {
   return {
     project: { id: project.id, name: project.name, budget: budgetAmount, hourlyBudget },
     time: { totalHours, billableHours, totalMinutes, billableMinutes },
-    costByUser: Object.values(costByUser),
+    costByUser,
     // Compatibility: complete known rate-derived scalar amounts remain
     // numeric; they are not currency-verified costs, revenue or profit.
     totalCost: missingRateEntries ? null : knownRateAmount,

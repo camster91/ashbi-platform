@@ -10,6 +10,7 @@ import {
   createWorkspaceChatChannel, listWorkspaceChatChannels, listWorkspaceChatPeople,
   postWorkspaceChatMessage, getWorkspaceChatMessages, setWorkspaceChatMember,
   markWorkspaceChatRead,
+  listWorkspaceChatAttention, acknowledgeWorkspaceChatAttention, getWorkspaceChatMessageIntent,
 } from '../../services/workspace-chat.service.js';
 
 const actor = { id: 'a', organizationId: 'org', role: 'ADMIN', isActive: true, name: 'Alex' };
@@ -18,7 +19,7 @@ function database() {
     user: [actor, { ...actor, id: 'b', name: 'Bianca', role: 'TEAM' }, { ...actor, id: 'foreign', organizationId: 'other' }, { ...actor, id: 'bot', role: 'BOT' }].map(row => ({ ...row })),
     client: [{ id: 'c', organizationId: 'org', deletedAt: null }],
     project: [{ id: 'p', organizationId: 'org', clientId: 'c', deletedAt: null }],
-    workspaceChatChannel: [], workspaceChatMember: [], workspaceChatMessage: [], auditEvent: [],
+    workspaceChatChannel: [], workspaceChatMember: [], workspaceChatMessage: [], workspaceChatAttention: [], auditEvent: [],
   };
   const calls = [];
   function related(model, row, key) {
@@ -26,6 +27,8 @@ function database() {
     if (key === 'client') return records.client.find(c => c.id === row.clientId);
     if (key === 'project') return records.project.find(p => p.id === row.projectId);
     if (key === 'channel') return records.workspaceChatChannel.find(c => c.id === row.channelId);
+    if (key === 'message') return records.workspaceChatMessage.find(m => m.id === row.messageId);
+    if (key === 'recipient') return records.user.find(u => u.id === row.recipientId);
     if (key === 'user' || key === 'author' || key === 'createdBy') return records.user.find(u => u.id === row[`${key}Id`]);
     return row[key];
   }
@@ -53,6 +56,9 @@ function database() {
     if (args.include?.members) result.members = records.workspaceChatMember.filter(m => m.channelId === row.id && !m.leftAt).map(m => ({ userId: m.userId, leftAt: m.leftAt, user: records.user.find(u => u.id === m.userId) }));
     if (args.include?.author) { const u = records.user.find(u => u.id === row.authorId); result.author = { id: u.id, name: u.name }; }
     if (args.include?.project) result.project = records.project.find(p => p.id === row.projectId) ?? null;
+    if (args.include?.attention) result.attention = records.workspaceChatAttention.filter(a => a.messageId === row.id).map(a => ({ ...a, recipient: records.user.find(u => u.id === a.recipientId) }));
+    if (args.include?.channel) result.channel = decorate('workspaceChatChannel', records.workspaceChatChannel.find(c => c.id === row.channelId), args.include.channel);
+    if (args.include?.message) result.message = decorate('workspaceChatMessage', records.workspaceChatMessage.find(m => m.id === row.messageId), args.include.message);
     return result;
   }
   const db = Object.fromEntries(Object.keys(records).map(model => [model, {
@@ -63,7 +69,7 @@ function database() {
       if (args.orderBy) rows.sort((a, b) => { for (const order of args.orderBy) { const [key, dir] = Object.entries(order)[0]; if (a[key] < b[key]) return dir === 'asc' ? -1 : 1; if (a[key] > b[key]) return dir === 'asc' ? 1 : -1; } return 0; });
       return rows.slice(0, args.take ?? rows.length).map(row => decorate(model, row, args));
     },
-    async create(args) { calls.push([model, 'create', args]); if (model === 'auditEvent' && db.failAudit) throw Error('audit down'); const row = { id: `${model}-${records[model].length}`, createdAt: new Date(), updatedAt: new Date(), archivedAt: null, leftAt: null, ...args.data }; records[model].push(row); return decorate(model, row, args); },
+    async create(args) { calls.push([model, 'create', args]); if (model === 'auditEvent' && db.failAudit) throw Error('audit down'); const row = { id: `${model}-${records[model].length}`, createdAt: new Date(), updatedAt: new Date(), archivedAt: null, leftAt: null, acknowledgedAt: null, ...args.data }; records[model].push(row); return decorate(model, row, args); },
     async createMany(args) { for (const row of args.data) await db[model].create({ data: row }); return { count: args.data.length }; },
     async updateMany(args) { calls.push([model, 'updateMany', args]); const rows = records[model].filter(row => matches(model, row, args.where)); for (const row of rows) Object.assign(row, args.data); return { count: rows.length }; },
   }]));
@@ -72,6 +78,85 @@ function database() {
 }
 const rejectCode = code => error => error.code === code;
 async function direct(fixture) { return (await createWorkspaceChatChannel(fixture.db, actor, { kind: 'DIRECT', memberIds: ['b'] })).channel; }
+
+test('human attention is explicit, normalized, atomic with message and replay-sensitive', async () => {
+  const f = database(), channel = await direct(f);
+  const input = { content: '@Bianca review this', idempotencyKey: 'attention-001', attentionRecipientIds: ['b', 'b'] };
+  const first = await postWorkspaceChatMessage(f.db, actor, channel.id, input);
+  assert.equal(first.message.attention.length, 1);
+  assert.match(first.message.intentHash, /^[a-f0-9]{64}$/);
+  assert.deepEqual(first.message.attentionRecipientIds, ['b']);
+  assert.equal((await postWorkspaceChatMessage(f.db, actor, channel.id, { ...input, attentionRecipientIds: ['b'] })).duplicate, true);
+  assert.equal(f.rows().workspaceChatAttention.length, 1);
+  await assert.rejects(postWorkspaceChatMessage(f.db, actor, channel.id, { ...input, attentionRecipientIds: [] }), rejectCode('CHAT_CONFLICT'));
+  await postWorkspaceChatMessage(f.db, actor, channel.id, { content: '@Bianca plain text only', idempotencyKey: 'attention-002' });
+  assert.equal(f.rows().workspaceChatAttention.length, 1);
+  const recovered = await getWorkspaceChatMessageIntent(f.db, actor, channel.id, input.idempotencyKey);
+  assert.equal(recovered.message.id, first.message.id);
+  await assert.rejects(getWorkspaceChatMessageIntent(f.db, { ...actor, id: 'b', role: 'TEAM' }, channel.id, input.idempotencyKey), rejectCode('RECORD_NOT_FOUND'));
+});
+
+test('attention denies self, nonmember, foreign, bot, inactive and removed recipients', async () => {
+  for (const target of ['a', 'foreign', 'bot', 'missing', 'inactive', 'removed']) {
+    const f = database(), channel = await direct(f);
+    let recipientId = target;
+    if (target === 'inactive' || target === 'removed') {
+      recipientId = 'b';
+      if (target === 'inactive') f.rows().user.find(row => row.id === 'b').isActive = false;
+      else f.rows().workspaceChatMember.find(row => row.userId === 'b').leftAt = new Date();
+    }
+    await assert.rejects(postWorkspaceChatMessage(f.db, actor, channel.id, { content: 'request', idempotencyKey: 'attention-001', attentionRecipientIds: [recipientId] }), rejectCode(target === 'a' ? 'INVALID_INPUT' : 'RECORD_NOT_FOUND'));
+    assert.equal(f.rows().workspaceChatMessage.length, 0);
+    assert.equal(f.rows().workspaceChatAttention.length, 0);
+  }
+});
+
+test('attention insert or audit failure rolls back both message and recipients', async () => {
+  for (const failure of ['attention', 'audit']) {
+    const f = database(), channel = await direct(f);
+    if (failure === 'audit') f.db.failAudit = true;
+    else f.db.workspaceChatAttention.createMany = async () => { throw Error('attention failed'); };
+    await assert.rejects(postWorkspaceChatMessage(f.db, actor, channel.id, { content: 'request', idempotencyKey: 'attention-001', attentionRecipientIds: ['b'] }));
+    assert.equal(f.rows().workspaceChatMessage.length, 0); assert.equal(f.rows().workspaceChatAttention.length, 0);
+  }
+});
+
+test('recipient alone can acknowledge, idempotent replay preserves timestamp and audit', async () => {
+  const f = database(), channel = await direct(f), recipient = { ...actor, id: 'b', role: 'TEAM' };
+  const posted = await postWorkspaceChatMessage(f.db, actor, channel.id, { content: 'request', idempotencyKey: 'attention-001', attentionRecipientIds: ['b'] });
+  const attention = posted.message.attention[0];
+  assert.equal((await listWorkspaceChatAttention(f.db, actor)).pendingCount, 0);
+  assert.equal((await listWorkspaceChatAttention(f.db, recipient)).pendingCount, 1);
+  await assert.rejects(acknowledgeWorkspaceChatAttention(f.db, actor, channel.id, attention.id), rejectCode('RECORD_NOT_FOUND'));
+  const before = f.rows().auditEvent.length;
+  const first = await acknowledgeWorkspaceChatAttention(f.db, recipient, channel.id, attention.id);
+  const replay = await acknowledgeWorkspaceChatAttention(f.db, recipient, channel.id, attention.id);
+  assert.equal(+first.attention.acknowledgedAt, +replay.attention.acknowledgedAt);
+  assert.equal(f.rows().auditEvent.length, before + 1);
+  assert.equal((await listWorkspaceChatAttention(f.db, recipient)).pendingCount, 0);
+});
+
+test('current channel membership and canonical client/project bind inbox and acknowledgement', async () => {
+  for (const revoked of ['membership', 'project', 'client', 'actor']) {
+    const f = database(), recipient = { ...actor, id: 'b', role: 'TEAM' };
+    const channel = (await createWorkspaceChatChannel(f.db, actor, { kind: 'PROJECT', name: 'Review', projectId: 'p', memberIds: ['b'] })).channel;
+    const posted = await postWorkspaceChatMessage(f.db, actor, channel.id, { content: 'request', idempotencyKey: 'attention-001', attentionRecipientIds: ['b'] });
+    if (revoked === 'membership') f.rows().workspaceChatMember.find(row => row.userId === 'b').leftAt = new Date();
+    if (revoked === 'project') f.rows().project[0].clientId = 'moved-client';
+    if (revoked === 'client') f.rows().client[0].deletedAt = new Date();
+    if (revoked === 'actor') f.rows().user.find(row => row.id === 'b').isActive = false;
+    if (revoked === 'actor') await assert.rejects(listWorkspaceChatAttention(f.db, recipient), rejectCode('ROLE_DENIED'));
+    else assert.equal((await listWorkspaceChatAttention(f.db, recipient)).pendingCount, 0);
+    await assert.rejects(acknowledgeWorkspaceChatAttention(f.db, recipient, channel.id, posted.message.attention[0].id), rejectCode(revoked === 'actor' ? 'ROLE_DENIED' : 'RECORD_NOT_FOUND'));
+  }
+});
+
+test('recipient membership is reread after channel lock, before any child write', async () => {
+  const f = database(), channel = await direct(f), originalLock = f.db.workspaceChatChannel.updateMany;
+  f.db.workspaceChatChannel.updateMany = async args => { const result = await originalLock(args); f.rows().workspaceChatMember.find(row => row.userId === 'b').leftAt = new Date(); return result; };
+  await assert.rejects(postWorkspaceChatMessage(f.db, actor, channel.id, { content: 'request', idempotencyKey: 'attention-001', attentionRecipientIds: ['b'] }), rejectCode('RECORD_NOT_FOUND'));
+  assert.equal(f.rows().workspaceChatMessage.length, 0);
+});
 
 test('fresh stored staff role is required, bot and inactive identities refused', async () => {
   for (const changes of [{ role: 'CLIENT' }, { role: 'BOT' }, { isActive: false }, { organizationId: 'other' }]) {
@@ -163,7 +248,7 @@ test('messages use actor identity, idempotent retries and content-sensitive conf
   assert.equal(f.rows().workspaceChatMessage.length, 1);
   await assert.rejects(postWorkspaceChatMessage(f.db, actor, c.id, { ...input, content: 'changed' }), rejectCode('CHAT_CONFLICT'));
   await assert.rejects(postWorkspaceChatMessage(f.db, { ...actor, id: 'b', role: 'TEAM' }, c.id, input), rejectCode('CHAT_CONFLICT'));
-  assert.deepEqual(f.rows().auditEvent.at(-1).metadata, { channelId: c.id, parentId: null });
+  assert.deepEqual(f.rows().auditEvent.at(-1).metadata, { channelId: c.id, parentId: null, attentionCount: 0 });
 });
 test('reply parent must belong to the same channel and organization', async () => {
   const f = database(); const c = await direct(f);
@@ -222,6 +307,12 @@ test('route strict inputs reject author spoofing, invalid keys, unknown fields a
   assert.equal((await app.inject(`/api/workspace-chat/channels/${c.id}/messages?limit=51`)).statusCode, 400);
   assert.equal((await app.inject('/api/workspace-chat/channels?limit=101')).statusCode, 400);
   assert.equal((await app.inject('/api/workspace-chat/channels?unexpected=field')).statusCode, 400);
+  assert.equal((await app.inject('/api/workspace-chat/attention?limit=51')).statusCode, 400);
+  assert.equal((await app.inject(`/api/workspace-chat/channels/${c.id}/messages/by-intent/short`)).statusCode, 400);
+  const pending = await postWorkspaceChatMessage(f.db, actor, c.id, { content: 'Attention', idempotencyKey: 'route-attention', attentionRecipientIds: ['b'] });
+  const ackUrl = `/api/workspace-chat/channels/${c.id}/attention/${pending.message.attention[0].id}/ack`;
+  assert.equal((await app.inject({ method: 'POST', url: ackUrl, payload: { recipientId: 'b' } })).statusCode, 400);
+  assert.equal((await app.inject({ method: 'POST', url: ackUrl, payload: {} })).statusCode, 404);
   f.db.workspaceChatChannel.findFirst = async () => { throw Error('password=secret-provider-text'); };
   const failed = await app.inject(`/api/workspace-chat/channels/${c.id}/messages`); assert.equal(failed.statusCode, 503); assert.doesNotMatch(failed.body, /secret|password/);
 });
@@ -237,11 +328,15 @@ test('real MCP discovery and reads preserve channel membership boundaries', asyn
   await server.connect(right); await client.connect(left);
   try {
     const catalog = await client.listTools();
+    assert.equal(catalog.tools.find(t => t.name === 'list_workspace_chat_attention').annotations.readOnlyHint, true);
     assert.equal(catalog.tools.find(t => t.name === 'get_workspace_chat_messages').annotations.readOnlyHint, true);
     const channels = await client.callTool({ name: 'list_workspace_chat_channels', arguments: {} });
     assert.equal(channels.structuredContent.output.items[0].id, c.id);
     const messages = await client.callTool({ name: 'get_workspace_chat_messages', arguments: { channelId: c.id } });
     assert.equal(messages.structuredContent.output.items[0].content, 'Private team record');
+    const attention = await client.callTool({ name: 'list_workspace_chat_attention', arguments: {} });
+    assert.deepEqual(attention.structuredContent.output.items, []);
+    assert.equal(attention.structuredContent.output.countScope, 'page');
     const outsider = { ...context, user: { ...actor, id: 'foreign', organizationId: 'other' } };
     await assert.rejects(service.call(outsider, 'get_workspace_chat_messages', { channelId: c.id }), { code: 'RECORD_NOT_FOUND' });
     assert.equal(service.list({ ...context, scopes: ['workspace:actions'] }).some(t => t.name === 'get_workspace_chat_messages'), false);

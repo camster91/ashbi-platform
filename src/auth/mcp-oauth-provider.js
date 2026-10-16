@@ -3,12 +3,13 @@ import { InvalidClientError, InvalidGrantError, InvalidScopeError, InvalidReques
 import { mustEnrollMfa } from './mfa-enforcement.js';
 import { safeEqual } from '../utils/crypto.js';
 import { recordAuditEvent } from '../services/audit-event.service.js';
-import { scopesForAudit } from './api-key-scopes.js';
+import { MCP_OAUTH_DEFAULT_SCOPES, MCP_OAUTH_OPTIONAL_SCOPES, hasMcpWriteScope, normalizeMcpScopes } from './mcp-oauth-scopes.js';
+import { isDeepStrictEqual } from 'node:util';
 
 export const CHATGPT_CLIENT_ID = 'https://chatgpt.com/oauth/client.json';
 export const CHATGPT_REDIRECT = 'https://chatgpt.com/connector_platform_oauth_redirect';
 export const MCP_OAUTH_PREFIX = 'ashbi_mcp_';
-export const MCP_OAUTH_SCOPES = Object.freeze(['workspace:read']);
+export const MCP_OAUTH_SCOPES = MCP_OAUTH_DEFAULT_SCOPES;
 const ACCESS_SECONDS = 3600;
 const GRANT_SECONDS = 30 * 86400;
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -50,16 +51,18 @@ export function createMcpOAuthProvider({ prisma, redis, issuer, fetchImpl = fetc
     if (value?.href !== resource) throw new InvalidRequestError('Resource must match this MCP endpoint');
   }
 
-  async function owner(grant) {
-    const user = await prisma.user.findUnique({ where: { id: grant.userId }, include: { organization: true } });
+  async function owner(grant, database = prisma) {
+    const user = await database.user.findUnique({ where: { id: grant.userId }, include: { organization: true } });
     if (!user?.isActive || !['ADMIN', 'TEAM'].includes(user.role) || !user.organizationId
+      || (hasMcpWriteScope(grant.scopes) && user.role !== 'ADMIN')
       || user.organizationId !== grant.organizationId || user.sessionVersion !== grant.sessionVersion || mustEnrollMfa(user)) throw new InvalidGrantError('Account access has changed; reconnect');
     return user;
   }
 
   async function grantForKey(key) {
     const grant = key && await read(`grant:${key.id}`);
-    if (!key?.isActive || key.revokedAt || !grant || grant.resource !== resource || grant.expiresAt <= now()) throw new InvalidGrantError('Connection is expired or revoked');
+    if (!key?.isActive || key.revokedAt || !grant || key.userId !== grant.userId || key.id !== grant.keyId || grant.resource !== resource || grant.expiresAt <= now()) throw new InvalidGrantError('Connection is expired or revoked');
+    if (!normalizeMcpScopes(grant.scopes) || !isDeepStrictEqual(normalizeMcpScopes(key.scopes), normalizeMcpScopes(grant.scopes))) throw new InvalidGrantError('Connection scopes changed; reconnect');
     await owner(grant);
     return grant;
   }
@@ -79,11 +82,11 @@ export function createMcpOAuthProvider({ prisma, redis, issuer, fetchImpl = fetc
       checkResource(params.resource);
       if (client.client_id !== CHATGPT_CLIENT_ID || params.redirectUri !== CHATGPT_REDIRECT) throw new InvalidClientError('Unknown client or callback');
       if (!/^[A-Za-z0-9_-]{43}$/.test(params.codeChallenge) || (params.state && params.state.length > 1024)) throw new InvalidRequestError('Invalid authorization request');
-      const scopes = params.scopes?.length ? params.scopes : MCP_OAUTH_SCOPES;
-      if (scopes.some(scope => !MCP_OAUTH_SCOPES.includes(scope))) throw new InvalidScopeError('This connection supports read-only workspace access');
+      const scopes = normalizeMcpScopes(params.scopes?.length ? params.scopes : MCP_OAUTH_SCOPES);
+      if (!scopes) throw new InvalidScopeError('Unsupported workspace scope request');
       const ticket = random();
       await save(`pending:${hash(ticket)}`, { clientId: client.client_id, redirectUri: params.redirectUri,
-        codeChallenge: params.codeChallenge, state: params.state, scopes: [...MCP_OAUTH_SCOPES], resource, expiresAt: now() + 600000 }, 600);
+        codeChallenge: params.codeChallenge, state: params.state, scopes, resource, expiresAt: now() + 600000 }, 600);
       res.redirect(`${origin}/connect-chatgpt?state=${encodeURIComponent(ticket)}`);
     },
     async preview(ticket, user) {
@@ -94,12 +97,14 @@ export function createMcpOAuthProvider({ prisma, redis, issuer, fetchImpl = fetc
       await owner(bound);
       const nonce = random();
       await save(`pending:${hash(ticket)}`, { ...bound, nonceHash: hash(nonce) }, (pending.expiresAt - now()) / 1000);
-      return { clientName: 'ChatGPT', scopes: [...MCP_OAUTH_SCOPES], nonce, resource, accountEmail: user.email };
+      return { clientName: 'ChatGPT', scopes: [...MCP_OAUTH_SCOPES], requestedScopes: [...pending.scopes], optionalScopes: MCP_OAUTH_OPTIONAL_SCOPES.filter(row => pending.scopes.includes(row.scope)), nonce, resource, accountEmail: user.email };
     },
-    async consent(ticket, nonce, user, approved) {
+    async consent(ticket, nonce, user, approved, selectedScopes = MCP_OAUTH_SCOPES) {
       const pending = typeof ticket === 'string' && ticket.length < 128 && await read(`pending:${hash(ticket)}`);
       if (!pending || pending.expiresAt <= now() || pending.userId !== user.id || typeof nonce !== 'string' || !safeEqual(pending.nonceHash, hash(nonce))) throw new InvalidGrantError('Connection request expired or changed');
-      await owner(pending);
+      const scopes = normalizeMcpScopes(selectedScopes);
+      if (!scopes || scopes.some(scope => !pending.scopes.includes(scope))) throw new InvalidScopeError('Scopes exceed the consent request');
+      await owner({ ...pending, scopes });
       const consumed = await take(`pending:${hash(ticket)}`);
       if (!consumed || consumed.nonceHash !== pending.nonceHash || consumed.userId !== user.id) throw new InvalidGrantError('Connection request already used');
       const redirect = new URL(pending.redirectUri);
@@ -107,7 +112,7 @@ export function createMcpOAuthProvider({ prisma, redis, issuer, fetchImpl = fetc
       if (pending.state) redirect.searchParams.set('state', pending.state);
       if (approved) {
         const code = random();
-        await save(`code:${hash(code)}`, pending, 60);
+        await save(`code:${hash(code)}`, { ...pending, scopes }, 60);
         redirect.searchParams.set('code', code);
       } else redirect.searchParams.set('error', 'access_denied');
       return { redirect: redirect.href };
@@ -127,15 +132,17 @@ export function createMcpOAuthProvider({ prisma, redis, issuer, fetchImpl = fetc
       if (!await take(`code:${hash(code)}`)) throw new InvalidGrantError('Authorization code already used');
       const accessToken = MCP_OAUTH_PREFIX + random();
       const key = await prisma.$transaction(async tx => {
+        const current = await tx.user.findUnique({ where: { id: data.userId }, include: { organization: true } });
+        if (!current?.isActive || !['ADMIN', 'TEAM'].includes(current.role) || current.organizationId !== data.organizationId || current.sessionVersion !== data.sessionVersion || mustEnrollMfa(current) || (hasMcpWriteScope(data.scopes) && current.role !== 'ADMIN')) throw new InvalidGrantError('Account access changed');
         if (await tx.apiKey.count({ where: { userId: data.userId, isActive: true } }) >= 5) throw new InvalidGrantError('Revoke an unused API key before connecting');
-        return tx.apiKey.create({ data: { name: 'ChatGPT (read-only MCP)', userId: data.userId, key: hash(accessToken),
+        return tx.apiKey.create({ data: { name: hasMcpWriteScope(data.scopes) ? 'ChatGPT (scoped MCP actions)' : 'ChatGPT (read-only MCP)', userId: data.userId, key: hash(accessToken),
           scopes: data.scopes, expiresAt: new Date(now() + ACCESS_SECONDS * 1000) } });
       }, { isolationLevel: 'Serializable' });
       const grant = { keyId: key.id, userId: data.userId, organizationId: data.organizationId, sessionVersion: data.sessionVersion,
         clientId: client.client_id, resource, scopes: data.scopes, expiresAt: now() + GRANT_SECONDS * 1000 };
       await save(`grant:${key.id}`, grant, GRANT_SECONDS);
       await audit(prisma, { action: 'api_key.created', organizationId: grant.organizationId, actorType: 'USER', actorUserId: grant.userId,
-        entityId: key.id, metadata: { ownerUserId: grant.userId, expires: true, expiresAt: key.expiresAt, scopes: scopesForAudit(grant.scopes) } });
+        entityId: key.id, metadata: { ownerUserId: grant.userId, expires: true, expiresAt: key.expiresAt, scopes: [...grant.scopes].sort().join('+') } });
       return { access_token: accessToken, token_type: 'Bearer', expires_in: ACCESS_SECONDS, scope: grant.scopes.join(' '), refresh_token: await refreshFor(grant) };
     },
     async exchangeRefreshToken(client, token, scopes, requestedResource) {
@@ -148,14 +155,19 @@ export function createMcpOAuthProvider({ prisma, redis, issuer, fetchImpl = fetc
         if (used?.clientId === client.client_id) await prisma.apiKey.updateMany({ where: { id: used.keyId }, data: { isActive: false, revokedAt: new Date(now()) } });
         throw new InvalidGrantError('Refresh token expired or already used');
       }
-      if (data.clientId !== client.client_id || (scopes?.length && scopes.some(scope => !data.scopes.includes(scope)))) throw new InvalidGrantError('Invalid refresh scope or client');
+      if (data.clientId !== client.client_id || (scopes?.length && !isDeepStrictEqual(normalizeMcpScopes(scopes), normalizeMcpScopes(data.scopes)))) throw new InvalidGrantError('Invalid refresh scope or client');
       const key = await prisma.apiKey.findUnique({ where: { id: data.keyId } });
       const grant = await grantForKey(key);
       if (!await take(keyName)) throw new InvalidGrantError('Refresh token already used');
       await save(`used:${hash(token)}`, { keyId: key.id, clientId: grant.clientId }, (grant.expiresAt - now()) / 1000);
       const accessToken = MCP_OAUTH_PREFIX + random();
-      const changed = await prisma.apiKey.updateMany({ where: { id: key.id, key: key.key, isActive: true, revokedAt: null },
-        data: { key: hash(accessToken), expiresAt: new Date(Math.min(grant.expiresAt, now() + ACCESS_SECONDS * 1000)) } });
+      const changed = await prisma.$transaction(async tx => {
+        await owner(grant, tx);
+        const current = await tx.apiKey.findUnique({ where: { id: key.id } });
+        if (!current || current.userId !== grant.userId || !isDeepStrictEqual(normalizeMcpScopes(current.scopes), normalizeMcpScopes(grant.scopes))) throw new InvalidGrantError('Connection scopes changed');
+        return tx.apiKey.updateMany({ where: { id: key.id, key: key.key, isActive: true, revokedAt: null },
+          data: { key: hash(accessToken), expiresAt: new Date(Math.min(grant.expiresAt, now() + ACCESS_SECONDS * 1000)) } });
+      }, { isolationLevel: 'Serializable' });
       if (changed.count !== 1) throw new InvalidGrantError('Connection changed; reconnect');
       return { access_token: accessToken, token_type: 'Bearer', expires_in: Math.min(ACCESS_SECONDS, Math.floor((grant.expiresAt - now()) / 1000)),
         scope: grant.scopes.join(' '), refresh_token: await refreshFor(grant) };
@@ -167,7 +179,7 @@ export function createMcpOAuthProvider({ prisma, redis, issuer, fetchImpl = fetc
       if (!key.expiresAt || key.expiresAt.getTime() <= now()) throw new InvalidTokenError('MCP access token expired');
       const user = await owner(grant);
       return { token, clientId: grant.clientId, scopes: [...grant.scopes], expiresAt: Math.floor(key.expiresAt.getTime() / 1000),
-        resource: new URL(resource), extra: { user: { id: user.id, email: user.email, name: user.name, role: user.role,
+        resource: new URL(resource), extra: { oauth: { keyId: key.id, sessionVersion: grant.sessionVersion, clientId: grant.clientId, scopes: [...grant.scopes], expiresAt: grant.expiresAt }, user: { id: user.id, email: user.email, name: user.name, role: user.role,
           organizationId: user.organizationId, clientId: user.clientId } } };
     },
     async revokeToken(client, request) {
