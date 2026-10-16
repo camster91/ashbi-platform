@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render as renderUI, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ANSWERER_RECOVERY_WINDOW_MS,
@@ -39,6 +40,11 @@ vi.mock('../hooks/useSocket', () => ({ useSocket: () => ({ socket }) }));
 const { default: ProjectMedia } = await import('../components/project/ProjectMedia');
 
 const PROJECT = 'p1';
+
+function render(ui) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return renderUI(ui, { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+}
 
 function deferred() {
   let resolve;
@@ -390,6 +396,35 @@ describe('call quality indicator', () => {
 });
 
 describe('screen recording duration limit', () => {
+  it('refreshes uploaded recordings without disconnecting an established call', async () => {
+    const peer = await connectAsOfferer();
+    const callStream = await mediaDevices.getUserMedia.mock.results[0].value;
+    class Recorder {
+      static isTypeSupported() { return true; }
+      constructor() { this.state = 'inactive'; }
+      start() { this.state = 'recording'; }
+      stop() {
+        this.state = 'inactive';
+        this.ondataavailable({ data: new Blob(['frame'], { type: 'video/webm' }) });
+        this.onstop();
+      }
+    }
+    vi.stubGlobal('MediaRecorder', Recorder);
+    const screenTrack = new FakeTrack('video', 'screen');
+    mediaDevices.getDisplayMedia.mockResolvedValue(new FakeStream([screenTrack]));
+    vi.spyOn(apiMock, 'getAttachments').mockResolvedValue([{ id: 'new-video', mimeType: 'video/webm', originalName: 'New recording.webm', filename: 'new.webm' }]);
+    fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop and upload screen recording' }));
+    await flush();
+    expect(screen.getByRole('link', { name: 'Watch' })).toHaveAttribute('href', '/api/attachments/uploads/new.webm');
+    expect(screen.getByText('Call connected')).toBeInTheDocument();
+    expect(peer.close).not.toHaveBeenCalled();
+    expect(callStream.getTracks().every((track) => track.stop.mock.calls.length === 0)).toBe(true);
+    expect(socket.emitted.some(({ event, args }) => event === 'call:presence' && args[0]?.state === 'left')).toBe(false);
+    expect(screenTrack.stop).toHaveBeenCalled();
+  });
+
   it('counts down and auto-stops and uploads at the maximum duration', async () => {
     const recorders = [];
     class FakeRecorder {

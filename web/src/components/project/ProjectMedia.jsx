@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Activity, Mic, MicOff, MonitorUp, Phone, PhoneOff, Radio, Video, VideoOff } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useSocket } from '../../hooks/useSocket';
@@ -50,7 +51,9 @@ export default function ProjectMedia({ projectId }) {
   const [recordingError, setRecordingError] = useState('');
   const [recordingNotice, setRecordingNotice] = useState('');
   const [recordingRemainingMs, setRecordingRemainingMs] = useState(MAX_RECORDING_DURATION_MS);
-  const [recordings, setRecordings] = useState([]);
+  const queryClient = useQueryClient();
+  const filesQuery = useQuery({ queryKey: ['project-files', projectId], queryFn: () => api.getAttachments('PROJECT', projectId) });
+  const recordings = (Array.isArray(filesQuery.data) ? filesQuery.data : []).filter((item) => item.mimeType?.startsWith('video/'));
   const [callState, setCallState] = useState('idle');
   const [callError, setCallError] = useState('');
   const [callNotice, setCallNotice] = useState('');
@@ -95,17 +98,6 @@ export default function ProjectMedia({ projectId }) {
   const deviceSwitchQueueRef = useRef({});
   // Re-subscribes stats polling when the peer is rebuilt.
   const [peerGeneration, setPeerGeneration] = useState(0);
-
-  const refreshRecordings = useCallback(async () => {
-    try {
-      const attachments = await api.getAttachments('PROJECT', projectId);
-      setRecordings((attachments || []).filter((item) => item.mimeType?.startsWith('video/')));
-    } catch {
-      // The primary call and recording controls remain usable if history cannot load.
-    }
-  }, [projectId]);
-
-  useEffect(() => { refreshRecordings(); }, [refreshRecordings]);
 
   const stopLocalTracks = useCallback(() => {
     localStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -610,7 +602,7 @@ export default function ProjectMedia({ projectId }) {
           try {
             const file = new File([blob], recordingFileName('screen-recording', mimeType), { type: mimeType });
             await api.uploadAttachment(file, 'PROJECT', projectId);
-            await refreshRecordings();
+            await queryClient.invalidateQueries({ queryKey: ['project-files', projectId] });
           } catch (error) { setRecordingError(error.message || 'Recording upload failed.'); }
           finally { setUploading(false); }
         },
