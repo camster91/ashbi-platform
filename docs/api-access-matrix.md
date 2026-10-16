@@ -56,12 +56,12 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | api-key + scope ai_bridge:actions | 2 |
 | api-key + scope ai_bridge:read | 1 |
 | bot-secret | 40 |
-| client-portal | 27 |
+| client-portal | 31 |
 | public | 51 |
 | recent-auth + staff | 9 |
-| staff | 460 |
+| staff | 465 |
 | staff (inline) | 1 |
-| **total** | 659 |
+| **total** | 668 |
 
 ## Routes by prefix
 
@@ -359,6 +359,10 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/client-portal/me` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects/:id` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id/account-manager-requests` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/account-manager-requests` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id/account-manager-requests/:requestId` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id/account-manager-requests/by-intent/:key` | client-portal | exempt |  |
 | POST | `/api/client-portal/projects/:id/chat-uploads` | client-portal | exempt |  |
 | DELETE | `/api/client-portal/projects/:id/chat-uploads/:attachmentId` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects/:id/documents` | client-portal | exempt |  |
@@ -769,6 +773,16 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/portal/review/:token/annotations` | public | exempt | capability token: Named-guest comment on the session the review share link names; plain text, bounded, rate limited per IP. |
 | POST | `/api/portal/review/:token/decisions` | public | exempt | capability token: Approval decision via review share link, only when the link was created with allowDecision; append-only and audited. Rate limited per IP. |
 | GET | `/api/portal/review/:token/file` | public | exempt | capability token: Streams only the file of the session the review share link names; quarantined, unreviewable and scan-blocked files are withheld. Rate limited per IP. |
+
+### /api/portal-handoffs
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/portal-handoffs` | staff | exempt | Fresh ADMIN/TEAM identity and organization; canonical request/client/project SQL join scopes before cursor/limit. |
+| GET | `/api/portal-handoffs/:requestId` | staff | exempt | Fresh ADMIN/TEAM identity and organization; exact canonical request/client/project join before receipt read. |
+| POST | `/api/portal-handoffs/:requestId/claim` | staff | exempt | Serializable fresh ADMIN/TEAM identity and canonical organization/client/project; self-claim only with revision CAS and required audit. |
+| POST | `/api/portal-handoffs/:requestId/requeue` | staff | exempt | Serializable fresh ADMIN in the canonical organization/client/project; bounded reason, revision CAS and required audit. |
+| POST | `/api/portal-handoffs/:requestId/resolve` | staff | exempt | Serializable fresh owner or ADMIN in the canonical organization/client/project; revision CAS and required audit. |
 
 ### /api/projects
 

@@ -685,7 +685,7 @@ function PortalDashboard({ token }) {
         {activeTab === 'projects' && selectedProject && (
           <Suspense fallback={<LoadingState label="Loading project..." />}>
             <ProjectDetail
-              projectId={selectedProject} token={token}
+              projectId={selectedProject} token={token} handoffIdentity={me?.handoffIdentity}
               onBack={() => setSelectedProject(null)}
             />
           </Suspense>

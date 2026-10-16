@@ -30,7 +30,7 @@ export default async function workQueueRoutes(fastify) {
     preHandler: [requireQueueStaff, validateQuery(workQueueQuerySchema)],
   }, async (request) => {
     return buildWorkQueue(request.prisma, {
-      user: { id: request.user.id, role: request.user.role },
+      user: { id: request.user.id, role: request.user.role, organizationId: request.user.organizationId },
       filters: request.query,
     });
   });

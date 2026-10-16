@@ -143,8 +143,8 @@ test('rows sort by due date (undated last), then by age; counts cover every view
 
 test('sources follow their owning routes: reviews for review staff, finance and approvals for admins', () => {
   const keys = (role) => sourcesForRole(role).map((source) => source.key);
-  assert.deepEqual(keys('ADMIN'), ['tasks', 'approvals', 'reviews', 'proposals', 'contracts', 'invoices']);
-  assert.deepEqual(keys('TEAM'), ['tasks', 'reviews']);
+  assert.deepEqual(keys('ADMIN'), ['portal_handoffs', 'tasks', 'approvals', 'reviews', 'proposals', 'contracts', 'invoices']);
+  assert.deepEqual(keys('TEAM'), ['portal_handoffs', 'tasks', 'reviews']);
   // The review routes admit ADMIN and TEAM only, so STAFF gets no review rows.
   assert.deepEqual(keys('STAFF'), ['tasks']);
   assert.deepEqual(REVIEW_STAFF_ROLES, ['ADMIN', 'TEAM']);

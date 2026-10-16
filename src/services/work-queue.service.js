@@ -6,6 +6,7 @@
 import logger from '../utils/logger.js';
 import { UNPAID_INVOICE_STATUSES } from '../utils/invoice-balance.js';
 import { REVIEW_STAFF_ROLES } from './media-review.service.js';
+import { authorizeHandoffStaff, canonicalHandoffIds } from './portal-handoff.service.js';
 
 export const WORK_QUEUE_VIEWS = Object.freeze(['needs_action', 'awaiting_approval', 'waiting_on_client', 'at_risk']);
 
@@ -275,6 +276,21 @@ export function countByView(rows) {
  * admin-only.
  */
 export const WORK_QUEUE_SOURCES = Object.freeze([
+  {
+    key: 'portal_handoffs', roles: ['ADMIN', 'TEAM'],
+    async load(prisma, { filters, user, now }) {
+      const actor = await authorizeHandoffStaff(prisma, user);
+      const ids = await canonicalHandoffIds(prisma, actor, { limit: WORK_QUEUE_SOURCE_LIMIT + 1, statuses: ['PENDING', 'CLAIMED'],
+        clientId: filters.clientId, projectId: filters.projectId, ownerId: filters.owner === 'me' ? actor.id : undefined });
+      const rows = ids.length ? await prisma.portalHandoffRequest.findMany({ where: { organizationId: actor.organizationId, id: { in: ids } },
+        select: { id: true, status: true, ownerId: true, createdAt: true, project: projectSelect }, orderBy: { id: 'asc' }, take: WORK_QUEUE_SOURCE_LIMIT + 1 }) : [];
+      // Deliberately no client question in the queue or existing AI brief.
+      return rows.map(row => ({ type: 'portal_handoff', id: row.id, title: 'Client requested an account manager', sourceUrl: `/project/${row.project.id}`,
+        client: ref(row.project.client), project: ref(row.project), owner: row.ownerId ? { id: row.ownerId, name: 'Claimed by staff', role: null } : null, state: row.status,
+        nextAction: row.status === 'PENDING' ? 'Claim the human request' : 'Follow up with the client and resolve the request',
+        dueAt: null, dueKind: null, ageDays: ageInDays(row.createdAt, now), view: 'needs_action' }));
+    },
+  },
   {
     key: 'tasks',
     roles: WORK_QUEUE_STAFF_ROLES,

@@ -5,7 +5,8 @@
  *
  * Pulls emails from the last 48hrs from the connected Gmail inbox,
  * matches senders to Hub clients/contacts, stores via Prisma,
- * and applies AI triage tags.
+ * and applies local keyword triage tags.
+ * A bounded rolling scan is partial stored history, not a full mailbox mirror.
  *
  * The mailbox belongs to one organization: GMAIL_SYNC_ORGANIZATION_ID (an
  * existing Organization id) is required, and senders are matched only
@@ -14,7 +15,7 @@
  *
  * Usage: GMAIL_SYNC_ORGANIZATION_ID=<org id> node scripts/gmail-sync.js
  * Cron (every 30min 8am-10pm ET): use docker exec cron
- * Cron overnight: full sync at 5am UTC
+ * Cron overnight: the same bounded rolling INBOX scan at 5am UTC
  */
 
 // Prisma 7 ESM + driver adapter setup.
@@ -24,7 +25,9 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { matchSenderToClient } from '../src/services/gmail-sync-matcher.js';
+import { ingestGmailMessage } from '../src/services/gmail-ingest.service.js';
+import { scanGmailInbox } from '../src/services/gmail-sync-scan.js';
+import { outboundSignal } from '../src/utils/outbound-timeouts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const prisma = new PrismaClient({
@@ -71,6 +74,7 @@ async function getAccessToken() {
   if (now >= expiresAt - 300) {
     console.log('[gmail-sync] Refreshing access token...');
     const resp = await fetch('https://oauth2.googleapis.com/token', {
+      signal: outboundSignal('oauth'),
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -82,8 +86,7 @@ async function getAccessToken() {
     });
 
     if (!resp.ok) {
-      const err = await resp.text();
-      throw new Error(`Token refresh failed: ${resp.status} ${err}`);
+      throw new Error('GMAIL_SYNC_TOKEN_REFRESH_FAILED');
     }
 
     const data = await resp.json();
@@ -104,23 +107,13 @@ async function getAccessToken() {
 
 async function gmailFetch(endpoint, token) {
   const resp = await fetch(`${GMAIL_API}${endpoint}`, {
+    signal: outboundSignal('api'),
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Gmail API error: ${resp.status} ${err}`);
+    throw new Error('GMAIL_SYNC_PROVIDER_REQUEST_FAILED');
   }
   return resp.json();
-}
-
-async function listRecentMessages(token) {
-  const after = Math.floor((Date.now() - HOURS_LOOKBACK * 60 * 60 * 1000) / 1000);
-  const query = `in:inbox after:${after}`;
-  const data = await gmailFetch(
-    `/messages?q=${encodeURIComponent(query)}&maxResults=200`,
-    token
-  );
-  return data.messages || [];
 }
 
 async function getMessageDetail(messageId, token) {
@@ -286,251 +279,52 @@ function triageEmail({ from, subject, body, isUpwork }) {
   return tags;
 }
 
-// ==================== DEDUPLICATE ====================
-
-async function isDuplicate(senderEmail, subject, gmailMessageId) {
-  // Check by gmail message ID in aiExtracted JSON
-  const existing = await prisma.message.findFirst({
-    where: {
-      senderEmail,
-      aiExtracted: {
-        contains: gmailMessageId
-      },
-      thread: { client: { organizationId: ORGANIZATION_ID } }
-    }
-  });
-  return !!existing;
-}
-
-// ==================== STORE IN HUB ====================
-
-async function storeInHub(email, clientMatch, tags, upworkInfo) {
-  const { from, subject, body, threadId: gmailThreadId, gmailMessageId, date, senderEmail, senderName } = email;
-
-  // Deduplicate
-  if (await isDuplicate(senderEmail, subject, gmailMessageId)) {
-    return { skipped: true, reason: 'duplicate' };
-  }
-
-  // Skip outbound emails from ourselves
-  if (senderEmail.toLowerCase().includes('@ashbi.ca') && !upworkInfo?.isUpwork) {
-    return { skipped: true, reason: 'own email' };
-  }
-
-  const aiExtractedData = {
-    gmailThreadId,
-    gmailMessageId,
-    tags,
-    source: 'gmail-sync',
-    syncedAt: new Date().toISOString(),
-    ...(upworkInfo?.upworkUrl ? { upworkUrl: upworkInfo.upworkUrl } : {})
-  };
-
-  // For Upwork messages: find or create thread under "Upwork" virtual client or match by contract
-  if (upworkInfo?.isUpwork) {
-    // Find existing Upwork triage item with same thread
-    const existingTriage = await prisma.emailTriageItem.findFirst({
-      where: {
-        organizationId: ORGANIZATION_ID,
-        senderEmail,
-        status: 'PENDING'
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    if (!existingTriage) {
-      await prisma.emailTriageItem.create({
-        data: {
-          organizationId: ORGANIZATION_ID,
-          subject: subject || '(Upwork message)',
-          senderEmail,
-          senderName: upworkInfo.clientName || senderName,
-          bodyText: body?.substring(0, 50000) || '',
-          tags: JSON.stringify(tags),
-          status: 'PENDING',
-          aiSummary: `Upwork message${upworkInfo.clientName ? ` from ${upworkInfo.clientName}` : ''}${upworkInfo.upworkUrl ? ` | URL: ${upworkInfo.upworkUrl}` : ''}`
-        }
-      });
-    }
-    return { stored: true, triage: true, tags, upwork: true };
-  }
-
-  // If we matched a client, create/find a thread
-  if (clientMatch) {
-    tags = [...tags, 'client'];
-
-    // Clean subject for matching (remove Re:, Fwd:, etc.)
-    const cleanSubject = subject?.replace(/^(Re|Fwd|Fw):\s*/i, '').trim() || '';
-
-    // Find existing open thread for this client with similar subject
-    let thread = null;
-    if (gmailThreadId) {
-      // Match by gmail thread ID stored in messages
-      const existingMsg = await prisma.message.findFirst({
-        where: {
-          aiExtracted: { contains: gmailThreadId },
-          thread: { clientId: clientMatch.client.id }
-        },
-        include: { thread: true }
-      });
-      if (existingMsg) thread = existingMsg.thread;
-    }
-
-    if (!thread) {
-      thread = await prisma.thread.findFirst({
-        where: {
-          clientId: clientMatch.client.id,
-          status: { not: 'RESOLVED' },
-          subject: { contains: cleanSubject.substring(0, 50) }
-        },
-        orderBy: { lastActivityAt: 'desc' }
-      });
-    }
-
-    if (!thread) {
-      thread = await prisma.thread.create({
-        data: {
-          subject: subject || '(no subject)',
-          status: 'OPEN',
-          priority: tags.includes('urgent') ? 'HIGH' : 'NORMAL',
-          clientId: clientMatch.client.id,
-          matchConfidence: clientMatch.confidence,
-          matchReason: `Gmail sync - matched by ${clientMatch.contact ? 'contact email' : 'domain'}`,
-          needsTriage: tags.includes('lead') || clientMatch.confidence < 0.85
-        }
-      });
-    }
-
-    // Add message to thread
-    await prisma.message.create({
-      data: {
-        direction: 'INBOUND',
-        senderEmail,
-        senderName,
-        subject,
-        bodyText: body?.substring(0, 50000) || '',
-        receivedAt: new Date(date),
-        threadId: thread.id,
-        aiExtracted: JSON.stringify(aiExtractedData)
-      }
-    });
-
-    // Update thread activity
-    await prisma.thread.update({
-      where: { id: thread.id },
-      data: {
-        lastActivityAt: new Date(),
-        ...(tags.includes('urgent') ? { priority: 'HIGH' } : {})
-      }
-    });
-
-    return { stored: true, threadId: thread.id, clientName: clientMatch.client.name };
-  }
-
-  // No client match - store as EmailTriageItem for review
-  await prisma.emailTriageItem.create({
-    data: {
-      organizationId: ORGANIZATION_ID,
-      subject: subject || '(no subject)',
-      senderEmail,
-      senderName,
-      bodyText: body?.substring(0, 50000) || '',
-      tags: JSON.stringify(tags),
-      status: 'PENDING',
-      aiSummary: `Gmail sync: ${tags.join(', ')}`
-    }
-  });
-
-  return { stored: true, triage: true, tags };
-}
-
 // ==================== MAIN ====================
 
 async function main() {
-  const timestamp = new Date().toISOString();
-  console.log(`\n[gmail-sync] ===== Starting at ${timestamp} =====`);
-  console.log(`[gmail-sync] Looking back ${HOURS_LOOKBACK} hours`);
-
-  // Fail closed: without the mailbox's organization nothing can be filed.
-  if (!ORGANIZATION_ID) {
-    throw new Error('GMAIL_SYNC_ORGANIZATION_ID is not set: the organization that owns the synced mailbox is required');
-  }
+  if (!ORGANIZATION_ID) throw new Error('GMAIL_SYNC_ORGANIZATION_REQUIRED');
+  if (!Number.isInteger(HOURS_LOOKBACK) || HOURS_LOOKBACK < 1 || HOURS_LOOKBACK > 168) throw new Error('GMAIL_SYNC_LOOKBACK_INVALID');
   const organization = await prisma.organization.findUnique({ where: { id: ORGANIZATION_ID }, select: { id: true } });
-  if (!organization) {
-    throw new Error(`GMAIL_SYNC_ORGANIZATION_ID ${ORGANIZATION_ID} is not an existing organization`);
-  }
-
+  if (!organization) throw new Error('GMAIL_SYNC_ORGANIZATION_UNAVAILABLE');
   const token = await getAccessToken();
-  const messageList = await listRecentMessages(token);
-
-  console.log(`[gmail-sync] Found ${messageList.length} messages in last ${HOURS_LOOKBACK}h`);
-
-  let synced = 0;
-  let skipped = 0;
-  let errors = 0;
-
-  for (const msg of messageList) {
-    try {
-      const detail = await getMessageDetail(msg.id, token);
+  // Identity comes from the current authenticated provider, never a configured
+  // address, sender header, alias, token contents, or deployment organization.
+  const profile = await gmailFetch('/profile', token);
+  const mailbox = typeof profile.emailAddress === 'string' ? profile.emailAddress.trim().toLowerCase() : '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mailbox) || mailbox.length > 255) throw new Error('GMAIL_SYNC_MAILBOX_UNAVAILABLE');
+  const after = Math.floor((Date.now() - HOURS_LOOKBACK * 3600000) / 1000);
+  const query = `in:inbox after:${after}`;
+  const result = await scanGmailInbox({
+    query, lookbackHours: HOURS_LOOKBACK,
+    fetchPage: ({ query, pageToken, maxResults }) => {
+      const params = new URLSearchParams({ q: query, maxResults: String(maxResults) });
+      if (pageToken) params.set('pageToken', pageToken);
+      return gmailFetch(`/messages?${params}`, token);
+    },
+    processMessage: async providerMessageId => {
+      const detail = await getMessageDetail(providerMessageId, token);
+      if (detail.id !== providerMessageId) throw new Error('GMAIL_SYNC_MESSAGE_ID_CHANGED');
       const headers = detail.payload?.headers || [];
-
-      const fromRaw = extractHeader(headers, 'From');
-      const { email: senderEmail, name: senderName } = parseEmailAddress(fromRaw);
+      const { email: senderEmail, name: senderName } = parseEmailAddress(extractHeader(headers, 'From'));
       const subject = extractHeader(headers, 'Subject') || '(no subject)';
-      const date = extractHeader(headers, 'Date') || new Date().toISOString();
-      const messageId = extractHeader(headers, 'Message-ID') || msg.id;
-      const body = extractBody(detail.payload);
-      const snippet = detail.snippet || '';
-
-      // Detect Upwork
-      const upworkInfo = detectUpwork(senderEmail, subject, body + snippet);
-
-      // Skip our own non-upwork emails
-      if (senderEmail.toLowerCase().includes('@ashbi.ca') && !upworkInfo) {
-        skipped++;
-        continue;
-      }
-
-      // Match sender to client (skip for Upwork)
-      const clientMatch = upworkInfo ? null : await matchSenderToClient(prisma, ORGANIZATION_ID, senderEmail);
-
-      // Triage
-      let tags = triageEmail({ from: senderEmail, subject, body, isUpwork: !!upworkInfo });
-
-      // Store
-      const result = await storeInHub(
-        { from: fromRaw, subject, body, threadId: detail.threadId, gmailMessageId: msg.id, date, senderEmail, senderName, snippet },
-        clientMatch,
-        tags,
-        upworkInfo
-      );
-
-      if (result.skipped) {
-        skipped++;
-      } else {
-        synced++;
-        let dest = `→ triage [${result.tags?.join(', ')}]`;
-        if (result.clientName) dest = `→ ${result.clientName} (thread ${result.threadId})`;
-        if (result.upwork) dest = `→ Upwork inbox`;
-        console.log(`[gmail-sync] ${senderEmail}: ${subject.substring(0, 60)} ${dest}`);
-      }
-
-      // Small delay to avoid rate limiting
-      await new Promise(r => setTimeout(r, 100));
-    } catch (err) {
-      errors++;
-      console.error(`[gmail-sync] Error processing message ${msg.id}:`, err.message);
-    }
-  }
-
-  console.log(`[gmail-sync] Done: ${synced} synced, ${skipped} skipped, ${errors} errors`);
+      const body = extractBody(detail.payload || {});
+      const upworkInfo = detectUpwork(senderEmail, subject, body + (detail.snippet || ''));
+      if (senderEmail.toLowerCase().split('@')[1] === 'ashbi.ca' && !upworkInfo) return { skipped: true };
+      const receivedAt = new Date(Number(detail.internalDate));
+      return ingestGmailMessage(prisma, {
+        organizationId: ORGANIZATION_ID, mailbox, providerMessageId, providerThreadId: detail.threadId,
+        senderEmail, senderName: senderName?.substring(0, 255) || null, subject: subject.substring(0, 1000),
+        bodyText: body.substring(0, 50000), receivedAt,
+        tags: triageEmail({ from: senderEmail, subject, body, isUpwork: !!upworkInfo }), upwork: !!upworkInfo,
+      });
+    },
+  });
+  console.log(`GMAIL_SYNC_SUMMARY ${JSON.stringify(result)}`);
 }
 
-main()
-  .catch((err) => {
-    console.error('[gmail-sync] Fatal error:', err);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main().catch(() => {
+  // Provider responses can contain mailbox content or OAuth details. Keep
+  // both cron logs and the admin child-process response free of that content.
+  console.error('[gmail-sync] Sync failed; scan incomplete.');
+  process.exitCode = 1;
+}).finally(async () => { await prisma.$disconnect(); });

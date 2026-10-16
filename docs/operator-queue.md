@@ -132,3 +132,14 @@ reviews they can open.
   owner/client/project filters, bot refusal.
 - `web/src/tests/WorkQueue.test.jsx`: tabs with counts and keyboard navigation,
   filters, source links, empty, partial, error and loading states, navigation.
+
+## Human portal requests
+
+`portal_handoffs` adds open `PENDING`/`CLAIMED` human follow-up requests for
+current ADMIN/TEAM members. Canonical client/project/organization matching is
+applied before the source cap and filters, including after a project remap.
+The generic title excludes the client's question, including in account-manager
+briefs. Rows map to `needs_action` and link to the existing project page; this
+backend slice does not add staff claim controls to that page. Owner, client,
+project and view filtering retain the queue's existing semantics. Failures and
+truncation remain explicit. See [portal-human-handoffs.md](portal-human-handoffs.md).

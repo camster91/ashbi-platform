@@ -1,6 +1,7 @@
 // Gmail API routes — bidirectional email via Gmail OAuth
 
 import fs from 'fs';
+import { parseGmailSyncSummary } from '../services/gmail-sync-scan.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import env from '../config/env.js';
@@ -402,12 +403,10 @@ Write a helpful, professional reply that addresses the client's needs. Be concis
       execFile(process.execPath, [scriptPath], {
         timeout: 120000,
         env: { ...process.env, GMAIL_SYNC_ORGANIZATION_ID: organizationId },
-      }, (error, stdout, stderr) => {
-        if (error) {
-          resolve({ success: false, error: 'Command failed', output: stderr });
-        } else {
-          resolve({ success: true, output: stdout });
-        }
+      }, (error, stdout) => {
+        const summary = !error && parseGmailSyncSummary(stdout);
+        if (!summary) resolve({ success: false, partial: true, error: 'Gmail sync failed; the scan is incomplete.' });
+        else resolve({ success: !summary.partial, ...summary });
       });
     });
   });

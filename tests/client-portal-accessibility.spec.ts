@@ -10,9 +10,11 @@ const viewports = [
   { width: 1366, height: 768 },
   { width: 1920, height: 1080 },
 ];
+const handoffIdentity = { organizationId: 'portal-fixture-org', userId: 'portal-fixture-user', contactId: 'portal-fixture-contact' };
 
 test.describe('Client portal accessibility', () => {
   test.beforeEach(async ({ page }) => {
+    await page.routeWebSocket('**/*', socket => socket.close());
     // These login checks start without a portal or staff cookie session. Later
     // per-test authenticated routes take precedence over this default fixture.
     await page.route('**/api/**', async route => {
@@ -45,7 +47,7 @@ test.describe('Client portal accessibility', () => {
         return route.fulfill({
           status: logoutCalled ? 401 : 200,
           contentType: 'application/json',
-          body: logoutCalled ? '{"error":"revoked"}' : JSON.stringify({ client: { name: 'Fixture Client' }, contact: { name: 'Fixture Contact' } }),
+          body: logoutCalled ? '{"error":"revoked"}' : JSON.stringify({ client: { name: 'Fixture Client' }, contact: { name: 'Fixture Contact' }, handoffIdentity }),
         });
       }
       if (pathname.endsWith('/projects') || pathname.endsWith('/invoices')) {
@@ -79,7 +81,8 @@ test.describe('Client portal accessibility', () => {
       const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
       if (pathname.endsWith('/verify-token')) return json({ user: { role: 'CLIENT' } });
       // The agency's own brand (issue #531), never another workspace's name.
-      if (pathname.endsWith('/me')) return json({ client: { name: 'Fixture Client' }, contact: { name: 'Fixture Contact' }, brand: { companyName: 'Fixture Agency', logoUrl: null } });
+      if (pathname.endsWith('/me')) return json({ client: { name: 'Fixture Client' }, contact: { name: 'Fixture Contact' }, brand: { companyName: 'Fixture Agency', logoUrl: null }, handoffIdentity });
+      if (pathname.endsWith('/account-manager-requests') && request.method() === 'GET') return json({ items: [], nextCursor: null });
       if (pathname.endsWith('/contracts')) return json([{ id: 'contract-a', title: 'Project agreement', status: 'SENT', signToken: 'sign-a', canReview: true }]);
       if (pathname.endsWith('/projects/project-a/revisions/revision-a/respond')) {
         revisionPayload = request.postDataJSON();
@@ -116,12 +119,12 @@ test.describe('Client portal accessibility', () => {
     await expect(page.getByRole('alert')).toContainText('Describe the changes');
     await page.getByLabel('Feedback for round 1').fill('Please adjust the homepage hierarchy.');
     await page.getByRole('button', { name: 'Request changes' }).click();
-    await expect(page.getByRole('status')).toContainText('Change request sent');
+    await expect(page.getByRole('status').filter({ hasText: 'Change request sent for revision round 1.' })).toHaveText('Change request sent for revision round 1.');
     expect(revisionPayload).toEqual({ action: 'REQUEST_CHANGES', feedback: 'Please adjust the homepage hierarchy.' });
 
     await page.getByLabel('Message to the project team').fill('The new direction looks good.');
     await page.getByRole('button', { name: 'Send feedback' }).click();
-    await expect(page.getByRole('status')).toContainText('feedback was sent');
+    await expect(page.getByRole('status').filter({ hasText: 'Your feedback was sent to the project team.' })).toHaveText('Your feedback was sent to the project team.');
     expect(projectFeedback).toBe('The new direction looks good.');
 
     await expect(page.locator('header').getByText('Fixture Agency')).toBeVisible();
