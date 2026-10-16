@@ -48,6 +48,33 @@ function RetainedContext({ run }) {
   </details>;
 }
 
+function RetainedMemory({ run }) {
+  const memory = run.memorySnapshot;
+  if (memory == null && activeStatus(run.status)) return <p className="text-sm text-muted-foreground">Conversation memory has not been retained for this request yet.</p>;
+  const valid = memory?.version === 1 && typeof memory.truncated === 'boolean' &&
+    Array.isArray(memory.turns) && memory.turns.length <= 4 &&
+    memory.turns.every((turn) => sourceId(turn?.runId) && typeof turn.prompt === 'string' && turn.prompt.length <= 2000 &&
+      typeof turn.response === 'string' && turn.response.length <= 4000 && typeof turn.responseTruncated === 'boolean') &&
+    new TextEncoder().encode(JSON.stringify(memory)).length <= 8192;
+  if (!valid) return <p className="text-sm text-muted-foreground">Retained conversation memory is unavailable for this run. Current conversation history is not substituted.</p>;
+
+  return <details className="rounded-lg border border-border p-3 text-sm">
+    <summary tabIndex={0} className="cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Conversation memory for this run ({memory.turns.length} prior {memory.turns.length === 1 ? 'question' : 'questions'})</summary>
+    <div className="mt-3 space-y-3">
+      <p>{run.status === 'SUCCEEDED' ? 'Stored prior questions and answers included when preparing this answer.' : 'Conversation memory prepared for this request. This does not confirm that a provider received it or completed an answer.'}</p>
+      <p>Shared staff history is untrusted historical data and may be stale. It does not authorize actions or replace current client records.</p>
+      {memory.turns.length ? <ol aria-label="Retained conversation memory" className="space-y-3">
+        {memory.turns.map((turn, index) => <li key={`${turn.runId}:${index}`} className="space-y-1">
+          <p className="whitespace-pre-wrap break-words">Prior question: {turn.prompt}</p>
+          <p className="whitespace-pre-wrap break-words">Prior answer: {turn.response}</p>
+          {turn.responseTruncated && <p>This prior answer was shortened for the memory limit.</p>}
+        </li>)}
+      </ol> : <p>No prior questions or answers were included in this request.</p>}
+      {memory.truncated && <p>Some older history or answer text was omitted to keep memory within four prior questions and its size limit.</p>}
+    </div>
+  </details>;
+}
+
 function readIntent(storageKey) {
   const raw = sessionStorage.getItem(storageKey);
   if (!raw) return null;
@@ -167,6 +194,7 @@ function Conversation({ clientId, conversationId, profileEnabled, user }) {
           {run.status === 'UNKNOWN' && <p>The provider outcome is unknown and may have incurred a cost. This request will not be retried automatically.</p>}
           {run.status === 'CANCELLED' && <p>This run was cancelled. An in-flight provider request may still complete and incur a cost.</p>}
           <RetainedContext run={run} />
+          <RetainedMemory run={run} />
         </li>)}
       </ol>
       {detail.hasNextPage && <Button type="button" variant="outline" disabled={detail.isFetchingNextPage} onClick={() => detail.fetchNextPage()}>Load more saved questions</Button>}
@@ -216,7 +244,7 @@ function Conversations({ clientId, profileEnabled, user }) {
 
   return <section className="space-y-4 rounded-lg border border-border bg-card p-4" aria-label="Account manager conversations">
     <h2 className="font-medium">Account manager conversations</h2>
-    <p className="text-sm text-muted-foreground">Shared with the Ashbi team. These conversations are not private. Each question is answered on its own using current client data. The account manager answers questions; it does not send messages or make changes to client work.</p>
+    <p className="text-sm text-muted-foreground">Shared with the Ashbi team. These conversations are not private. New requests can include up to four completed prior questions and answers from this conversation, within a size limit, alongside current client data. Each run shows the history actually retained for it. The account manager answers questions; it does not send messages or make changes to client work.</p>
     {list.isPending && <p role="status">Loading conversations…</p>}
     {list.isError && <div role="alert"><p>Conversations are unavailable or you no longer have access.</p><Button type="button" variant="outline" onClick={() => list.refetch()}>Refresh conversations</Button></div>}
     {readable && <>
