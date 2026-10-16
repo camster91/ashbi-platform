@@ -1,6 +1,7 @@
 import { isWorkspaceBoundAction } from './workspace-bound-actions.js';
 import { WORKSPACE_CLIENT_AGENT_ACTIONS } from './workspace-client-agent-actions.js';
 import { clientTaskInputSchema, clientTaskScope, authorizeClientTaskReceipt } from '../services/client-agent-action.service.js';
+import { WORKSPACE_SERVICE_PANEL_TOOLS } from './workspace-service-panel-tools.js';
 import { WORKSPACE_NOTE_TOOLS } from './workspace-note-tools.js';
 import { visibleNoteIds } from '../services/note-access.service.js';
 import { z } from 'zod';
@@ -58,6 +59,7 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
 }
 
 export const workspaceRegistry = createToolRegistry([
+  ...WORKSPACE_SERVICE_PANEL_TOOLS,
   ...WORKSPACE_ACCOUNT_MANAGER_TOOLS,
   ...WORKSPACE_CHAT_TOOLS,
   ...WORKSPACE_CLIENT_COMMUNICATIONS_TOOLS,

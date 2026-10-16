@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-123 models, 0 enums, 69 tenant-scoped, 13 soft-deletable.
+125 models, 0 enums, 71 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -39,7 +39,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [CalendarEvent](#model-calendarevent) | `calendar_events` | no | no | 22 |
 | [ChatMessage](#model-chatmessage) | `chat_messages` | no | no | 22 |
 | [ChatReaction](#model-chatreaction) | `chat_reactions` | no | no | 7 |
-| [Client](#model-client) | `clients` | yes | yes | 56 |
+| [Client](#model-client) | `clients` | yes | yes | 58 |
 | [ClientAgentConversation](#model-clientagentconversation) | `client_agent_conversations` | yes | no | 13 |
 | [ClientAgentProfile](#model-clientagentprofile) | `client_agent_profiles` | yes | no | 17 |
 | [ClientAgentRun](#model-clientagentrun) | `client_agent_runs` | yes | no | 23 |
@@ -47,6 +47,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [ClientEmbedding](#model-clientembedding) | `client_embeddings` | no | no | 10 |
 | [ClientInvitation](#model-clientinvitation) | `client_invitations` | no | no | 8 |
 | [ClientPortalLinkRedemption](#model-clientportallinkredemption) | `client_portal_link_redemptions` | no | no | 4 |
+| [ClientServiceProject](#model-clientserviceproject) | `client_service_projects` | yes | no | 17 |
+| [ClientServiceReport](#model-clientservicereport) | `client_service_reports` | yes | no | 12 |
 | [Contact](#model-contact) | `contacts` | no | no | 9 |
 | [Contract](#model-contract) | `contracts` | no | yes | 31 |
 | [CreativeBrief](#model-creativebrief) | `creative_briefs` | no | no | 16 |
@@ -83,7 +85,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 78 |
+| [Organization](#model-organization) | `organizations` | no | no | 80 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -647,6 +649,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@unique([organizationId, domain])`
   - `@@index([status])`
   - `@@index([organizationId])`
+  - `@@unique([id, organizationId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -703,6 +706,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `wpSites` | WPSite[] | list, required |  | → WPSite, "WPSiteClient" |  |
 | `estimates` | Estimate[] | list, required |  | → Estimate |  |
 | `rateCards` | RateCard[] | list, required |  | → RateCard |  |
+| `serviceProjects` | ClientServiceProject[] | list, required |  | → ClientServiceProject |  |
+| `serviceReports` | ClientServiceReport[] | list, required |  | → ClientServiceReport |  |
 | `agentProfiles` | ClientAgentProfile[] | list, required |  | → ClientAgentProfile |  |
 | `agentConversations` | ClientAgentConversation[] | list, required |  | → ClientAgentConversation |  |
 | `workspaceChatChannels` | WorkspaceChatChannel[] | list, required |  | → WorkspaceChatChannel |  |
@@ -880,6 +885,63 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `jti` | String | unique, required |  |  |  |
 | `expiresAt` | DateTime | required |  |  |  |
 | `redeemedAt` | DateTime | required | `now()` |  |  |
+
+### Model ClientServiceProject
+
+- Table: `client_service_projects`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([organizationId, clientId, provider, providerProjectId], map: "service_project_provider_key")`
+  - `@@unique([id, organizationId, clientId])`
+  - `@@index([organizationId, clientId, enabled])`
+  - `@@index([clientId, organizationId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `clientId` | String | required |  |  |  |
+| `provider` | String | required | `"OPENSEO"` |  |  |
+| `providerProjectId` | String | required |  |  |  |
+| `displayLabel` | String | required |  |  |  |
+| `enabled` | Boolean | required | `true` |  |  |
+| `revision` | Int | required | `1` |  |  |
+| `lastAttemptAt` | DateTime | optional |  |  |  |
+| `lastSuccessAt` | DateTime | optional |  |  |  |
+| `lastOutcome` | String | optional |  |  |  |
+| `failureCode` | String | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `client` | Client | required |  | → Client, via (clientId, organizationId) → (id, organizationId), onDelete Cascade |  |
+| `reports` | ClientServiceReport[] | list, required |  | → ClientServiceReport |  |
+
+### Model ClientServiceReport
+
+- Table: `client_service_reports`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([mappingId, providerReportId])`
+  - `@@index([organizationId, clientId, hubStoredAt])`
+  - `@@index([clientId, organizationId])`
+  - `@@index([mappingId, organizationId, clientId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `clientId` | String | required |  |  |  |
+| `mappingId` | String | required |  |  |  |
+| `providerReportId` | String | required |  |  |  |
+| `title` | String | required |  |  |  |
+| `summary` | String | required |  |  |  |
+| `sourceReportedAt` | DateTime | optional |  |  |  |
+| `hubStoredAt` | DateTime | required | `now()` |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `client` | Client | required |  | → Client, via (clientId, organizationId) → (id, organizationId), onDelete Cascade |  |
+| `mapping` | ClientServiceProject | required |  | → ClientServiceProject, via (mappingId, organizationId, clientId) → (id, organizationId, clientId), onDelete Cascade |  |
 
 ### Model Contact
 
@@ -1946,6 +2008,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `domainEvents` | DomainEvent[] | list, required |  | → DomainEvent |  |
 | `impersonationSessions` | ImpersonationSession[] | list, required |  | → ImpersonationSession |  |
 | `breakGlassGrants` | BreakGlassGrant[] | list, required |  | → BreakGlassGrant |  |
+| `clientServiceProjects` | ClientServiceProject[] | list, required |  | → ClientServiceProject |  |
+| `clientServiceReports` | ClientServiceReport[] | list, required |  | → ClientServiceReport |  |
 | `clientAgentProfiles` | ClientAgentProfile[] | list, required |  | → ClientAgentProfile |  |
 | `clientAgentConversations` | ClientAgentConversation[] | list, required |  | → ClientAgentConversation |  |
 | `clientAgentRuns` | ClientAgentRun[] | list, required |  | → ClientAgentRun |  |
