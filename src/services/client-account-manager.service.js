@@ -18,6 +18,11 @@ export const ACCOUNT_MANAGER_PLUGINS = Object.freeze([
     tools: Object.freeze(['get_client_account_manager_brief']),
     capabilities: Object.freeze(['project-context', 'work-queue', 'source-links']),
   }),
+  Object.freeze({
+    id: 'client-task-actions', version: '1', name: 'Task proposals', mode: 'approval-required',
+    requiredScope: 'workspace:actions', roles: Object.freeze(['ADMIN', 'TEAM']), effects: 'internal-task-create',
+    tools: Object.freeze(['create_client_task']), capabilities: Object.freeze(['task-preview', 'human-confirmation']),
+  }),
 ]);
 
 /** Shared deterministic projection for the app and workspace MCP. No inference

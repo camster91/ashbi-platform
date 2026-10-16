@@ -341,6 +341,10 @@ export const api = {
   getCommunicationTaskByIntent: (clientId, messageId, key) => request(`/client-communications/${encodeURIComponent(clientId)}/inbox/${encodeURIComponent(messageId)}/task-actions/by-intent/${encodeURIComponent(key)}`, { silent: true }),
   getCommunicationTaskAction: (clientId, messageId, actionId) => request(`/client-communications/${encodeURIComponent(clientId)}/inbox/${encodeURIComponent(messageId)}/task-actions/${encodeURIComponent(actionId)}`, { silent: true }),
   confirmCommunicationTask: (clientId, messageId, actionId) => request(`/client-communications/${encodeURIComponent(clientId)}/inbox/${encodeURIComponent(messageId)}/task-actions/${encodeURIComponent(actionId)}/confirm`, { method: 'POST', body: { confirm: true }, silent: true }),
+  prepareClientTaskAction: (clientId, data) => request(`/clients/${encodeURIComponent(clientId)}/assistant/task-actions`, { method: 'POST', body: data, silent: true, notifyUnauthorized: true }),
+  getClientTaskActionByIntent: (clientId, key) => request(`/clients/${encodeURIComponent(clientId)}/assistant/task-actions/by-intent/${encodeURIComponent(key)}`, { silent: true, notifyUnauthorized: true }),
+  getClientTaskAction: (clientId, actionId) => request(`/clients/${encodeURIComponent(clientId)}/assistant/task-actions/${encodeURIComponent(actionId)}`, { silent: true, notifyUnauthorized: true }),
+  confirmClientTaskAction: (clientId, actionId) => request(`/clients/${encodeURIComponent(clientId)}/assistant/task-actions/${encodeURIComponent(actionId)}/confirm`, { method: 'POST', body: { confirm: true }, silent: true, notifyUnauthorized: true }),
   getClientAgentProfile: (id) => request(`/client-assistants/${encodeURIComponent(id)}/profile`),
   updateClientAgentProfile: (id, data) => request(`/client-assistants/${encodeURIComponent(id)}/profile`, { method: 'PATCH', body: data }),
   listClientAgentConversations: (clientId, params = {}) => {

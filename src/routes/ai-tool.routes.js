@@ -1,3 +1,4 @@
+import { WORKSPACE_BOUND_ACTIONS, isWorkspaceBoundAction } from '../integrations/workspace-bound-actions.js';
 // AI tool approval queue and execution receipts (#413 slice 2,
 // docs/ai-tool-registry.md).
 //
@@ -37,10 +38,9 @@ import {
 } from '../validators/schemas.js';
 
 const STAFF_ROLES = ['ADMIN', 'TEAM'];
-// Source-bound inbox receipts are visible only through their current-source
-// authorized routes/MCP controls, including after execution or reassignment.
-const SOURCE_BOUND_ACTION = 'create_task_from_client_message';
-const genericAction = row => row?.action !== SOURCE_BOUND_ACTION;
+// These two client/source-bound receipts require their dedicated fresh-authority
+// routes/MCP controls, including after execution, profile edits or reassignment.
+const genericAction = row => !isWorkspaceBoundAction(row?.action);
 
 /**
  * Assistant sessions each staff member may start. Proposal
@@ -175,7 +175,7 @@ export default async function aiToolRoutes(fastify, options = {}) {
   async function assertGenericAction(request) {
     const row = await request.prisma.aiBridgeAction.findFirst({ where: {
       id: request.params.id, organizationId: request.user.organizationId,
-      action: { not: SOURCE_BOUND_ACTION }, ...visibleTo(request),
+      action: { notIn: WORKSPACE_BOUND_ACTIONS }, ...visibleTo(request),
     }, select: { id: true, action: true } });
     if (!row || !genericAction(row)) throw new ToolError('NOT_FOUND', 'Action not found', { statusCode: 404 });
   }
@@ -190,7 +190,7 @@ export default async function aiToolRoutes(fastify, options = {}) {
     preHandler: [requireStaffRole, validateQuery(aiToolApprovalListQuerySchema)],
   }, async (request) => {
     const rows = await request.prisma.aiBridgeAction.findMany({
-      where: { status: PENDING_STATUS, action: { not: SOURCE_BOUND_ACTION }, ...visibleTo(request) },
+      where: { status: PENDING_STATUS, action: { notIn: WORKSPACE_BOUND_ACTIONS }, ...visibleTo(request) },
       include: withRequester,
       orderBy: { createdAt: 'desc' },
       take: request.query.limit,
@@ -204,7 +204,7 @@ export default async function aiToolRoutes(fastify, options = {}) {
     preHandler: [requireStaffRole, validateParams(aiToolActionParamsSchema)],
   }, async (request, reply) => {
     const row = await request.prisma.aiBridgeAction.findFirst({
-      where: { id: request.params.id, action: { not: SOURCE_BOUND_ACTION }, ...visibleTo(request) },
+      where: { id: request.params.id, action: { notIn: WORKSPACE_BOUND_ACTIONS }, ...visibleTo(request) },
       include: withRequester,
     });
     if (!row || !genericAction(row)) return reply.status(404).send({ error: 'Action not found', code: 'NOT_FOUND' });
@@ -252,7 +252,7 @@ export default async function aiToolRoutes(fastify, options = {}) {
       where: {
         status: status ?? { not: PENDING_STATUS },
         ...(outcome ? { outcome } : {}),
-        action: tool ? { in: tool === SOURCE_BOUND_ACTION ? [] : [tool] } : { not: SOURCE_BOUND_ACTION },
+        action: tool ? { in: isWorkspaceBoundAction(tool) ? [] : [tool] } : { notIn: WORKSPACE_BOUND_ACTIONS },
         ...(source ? { source } : {}),
         ...(requesterId ? { userId: requesterId } : {}),
         ...(before ? { createdAt: { lt: new Date(before) } } : {}),

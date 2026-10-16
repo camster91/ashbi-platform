@@ -4,8 +4,10 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ClientAccountManager from '../components/ClientAccountManager';
 
-const { getClientAccountManagerBrief, previewClientAssistant } = vi.hoisted(() => ({ getClientAccountManagerBrief: vi.fn(), previewClientAssistant: vi.fn() }));
-vi.mock('../lib/api', () => ({ api: { getClientAccountManagerBrief, previewClientAssistant } }));
+const { getClientAccountManagerBrief, previewClientAssistant, getClientAgentProfile } = vi.hoisted(() => ({ getClientAccountManagerBrief: vi.fn(), previewClientAssistant: vi.fn(), getClientAgentProfile: vi.fn() }));
+vi.mock('../lib/api', () => ({ api: { getClientAccountManagerBrief, previewClientAssistant, getClientAgentProfile } }));
+
+vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'staff', organizationId: 'org', role: 'TEAM' } }) }));
 
 const queue = (overrides = {}) => ({
   generatedAt: '2026-10-14T14:00:00.000Z',
@@ -26,7 +28,7 @@ async function openManager() {
   await waitFor(() => expect(getClientAccountManagerBrief).toHaveBeenCalled());
 }
 
-beforeEach(() => { vi.resetAllMocks(); getClientAccountManagerBrief.mockResolvedValue(queue()); });
+beforeEach(() => { vi.resetAllMocks(); getClientAccountManagerBrief.mockResolvedValue(queue()); getClientAgentProfile.mockResolvedValue({ enabled: true, pluginIds: ['client-work'] }); });
 
 describe('client account manager', () => {
   it.each(['ADMIN', 'TEAM'])('loads lazily with client and %s role, without generating AI', async (role) => {
