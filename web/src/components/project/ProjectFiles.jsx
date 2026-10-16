@@ -1,6 +1,6 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download, Eye, EyeOff, FolderOpen, Loader2, Upload } from 'lucide-react';
+import { Download, Eye, EyeOff, FolderOpen, Loader2, Trash2, Upload } from 'lucide-react';
 import { api } from '../../lib/api';
 import { prepareUploadFile, UPLOAD_ACCEPT } from '../../lib/upload';
 import { useAuth } from '../../hooks/useAuth';
@@ -34,6 +34,13 @@ const isClientUpload = (file) => file.uploadedBy?.role === 'CLIENT';
 // media review shared with them (whatever clientVisible says).
 const seenByClient = (file) => Boolean(file.clientVisible) || Boolean(file.sharedViaReview);
 const reviewNote = (count) => `${filesLabel(count)} shared through a client review ${stays(count)} visible.`;
+// Only destructive identity belongs in the confirmation snapshot; a visibility
+// toggle or timestamp refresh must not discard an otherwise current choice.
+const deleteFileIdentity = (file) => file && JSON.stringify([
+  file.id, file.originalName, file.filename, file.path, file.checksumSha256,
+  file.mimeType, file.size, file.uploadedById, file.uploadedBy?.id,
+  file.organizationId, file.entityType, file.entityId,
+]);
 
 // Set clientVisible on the given files, BULK_BATCH_SIZE at a time. Returns
 // the ids that changed and the skipped files; a failure part-way still
@@ -81,6 +88,18 @@ export default function ProjectFiles({ projectId }) {
   const queryClient = useQueryClient();
   // The server allows the uploader or an admin to change who sees a file.
   const canChange = (file) => user?.role === 'ADMIN' || (Boolean(user?.id) && file.uploadedBy?.id === user.id);
+  const canDelete = (file) => (user?.role === 'TEAM' || user?.role === 'ADMIN')
+    && typeof file.id === 'string' && file.id.length > 0 && canChange(file);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const deleteInFlight = useRef(false);
+  const currentProject = useRef(projectId);
+  currentProject.current = projectId;
+  useEffect(() => {
+    setDeleteTarget(null);
+    setDeleteError('');
+  }, [projectId]);
   const [pendingId, setPendingId] = useState('');
   const [error, setError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -96,6 +115,43 @@ export default function ProjectFiles({ projectId }) {
   });
   const files = Array.isArray(filesQuery.data) ? filesQuery.data : [];
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['project-files', projectId] });
+  const deleteActor = JSON.stringify([user?.id, user?.role, user?.organizationId]);
+  const selectedFileIdentity = deleteFileIdentity(files.find((row) => row.id === deleteTarget?.id));
+  const deleteContextMatches = Boolean(deleteTarget)
+    && deleteTarget.actor === deleteActor && deleteTarget.fileIdentity === selectedFileIdentity;
+  useEffect(() => {
+    if (deleteTarget && !deleteContextMatches) {
+      setDeleteTarget(null);
+      setDeleteError('');
+    }
+  }, [deleteTarget, deleteContextMatches]);
+
+  const deleteFile = async () => {
+    if (deleteInFlight.current || !deleteTarget || deleteTarget.projectId !== projectId
+      || currentProject.current !== projectId) return;
+    const file = files.find((row) => row.id === deleteTarget.id);
+    // Confirm against the current project list and actor, never a stale row.
+    if (filesQuery.error || !file || !canDelete(file) || !deleteContextMatches) {
+      setDeleteError('This file is no longer available to delete. Close this dialog and refresh the project files.');
+      return;
+    }
+    const targetProject = projectId;
+    deleteInFlight.current = true;
+    setDeletePending(true);
+    setDeleteError('');
+    try {
+      await api.deleteAttachment(file.id);
+      await queryClient.invalidateQueries({ queryKey: ['project-files', targetProject] });
+      if (currentProject.current === targetProject) setDeleteTarget(null);
+    } catch (err) {
+      if (currentProject.current === targetProject) {
+        setDeleteError(err?.message || 'The file could not be deleted. Check your connection and try again.');
+      }
+    } finally {
+      deleteInFlight.current = false;
+      setDeletePending(false);
+    }
+  };
 
   // One clear action: share what the client cannot see, or, once they see
   // everything, stop sharing it. A bulk hide leaves the client's own uploads
@@ -367,6 +423,24 @@ export default function ProjectFiles({ projectId }) {
                       Download
                     </a>
                   )}
+                  {canDelete(file) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Delete ${file.originalName}`}
+                      leftIcon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
+                      disabled={deletePending || Boolean(pendingId) || bulkPending}
+                      onClick={() => {
+                        setDeleteError('');
+                        setDeleteTarget({
+                          id: file.id, originalName: file.originalName, projectId,
+                          actor: deleteActor, fileIdentity: deleteFileIdentity(file),
+                        });
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  )}
                   <label
                     className={`inline-flex min-h-11 items-center gap-2 text-sm text-foreground ${canChange(file) ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
                     title={canChange(file) ? undefined : 'Only the uploader or an admin can change this'}
@@ -397,6 +471,16 @@ export default function ProjectFiles({ projectId }) {
         )}
         {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
       </div>
+      <ConfirmDialog
+        isOpen={deleteContextMatches && deleteTarget.projectId === projectId}
+        title="Delete project file"
+        description={`Delete “${deleteTarget?.originalName || ''}” from this project? This cannot be undone.`}
+        confirmLabel="Delete file"
+        onConfirm={deleteFile}
+        onCancel={() => { setDeleteTarget(null); setDeleteError(''); }}
+        pending={deletePending}
+        error={deleteError}
+      />
       <ConfirmDialog
         isOpen={confirmOpen}
         title={bulkShare ? 'Share files with the client' : 'Hide files from the client'}
