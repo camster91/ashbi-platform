@@ -63,7 +63,7 @@ function Requests({ projectId, token, identity }) {
       retain({ key, status: 'UNKNOWN' });
     } catch { setIntent((current) => !current || current.key === key ? { key, status: 'UNKNOWN' } : current); setStorageError(true); }
   }
-  async function confirm(data, key) {
+  async function confirmSubmittedRequest(data, key) {
     if (!active.current) return false;
     if (!validRequest(data?.request, projectId)) throw new Error('Unconfirmed request');
     if (readIntent()?.key !== key) { restore(); setNotice('A different submission is being tracked. Check its status before continuing.'); return false; }
@@ -85,7 +85,7 @@ function Requests({ projectId, token, identity }) {
     } catch { setStorageError(true); busy.current = false; setPending(false); return; }
     try {
       const data = await portalHandoffs.create(projectId, token, { question: question.trim(), idempotencyKey: key });
-      if (active.current) await confirm(data, key);
+      if (active.current) await confirmSubmittedRequest(data, key);
     } catch (error) {
       if (active.current) {
         markUnknown(key);
@@ -98,7 +98,7 @@ function Requests({ projectId, token, identity }) {
     if (!intent || busy.current) return;
     busy.current = true; setPending(true); setNotice('');
     const key = intent.key;
-    try { const data = await portalHandoffs.recover(projectId, token, key); if (active.current) await confirm(data, key); }
+    try { const data = await portalHandoffs.recover(projectId, token, key); if (active.current) await confirmSubmittedRequest(data, key); }
     catch (error) { if (active.current) { markUnknown(key); if ([401, 403].includes(error.status)) setDenied(true); setNotice('The saved request could not be confirmed. Keep this attempt and check again, or contact the team through your usual channel.'); } }
     finally { if (active.current) { busy.current = false; setPending(false); } }
   }
