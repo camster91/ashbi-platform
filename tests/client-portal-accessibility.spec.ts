@@ -93,6 +93,7 @@ test.describe('Client portal accessibility', () => {
         return json({ id: 'activity-a' }, 201);
       }
       if (pathname.endsWith('/projects/project-a/tasks')) return json({ columns: { TODO: [], IN_PROGRESS: [], DONE: [], BLOCKED: [] } });
+      if (pathname === '/api/client-portal/projects/project-a/resource-links' && request.method() === 'GET') return json({ items: [], nextCursor: null });
       if (pathname.endsWith('/projects/project-a/documents')) return json([]);
       if (pathname.endsWith('/projects/project-a')) return json({
         id: 'project-a', name: 'Portal Project', status: 'ACTIVE', progressPct: 25,

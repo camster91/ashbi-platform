@@ -32,3 +32,6 @@ The additive migration creates the resource table, tenant/parent constraints,
 immutable provenance and archive/revision guards. Required hosted integration
 tests exercise the committed migration against disposable PostgreSQL. Local
 unit tests alone do not verify database constraints or concurrency.
+
+
+Resource links, including archived links, retain their parent task, project and client recovery records. Permanent trash deletion returns HTTP 409 with code `RESOURCE_LINK_RETENTION` when a parent contains retained resources; restore the parent to manage those resources. Empty trash reports the same fixed reason for each retained item. Scheduled expiry counts these items as `retained`, preserves their recovery ledger, and continues with other items; unrelated database failures remain failures. Archiving a link does not authorize its hard deletion or removal of its provenance.

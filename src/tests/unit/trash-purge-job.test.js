@@ -24,7 +24,7 @@ test('scheduled purge delegates each expired ledger to the atomic hard-purge bou
     { scopedPrisma, rawPrisma, trashId: 'trash-a' },
     { scopedPrisma, rawPrisma, trashId: 'trash-b' },
   ]);
-  assert.deepEqual(result, { examined: 2, purged: 1, failed: 1 });
+  assert.deepEqual(result, { examined: 2, purged: 1, retained: 0, failed: 1 });
 });
 
 test('scheduled purge reports an empty run without invoking the privileged boundary', async () => {
@@ -35,6 +35,20 @@ test('scheduled purge reports an empty run without invoking the privileged bound
 
   const result = await purgeExpiredTrash(scopedPrisma, {}, async () => { called = true; });
 
-  assert.deepEqual(result, { examined: 0, purged: 0, failed: 0 });
+  assert.deepEqual(result, { examined: 0, purged: 0, retained: 0, failed: 0 });
   assert.equal(called, false);
+});
+
+test('scheduled purge classifies exact retained resources without treating unrelated failures as retention', async () => {
+  const result = await purgeExpiredTrash({ trashedItem: { findMany: async () => [{ id: 'retained' }, { id: 'broken' }] } }, {}, async ({ trashId }) => {
+    throw Object.assign(new Error('retained'), trashId === 'retained' ? { statusCode: 409, code: 'RESOURCE_LINK_RETENTION' } : { statusCode: 500, code: 'RESOURCE_LINK_RETENTION' });
+  });
+  assert.deepEqual(result, { examined: 2, purged: 0, retained: 1, failed: 1 });
+});
+
+test('a scheduled retention-only run has no failures and retains each recovery ledger', async () => {
+  const result = await purgeExpiredTrash({ trashedItem: { findMany: async () => [{ id: 'retained' }] } }, {}, async () => {
+    throw Object.assign(new Error('retained'), { statusCode: 409, code: 'RESOURCE_LINK_RETENTION' });
+  });
+  assert.deepEqual(result, { examined: 1, purged: 0, retained: 1, failed: 0 });
 });

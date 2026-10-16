@@ -265,6 +265,14 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
     }
     if (!session) return json(route, { error: 'Unauthorized' }, 401);
 
+    // Resource collections are target-scoped and paginated, including empty lists.
+    if (path === '/resource-links' && method === 'GET') {
+      const query = new URL(request.url()).searchParams;
+      const knownTarget = (query.get('entityType') === 'PROJECT' && query.get('entityId') === project.id)
+        || (query.get('entityType') === 'TASK' && tasks.some(task => task.id === query.get('entityId')));
+      if (knownTarget && ['ADMIN', 'TEAM'].includes(user.role)) return json(route, { items: [], nextCursor: null });
+    }
+
     // Support impersonation (#416).
     if (path === '/auth/impersonation' && method === 'POST') {
       state.impersonationStarts.push(request.postDataJSON());
@@ -315,6 +323,9 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
       });
     }
     if (path === '/tasks/my') return json(route, { IMMEDIATE: [tasks[0]], THIS_WEEK: [], UPCOMING: [], WAITING_CLIENT: [tasks[1]], WAITING_US: [] });
+    if (path === '/tasks/task-a/page' && method === 'GET') return json(route, { ...tasks[0], projectId: project.id, content: [], subpages: [], comments: [] });
+    if (path === '/tasks/task-a/breadcrumbs' && method === 'GET') return json(route, []);
+    if (path === '/projects/project-a/boards' && method === 'GET') return json(route, { items: [], nextCursor: null });
     if (/^\/tasks\/[^/]+\/fields$/.test(path)) return json(route, { taskId: path.split('/')[2], projectId: 'project-a', projectName: project.name, fields: [], values: {}, relations: {}, revision: 0, definitionRevision: 0 });
     if (/^\/tasks\/[^/]+\/collaborators$/.test(path)) return json(route, { taskId: path.split('/')[2], ownerId: adminUser.id, revision: 0, canManage: false, collaborators: [] });
 
@@ -450,6 +461,7 @@ export async function mockClientPortalApi(page: Page) {
       });
     }
     if (path === `/projects/${projectId}/tasks`) return json(route, { columns: { TODO: [], IN_PROGRESS: [], DONE: [], BLOCKED: [] } });
+    if (path === `/projects/${projectId}/resource-links` && method === 'GET') return json(route, { items: [], nextCursor: null });
     if (path === `/projects/${projectId}/documents`) return json(route, state.documents);
     if (path === `/projects/${projectId}/upload` && method === 'POST') {
       state.uploads += 1;
