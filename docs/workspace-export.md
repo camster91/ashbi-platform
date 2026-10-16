@@ -31,6 +31,23 @@ export and offline verification). Tests:
 `src/tests/unit/workspace-export.test.js`,
 `src/tests/integration/workspace-export.database.test.js`.
 
+Portal assistants add `portal_assistant_configs`,
+`portal_assistant_conversations` and `portal_assistant_runs`. The operator-only
+organization-owner export includes client-published names/instructions and
+retained private questions, answers, terminal outcomes and bounded context/turn
+provenance. Immutable organization/client/project/user/contact identity remains
+on each conversation/run; paused clients, revoked contacts and reassigned
+projects do not erase that retained history or change its original audience.
+These rows are scoped directly to the requested organization, as retained
+human portal handoffs are. Internal creation-session counters, request intent
+keys, input hashes and claim tokens are omitted and listed in the manifest.
+This does not give portal contacts or ordinary staff an export endpoint, join
+private contact histories in the application, or authorize sharing this archive
+with a client. The existing operator request/destination verification and
+private-file delivery requirements apply. This export preserves records; it
+does not grant restored sessions or resume/retry model runs. Real-tenant
+offboarding and restore acceptance remain unverified.
+
 Standalone collections, canonical record values/relations and reusable form
 configurations are included under `workspace_collections`, `workspace_records`
 and `workspace_record_forms`. These entities preserve archived rows, schema
