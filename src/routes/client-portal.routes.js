@@ -11,6 +11,7 @@ import { CLIENT_SESSION_TOKEN_TYPE, isCurrentUserSession, revokeUserSessions, se
 import { MAGIC_LINK_TOKEN_TYPE, redeemMagicLink } from '../auth/magic-link.js';
 import { accountThrottle } from '../auth/credential-throttle.js';
 import { resolvePortalPrincipal } from '../auth/portal-principal.js';
+import { portalAssistantRoutes } from './portal-assistant.routes.js';
 import { portalHandoffRoutes } from './portal-handoff.routes.js';
 import { revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
 import { clearStaleSessionCookie } from '../auth/request-session.js';
@@ -1190,4 +1191,5 @@ export default async function clientPortalRoutes(fastify) {
   // "Client portal reviews"), behind this plugin's clientAuth guard.
   await fastify.register(clientPortalReviewRoutes, { prefix: '/reviews', clientAuth });
   await fastify.register(portalHandoffRoutes, { clientAuth });
+  await fastify.register(portalAssistantRoutes, { clientAuth });
 }

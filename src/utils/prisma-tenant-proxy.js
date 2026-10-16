@@ -30,7 +30,7 @@ import { relationsFor } from './tenant-relations.js';
 // Models that have a direct `organizationId` column. These get the
 // `where.organizationId = <jwt.orgId>` auto-inject (same as before).
 const DIRECT_SCOPED_MODELS = new Set([
-  'portalhandoffrequest',
+  'portalhandoffrequest', 'portalassistantconfig', 'portalassistantconversation', 'portalassistantrun',
   'client', 'project', 'user', 'integration', 'trasheditem', 'attachment', 'formdraft',
   'wpsite', 'wpbackup', 'wpreport', 'wpalert', 'wpfleetop',
   'wpmagicloginlog', 'wpbridgenonce', 'supporthourentry',
@@ -57,7 +57,7 @@ const DIRECT_SCOPED_MODELS = new Set([
 // Evidence tables that may only ever be appended to. Request-scoped code gets
 // no update/upsert/delete path for them; the database enforces the same rule
 // with triggers (see prisma/migrations/*_audit_events).
-const APPEND_ONLY_MODELS = new Set(['auditevent', 'reviewdecision']);
+const APPEND_ONLY_MODELS = new Set(['auditevent', 'reviewdecision', 'portalassistantconversation']);
 const TRIGGER_OWNED_MODELS = new Set(['noterevision', 'workspacepagerevision', 'gmailingestreceipt']);
 const APPEND_ONLY_BLOCKED_METHODS = new Set([
   'update', 'updateMany', 'updateManyAndReturn', 'upsert', 'delete', 'deleteMany',
@@ -68,6 +68,8 @@ const APPEND_ONLY_BLOCKED_METHODS = new Set([
 // outbox (#412): its envelope is immutable (also enforced by a database
 // trigger); only dispatch bookkeeping changes, e.g. an admin replay.
 const BOOKKEEPING_ONLY_MODELS = {
+  portalassistantconfig: new Set(['enabled', 'name', 'instructions', 'revision', 'changedById', 'updatedAt']),
+  portalassistantrun: new Set(['status', 'response', 'claimToken', 'contextSnapshot', 'memorySnapshot', 'startedAt', 'finishedAt', 'errorCode', 'updatedAt']),
   portalhandoffrequest: new Set(['status', 'ownerId', 'claimedAt', 'resolvedAt', 'changedById', 'requeueReason', 'revision', 'updatedAt']),
   workspacechatattention: new Set(['acknowledgedAt']),
   workspaceaccountmanagerinvocation: new Set(['deliveryState', 'deliveryCode', 'deliveredAt', 'suppressedAt', 'updatedAt']),
@@ -97,6 +99,16 @@ const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platfor
 // redundant organizationId is not enough: the referenced parent must belong
 // to the same organization or the graph would span tenants.
 const DIRECT_PARENT_RELATIONS = {
+  portalassistantconfig: [{ relation: 'client', field: 'clientId', model: 'client', delegate: 'client', required: true }],
+  portalassistantconversation: [
+    { relation: 'client', field: 'clientId', model: 'client', delegate: 'client', required: true },
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true },
+  ],
+  portalassistantrun: [
+    { relation: 'client', field: 'clientId', model: 'client', delegate: 'client', required: true },
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true },
+    { relation: 'conversation', field: 'conversationId', model: 'portalassistantconversation', delegate: 'portalAssistantConversation', required: true },
+  ],
   portalhandoffrequest: [
     { relation: 'client', field: 'clientId', model: 'client', delegate: 'client', required: true },
     { relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true },

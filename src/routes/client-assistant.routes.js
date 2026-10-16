@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import portalAssistantStaffRoutes from './portal-assistant.routes.js';
 import { validateBody, validateParams, validateQuery } from '../validators/schemas.js';
 import { getProvider } from '../ai/providers/index.js';
 import { AiProviderError, isAiControlError, sendAiError } from '../ai/errors.js';
@@ -29,6 +30,7 @@ async function requireStaff(request, reply) {
 
 /** Staff preview only. Client portal access and autonomous tools are separate slices. */
 export default async function clientAssistantRoutes(fastify, options = {}) {
+  await fastify.register(portalAssistantStaffRoutes);
   const chat = options.chat ?? ((input) => getProvider().chat(input));
   fastify.get('/:clientId/brief', {
     onRequest: [fastify.authenticate, requireStaff],

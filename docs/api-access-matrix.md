@@ -56,12 +56,12 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | api-key + scope ai_bridge:actions | 2 |
 | api-key + scope ai_bridge:read | 1 |
 | bot-secret | 40 |
-| client-portal | 31 |
+| client-portal | 38 |
 | public | 51 |
 | recent-auth + staff | 9 |
-| staff | 467 |
+| staff | 469 |
 | staff (inline) | 1 |
-| **total** | 670 |
+| **total** | 679 |
 
 ## Routes by prefix
 
@@ -329,6 +329,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
 | GET | `/api/client-assistants/:clientId/brief` | staff | scoped |  |
+| GET | `/api/client-assistants/:clientId/portal-config` | staff | scoped |  |
+| PATCH | `/api/client-assistants/:clientId/portal-config` | staff | scoped |  |
 | POST | `/api/client-assistants/:clientId/preview` | staff | scoped |  |
 | GET | `/api/client-assistants/:clientId/profile` | staff | scoped |  |
 | PATCH | `/api/client-assistants/:clientId/profile` | staff | scoped |  |
@@ -363,6 +365,13 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/client-portal/projects/:id/account-manager-requests` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects/:id/account-manager-requests/:requestId` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects/:id/account-manager-requests/by-intent/:key` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id/assistant` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/assistant/runs` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id/assistant/runs/:runId` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/assistant/runs/:runId/cancel` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/assistant/runs/:runId/dispatch` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/assistant/runs/:runId/recover` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id/assistant/runs/by-intent/:key` | client-portal | exempt |  |
 | POST | `/api/client-portal/projects/:id/chat-uploads` | client-portal | exempt |  |
 | DELETE | `/api/client-portal/projects/:id/chat-uploads/:attachmentId` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects/:id/documents` | client-portal | exempt |  |
