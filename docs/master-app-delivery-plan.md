@@ -1,10 +1,16 @@
 # Ashbi master-app delivery plan
 
-## Current status entrypoint — October 16, 2026 source snapshot
+## Current status entrypoint — October 16, 2026
 
 This is the single current delivery/status entrypoint. [GitHub #565](https://github.com/camster91/ashbi-platform/issues/565) is the actionable execution checklist; the linked roadmap and dated implementation plans explain scope and acceptance, not competing build queues.
 
-## Verified deployment checkpoint — October 16, 2026 (6b62966)
+## Current checkpoint — October 16, 2026, 21:35 UTC
+
+[Issue #565](https://github.com/camster91/ashbi-platform/issues/565) owns the current execution queue. [PR #658](https://github.com/camster91/ashbi-platform/pull/658) is deployed as **073e0ff351e64439facb32327c3c9369d112901e**, with healthy API and worker on **sha256:5c7a48a86614e1ae1acb05c506596280d43250699911185958db5db10ec2b410**. Fresh exact-revision public HTTP 200/core readiness and migration 150 guard/four restrictive foreign-key checks passed. Public **degraded:true** remains the unresolved operational-alert owner/destination gate. Sources remain primary; no company input/cutover, provider activation or real-invoice financial mutation is established.
+
+OpenSEO #644 and the separately configured, default-disabled portal assistant #645 shipped through **2cb2829c89ef62d3b08d3d0d1091cf31061163a9**. Synthetic two-context document conflict/history/restore acceptance later passed **56/56 on 6b62966**; the earlier failed helper/comparison runs below remain historical. Resource Links #653, original Files #650, Files deletion #656 and Invoice Undo #658 are shipped. Their scoped acceptance and exact CI/deployment evidence are recorded in the [current launch checkpoint](launch-status.md); Files UI acceptance belongs to preceding **2e91896**, not a rerun on **073e0ff**. Local company HEIC policy eligibility leaves company-original roundtrip, thumbnail/every-item and editable fidelity gates open.
+
+## Historical deployment checkpoint — October 16, 2026 (6b62966)
 
 The latest verified deployment at this documentation checkpoint is **6b62966067d9f01d483cea07070bb1810fa299b5**, [PR #643](https://github.com/camster91/ashbi-platform/pull/643). All three PR and exact-main CI jobs passed (38875191830 and 38876941009), and artifact builder 38876954935 passed. The reviewed SSH deployment followed exact artifact/capacity checks and a fresh encrypted off-server-verified backup. API and worker matched healthy engine sha256:2aedb83777a88d41a35c45c3a1a983c87de7f0197eefcccc4f028b5c04aa1996; public strict readiness verified database, Redis and worker. Operational alert ownership/destination remains unset.
 
@@ -14,7 +20,9 @@ Current source work in [PR #644](https://github.com/camster91/ashbi-platform/pul
 
 Actual document conflict QA verified an owned synthetic save to revision 1 and a stale revision 0 rejection 409, then stopped on a rendered comparison assertion. Both sessions logged out with denied-session readbacks. This is partial acceptance, not completion; preserve the original failures and continue only after fresh same-record reconciliation. Company migration still requires normal company sign-in and a fresh destination baseline. [Issue #565](https://github.com/camster91/ashbi-platform/issues/565) is the live execution ledger.
 
-Implemented in this source, with deployment/provider/team acceptance kept separate:
+## Implemented foundations and current acceptance gaps
+
+Implemented foundations, with real provider/team acceptance kept separate:
 
 - Shared staff conversations, durable runs, bounded memory/source evidence, human channels, explicit attention and the default-disabled account-manager bot pilot. These foundations do not need rebuilding. See [pilot contract](workspace-account-manager-pilot.md).
 - Optional operation-specific OAuth actions and explicit consent; existing grants remain read-only until deliberately renewed. See [scope contract](scoped-mcp-oauth-actions.md).
@@ -26,8 +34,8 @@ Implemented in this source, with deployment/provider/team acceptance kept separa
 ### Validated remaining implementation and policy gaps
 
 1. **WhatsApp intake:** authenticated provider/mention transport and exact group-to-client mapping remain unimplemented; provider eligibility and approved account/number/group activation precede pairing. Outbound replies have a separate policy.
-2. **OpenSEO acceptance:** the explicit bounded saved-report pull is source-present in PR #644 and independently reviewed. Required CI, deployment, approved public-proxy credential binding and exact project mapping/provider acceptance remain. Loading a panel performs no upstream call or paid research.
-3. **Portal AI:** profile/SQL guards still enforce `portalEnabled=false`. A separately scoped client assistant remains unimplemented; human handoffs do not authorize staff transcripts or generic staff tools.
+2. **OpenSEO acceptance:** the explicit bounded saved-report pull in [#644](https://github.com/camster91/ashbi-platform/pull/644) is deployed through 2cb with required CI and bounded read/denial QA complete. Approved public-proxy credential binding, exact project mapping and real-provider acceptance remain. Loading a panel performs no upstream call or paid research.
+3. **Portal AI acceptance:** the separate [client assistant #645](https://github.com/camster91/ashbi-platform/pull/645) is deployed through 2cb and defaults off. ADMIN publishes its independent configuration; it has no tools and uses only bounded canonical project identity/status/dates and that exact portal principal's last four successful turns. Staff profiles still enforce `portalEnabled=false`; staff transcripts, files, email, financial records and credentials are excluded. Client enablement, governed real-provider response and real client acceptance remain open. See [assistant contract](portal-assistant.md).
 4. **Full mailbox coverage, if required:** INBOX-window ingestion exists; durable history cursors and Sent/history backfill do not. Real mailbox ownership, connection, mapping holds and delivery/reconciliation acceptance are activation work, not a reason to rebuild receipts.
 5. **Agent-run projection:** own human workspace-chat attention is deployed and verified in the existing Daily Queue through #643, alongside portal requests, tasks, approvals, reviews and finance follow-up. Broader agent-run rows still require actionable-state semantics and the existing permissions/partial-result contract. Do not rebuild the queue.
 6. **Profit/margin definitions:** missing-rate and original-currency reporting exist. Labor-cost basis, revenue recognition and budget/rate currency metadata need a defined policy/data model before trustworthy profitability; never infer profit or FX from unknown amounts.
@@ -51,7 +59,7 @@ Bounded live API QA passed **51/51** in the synthetic QA tenant, covering client
 
 Deployed at that earlier checkpoint: persisted source context #614, bounded successful-exchange memory #615, stored-inbox email-to-task #616, default-off confirmed client task proposals #617, saved service-report mappings/publication and last-good data #618, canonical client/project channel creation #619, included-work retainer notes #620 and TEAM own Timesheets navigation #621. Saved reports are not a live OpenSEO adapter. Human chat does not establish bot participation or private bot memory. Real provider quality, ChatGPT connection acceptance and Cameron/Bianca daily use remain unverified.
 
-Historical next-step wording is superseded by the current e7 source snapshot above. Optional OAuth actions, bot participation, native Gmail identity, human portal handoffs and explicit manual document recovery are implemented; deployment and real acceptance remain distinct.
+Historical next-step wording is superseded by the current checkpoint above. Optional OAuth actions, bot participation, native Gmail identity, human portal handoffs and explicit manual document recovery are implemented; deployment and real acceptance remain distinct.
 
 Cleanup remains separate from new features. Continue in small reviewed slices: consolidate genuinely shared behavior, preserve distinct permission/persistence/concurrency/recovery tests, remove only confirmed unused code/dependencies, and archive superseded plans while retaining evidence. GitHub #565 is the current execution checklist; dated plans do not authorize rebuilding already shipped features.
 
@@ -84,13 +92,13 @@ The October 14 expansion covers app-native account managers, curated plugins, Ch
 | ChatGPT control plane | Scoped OAuth/API/MCP code and confirmed action contracts exist | Real connection/discovery/revocation/denial/expiry/idempotency/audit acceptance [#561](https://github.com/camster91/ashbi-platform/issues/561) |
 | Revenue/provider journey | Proposals, agreements, portal, invoice/payment integration code exists | Prove lead → proposal → signature → delivery → approved work → invoice → sandbox payment/webhook → receipt; email/PDF/retry, tax/partial payment/refund and currency reconciliation (#280/#378/#379/#380) |
 | Source mapping/input | Consolidation continuation and source-primary parallel running are approved; source references and a prepared first-client batch exist, with fidelity exceptions still open | Resolve exact canonical/financial, stage/relation/file, ownership and time-precision exceptions; complete disposable rehearsal and bounded readback with totals by original currency |
-| Release/target/cutover | Current `d700d00` deployment, exact-revision readiness and 77/77 bounded API checks are recorded above; browser evidence remains historical on `4130e80`. Historical `37d02b3` passed required main CI 38808629217 and 169/169 bounded live checks plus saved-conversation browser persistence and separate API cleanup. Earlier `ebafa8c` history restore/browser proof retains its original attribution. See [launch evidence](launch-status.md) | Complete populated UI/provider/recovery/team acceptance and final cutover with retained source fallback (#398); configure approved alert destination/owner |
+| Release/target/cutover | Current `073e0ff` deployment and exact-revision readiness are recorded above; Files UI evidence remains scoped to preceding `2e91896`. Earlier 77/77 API checks remain on `d700d00` and browser evidence on `4130e80`. Historical `37d02b3` passed required main CI 38808629217 and 169/169 bounded live checks plus saved-conversation browser persistence and separate API cleanup. Earlier `ebafa8c` history restore/browser proof retains its original attribution. See [launch evidence](launch-status.md) | Complete populated UI/provider/recovery/team acceptance and final cutover with retained source fallback (#398); configure approved alert destination/owner |
 
 ## Ordered TODOs and next steps
 
-1. **Finish the pinned e7 release and bounded target QA.** Require the exact main/artifact, backup, capacity and health evidence; keep helper results and production versus synthetic acceptance distinct. Do not merge this docs follow-up while the active release is pinned.
+1. **Continue the current #565 acceptance queue.** The 073e0ff release is deployed and verified. Preserve exact-release attribution, original helper failures and scoped acceptance; retain #659 as an unresolved CI-flake investigation. Do not repeat or rebuild shipped work from older release TODOs.
 2. **Accept the implemented workflows.** Exercise normal staff/client roles, optional ChatGPT scopes, disabled bot setup and governed drafts, human handoffs, document recovery, templates and capacity with representative agency/freelance records. Provider calls and live connection changes require their own authorized operation.
-3. **Implement only the seven validated gaps above.** Keep provider activation, policy definitions and realtime editing distinct from code-present functionality. Reuse the existing queue, receipt and canonical-client services.
+3. **Implement confirmed gaps from #565.** The seven items above include provider acceptance and policy decisions; they are not seven missing features. Newly confirmed recovery defects [#660](https://github.com/camster91/ashbi-platform/issues/660) and [#661](https://github.com/camster91/ashbi-platform/issues/661) are being fixed separately. Reuse the existing queue, receipt and canonical-client services.
 4. **Complete integrated acceptance.** Prove revenue/provider, accessibility, recovery and Cameron/Bianca daily use with exact-revision evidence; configure an approved alert owner/destination.
 5. **Rehearse reviewed one-time input and cutover.** Resolve canonical/financial/stage/relation/file/ownership/time-fidelity exceptions, rehearse in disposable staging, read back by original currency, reconcile a final source delta and record an explicit cutoff/acceptance. Sources remain primary until then; retirement/cancellation is separate.
 
