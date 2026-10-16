@@ -124,7 +124,7 @@ export default function Retainers() {
       // A stored 0 stays 0; only a missing amount shows as empty.
       monthlyAmountUsd: plan.monthlyAmountUsd ?? '',
       monthlyAmountCad: plan.monthlyAmountCad ?? '',
-      serviceDescription: plan.serviceDescription ?? '',
+      serviceDescription: undefined,
     });
   };
 
@@ -306,7 +306,7 @@ export default function Retainers() {
                       />
                     </div>
                   </div>
-                  <div><label htmlFor={`retainer-edit-included-work-${plan.clientId}`} className="block text-sm font-medium mb-1">Included-work notes (optional)</label><textarea id={`retainer-edit-included-work-${plan.clientId}`} className="w-full rounded-lg border border-border bg-background p-3 text-sm" value={editForm.serviceDescription} maxLength={4000} onChange={(event) => setEditForm({ ...editForm, serviceDescription: event.target.value })} /><p className="text-xs text-muted-foreground">Record the agreed scope in plain text. Clear this field to remove the notes.</p></div>
+                  <div><label htmlFor={`retainer-edit-included-work-${plan.clientId}`} className="block text-sm font-medium mb-1">Included-work notes (optional)</label><textarea id={`retainer-edit-included-work-${plan.clientId}`} className="w-full rounded-lg border border-border bg-background p-3 text-sm" value={editForm.serviceDescription !== undefined ? editForm.serviceDescription : (plan.serviceDescription ?? '')} maxLength={4000} onChange={(event) => setEditForm({ ...editForm, serviceDescription: event.target.value })} /><p className="text-xs text-muted-foreground">Record the agreed scope in plain text. Clear this field to remove the notes.</p></div>
                   <div className="flex items-center gap-3">
                     <Button size="sm" type="submit" loading={updateMutation.isPending}>Save</Button>
                     <Button size="sm" variant="outline" type="button"

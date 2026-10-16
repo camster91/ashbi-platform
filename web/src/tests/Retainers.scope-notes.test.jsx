@@ -24,6 +24,23 @@ describe('retainer included-work notes', () => {
     fireEvent.change(notes, { target: { value: '' } }); expect(api.updateRetainerPlan).not.toHaveBeenCalled(); fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
     await waitFor(() => expect(api.updateRetainerPlan).toHaveBeenCalledExactlyOnceWith('client1', { hoursPerMonth: 20, monthlyAmountUsd: null, monthlyAmountCad: 200, serviceDescription: null }));
   });
+  it('omits untouched notes when only hours change, preserving concurrent admin note edits', async () => {
+    setup(); fireEvent.click(await screen.findByRole('button', { name: 'Edit retainer Acme' }));
+    expect(screen.getByLabelText('Included-work notes (optional)')).toHaveValue(plan.serviceDescription);
+    fireEvent.change(screen.getByLabelText('Hours/Month'), { target: { value: '30' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+    await waitFor(() => expect(api.updateRetainerPlan).toHaveBeenCalledOnce());
+    expect(api.updateRetainerPlan.mock.calls[0][0]).toBe('client1');
+    expect(api.updateRetainerPlan.mock.calls[0][1].hoursPerMonth).toBe(30);
+    expect(Object.hasOwn(api.updateRetainerPlan.mock.calls[0][1], 'serviceDescription')).toBe(false);
+  });
+  it('sends changed edit notes only after the user explicitly edits and saves them', async () => {
+    setup(); fireEvent.click(await screen.findByRole('button', { name: 'Edit retainer Acme' }));
+    fireEvent.change(screen.getByLabelText('Included-work notes (optional)'), { target: { value: '  Newly supplied scope  ' } });
+    expect(api.updateRetainerPlan).not.toHaveBeenCalled(); fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+    await waitFor(() => expect(api.updateRetainerPlan).toHaveBeenCalledOnce());
+    expect(api.updateRetainerPlan.mock.calls[0][1].serviceDescription).toBe('Newly supplied scope');
+  });
   it('creates a plan with supplied notes without altering entered hours or currency amounts', async () => {
     setup(); await screen.findByText(/Agreed design work/); fireEvent.click(screen.getByRole('button', { name: 'Add Retainer', exact: true }));
     fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'client2' } }); fireEvent.change(screen.getByLabelText('Included-work notes (optional)'), { target: { value: '  Supplied scope  ' } });
@@ -52,7 +69,7 @@ describe('retainer included-work notes', () => {
     expect(api.createRetainerPlan.mock.calls[0][0].serviceDescription).toBe(null);
     expect(Object.hasOwn(api.createRetainerPlan.mock.calls[0][0], 'serviceDescription')).toBe(true);
   });
-  it('keeps staff notes readable while only admins can edit scope', async () => {
+  it('defensively hides edit controls if a mounted component loses its administrator role', async () => {
     auth.user.role = 'TEAM'; setup(); await screen.findByText(/Agreed design work/);
     expect(screen.queryByRole('button', { name: /Edit retainer/ })).not.toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Add Retainer', exact: true })).not.toBeInTheDocument(); expect(api.updateRetainerPlan).not.toHaveBeenCalled();
   });
