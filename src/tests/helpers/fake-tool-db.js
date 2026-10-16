@@ -12,6 +12,8 @@
 let nextId = 1;
 
 const RELATIONS = {
+  clientServiceProject: { client: ['client', 'clientId'] },
+  clientServiceReport: { client: ['client', 'clientId'], mapping: ['clientServiceProject', 'mappingId'] },
   workspaceCollection: { author: ['user', 'authorId'] },
   workspaceRecord: { collection: ['workspaceCollection', 'collectionId'], author: ['user', 'authorId'] },
   workspaceRecordForm: { collection: ['workspaceCollection', 'collectionId'], author: ['user', 'authorId'] },
@@ -30,6 +32,7 @@ const TERMINAL = new Set(['EXECUTED', 'FAILED', 'REJECTED', 'EXPIRED']);
 
 export function createFakeToolDb() {
   const tables = {
+    clientServiceProject: [], clientServiceReport: [],
     organization: [], user: [], client: [], project: [], projectBoard: [], workspacePage: [], workspacePageGrant: [], workspaceCollection: [], workspaceRecord: [], workspaceRecordForm: [], task: [], taskCollaborator: [], calendarEvent: [], chatMessage: [],
     slackInstallation: [], slackChannelMapping: [], aiBridgeAction: [], auditEvent: [],
     aiProviderConnection: [], aiUsageRecord: [], platformSetting: [], credential: [],
