@@ -93,7 +93,7 @@ function TaskAction({ clientId, user }) {
       setError('The preview could not be confirmed. Check the saved request, or retry the exact same details.');
     } finally { busy.current = false; if (alive.current) setPending(false); }
   }
-  async function confirm() {
+  async function confirmTask() {
     if (busy.current || forbidden || confirmationUnknown || !action?.preview || action.preview.destination?.clientId !== clientId || action.status !== 'PENDING_CONFIRMATION' || action.expired || recovery.blocked) return;
     busy.current = true; setPending(true); setError('');
     try {
@@ -121,7 +121,7 @@ function TaskAction({ clientId, user }) {
   const preview = !forbidden && action?.preview?.destination?.clientId === clientId && action.preview;
   return <section aria-label="Task proposals">
     <div className="space-y-4 p-4">
-      <p className="text-sm text-muted-foreground">Prepare a task for this client, then review and confirm the exact task. No model is called. A preview does not create a task.</p>
+      <p className="text-sm text-muted-foreground">Review the task details before confirming creation.</p>
       {error && <p role="alert">{error}</p>}
       {recovery.blocked && <p role="alert">This browser cannot safely recover the request. Task creation is unavailable.</p>}
       {forbidden ? <p role="alert">You no longer have access to this request.</p> : <>
@@ -140,7 +140,7 @@ function TaskAction({ clientId, user }) {
         {preview && <section aria-label="Task preview" className="space-y-2 rounded-lg border border-border p-3">
           <h3 className="font-medium">{preview.task.title}</h3><p className="whitespace-pre-wrap break-words">{preview.task.description}</p>
           <p>Project: {preview.destination.projectName}</p><p>Priority: {preview.task.priority}</p><p>Due: {preview.task.dueDate || 'No due date'}</p>
-          {action.status === 'PENDING_CONFIRMATION' && !action.expired && <Button type="button" disabled={pending || recovery.blocked || confirmationUnknown} loading={pending} onClick={confirm}>Confirm create task</Button>}
+          {action.status === 'PENDING_CONFIRMATION' && !action.expired && <Button type="button" disabled={pending || recovery.blocked || confirmationUnknown} loading={pending} onClick={confirmTask}>Confirm create task</Button>}
         </section>}
         {action?.status === 'EXECUTED' && action.result?.task?.id && preview && action.result.task.projectId === preview.destination.projectId && <div role="status"><p>Task created.</p><Link className="inline-flex min-h-11 items-center underline" to={`/task/${encodeURIComponent(action.result.task.id)}`}>Open created task</Link></div>}
         {action && action.status !== 'PENDING_CONFIRMATION' && action.status !== 'EXECUTED' && <p role="status">{action.status === 'EXECUTING' || action.outcome === 'unknown' ? 'The outcome is not yet confirmed. Check the saved status before starting another request.' : 'This request did not create a confirmed task.'}</p>}
