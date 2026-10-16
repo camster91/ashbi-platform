@@ -48,7 +48,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   // column of its own (migration 20261001130000_expense_organization).
   'expense', 'taskcollaborator', 'projectboard', 'workspacepage', 'workspacepagegrant',
   'workspacecollection', 'workspacerecord', 'workspacerecordform',
-  'clientagentprofile', 'workspacechatchannel', 'workspacechatmember', 'workspacechatmessage', 'gmailsendreceipt',
+  'clientagentprofile', 'workspacechatchannel', 'workspacechatmember', 'workspacechatmessage', 'workspacechatattention', 'gmailsendreceipt',
   'clientagentconversation', 'clientagentrun', 'clientserviceproject', 'clientservicereport',
   'noterevision', 'workspacepagerevision'
 ]);
@@ -67,6 +67,7 @@ const APPEND_ONLY_BLOCKED_METHODS = new Set([
 // outbox (#412): its envelope is immutable (also enforced by a database
 // trigger); only dispatch bookkeeping changes, e.g. an admin replay.
 const BOOKKEEPING_ONLY_MODELS = {
+  workspacechatattention: new Set(['acknowledgedAt']),
   gmailsendreceipt: new Set(['status', 'providerMessageId', 'providerThreadId', 'hubMessageId', 'errorCode', 'updatedAt', 'finishedAt']),
   domainevent: new Set([
     'status', 'attempts', 'nextAttemptAt', 'lastAttemptAt', 'lockedUntil',

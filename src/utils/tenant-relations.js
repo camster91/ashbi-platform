@@ -34,6 +34,7 @@ export const COMPOSITE_TENANT_RELATIONS = Object.freeze({
   workspacechatchannel: { createdBy: ['createdById', 'organizationId'] },
   workspacechatmember: { channel: ['channelId', 'organizationId'], user: ['userId', 'organizationId'] },
   workspacechatmessage: { channel: ['channelId', 'organizationId'], author: ['authorId', 'organizationId'] },
+  workspacechatattention: { channel: ['channelId', 'organizationId'], message: ['messageId', 'organizationId'], recipient: ['recipientId', 'organizationId'] },
   workspacecollection: { author: ['authorId', 'organizationId'] },
   workspacerecord: { collection: ['collectionId', 'organizationId'], author: ['authorId', 'organizationId'] },
   workspacerecordform: { collection: ['collectionId', 'organizationId'], author: ['authorId', 'organizationId'] },
@@ -65,7 +66,7 @@ export function tenantRelationMap() {
       if (field.kind !== 'object') continue;
       const fk = scalars.has(`${field.name}Id`) ? `${field.name}Id` : null;
       const fkFields = COMPOSITE_TENANT_RELATIONS[model.name.toLowerCase()]?.[field.name] ?? (fk ? [fk] : []);
-      if (fkFields.some(key => !scalars.has(key)) || (fkFields.length > 1 && (fkFields[0] !== fk || fkFields[1] !== 'organizationId' || !['User', 'Client', 'WorkspaceCollection', 'WorkspaceChatChannel', 'ClientAgentConversation', 'ClientServiceProject'].includes(field.type) || (fkFields.length > 2 && !(model.name === 'ClientServiceReport' && field.name === 'mapping' && fkFields.length === 3 && fkFields[2] === 'clientId'))))) throw new Error('Tenancy Error: unsupported composite relation');
+      if (fkFields.some(key => !scalars.has(key)) || (fkFields.length > 1 && (fkFields[0] !== fk || fkFields[1] !== 'organizationId' || !['User', 'Client', 'WorkspaceCollection', 'WorkspaceChatChannel', 'WorkspaceChatMessage', 'ClientAgentConversation', 'ClientServiceProject'].includes(field.type) || (fkFields.length > 2 && !(model.name === 'ClientServiceReport' && field.name === 'mapping' && fkFields.length === 3 && fkFields[2] === 'clientId'))))) throw new Error('Tenancy Error: unsupported composite relation');
       relations[field.name] = { target: String(field.type).toLowerCase(), fk, fkFields };
       if (fk) foreignKeys[fk] = field.name;
     }

@@ -290,7 +290,10 @@ and export boundaries are described in [client-agent-conversations.md](client-ag
 `projectId`; `workspace_chat.membership_changed` records `channelId`,
 `memberUserId` and `active`, both for entity `workspace_chat_channel`.
 `workspace_chat.message_created` uses entity `workspace_chat_message` and
-records only `channelId` and `parentId`. No message body is audited.
+records only `channelId`, `parentId` and `attentionCount`. No message body is audited.
+`workspace_chat.attention_acknowledged` uses entity `workspace_chat_attention`
+and records only `channelId` and `messageId`. The actor is the recipient;
+acknowledgement replay does not append another event.
 These mutations require successful audit evidence in the same transaction.
 
 ## Gmail send receipts

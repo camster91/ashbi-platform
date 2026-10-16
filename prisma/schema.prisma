@@ -102,6 +102,7 @@ model Organization {
   workspaceChatChannels WorkspaceChatChannel[]
   workspaceChatMembers WorkspaceChatMember[]
   workspaceChatMessages WorkspaceChatMessage[]
+  workspaceChatAttention WorkspaceChatAttention[]
   gmailSendReceipts GmailSendReceipt[]
 }
 
@@ -180,6 +181,7 @@ model User {
   createdWorkspaceChatChannels WorkspaceChatChannel[] @relation("WorkspaceChatCreator")
   workspaceChatMemberships WorkspaceChatMember[]
   workspaceChatMessages WorkspaceChatMessage[] @relation("WorkspaceChatAuthor")
+  workspaceChatAttention WorkspaceChatAttention[]
   gmailSendReceipts GmailSendReceipt[]
 }
 
@@ -3233,6 +3235,7 @@ model WorkspaceChatChannel {
   createdBy User @relation("WorkspaceChatCreator", fields: [createdById, organizationId], references: [id, organizationId], onDelete: Restrict)
   members WorkspaceChatMember[]
   messages WorkspaceChatMessage[]
+  attention WorkspaceChatAttention[]
   @@unique([id, organizationId])
   @@unique([organizationId, directKey])
   @@index([organizationId, updatedAt])
@@ -3268,6 +3271,8 @@ model WorkspaceChatMessage {
   content String
   parentId String?
   clientKey String?
+  attentionRecipientIds String[] @default([])
+  intentHash String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -3275,12 +3280,34 @@ model WorkspaceChatMessage {
   author User @relation("WorkspaceChatAuthor", fields: [authorId, organizationId], references: [id, organizationId], onDelete: Restrict)
   parent WorkspaceChatMessage? @relation("WorkspaceChatReplies", fields: [parentId], references: [id], onDelete: SetNull)
   replies WorkspaceChatMessage[] @relation("WorkspaceChatReplies")
+  attention WorkspaceChatAttention[]
+  @@unique([id, organizationId])
   @@unique([channelId, clientKey])
   @@index([organizationId, channelId, createdAt, id])
   @@index([channelId, organizationId])
   @@index([authorId, organizationId])
   @@index([parentId])
   @@map("workspace_chat_messages")
+}
+
+model WorkspaceChatAttention {
+  id String @id @default(cuid())
+  organizationId String
+  channelId String
+  messageId String
+  recipientId String
+  acknowledgedAt DateTime?
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  channel WorkspaceChatChannel @relation(fields: [channelId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  message WorkspaceChatMessage @relation(fields: [messageId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  recipient User @relation(fields: [recipientId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@unique([messageId, recipientId])
+  @@index([organizationId, recipientId, acknowledgedAt, id])
+  @@index([channelId, organizationId])
+  @@index([messageId, organizationId])
+  @@index([recipientId, organizationId])
+  @@map("workspace_chat_attention")
 }
 
 
