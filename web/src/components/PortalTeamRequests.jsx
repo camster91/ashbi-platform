@@ -104,9 +104,9 @@ function Requests({ projectId, token, identity }) {
   }
   async function reload() { const result = await history.refetch(); if (!result.isError) setDenied(false); }
 
-  return <section aria-labelledby={`${fieldId}-heading`} className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5">
+  return <section aria-labelledby={`${fieldId}-heading`} className="space-y-4 pt-3">
     <h3 id={`${fieldId}-heading`} className="text-lg font-semibold">Ask the team</h3>
-    <p className="text-sm text-muted-foreground">Send a question about this project to the human team. This creates a request for review; it does not generate an AI answer or promise a response time.</p>
+    <p className="text-sm text-muted-foreground">Ask the team to follow up about this project.</p>
     {storageError && <div role="alert"><p>Browser storage could not retain your submission safely. New requests are blocked.</p><Button type="button" variant="outline" disabled={pending} onClick={restore}>Retry browser storage</Button></div>}
     {intent && <div className="space-y-2 rounded-lg border border-border p-3"><p role="status">A submission needs confirmation. It may already be saved. New questions are paused to avoid duplicates.</p><Button type="button" variant="outline" loading={pending} onClick={recover}>Check submission status</Button></div>}
     {notice && <p role="status">{notice}</p>}
@@ -127,8 +127,20 @@ function Requests({ projectId, token, identity }) {
 
 function PortalRequestScope(props) {
   const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
+  const [open, setOpen] = useState(false);
   useEffect(() => () => client.clear(), [client]);
-  return <QueryClientProvider client={client}><Requests {...props} /></QueryClientProvider>;
+  useEffect(() => {
+    const key = ['portal-team-request', props.identity.organizationId, props.identity.userId, props.identity.contactId, props.projectId].map(encodeURIComponent).join(':');
+    const revealPending = () => { try { if (localStorage.getItem(key)) setOpen(true); } catch { setOpen(true); } };
+    revealPending();
+    const listener = (event) => { if (event.key === key || event.key === null) revealPending(); };
+    window.addEventListener('storage', listener);
+    return () => window.removeEventListener('storage', listener);
+  }, [props.identity.organizationId, props.identity.userId, props.identity.contactId, props.projectId]);
+  return <details className="rounded-xl border border-border bg-card p-4 sm:p-5" open={open} onToggle={(event) => { if (event.target === event.currentTarget) setOpen(event.currentTarget.open); }}>
+    <summary className="min-h-11 cursor-pointer font-semibold">Request human follow-up</summary>
+    {open && <QueryClientProvider client={client}><Requests {...props} /></QueryClientProvider>}
+  </details>;
 }
 
 export default function PortalTeamRequests({ projectId, token, identity }) {

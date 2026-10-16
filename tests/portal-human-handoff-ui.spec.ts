@@ -52,9 +52,14 @@ for (const width of [1280, 390]) {
       return fulfill({ error: 'Unmocked request' }, 401);
     });
 
-    const openProject = async () => {
+    const openProject = async (expandFollowup = true) => {
       await page.getByRole('tab', { name: /Projects/ }).click();
       await page.getByRole('button', { name: 'Open project Website refresh' }).click();
+      await expect(page.getByText('Request human follow-up', { exact: true })).toBeVisible();
+      if (expandFollowup) {
+        await expect(page.getByLabel('Your question', { exact: true })).toHaveCount(0);
+        await page.getByText('Request human follow-up', { exact: true }).click();
+      }
       await expect(page.getByRole('heading', { name: 'Ask the team', exact: true })).toBeVisible();
     };
     await page.goto('/client-portal'); await openProject();
@@ -62,7 +67,7 @@ for (const width of [1280, 390]) {
     await page.getByRole('button', { name: 'Send question to the team' }).click();
     await expect(page.getByRole('button', { name: 'Check submission status' })).toBeVisible();
     expect(posts).toBe(1);
-    await page.reload(); await openProject();
+    await page.reload(); await openProject(false);
     await expect(page.getByLabel('Your question', { exact: true })).toBeDisabled();
     await expect(page.getByText('Please review <b>my question</b>', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Check submission status' }).click();
@@ -77,5 +82,7 @@ for (const width of [1280, 390]) {
     await page.getByLabel('Your question', { exact: true }).focus();
     await expect(page.getByLabel('Your question', { exact: true })).toBeFocused();
     await page.screenshot({ path: testInfo.outputPath('portal-team-request.png'), fullPage: true });
+    await page.getByText('Request human follow-up', { exact: true }).click();
+    await page.screenshot({ path: testInfo.outputPath('portal-follow-up-collapsed.png'), fullPage: true });
   });
 }

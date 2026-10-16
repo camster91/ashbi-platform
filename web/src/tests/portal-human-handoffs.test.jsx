@@ -10,10 +10,13 @@ vi.mock('../lib/api', () => ({ api }));
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => auth }));
 const identity = { organizationId: 'o1', userId: 'portal1', contactId: 'contact1' };
 const row = { id: 'r1', projectId: 'p1', question: 'Can we review the draft?', status: 'PENDING', revision: 1, ownerId: null, createdAt: '2026-10-16T10:00:00Z', updatedAt: '2026-10-16T10:00:00Z' };
-function setup(element) {
+function setup(element, openFollowup = true) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = (child) => <QueryClientProvider client={cache}>{child}</QueryClientProvider>;
-  return { ...render(view(element)), view, cache };
+  const result = render(view(element));
+  const summary = screen.queryByText('Request human follow-up');
+  if (openFollowup && summary && !summary.closest('details').open) fireEvent.click(summary);
+  return { ...result, view, cache };
 }
 const portal = (props = {}) => <PortalTeamRequests projectId="p1" identity={identity} {...props} />;
 beforeEach(() => {
@@ -23,6 +26,21 @@ beforeEach(() => {
 });
 
 describe('portal human questions', () => {
+  it('starts collapsed without loading history and opens retained uncertainty automatically', async () => {
+    const first = setup(portal(), false);
+    expect(screen.queryByLabelText('Your question')).not.toBeInTheDocument();
+    expect(portalHandoffs.list).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Request human follow-up'));
+    await screen.findByLabelText('Your question');
+    expect(portalHandoffs.list).toHaveBeenCalledTimes(1);
+    first.unmount();
+    localStorage.setItem('portal-team-request:o1:portal1:contact1:p1', JSON.stringify({ key: '11111111-1111-4111-8111-111111111111', status: 'UNKNOWN' }));
+    setup(portal(), false);
+    await screen.findByRole('button', { name: 'Check submission status' });
+    expect(screen.getByText('Request human follow-up').closest('details').open).toBe(true);
+    expect(portalHandoffs.recover).not.toHaveBeenCalled();
+  });
+
   it('persists an opaque scoped key before explicit submission and renders saved questions as plaintext', async () => {
     portalHandoffs.create.mockImplementation(async (_project, _token, body) => {
       const saved = JSON.parse(localStorage.getItem(localStorage.key(0)));
@@ -86,11 +104,15 @@ describe('portal human questions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send question to the team' }));
     await waitFor(() => expect(portalHandoffs.create).toHaveBeenCalledTimes(1));
     rerender(view(portal({ projectId: 'p2' })));
+    fireEvent.click(screen.getByText('Request human follow-up'));
+    await screen.findByLabelText('Your question');
     await act(async () => resolve({ request: row }));
     expect(screen.getByLabelText('Your question')).toHaveValue('');
     expect(screen.queryByText(/Your request is saved/)).not.toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem(localStorage.key(0))).status).toBe('PREPARED');
     rerender(view(portal({ identity: { ...identity, contactId: 'replacement' } })));
+    fireEvent.click(screen.getByText('Request human follow-up'));
+    await screen.findByLabelText('Your question');
     expect(screen.getByLabelText('Your question')).toBeEnabled();
     rerender(view(portal({ identity: undefined })));
     expect(screen.getByText(/Sign in again/)).toBeInTheDocument();

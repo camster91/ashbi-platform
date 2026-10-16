@@ -224,8 +224,6 @@ export default function ProjectDetail({ projectId, token, onBack, handoffIdentit
         </div>
       </div>
 
-      <PortalTeamRequests projectId={projectId} token={token} identity={handoffIdentity} />
-
       {/* Progress */}
       <Card padding="none" className="px-5 py-4">
         <div className="mb-1.5 flex justify-between text-sm">
@@ -234,6 +232,8 @@ export default function ProjectDetail({ projectId, token, onBack, handoffIdentit
         </div>
         <PortalProgress value={project.progressPct} tone={project.progressPct >= 80 ? 'bg-success' : 'bg-primary'} className="h-2.5" />
       </Card>
+
+      <PortalTeamRequests projectId={projectId} token={token} identity={handoffIdentity} />
 
       {project.milestones?.length > 0 && (
         <Card as="section" padding="none" className="px-5 py-4" aria-labelledby="portal-milestones-title">
