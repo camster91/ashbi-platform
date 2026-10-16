@@ -21,7 +21,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | Model | Table | Tenant-scoped | Soft-deletable | Fields |
 | --- | --- | --- | --- | --- |
 | [Activity](#model-activity) | `activities` | no | no | 12 |
-| [AiBridgeAction](#model-aibridgeaction) | `ai_bridge_actions` | yes | no | 26 |
+| [AiBridgeAction](#model-aibridgeaction) | `ai_bridge_actions` | yes | no | 27 |
 | [AiContext](#model-aicontext) | `ai_context` | yes | no | 7 |
 | [AiProviderConnection](#model-aiproviderconnection) | `ai_provider_connections` | yes | no | 20 |
 | [AiTeamMessage](#model-aiteammessage) | `ai_team_messages` | no | no | 9 |
@@ -204,6 +204,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `source` | String | required | `"ai_bridge"` |  | ai_bridge, assistant |
 | `toolClass` | String | required | `"execute"` |  | prepare, execute |
 | `correlationId` | String | optional |  |  |  |
+| `authorizationBinding` | Json | optional |  |  | Immutable optional MCP OAuth grant binding; NULL for existing API-key/session actions |
 | `inputScope` | Json | optional |  |  | Record ids the scope resolver proved belong to the organization |
 | `approverId` | String | optional |  |  | No foreign key: the receipt outlives the approver's account |
 | `approvalEvidence` | Json | optional |  |  | { method, approverRole, requesterApproved, reauthenticated } |

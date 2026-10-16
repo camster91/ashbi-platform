@@ -26193,6 +26193,20 @@
                     "maxLength": 128,
                     "type": "string"
                   },
+                  "scopes": {
+                    "items": {
+                      "enum": [
+                        "workspace:read",
+                        "workspace:client-tasks:write",
+                        "workspace:service-reports:publish"
+                      ],
+                      "type": "string"
+                    },
+                    "maxItems": 3,
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
                   "state": {
                     "maxLength": 128,
                     "type": "string"
