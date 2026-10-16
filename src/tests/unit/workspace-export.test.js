@@ -218,6 +218,39 @@ async function withExport(setup, rowsByModel, check) {
   }
 }
 
+test('offboarding retains duplicate resource edges and archived provenance without foreign rows, retry state or provider fetches', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-resource-export-'));
+  const outputDir = path.join(root, 'export');
+  const source = { system: 'fixture', recordId: 'source-1', originalUrl: 'https://example.test/?x=1#part' };
+  const rows = ['active', 'archived'].map((id, index) => ({ id, organizationId: 'org1', projectId: 'project1', taskId: index ? 'task1' : null,
+    title: id, url: source.originalUrl, source, archivedAt: index ? '2026-01-01T00:00:00Z' : null,
+    clientVisible: false, createIntentId: `retry-${id}`, inputHash: `internal-${id}` }));
+  rows.push({ ...rows[0], id: 'foreign', organizationId: 'org2' });
+  const prisma = new Proxy(fakePrisma({}), { get(target, key) {
+    if (key !== 'resourceLink') return target[key];
+    return { findMany: async args => {
+      if (args.where.AND) return [];
+      assert.deepEqual(args.where, { organizationId: 'org1' });
+      return rows.filter(row => row.organizationId === args.where.organizationId)
+        .map(row => Object.fromEntries(Object.entries(row).filter(([field]) => !args.omit?.[field])));
+    } };
+  } });
+  const oldFetch = globalThis.fetch;
+  globalThis.fetch = () => { throw new Error('Resource exports must not fetch providers'); };
+  try {
+    await exportWorkspace({ prisma, organizationId: 'org1', outputDir, includeFiles: false, snapshot: false });
+    const text = fs.readFileSync(path.join(outputDir, 'data', 'resource_links.jsonl'), 'utf8');
+    const exported = text.trim().split('\n').map(JSON.parse);
+    assert.deepEqual(exported.map(row => row.id), ['active', 'archived']);
+    assert.equal(exported[0].url, exported[1].url);
+    assert.deepEqual(exported[1].source, source);
+    assert.equal(exported[1].taskId, 'task1');
+    assert.equal(exported[1].archivedAt, rows[1].archivedAt);
+    assert.doesNotMatch(text, /createIntentId|inputHash|retry-|internal-|foreign/);
+    assert.equal((await verifyWorkspaceExportDirectory(outputDir)).valid, true);
+  } finally { globalThis.fetch = oldFetch; fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('owner offboarding preserves both private portal audiences and published config, excluding session/intent/claim state and foreign rows', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-portal-owner-export-'));
   const outputDir = path.join(root, 'export');

@@ -26,6 +26,8 @@
 // timestamps. A database trigger makes it immutable once terminal.
 
 import crypto from 'node:crypto';
+import { toolInputByteLimit } from './input-budgets.js';
+export { MAX_TOOL_INPUT_BYTES } from './input-budgets.js';
 import { assertMcpActionAuthority, oauthActionBinding } from '../../auth/mcp-action-authority.js';
 import defaultLogger from '../../utils/logger.js';
 import { actorTypeForRole, recordAuditEvent } from '../../services/audit-event.service.js';
@@ -33,8 +35,6 @@ import { LOG_REDACT_PATHS } from '../../utils/log-redaction.js';
 import { isAiControlError } from '../errors.js';
 import { APPROVAL_CLASSES, APPROVAL_TTL_MS, ToolError, toolRegistry } from './registry.js';
 
-/** Largest serialized tool input accepted. Proposal (docs/ai-tool-registry.md). */
-export const MAX_TOOL_INPUT_BYTES = 16 * 1024;
 export const IDEMPOTENCY_KEY_FORMAT = /^[A-Za-z0-9._:-]{8,128}$/;
 export const PENDING_STATUS = 'PENDING_CONFIRMATION';
 export const TERMINAL_STATUSES = Object.freeze(['EXECUTED', 'FAILED', 'REJECTED', 'EXPIRED']);
@@ -213,7 +213,7 @@ export function createToolExecutor(options = {}) {
     const tool = registry.get(name);
     const denyWith = async (error) => { throw await deny(ctx, error, { tool: tool?.name ?? (typeof name === 'string' ? name : null), source }); };
     if (!tool) return denyWith(new ToolError('TOOL_UNKNOWN', 'Unknown tool', { statusCode: 400 }));
-    if (serializedSize(input) > MAX_TOOL_INPUT_BYTES) {
+    if (serializedSize(input) > toolInputByteLimit(tool.name)) {
       return denyWith(new ToolError('INPUT_TOO_LARGE', 'Tool input is too large', { statusCode: 400 }));
     }
     const parsed = tool.inputSchema.safeParse(input);

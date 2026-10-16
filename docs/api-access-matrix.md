@@ -56,12 +56,12 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | api-key + scope ai_bridge:actions | 2 |
 | api-key + scope ai_bridge:read | 1 |
 | bot-secret | 40 |
-| client-portal | 38 |
+| client-portal | 39 |
 | public | 51 |
 | recent-auth + staff | 9 |
-| staff | 469 |
+| staff | 475 |
 | staff (inline) | 1 |
-| **total** | 679 |
+| **total** | 686 |
 
 ## Routes by prefix
 
@@ -378,6 +378,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/client-portal/projects/:id/feedback` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects/:id/messages` | client-portal | exempt |  |
 | POST | `/api/client-portal/projects/:id/messages` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id/resource-links` | client-portal | exempt |  |
 | POST | `/api/client-portal/projects/:id/revisions/:revisionId/respond` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects/:id/tasks` | client-portal | exempt |  |
 | POST | `/api/client-portal/projects/:id/upload` | client-portal | exempt |  |
@@ -902,6 +903,17 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
 | GET | `/api/realtime/ice-servers` | staff | scoped |  |
+
+### /api/resource-links
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/resource-links` | staff | scoped |  |
+| POST | `/api/resource-links` | staff | scoped |  |
+| GET | `/api/resource-links/:id` | staff | scoped |  |
+| PATCH | `/api/resource-links/:id` | staff | scoped |  |
+| POST | `/api/resource-links/:id/archive` | staff | scoped |  |
+| POST | `/api/resource-links/reorder` | staff | scoped |  |
 
 ### /api/responses
 

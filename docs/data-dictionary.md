@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-133 models, 0 enums, 79 tenant-scoped, 13 soft-deletable.
+134 models, 0 enums, 80 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -86,7 +86,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 88 |
+| [Organization](#model-organization) | `organizations` | no | no | 89 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -95,7 +95,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [PortalAssistantConversation](#model-portalassistantconversation) | `portal_assistant_conversations` | yes | no | 12 |
 | [PortalAssistantRun](#model-portalassistantrun) | `portal_assistant_runs` | yes | no | 27 |
 | [PortalHandoffRequest](#model-portalhandoffrequest) | `portal_handoff_requests` | yes | no | 22 |
-| [Project](#model-project) | `projects` | yes | yes | 66 |
+| [Project](#model-project) | `projects` | yes | yes | 67 |
 | [ProjectBoard](#model-projectboard) | `project_boards` | yes | no | 16 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
@@ -108,6 +108,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [PushSubscription](#model-pushsubscription) | `push_subscriptions` | no | no | 7 |
 | [RateCard](#model-ratecard) | `rate_cards` | no | no | 8 |
 | [Report](#model-report) | `reports` | no | no | 9 |
+| [ResourceLink](#model-resourcelink) | `resource_links` | yes | no | 20 |
 | [Response](#model-response) | `responses` | no | no | 18 |
 | [RetainerPlan](#model-retainerplan) | `retainer_plans` | no | yes | 23 |
 | [RevenueSnapshot](#model-revenuesnapshot) | `revenue_snapshots` | no | no | 20 |
@@ -122,7 +123,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [SlackInstallation](#model-slackinstallation) | `slack_installations` | yes | no | 15 |
 | [Snippet](#model-snippet) | `snippets` | no | no | 13 |
 | [SupportHourEntry](#model-supporthourentry) | `support_hours` | yes | no | 12 |
-| [Task](#model-task) | `tasks` | no | yes | 55 |
+| [Task](#model-task) | `tasks` | no | yes | 56 |
 | [TaskCollaborator](#model-taskcollaborator) | `task_collaborators` | yes | no | 8 |
 | [TaskComment](#model-taskcomment) | `task_comments` | no | no | 9 |
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
@@ -132,7 +133,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [TimeSession](#model-timesession) | `time_sessions` | no | no | 16 |
 | [TrashedItem](#model-trasheditem) | `trashed_items` | yes | yes | 9 |
 | [UnmatchedEmail](#model-unmatchedemail) | `unmatched_emails` | yes | no | 16 |
-| [User](#model-user) | `users` | yes | no | 70 |
+| [User](#model-user) | `users` | yes | no | 71 |
 | [WPAlert](#model-wpalert) | `wp_alerts` | yes | no | 9 |
 | [WPBackup](#model-wpbackup) | `wp_backups` | yes | no | 15 |
 | [WPBridgeNonce](#model-wpbridgenonce) | `wp_bridge_nonces` | yes | no | 7 |
@@ -1998,6 +1999,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
+| `resourceLinks` | ResourceLink[] | list, required |  | → ResourceLink |  |
 | `portalAssistantConversations` | PortalAssistantConversation[] | list, required |  | → PortalAssistantConversation |  |
 | `portalAssistantRuns` | PortalAssistantRun[] | list, required |  | → PortalAssistantRun |  |
 | `portalAssistantConfigs` | PortalAssistantConfig[] | list, required |  | → PortalAssistantConfig |  |
@@ -2315,6 +2317,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
+| `resourceLinks` | ResourceLink[] | list, required |  | → ResourceLink |  |
 | `portalAssistantConversations` | PortalAssistantConversation[] | list, required |  | → PortalAssistantConversation |  |
 | `portalAssistantRuns` | PortalAssistantRun[] | list, required |  | → PortalAssistantRun |  |
 | `portalHandoffRequests` | PortalHandoffRequest[] | list, required |  | → PortalHandoffRequest |  |
@@ -2691,6 +2694,41 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `sentAt` | DateTime | optional |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `client` | Client | required |  | → Client, via (clientId) → (id), onDelete Cascade |  |
+
+### Model ResourceLink
+
+- Table: `resource_links`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([organizationId,createdById,createIntentId], map:"resource_links_actor_intent_key")`
+  - `@@index([organizationId,projectId,taskId,archivedAt,position,id], map:"resource_links_target_page_idx")`
+  - `@@index([projectId,organizationId])`
+  - `@@index([taskId,projectId])`
+  - `@@index([createdById,organizationId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `projectId` | String | required |  |  |  |
+| `taskId` | String | optional |  |  |  |
+| `createdById` | String | required |  |  |  |
+| `createIntentId` | String | required |  |  |  |
+| `inputHash` | String | required |  |  |  |
+| `title` | String | required |  |  |  |
+| `url` | String | required |  |  |  |
+| `source` | Json | optional |  |  |  |
+| `position` | Int | required | `0` |  |  |
+| `revision` | Int | required | `1` |  |  |
+| `clientVisible` | Boolean | required | `false` |  |  |
+| `archivedAt` | DateTime | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Restrict |  |
+| `project` | Project | required |  | → Project, via (projectId,organizationId) → (id,organizationId), onDelete Restrict |  |
+| `task` | Task | optional |  | → Task, via (taskId,projectId) → (id,projectId), onDelete Restrict |  |
+| `createdBy` | User | required |  | → User, via (createdById,organizationId) → (id,organizationId), onDelete Restrict |  |
 
 ### Model Response
 
@@ -3096,6 +3134,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Tenant-scoped: no
 - Soft-deletable: yes (`deletedAt`)
 - Constraints and indexes:
+  - `@@unique([id, projectId])`
   - `@@index([parentId])`
   - `@@index([projectId, parentId])`
   - `@@index([status])`
@@ -3112,6 +3151,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
+| `resourceLinks` | ResourceLink[] | list, required |  | → ResourceLink |  |
 | `id` | String | id, required | `cuid()` |  |  |
 | `title` | String | required |  |  |  |
 | `description` | String | optional |  |  | Brief description/summary |
@@ -3430,6 +3470,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
+| `resourceLinks` | ResourceLink[] | list, required |  | → ResourceLink |  |
 | `id` | String | id, required | `cuid()` |  |  |
 | `organizationId` | String | required |  |  | Set for all users to support multi-tenancy |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id) |  |

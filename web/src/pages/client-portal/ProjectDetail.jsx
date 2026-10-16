@@ -8,6 +8,7 @@ import { cn } from '../../lib/utils';
 import { portalFetch, downloadPortalDocument, deletePortalDocument, fmtRelative, projectStatusLabel, projectStatusColor, priorityLabel, priorityColor, Icons, useProjectChat, PortalChatComposer, PortalMessageAttachments, canSendPortalMessage, PortalProgress, PortalDocumentList, PortalUploadZone, StatusBadge, portalFieldStyles, pageTitleClass, sectionTitleClass, labelClass } from './shared';
 import PortalTeamRequests from '../../components/PortalTeamRequests';
 import PortalAssistant from '../../components/PortalAssistant';
+import ResourceLinks from '../../components/ResourceLinks';
 import { formatDate } from '../../lib/format';
 
 // The task board's columns, in order. The server maps every task status to
@@ -239,6 +240,7 @@ export default function ProjectDetail({ projectId, token, onBack, handoffIdentit
 
       <PortalAssistant projectId={projectId} token={token} identity={handoffIdentity} />
       <PortalTeamRequests projectId={projectId} token={token} identity={handoffIdentity} />
+      <ResourceLinks key={`resources-${projectId}`} entityType="PROJECT" entityId={projectId} readOnly portalToken={token} />
 
       {project.milestones?.length > 0 && (
         <Card as="section" padding="none" className="px-5 py-4" aria-labelledby="portal-milestones-title">

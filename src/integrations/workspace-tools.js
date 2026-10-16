@@ -22,6 +22,8 @@ import { readTeamWorkload } from '../services/team-workload.service.js';
 import { WORKSPACE_TASK_ACTIONS } from './workspace-task-actions.js';
 import { WORKSPACE_BILLING_TOOLS } from './workspace-billing-tools.js';
 import { WORKSPACE_RECORD_TOOLS, recordToolCall } from './workspace-record-tools.js';
+import { RESOURCE_LINK_TOOLS, resourceLinkToolCall } from './resource-link-tools.js';
+import { currentResourceLinkStaff } from '../services/resource-links.service.js';
 import { currentRecordStaff } from '../services/workspace-records.service.js';
 import { currentInvoiceAdmin } from '../services/unbilled-invoice.service.js';
 import { taskRelationLabels } from '../services/task-relation-labels.service.js';
@@ -98,6 +100,7 @@ export const workspaceRegistry = createToolRegistry([
   ...WORKSPACE_TASK_ACTIONS,
   ...WORKSPACE_BILLING_TOOLS,
   ...WORKSPACE_RECORD_TOOLS,
+  ...RESOURCE_LINK_TOOLS,
   {
     name: 'get_team_workload', description: 'Read active staff owned-task and contributor counts, and logged hours over the last seven days compared with weekly capacity. Counts can overlap; this does not forecast future availability.',
     class: 'read', roles: ['ADMIN', 'TEAM'], inputSchema: z.object({}).strict(),
@@ -198,6 +201,7 @@ export function createWorkspaceTools(options = {}) {
       await assertMcpActionAuthority(ctx.prisma, ctx, action.action, action);
       if (!registry.get(action.action).roles.includes(ctx.user.role)) throw new ToolError('ROLE_DENIED', 'Your role cannot access this action', { statusCode: 403 });
       if (WORKSPACE_BILLING_TOOLS.some(tool => tool.name === action.action)) await billingAdmin(ctx);
+      if (RESOURCE_LINK_TOOLS.some(tool => tool.name === action.action)) await resourceLinkToolCall(() => currentResourceLinkStaff(ctx.prisma, ctx.user));
       if (WORKSPACE_RECORD_TOOLS.some(tool => tool.name === action.action)) await recordToolCall(() => currentRecordStaff(ctx.prisma, ctx.user));
       if (WORKSPACE_COMMUNICATION_ACTIONS.some(tool => tool.name === action.action)) await communicationTaskScope({ prisma: ctx.prisma, user: ctx.user, input: action.input });
       if (WORKSPACE_CLIENT_AGENT_ACTIONS.some(tool => tool.name === action.action)) await authorizeClientTaskReceipt(ctx.prisma, ctx.user, action);
@@ -208,12 +212,14 @@ export function createWorkspaceTools(options = {}) {
         ? await executor.approve(ctx, parsed.data.actionId, { method: ctx.oauth ? 'oauth_confirm' : (options.approvalMethod ?? 'api_key_confirm'), ownerOnly: true })
         : await executor.reject(ctx, parsed.data.actionId, { reason: 'not_needed', ownerOnly: true, method: ctx.oauth ? 'oauth_confirm' : (options.approvalMethod ?? 'api_key_confirm') });
       if (result.action) await assertMcpActionAuthority(ctx.prisma, ctx, result.action.action, result.action);
+      if (RESOURCE_LINK_TOOLS.some(tool => tool.name === result.action?.action)) await resourceLinkToolCall(() => currentResourceLinkStaff(ctx.prisma, ctx.user));
       if (result.action?.action === 'create_client_task') await authorizeClientTaskReceipt(ctx.prisma, ctx.user, result.action);
       if (result.action?.action === 'publish_client_service_report_snapshot') await authorizeServicePublicationReceipt(ctx.prisma, ctx.user, result.action);
       return { kind: 'receipt', action: receipt(result.action), idempotent: result.idempotent };
     }
     const tool = registry.get(name);
     if (WORKSPACE_BILLING_TOOLS.some(tool => tool.name === name)) await billingAdmin(ctx);
+    if (RESOURCE_LINK_TOOLS.some(tool => tool.name === name)) await resourceLinkToolCall(() => currentResourceLinkStaff(ctx.prisma, ctx.user));
     if (WORKSPACE_RECORD_TOOLS.some(tool => tool.name === name)) await recordToolCall(() => currentRecordStaff(ctx.prisma, ctx.user));
     let input = args;
     let idempotencyKey;
@@ -239,13 +245,32 @@ export function createWorkspaceTools(options = {}) {
     }
     const result = await executor.invoke(ctx, { tool: name, input, idempotencyKey, source: 'ai_bridge' });
     if (result.action) await assertMcpActionAuthority(ctx.prisma, ctx, result.action.action, result.action);
+    if (RESOURCE_LINK_TOOLS.some(tool => tool.name === result.action?.action)) await resourceLinkToolCall(() => currentResourceLinkStaff(ctx.prisma, ctx.user));
     if (result.action?.action === 'create_client_task') await authorizeClientTaskReceipt(ctx.prisma, ctx.user, result.action);
     if (result.action?.action === 'publish_client_service_report_snapshot') await authorizeServicePublicationReceipt(ctx.prisma, ctx.user, result.action);
     return result.action ? { ...result, action: receipt(result.action) } : result;
   }
-  return { list, call: async (...args) => {
+  async function listCurrent(ctx) {
+    const visible = list(ctx);
+    if (!visible.some(tool => RESOURCE_LINK_TOOLS.some(resource => resource.name === tool.name))) return visible;
+    try { await resourceLinkToolCall(() => currentResourceLinkStaff(ctx.prisma, ctx.user)); }
+    catch (error) {
+      if (error.code !== 'ROLE_DENIED') throw error;
+      return visible.filter(tool => !RESOURCE_LINK_TOOLS.some(resource => resource.name === tool.name));
+    }
+    const resourceAction = ctx.oauth && visible.find(tool => RESOURCE_LINK_TOOLS.some(resource => resource.name === tool.name && resource.class !== 'read'));
+    if (resourceAction) {
+      try { await assertMcpActionAuthority(ctx.prisma, ctx, resourceAction.name); }
+      catch (error) {
+        if (error.code !== 'NOT_FOUND') throw error;
+        return visible.filter(tool => !RESOURCE_LINK_TOOLS.some(resource => resource.name === tool.name && resource.class !== 'read'));
+      }
+    }
+    return visible;
+  }
+  return { list, listCurrent, call: async (...args) => {
     try { return await call(...args); } catch (error) {
-      if (isWorkspaceBoundAction(error.action?.action)) delete error.action;
+      if (isWorkspaceBoundAction(error.action?.action) || RESOURCE_LINK_TOOLS.some(tool => tool.name === error.action?.action)) delete error.action;
       throw error;
     }
   } };

@@ -10,7 +10,7 @@ import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import clientTaskRoutes from '../../routes/client-agent-action.routes.js';
 import { reauthCookies, withSession } from '../helpers/reauth.js';
-const taskScope = 'workspace:client-tasks:write', reportScope = 'workspace:service-reports:publish';
+const taskScope = 'workspace:client-tasks:write', reportScope = 'workspace:service-reports:publish', resourceScope = 'workspace:resource-links:write';
 const task = { clientId: 'client-a', projectId: 'project-a', title: 'Scoped OAuth task', priority: 'HIGH' };
 const report = { clientId: 'client-a', mappingId: 'mapping-a', snapshot: { mappingRevision: 1, providerProjectIdMatch: 'source-a', outcome: 'OK', complete: true, reports: [{ providerReportId: 'new', title: 'Saved', summary: 'Private fixture text', sourceReportedAt: null }] } };
 function fixture(scopes = [taskScope, reportScope]) {
@@ -130,7 +130,7 @@ test('actual SDK discovery advertises narrow scopes and alternative control sche
     try {
       const { tools } = await client.listTools();
       for (const tool of tools) {
-        const expected = ['get_action', 'confirm_action', 'reject_action'].includes(tool.name) ? [taskScope, reportScope]
+        const expected = ['get_action', 'confirm_action', 'reject_action'].includes(tool.name) ? [taskScope, reportScope, resourceScope]
           : tool.name === 'create_client_task' ? [taskScope] : tool.name === 'publish_client_service_report_snapshot' ? [reportScope] : ['workspace:read'];
         const schemes = expected.map(scope => ({ type: 'oauth2', scopes: [scope] }));
         assert.deepEqual(tool._meta.securitySchemes, schemes);
