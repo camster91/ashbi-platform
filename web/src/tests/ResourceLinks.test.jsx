@@ -6,6 +6,48 @@ vi.mock('../lib/api', () => ({ api: Object.fromEntries(['listResourceLinks','cre
 const row = (id='r1', extra={}) => ({id,title:`Design ${id}`,url:'https://example.com/a?q=1#part',revision:3,position:0,canEdit:true,clientVisible:false,archivedAt:null,...extra});
 beforeEach(()=>{vi.resetAllMocks();api.listResourceLinks.mockResolvedValue({items:[],nextCursor:null});});
 const setup = (props={}) => render(<ResourceLinks entityType="PROJECT" entityId="p1" {...props}/>);
+it('browses a 650-resource client aggregate one explicit page at a time and retries the failed cursor without duplicate IDs',async()=>{
+  const shared=Array.from({length:650},(_,index)=>({id:`shared-${index}`,title:`Shared ${index}`,url:'https://example.com',position:index,updatedAt:'2026-01-01'}));
+  let failNext=true;
+  api.portalProjectResourceLinks.mockImplementation(async(_id,_token,params)=>{
+    const start=Number(params.after||0);
+    if(start===100 && failNext){failNext=false;throw new Error('Next page unavailable');}
+    return {items:start===100?[shared[99],...shared.slice(100,199)]:shared.slice(start,start+100),nextCursor:start+100<shared.length?String(start+100):null};
+  });
+  setup({readOnly:true,portalToken:'portal'});
+  await screen.findByRole('link',{name:'Shared 99 (opens in new tab)'});
+  expect(api.portalProjectResourceLinks).toHaveBeenCalledTimes(1);
+  expect(screen.getAllByRole('link')).toHaveLength(100);
+  fireEvent.click(screen.getByRole('button',{name:'Load more resources'}));
+  await screen.findByText('Next page unavailable');
+  expect(screen.getAllByRole('link')).toHaveLength(100);
+  expect(api.portalProjectResourceLinks).toHaveBeenCalledTimes(2);
+  fireEvent.click(screen.getByRole('button',{name:'Retry loading more resources'}));
+  await screen.findByRole('link',{name:'Shared 198 (opens in new tab)'});
+  expect(api.portalProjectResourceLinks).toHaveBeenCalledTimes(3);
+  expect(api.portalProjectResourceLinks.mock.calls[2][2]).toEqual({limit:100,after:'100'});
+  expect(screen.getAllByRole('link')).toHaveLength(199);
+  expect(screen.queryByRole('link',{name:'Shared 200 (opens in new tab)'})).not.toBeInTheDocument();
+});
+it('disables a pending explicit page request and ignores its stale response after switching client projects',async()=>{
+  let finishOldPage;
+  api.portalProjectResourceLinks.mockImplementation(async(id,_token,params)=>{
+    if(id==='p2')return {items:[{...row('new'),title:'New project resource'}],nextCursor:null};
+    if(params.after)return new Promise(resolve=>{finishOldPage=resolve;});
+    return {items:[row('old')],nextCursor:'next'};
+  });
+  const view=setup({readOnly:true,portalToken:'portal'});
+  fireEvent.click(await screen.findByRole('button',{name:'Load more resources'}));
+  expect(screen.getByRole('button',{name:'Load more resources'})).toBeDisabled();
+  fireEvent.click(screen.getByRole('button',{name:'Load more resources'}));
+  expect(api.portalProjectResourceLinks).toHaveBeenCalledTimes(2);
+  view.rerender(<ResourceLinks entityType="PROJECT" entityId="p2" readOnly portalToken="portal"/>);
+  await screen.findByRole('link',{name:'New project resource (opens in new tab)'});
+  finishOldPage({items:[row('stale')],nextCursor:null});
+  await waitFor(()=>expect(screen.queryByRole('link',{name:'Design stale (opens in new tab)'})).not.toBeInTheDocument());
+  expect(screen.queryByRole('link',{name:'Design old (opens in new tab)'})).not.toBeInTheDocument();
+  expect(screen.getAllByRole('link')).toHaveLength(1);
+});
 async function draft(){fireEvent.click(await screen.findByRole('button',{name:'Add resource'}));fireEvent.change(screen.getByLabelText('Resource title'),{target:{value:'Brand folder'}});fireEvent.change(screen.getByLabelText('Resource URL'),{target:{value:'https://drive.google.com/folder?a=1#x'}});}
 it('keeps separate IDs with duplicate URLs and targets the task',async()=>{api.listResourceLinks.mockResolvedValue({items:[row(),row('r2')],nextCursor:null});setup({entityType:'TASK',entityId:'t1'});expect(await screen.findAllByRole('link')).toHaveLength(2);expect(api.listResourceLinks).toHaveBeenCalledWith(expect.objectContaining({entityType:'TASK',entityId:'t1'}));});
 it('does not link unsafe URLs or permit editing read-only rows',async()=>{api.listResourceLinks.mockResolvedValue({items:[row('r1',{url:'javascript:alert(1)',canEdit:false}),row('r2',{url:'https://user:secret@example.com'})],nextCursor:null});setup();await screen.findByText('Design r1');expect(screen.queryByRole('link')).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'Edit Design r1'})).not.toBeInTheDocument();});

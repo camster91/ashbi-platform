@@ -16,6 +16,7 @@ export default function ResourceLinks({ entityType, entityId, readOnly = false, 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [complete, setComplete] = useState(false);
+  const [portalCursor, setPortalCursor] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -33,15 +34,34 @@ export default function ResourceLinks({ entityType, entityId, readOnly = false, 
   const historyGeneration = useRef(0);
   const creationDraft = useRef(null);
   const writing = useRef(false);
-  const load = useCallback(async () => {
+  const portalItems = useRef([]);
+  const portalCursors = useRef(new Set());
+  const load = useCallback(async (requestedCursor) => {
     const version = ++generation.current;
     setLoading(true); setComplete(false); setError('');
+    const portalAfter = readOnly && typeof requestedCursor === 'string' ? requestedCursor : null;
+    if (readOnly && !portalAfter) {
+      // New targets and explicit reloads start from a single fresh page.
+      portalItems.current = []; portalCursors.current = new Set();
+      setItems([]); setPortalCursor(null);
+    }
     try {
+      if (readOnly) {
+        // A client project can aggregate links from many tasks. Fetch only the
+        // requested page, never automatically drain that aggregate into the DOM.
+        const data = await api.portalProjectResourceLinks(entityId, portalToken, {limit:100, ...(portalAfter ? {after:portalAfter} : {})});
+        if (version !== generation.current) return false;
+        if (!Array.isArray(data?.items) || data.items.length > 100) throw new Error('Invalid resource list response.');
+        if (data.nextCursor && (data.nextCursor === portalAfter || portalCursors.current.has(data.nextCursor))) throw new Error('The resource list changed while loading. Reload resources to continue.');
+        const all = [...new Map([...portalItems.current, ...data.items].map(row=>[row.id,row])).values()];
+        portalItems.current = all;
+        if (data.nextCursor) portalCursors.current.add(data.nextCursor);
+        setItems(all); setPortalCursor(data.nextCursor || null); setComplete(true);
+        return all;
+      }
       let after; let all = []; const cursors = new Set();
       do {
-        const data = readOnly
-          ? await api.portalProjectResourceLinks(entityId, portalToken, { limit: 100, ...(after ? { after } : {}) })
-          : await api.listResourceLinks({ entityType, entityId, includeArchived: false, limit: 100, ...(after ? { after } : {}) });
+        const data = await api.listResourceLinks({ entityType, entityId, includeArchived: false, limit: 100, ...(after ? { after } : {}) });
         if (version !== generation.current) return false;
         if (!Array.isArray(data?.items)) throw new Error('Invalid resource list response.');
         all = [...all, ...data.items];
@@ -136,6 +156,7 @@ export default function ResourceLinks({ entityType, entityId, readOnly = false, 
     <p className="my-2 text-sm text-muted-foreground">Named links to briefs, folders and other resources. Sharing a link does not grant access to its external service.</p>
     {loading && <p role="status">Loading resources…</p>}
     {error && <p role="alert" className="my-2 text-sm text-destructive">{error}</p>}
+    {readOnly && portalCursor && <button type="button" className={control} disabled={loading} onClick={()=>load(portalCursor)}>{error ? 'Retry loading more resources' : 'Load more resources'}</button>}
     {notice && <p role="status" className="my-2 text-sm">{notice}</p>}
     {pendingCreate && !unresolvedEditor && <div className="my-3 space-y-2 rounded-lg border border-border p-3"><p role="status" className="text-sm">One resource creation remains unresolved. Its exact draft and creation ID are retained. Resolve it before adding another resource; other resource work can continue.</p><button type="button" className={control} disabled={busy || !!editor} onClick={resumeCreation}>Resume exact creation</button></div>}
     {conflict && !editor && <button type="button" className={control} disabled={busy || loading} onClick={reviewLatest}>Load latest resources for review</button>}

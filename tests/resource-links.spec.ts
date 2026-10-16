@@ -80,10 +80,21 @@ test('client project renders only minimal shared resource DTOs with no mutation 
   await page.routeWebSocket('**/*', socket => socket.close());
   await mockClientPortalApi(page);
   const shared = { id: 'resource-shared', title: 'Approved client brief', url: 'https://example.com/client?version=2#brief', position: 0, updatedAt: '2026-10-16T10:00:00Z' };
-  let reads = 0;
+  const resources = [shared, ...Array.from({ length: 649 }, (_, index) => ({ ...shared, id: `shared-${index}`, title: `Shared reference ${index + 1}`, position: index + 1 }))];
+  const reads: (string | null)[] = [];
+  let failNextPage = true;
   await page.route('**/api/client-portal/projects/project-a/resource-links?*', route => {
-    expect(route.request().method()).toBe('GET'); reads += 1;
-    return route.fulfill({ json: { items: [shared], nextCursor: null } });
+    expect(route.request().method()).toBe('GET');
+    const query = new URL(route.request().url()).searchParams;
+    expect(query.get('limit')).toBe('100');
+    const after = query.get('after'); reads.push(after);
+    if (after === 'page-100' && failNextPage) {
+      failNextPage = false;
+      return route.fulfill({ status: 503, json: { error: 'Page temporarily unavailable' } });
+    }
+    expect(after === null || after === 'page-100').toBe(true);
+    const offset = after ? 100 : 0;
+    return route.fulfill({ json: { items: resources.slice(offset, offset + 100), nextCursor: `page-${offset + 100}` } });
   });
   await page.goto('/client-portal/verify?token=resource-fixture-token');
   await page.getByRole('tab', { name: 'Projects (1)' }).click();
@@ -93,8 +104,17 @@ test('client project renders only minimal shared resource DTOs with no mutation 
   await expect(link).toHaveAttribute('href', shared.url);
   await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   await expect(panel.getByRole('button', { name: /Add|Edit|Archive|Restore|Move/ })).toHaveCount(0);
-  // React StrictMode may re-run the read effect; every call is checked above.
-  expect(reads).toBeGreaterThan(0);
+  // StrictMode may repeat the initial effect, but must never follow its cursor.
+  expect(reads.length).toBeGreaterThan(0);
+  expect(reads.every(after => after === null)).toBe(true);
+  await expect(panel.getByRole('link')).toHaveCount(100);
+  await panel.getByRole('button', { name: 'Load more resources', exact: true }).click();
+  await expect(panel.getByRole('alert')).toBeVisible();
+  await expect(panel.getByRole('link')).toHaveCount(100);
+  await panel.getByRole('button', { name: 'Retry loading more resources', exact: true }).click();
+  await expect(panel.getByRole('link')).toHaveCount(200);
+  expect(reads.filter(after => after !== null)).toEqual(['page-100', 'page-100']);
+  await expect(panel.getByRole('button', { name: 'Load more resources', exact: true })).toBeEnabled();
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const result = await new AxeBuilder({ page }).include('section[aria-labelledby]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   expect(result.violations).toEqual([]);

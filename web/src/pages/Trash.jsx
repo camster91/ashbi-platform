@@ -5,6 +5,23 @@ import QueryErrorState from '../components/QueryErrorState';
 import Modal, { ModalFooter } from '../components/Modal';
 import { Button } from '../components/ui';
 
+const RETENTION_MESSAGE = 'Items with resource links, including archived links, stay in Trash and can be restored.';
+const ENTITY_LABELS = { CLIENT: 'Client', PROJECT: 'Project', INVOICE: 'Invoice', PROPOSAL: 'Proposal', CONTRACT: 'Contract', EXPENSE: 'Expense', TASK: 'Task', ESTIMATE: 'Estimate', NOTE: 'Note', RETAINER_PLAN: 'Retainer plan' };
+const displayText = value => typeof value === 'string' ? value : '';
+
+function displayTrashItem(item) {
+  const data = item.data && typeof item.data === 'object' && !Array.isArray(item.data) ? item.data : {};
+  const typeLabel = ENTITY_LABELS[item.entity] || 'Item';
+  return {
+    id: item.id,
+    type: displayText(item.entity).toLowerCase(),
+    typeLabel,
+    title: displayText(data.title) || displayText(data.name) || typeLabel,
+    clientName: '',
+    deletedAt: item.deletedAt,
+  };
+}
+
 export default function Trash() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,9 +39,14 @@ export default function Trash() {
     setLoadError(null);
     try {
       const res = await api.request('/trash');
-      setItems(res.items || []);
+      if (!Array.isArray(res?.items) || !res.items.every(item => item && typeof item.id === 'string' && typeof item.entity === 'string')) {
+        throw new Error('Invalid trash response');
+      }
+      setItems(res.items.map(displayTrashItem));
+      return res.items;
     } catch (err) {
       setLoadError(err);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -58,7 +80,9 @@ export default function Trash() {
       setItems(items.filter(i => i.id !== id));
       setConfirmDelete(null);
     } catch (err) {
-      setOperationError(err?.message || 'This item could not be permanently deleted. Please try again.');
+      setOperationError(err?.data?.code === 'RESOURCE_LINK_RETENTION'
+        ? RETENTION_MESSAGE
+        : 'This item could not be permanently deleted. Please refresh Trash before trying again.');
     } finally {
       setPendingAction(null);
     }
@@ -69,11 +93,27 @@ export default function Trash() {
     setPendingAction('empty');
     setOperationError('');
     try {
-      await api.request('/trash/empty', { method: 'DELETE' });
-      setItems([]);
-      setShowEmptyConfirm(false);
-    } catch (err) {
-      setOperationError(err?.message || 'Trash could not be emptied. Please try again.');
+      const result = await api.request('/trash/empty', { method: 'DELETE' });
+      const refreshed = await loadTrash();
+      const knownResult = typeof result?.success === 'boolean'
+        && Number.isInteger(result.deleted) && result.deleted >= 0
+        && Number.isInteger(result.failed) && result.failed >= 0
+        && Array.isArray(result.failures) && result.failures.length === result.failed
+        && result.success === (result.failed === 0);
+      if (refreshed === null) {
+        setOperationError('The deletion request finished, but Trash could not be refreshed. Retry loading Trash to check what remains.');
+      } else if (!knownResult) {
+        setOperationError('The deletion result could not be confirmed. Trash has been refreshed; check the remaining items before trying again.');
+      } else if (result.failed > 0) {
+        const retained = result.failures.some(failure => failure?.code === 'RESOURCE_LINK_RETENTION');
+        setOperationError(`${result.deleted} deleted; ${result.failed} could not be deleted.${retained ? ` ${RETENTION_MESSAGE}` : ' Remaining items can be restored or reviewed before retrying.'}`);
+      } else if (refreshed.length > 0) {
+        setOperationError(`${result.deleted} deleted. Trash has additional items; review them before trying again.`);
+      } else {
+        setShowEmptyConfirm(false);
+      }
+    } catch {
+      setOperationError('The deletion result could not be confirmed. Reload Trash before trying again.');
     } finally {
       setPendingAction(null);
     }
@@ -94,7 +134,8 @@ export default function Trash() {
     .filter(i => typeFilter === 'ALL' || i.type === typeFilter.toLowerCase())
     .filter(i => !search || i.title.toLowerCase().includes(search.toLowerCase()) || i.clientName.toLowerCase().includes(search.toLowerCase()));
 
-  const types = [...new Set(items.map(i => i.typeLabel))].sort();
+  const types = [...new Map(items.map(item => [item.type, item.typeLabel])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]));
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -102,7 +143,7 @@ export default function Trash() {
         <div>
           <h1 className="text-2xl font-bold">Trash</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {items.length} item{items.length !== 1 ? 's' : ''} — items are automatically removed after 30 days
+            {items.length} item{items.length !== 1 ? 's' : ''} — eligible items are automatically removed after 30 days. Items with resource links are retained for recovery.
           </p>
         </div>
         {items.length > 0 && (
@@ -134,8 +175,8 @@ export default function Trash() {
           className="px-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
         >
           <option value="ALL">All Types</option>
-          {types.map(t => (
-            <option key={t} value={t.toLowerCase()}>{t}</option>
+          {types.map(([type, label]) => (
+            <option key={type} value={type}>{label}</option>
           ))}
         </select>
       </div>
@@ -160,9 +201,9 @@ export default function Trash() {
       {!loading && !loadError && filtered.length === 0 && (
         <div className="text-center py-16">
           <Trash2 className="w-12 h-12 mx-auto text-muted-foreground/40 mb-4" />
-          <h3 className="text-lg font-medium mb-1">Trash is empty</h3>
+          <h3 className="text-lg font-medium mb-1">{items.length ? 'No matching items' : 'Trash is empty'}</h3>
           <p className="text-sm text-muted-foreground">
-            Deleted items will appear here. They're automatically removed after 30 days.
+            Deleted items appear here. Eligible items are removed after 30 days; items with resource links, including archived links, remain recoverable.
           </p>
         </div>
       )}
@@ -265,7 +306,7 @@ export default function Trash() {
                   <strong>{confirmDelete.typeLabel}</strong>: {confirmDelete.title}
                 </p>
                 <p className="text-sm text-destructive mt-2">
-                  This cannot be undone. The item will be permanently removed.
+                  Eligible items are permanently removed and cannot be recovered. Items with resource links, including archived links, are retained and can be restored.
                 </p>
               </div>
             </div>
@@ -294,11 +335,12 @@ export default function Trash() {
               <AlertTriangle className="w-6 h-6 text-destructive shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  All {items.length} items will be permanently deleted. This cannot be undone.
+                  Attempt to permanently delete eligible items in Trash. Deleted items cannot be recovered. Items with resource links, including archived links, are retained and can be restored.
                 </p>
               </div>
             </div>
             {operationError && <p role="alert" className="mb-4 text-sm text-destructive">{operationError}</p>}
+            {operationError && <Button variant="outline" onClick={loadTrash} disabled={Boolean(pendingAction) || loading}>Refresh Trash</Button>}
         <ModalFooter className="flex-col-reverse sm:flex-row">
           <Button variant="outline" className="w-full sm:w-auto" onClick={() => { setOperationError(''); setShowEmptyConfirm(false); }} disabled={Boolean(pendingAction)}>Cancel</Button>
           <Button variant="destructive" className="w-full sm:w-auto" onClick={handleEmptyTrash} loading={pendingAction === 'empty'}>Empty trash</Button>

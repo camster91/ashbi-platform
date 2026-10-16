@@ -14,6 +14,9 @@ order and update time in the live client's project portal. Source references,
 creator information and internal task identifiers are excluded. The destination
 provider still controls access to its files and pages.
 
+The portal loads 100 resources initially. Load more retrieves one additional
+page on request; a failed page can be retried without losing visible links.
+
 Staff HTTP endpoints live under `/api/resource-links`; the read-only portal
 endpoint is `/api/client-portal/projects/:id/resource-links`. See the generated
 [OpenAPI contract](openapi.json) for payloads. Writes use expected revisions;
