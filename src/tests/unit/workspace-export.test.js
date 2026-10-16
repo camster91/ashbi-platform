@@ -218,6 +218,49 @@ async function withExport(setup, rowsByModel, check) {
   }
 }
 
+test('owner offboarding preserves both private portal audiences and published config, excluding session/intent/claim state and foreign rows', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-portal-owner-export-'));
+  const outputDir = path.join(root, 'export');
+  const audience = { organizationId: 'org1', clientId: 'client1', projectId: 'project-reassigned-later' };
+  const rows = {
+    portalAssistantConfig: [{ id: 'config1', organizationId: 'org1', clientId: 'client1', name: 'Published helper', instructions: 'Published instructions', enabled: false, revision: 3 }, { id: 'foreign-config', organizationId: 'org2' }],
+    portalAssistantConversation: ['a', 'b'].map(key => ({ id: `conversation-${key}`, ...audience, userId: `user-${key}`, contactId: `contact-${key}`, creationSessionVersion: 7 })),
+    portalAssistantRun: ['a', 'b'].map(key => ({ id: `run-${key}`, ...audience, userId: `user-${key}`, contactId: `contact-${key}`, conversationId: `conversation-${key}`, message: `Private question ${key}`, response: `Private answer ${key}`, status: 'SUCCEEDED', configRevision: 2, contextSnapshot: { project: { id: audience.projectId } }, memorySnapshot: [], creationSessionVersion: 7, idempotencyKey: `internal-intent-${key}`, inputHash: `internal-hash-${key}`, claimToken: `internal-claim-${key}` })),
+  };
+  rows.portalAssistantConversation.push({ id: 'foreign-conversation', organizationId: 'org2' });
+  rows.portalAssistantRun.push({ id: 'foreign-run', organizationId: 'org2' });
+  const calls = [];
+  const prisma = new Proxy(fakePrisma({}), { get(target, key) {
+    if (!Object.hasOwn(rows, key)) return target[key];
+    return { findMany: async args => {
+      calls.push({ model: key, ...args });
+      const scoped = args.where.AND ? args.where.AND[0] : args.where;
+      assert.deepEqual(scoped, { organizationId: 'org1' }, 'retained audience is scoped by origin, without reassigned parent joins');
+      if (args.where.AND) return [];
+      return rows[key].filter(row => row.organizationId === scoped.organizationId).slice(0, args.take)
+        .map(row => Object.fromEntries(Object.entries(row).filter(([field]) => !args.omit?.[field])));
+    } };
+  } });
+  try {
+    const result = await exportWorkspace({ prisma, organizationId: 'org1', outputDir, includeFiles: false, snapshot: false });
+    const read = entity => fs.readFileSync(path.join(outputDir, 'data', `${entity}.jsonl`), 'utf8').trim().split('\n').map(JSON.parse);
+    assert.equal(read('portal_assistant_configs')[0].instructions, 'Published instructions');
+    const conversations = read('portal_assistant_conversations'), runs = read('portal_assistant_runs');
+    assert.equal(conversations.length, 2);assert.equal(runs.length, 2);
+    for (const key of ['a', 'b']) {
+      assert.equal(conversations.find(row => row.id === `conversation-${key}`).contactId, `contact-${key}`);
+      const run = runs.find(row => row.id === `run-${key}`);
+      assert.equal(run.conversationId, `conversation-${key}`);assert.equal(run.contactId, `contact-${key}`);
+      assert.equal(run.response, `Private answer ${key}`);assert.deepEqual(run.contextSnapshot, { project: { id: audience.projectId } });
+    }
+    assert.doesNotMatch(JSON.stringify([...conversations, ...runs]), /creationSessionVersion|idempotencyKey|inputHash|claimToken|internal-intent|internal-hash|internal-claim|foreign-/);
+    assert.deepEqual(calls.find(call => call.model === 'portalAssistantConversation').omit, { creationSessionVersion: true });
+    assert.deepEqual(calls.find(call => call.model === 'portalAssistantRun').omit, { creationSessionVersion: true, idempotencyKey: true, inputHash: true, claimToken: true });
+    for (const entity of ['portal_assistant_conversations', 'portal_assistant_runs']) assert.ok(result.manifest.exclusions.some(row => row.scope === 'field' && row.entity === entity && row.field === 'creationSessionVersion' && /not a portable login/.test(row.reason)));
+    assert.equal((await verifyWorkspaceExportDirectory(outputDir)).valid, true);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 const codes = (result) => result.manifest.exceptions.map((exception) => `${exception.recordId}:${exception.code}`).sort();
 
 test('offboarding declares ingestion receipt exclusion without reading replay identities and retains canonical email content', async () => {

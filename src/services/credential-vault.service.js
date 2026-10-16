@@ -9,6 +9,7 @@ const PURPOSES = new Set([
   'incident response',
   'deployment',
   'rotation drill',
+  'read OpenSEO saved reports',
 ]);
 const OUTCOMES = new Set(['SUCCESS', 'NOT_FOUND', 'DECRYPT_FAILED']);
 

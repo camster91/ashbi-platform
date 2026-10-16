@@ -10,3 +10,11 @@ it('encodes saved report paths and preserves bounded explicit mutation bodies', 
   expect(fetch.mock.calls.map(([url]) => url)).toEqual(['/api/clients/c%2Fa/service-panels', '/api/clients/c%2Fa/service-panels', '/api/clients/c%2Fa/service-panels/m%2Fb', '/api/clients/c%2Fa/service-panels/m%2Fb/snapshots']);
   expect(fetch.mock.calls.slice(1).map(([, options]) => JSON.parse(options.body))).toEqual([create, update, publish]);
 });
+
+
+it('uses explicit refresh and metadata-only selection paths without accepting an alternate provider endpoint', async () => {
+  await api.getClientServiceCredentials('c/a');
+  await api.refreshClientServiceReports('c/a', 'm/b', { mappingRevision: 3 });
+  expect(fetch.mock.calls.map(([url]) => url)).toEqual(['/api/clients/c%2Fa/service-panel-credentials', '/api/clients/c%2Fa/service-panels/m%2Fb/refresh']);
+  expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ mappingRevision: 3 });
+});

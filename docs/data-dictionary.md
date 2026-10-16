@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-130 models, 0 enums, 76 tenant-scoped, 13 soft-deletable.
+133 models, 0 enums, 79 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -39,7 +39,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [CalendarEvent](#model-calendarevent) | `calendar_events` | no | no | 22 |
 | [ChatMessage](#model-chatmessage) | `chat_messages` | no | no | 22 |
 | [ChatReaction](#model-chatreaction) | `chat_reactions` | no | no | 7 |
-| [Client](#model-client) | `clients` | yes | yes | 60 |
+| [Client](#model-client) | `clients` | yes | yes | 63 |
 | [ClientAgentConversation](#model-clientagentconversation) | `client_agent_conversations` | yes | no | 18 |
 | [ClientAgentProfile](#model-clientagentprofile) | `client_agent_profiles` | yes | no | 18 |
 | [ClientAgentRun](#model-clientagentrun) | `client_agent_runs` | yes | no | 24 |
@@ -47,12 +47,12 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [ClientEmbedding](#model-clientembedding) | `client_embeddings` | no | no | 10 |
 | [ClientInvitation](#model-clientinvitation) | `client_invitations` | no | no | 8 |
 | [ClientPortalLinkRedemption](#model-clientportallinkredemption) | `client_portal_link_redemptions` | no | no | 4 |
-| [ClientServiceProject](#model-clientserviceproject) | `client_service_projects` | yes | no | 17 |
-| [ClientServiceReport](#model-clientservicereport) | `client_service_reports` | yes | no | 12 |
+| [ClientServiceProject](#model-clientserviceproject) | `client_service_projects` | yes | no | 23 |
+| [ClientServiceReport](#model-clientservicereport) | `client_service_reports` | yes | no | 14 |
 | [Contact](#model-contact) | `contacts` | no | no | 9 |
 | [Contract](#model-contract) | `contracts` | no | yes | 31 |
 | [CreativeBrief](#model-creativebrief) | `creative_briefs` | no | no | 16 |
-| [Credential](#model-credential) | `credentials` | yes | no | 16 |
+| [Credential](#model-credential) | `credentials` | yes | no | 17 |
 | [CredentialAccessAudit](#model-credentialaccessaudit) | `credential_access_audits` | yes | no | 11 |
 | [DocumentNumberSequence](#model-documentnumbersequence) | `document_number_sequences` | yes | no | 6 |
 | [DomainEvent](#model-domainevent) | `domain_events` | yes | no | 23 |
@@ -86,13 +86,16 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 85 |
+| [Organization](#model-organization) | `organizations` | no | no | 88 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
 | [PlatformSetting](#model-platformsetting) | `platform_settings` | no | no | 5 |
+| [PortalAssistantConfig](#model-portalassistantconfig) | `portal_assistant_configs` | yes | no | 12 |
+| [PortalAssistantConversation](#model-portalassistantconversation) | `portal_assistant_conversations` | yes | no | 12 |
+| [PortalAssistantRun](#model-portalassistantrun) | `portal_assistant_runs` | yes | no | 27 |
 | [PortalHandoffRequest](#model-portalhandoffrequest) | `portal_handoff_requests` | yes | no | 22 |
-| [Project](#model-project) | `projects` | yes | yes | 64 |
+| [Project](#model-project) | `projects` | yes | yes | 66 |
 | [ProjectBoard](#model-projectboard) | `project_boards` | yes | no | 16 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
@@ -659,6 +662,9 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
+| `portalAssistantConversations` | PortalAssistantConversation[] | list, required |  | → PortalAssistantConversation |  |
+| `portalAssistantRuns` | PortalAssistantRun[] | list, required |  | → PortalAssistantRun |  |
+| `portalAssistantConfigs` | PortalAssistantConfig[] | list, required |  | → PortalAssistantConfig |  |
 | `portalHandoffRequests` | PortalHandoffRequest[] | list, required |  | → PortalHandoffRequest |  |
 | `id` | String | id, required | `cuid()` |  |  |
 | `organizationId` | String | required |  |  |  |
@@ -910,6 +916,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Tenant-scoped: yes (`organizationId`)
 - Soft-deletable: no
 - Constraints and indexes:
+  - `@@index([credentialId, organizationId, clientId], map: "service_project_credential_idx")`
   - `@@unique([organizationId, clientId, provider, providerProjectId], map: "service_project_provider_key")`
   - `@@unique([id, organizationId, clientId])`
   - `@@index([organizationId, clientId, enabled])`
@@ -933,6 +940,12 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `client` | Client | required |  | → Client, via (clientId, organizationId) → (id, organizationId), onDelete Cascade |  |
+| `credentialId` | String | optional |  |  |  |
+| `credential` | Credential | optional |  | → Credential, via (credentialId, organizationId, clientId) → (id, organizationId, clientId), onDelete Restrict |  |
+| `refreshOutcome` | String | optional |  |  |  |
+| `refreshPartial` | Boolean | optional |  |  |  |
+| `providerTotalCount` | Int | optional |  |  |  |
+| `lastRefreshedAt` | DateTime | optional |  |  |  |
 | `reports` | ClientServiceReport[] | list, required |  | → ClientServiceReport |  |
 
 ### Model ClientServiceReport
@@ -956,6 +969,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `title` | String | required |  |  |  |
 | `summary` | String | required |  |  |  |
 | `sourceReportedAt` | DateTime | optional |  |  |  |
+| `providerEditedAt` | DateTime | optional |  |  |  |
+| `provenance` | String | required | `"ADMIN_PUBLISHED_SNAPSHOT"` |  |  |
 | `hubStoredAt` | DateTime | required | `now()` |  |  |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `client` | Client | required |  | → Client, via (clientId, organizationId) → (id, organizationId), onDelete Cascade |  |
@@ -1062,6 +1077,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([clientId])`
   - `@@index([projectId])`
   - `@@index([organizationId])`
+  - `@@unique([id, organizationId, clientId], map: "credentials_id_org_client_key")`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1081,6 +1097,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `client` | Client | optional |  | → Client, via (clientId) → (id), onDelete Cascade |  |
 | `project` | Project | optional |  | → Project, via (projectId) → (id), onDelete Cascade |  |
+| `serviceProjects` | ClientServiceProject[] | list, required |  | → ClientServiceProject |  |
 
 ### Model CredentialAccessAudit
 
@@ -1981,6 +1998,9 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
+| `portalAssistantConversations` | PortalAssistantConversation[] | list, required |  | → PortalAssistantConversation |  |
+| `portalAssistantRuns` | PortalAssistantRun[] | list, required |  | → PortalAssistantRun |  |
+| `portalAssistantConfigs` | PortalAssistantConfig[] | list, required |  | → PortalAssistantConfig |  |
 | `portalHandoffRequests` | PortalHandoffRequest[] | list, required |  | → PortalHandoffRequest |  |
 | `id` | String | id, required | `cuid()` |  |  |
 | `name` | String | required |  |  |  |
@@ -2151,6 +2171,99 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `aiDisabledById` | String | optional |  |  | No FK: history must outlive the actor account |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 
+### Model PortalAssistantConfig
+
+- Table: `portal_assistant_configs`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([organizationId, clientId])`
+  - `@@index([clientId, organizationId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `clientId` | String | required |  |  |  |
+| `enabled` | Boolean | required | `false` |  |  |
+| `name` | String | required | `"Account manager"` |  |  |
+| `instructions` | String | required | `""` |  |  |
+| `revision` | Int | required | `1` |  |  |
+| `changedById` | String | required |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Restrict |  |
+| `client` | Client | required |  | → Client, via (clientId, organizationId) → (id, organizationId), onDelete Restrict |  |
+
+### Model PortalAssistantConversation
+
+- Table: `portal_assistant_conversations`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([id, organizationId])`
+  - `@@unique([organizationId, clientId, projectId, userId, contactId], map: "portal_assistant_conversations_audience_key")`
+  - `@@index([clientId, organizationId])`
+  - `@@index([projectId, organizationId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `clientId` | String | required |  |  |  |
+| `projectId` | String | required |  |  |  |
+| `userId` | String | required |  |  |  |
+| `contactId` | String | required |  |  |  |
+| `creationSessionVersion` | Int | required |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Restrict |  |
+| `client` | Client | required |  | → Client, via (clientId, organizationId) → (id, organizationId), onDelete Restrict |  |
+| `project` | Project | required |  | → Project, via (projectId, organizationId) → (id, organizationId), onDelete Restrict |  |
+| `runs` | PortalAssistantRun[] | list, required |  | → PortalAssistantRun |  |
+
+### Model PortalAssistantRun
+
+- Table: `portal_assistant_runs`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([organizationId, clientId, userId, contactId, idempotencyKey], map: "portal_assistant_runs_intent_key")`
+  - `@@unique([organizationId, conversationId], map: "portal_assistant_runs_one_active", where: raw("status = ANY (ARRAY['QUEUED'::text, 'RUNNING'::text])"))`
+  - `@@index([organizationId, clientId, projectId, userId, contactId, id], map: "portal_assistant_runs_audience_id_idx")`
+  - `@@index([clientId, organizationId])`
+  - `@@index([projectId, organizationId])`
+  - `@@index([conversationId, organizationId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `clientId` | String | required |  |  |  |
+| `projectId` | String | required |  |  |  |
+| `userId` | String | required |  |  |  |
+| `contactId` | String | required |  |  |  |
+| `conversationId` | String | required |  |  |  |
+| `creationSessionVersion` | Int | required |  |  |  |
+| `configRevision` | Int | required |  |  |  |
+| `idempotencyKey` | String | required |  |  |  |
+| `inputHash` | String | required |  |  |  |
+| `message` | String | required |  |  |  |
+| `response` | String | optional |  |  |  |
+| `status` | String | required | `"QUEUED"` |  |  |
+| `claimToken` | String | optional |  |  |  |
+| `contextSnapshot` | Json | optional |  |  |  |
+| `memorySnapshot` | Json | optional |  |  |  |
+| `startedAt` | DateTime | optional |  |  |  |
+| `finishedAt` | DateTime | optional |  |  |  |
+| `deadlineAt` | DateTime | required |  |  |  |
+| `errorCode` | String | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Restrict |  |
+| `client` | Client | required |  | → Client, via (clientId, organizationId) → (id, organizationId), onDelete Restrict |  |
+| `project` | Project | required |  | → Project, via (projectId, organizationId) → (id, organizationId), onDelete Restrict |  |
+| `conversation` | PortalAssistantConversation | required |  | → PortalAssistantConversation, via (conversationId, organizationId) → (id, organizationId), onDelete Restrict |  |
+
 ### Model PortalHandoffRequest
 
 - Table: `portal_handoff_requests`
@@ -2202,6 +2315,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
+| `portalAssistantConversations` | PortalAssistantConversation[] | list, required |  | → PortalAssistantConversation |  |
+| `portalAssistantRuns` | PortalAssistantRun[] | list, required |  | → PortalAssistantRun |  |
 | `portalHandoffRequests` | PortalHandoffRequest[] | list, required |  | → PortalHandoffRequest |  |
 | `id` | String | id, required | `cuid()` |  |  |
 | `organizationId` | String | required |  |  |  |

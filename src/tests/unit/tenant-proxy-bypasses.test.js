@@ -185,10 +185,11 @@ test('the runtime relation map matches every @relation(fields: [...]) in the sch
     assert.deepEqual(info?.fkFields, scalars, `${model}.${field[1]} must match its complete foreign key`);
     if (scalars.length > 1) {
       const serviceReportMapping = model === 'clientservicereport' && field[1] === 'mapping';
-      assert.deepEqual(scalars, serviceReportMapping ? ['mappingId', 'organizationId', 'clientId'] : [`${field[1]}Id`, 'organizationId']);
+      const credentialBinding = model === 'clientserviceproject' && field[1] === 'credential';
+      assert.deepEqual(scalars, serviceReportMapping || credentialBinding ? [`${field[1]}Id`, 'organizationId', 'clientId'] : [`${field[1]}Id`, 'organizationId']);
       const referenced = /references:\s*\[([^\]]*)\]/.exec(field[3]);
-      assert.deepEqual(referenced?.[1].split(',').map(name => name.trim()), serviceReportMapping ? ['id', 'organizationId', 'clientId'] : ['id', 'organizationId']);
-      assert.ok(['User', 'Client', 'WorkspaceCollection', 'WorkspaceChatChannel', 'ClientAgentConversation', 'ClientServiceProject', 'Project', 'ClientAgentProfile', 'WorkspaceAccountManagerBinding', 'WorkspaceChatMessage', 'ClientAgentRun'].includes(field[2]));
+      assert.deepEqual(referenced?.[1].split(',').map(name => name.trim()), serviceReportMapping || credentialBinding ? ['id', 'organizationId', 'clientId'] : ['id', 'organizationId']);
+      assert.ok(['User', 'Client', 'WorkspaceCollection', 'WorkspaceChatChannel', 'ClientAgentConversation', 'ClientServiceProject', 'Credential', 'Project', 'ClientAgentProfile', 'WorkspaceAccountManagerBinding', 'WorkspaceChatMessage', 'ClientAgentRun', 'PortalAssistantConversation'].includes(field[2]));
       assert.equal(tenantModelPolicy[model], 'direct');
       assert.equal(tenantModelPolicy[field[2].toLowerCase()], 'direct');
     }

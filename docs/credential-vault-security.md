@@ -71,3 +71,7 @@ staged rotation. Do not print environment files, keyring JSON, plaintext,
 ciphertext, or provider credentials in logs, terminals captured for tickets, or
 GitHub. Production key generation, storage, escrow, and destruction require the
 organization's security approval; repository code cannot supply that approval.
+
+## OpenSEO saved-report reads
+
+The narrowly recognized `read OpenSEO saved reports` disclosure purpose is internal to explicit ADMIN refresh. A same-organization, exact-client vault login must be explicitly bound to the mapping; project-only credentials are ineligible. The declared URL must normalize to `https://openseo.ashbi.ca` without userinfo, query or fragment. Its path is not an alternate endpoint: all traffic uses the fixed public `/mcp`. Only eligible ID/label/username-presence metadata is selectable, never username or password. Password bytes are preserved. A committed credential-access audit gates disclosure; fresh post-read authority, binding and encrypted-row fingerprint/updatedAt checks gate publication. Rotation or ownership changes invalidate a pending refresh. No desktop connector credential is copied.

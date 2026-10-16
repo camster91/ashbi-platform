@@ -10571,6 +10571,8 @@
             "required": false,
             "schema": {
               "enum": [
+                "portal_assistant_config",
+                "portal_assistant_run",
                 "portal_handoff_request",
                 "workspace_account_manager_binding",
                 "workspace_account_manager_invocation",
@@ -10628,6 +10630,11 @@
             "required": false,
             "schema": {
               "enum": [
+                "portal_assistant.configured",
+                "portal_assistant.requested",
+                "portal_assistant.dispatched",
+                "portal_assistant.terminated",
+                "portal_assistant.settled",
                 "portal_handoff.requested",
                 "portal_handoff.claimed",
                 "portal_handoff.resolved",
@@ -10639,6 +10646,7 @@
                 "workspace_agent.suppressed",
                 "client_service_project.created",
                 "client_service_project.updated",
+                "client_service_project.refreshed",
                 "client_service_project.published",
                 "client_agent_conversation.created",
                 "client_agent_conversation.archived",
@@ -14564,6 +14572,148 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/client-assistants/{clientId}/portal-config": {
+      "get": {
+        "operationId": "get_api_client_assistants_clientId_portal_config",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/client-assistants/:clientId/portal-config",
+        "tags": [
+          "client-assistants"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
+      "patch": {
+        "operationId": "patch_api_client_assistants_clientId_portal_config",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "instructions": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "revision": {
+                    "maximum": 2147483646,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "revision",
+                  "enabled",
+                  "name",
+                  "instructions"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PATCH /api/client-assistants/:clientId/portal-config",
+        "tags": [
+          "client-assistants"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/client-assistants/{clientId}/preview": {
       "post": {
         "operationId": "post_api_client_assistants_clientId_preview",
@@ -16029,6 +16179,495 @@
           }
         ],
         "summary": "GET /api/client-portal/projects/:id/account-manager-requests/:requestId",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/projects/{id}/assistant": {
+      "get": {
+        "operationId": "get_api_client_portal_projects_id_assistant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/client-portal/projects/:id/assistant",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/projects/{id}/assistant/runs": {
+      "post": {
+        "operationId": "post_api_client_portal_projects_id_assistant_runs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "idempotencyKey": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "message": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "message",
+                  "idempotencyKey"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/client-portal/projects/:id/assistant/runs",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/projects/{id}/assistant/runs/by-intent/{key}": {
+      "get": {
+        "operationId": "get_api_client_portal_projects_id_assistant_runs_by_intent_key",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/client-portal/projects/:id/assistant/runs/by-intent/:key",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/projects/{id}/assistant/runs/{runId}": {
+      "get": {
+        "operationId": "get_api_client_portal_projects_id_assistant_runs_runId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/client-portal/projects/:id/assistant/runs/:runId",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/projects/{id}/assistant/runs/{runId}/cancel": {
+      "post": {
+        "operationId": "post_api_client_portal_projects_id_assistant_runs_runId_cancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/client-portal/projects/:id/assistant/runs/:runId/cancel",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/projects/{id}/assistant/runs/{runId}/dispatch": {
+      "post": {
+        "operationId": "post_api_client_portal_projects_id_assistant_runs_runId_dispatch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/client-portal/projects/:id/assistant/runs/:runId/dispatch",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/projects/{id}/assistant/runs/{runId}/recover": {
+      "post": {
+        "operationId": "post_api_client_portal_projects_id_assistant_runs_runId_recover",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/client-portal/projects/:id/assistant/runs/:runId/recover",
         "tags": [
           "client-portal"
         ],
@@ -18205,6 +18844,61 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/clients/{clientId}/service-panel-credentials": {
+      "get": {
+        "operationId": "get_api_clients_clientId_service_panel_credentials",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/clients/:clientId/service-panel-credentials",
+        "tags": [
+          "clients"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/clients/{clientId}/service-panels": {
       "get": {
         "operationId": "get_api_clients_clientId_service_panels",
@@ -18390,6 +19084,19 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "credentialId": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "pattern": "^[a-zA-Z0-9_-]+$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "displayLabel": {
                     "maxLength": 100,
                     "minLength": 1,
@@ -18447,6 +19154,93 @@
           }
         ],
         "summary": "PATCH /api/clients/:clientId/service-panels/:mappingId",
+        "tags": [
+          "clients"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/clients/{clientId}/service-panels/{mappingId}/refresh": {
+      "post": {
+        "operationId": "post_api_clients_clientId_service_panels_mappingId_refresh",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "mappingId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "mappingRevision": {
+                    "maximum": 2147483646,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "mappingRevision"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/clients/:clientId/service-panels/:mappingId/refresh",
         "tags": [
           "clients"
         ],

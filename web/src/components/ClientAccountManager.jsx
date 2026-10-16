@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import Button from './ui/Button';
 import ClientAssistantPreview from './ClientAssistantPreview';
 import ClientAgentSettings from './ClientAgentSettings';
+import PortalAssistantSettings from './PortalAssistantSettings';
 import { useAuth } from '../hooks/useAuth';
 
 const ClientAgentTaskAction = lazy(() => import('./ClientAgentTaskAction'));
@@ -143,6 +144,7 @@ export default function ClientAccountManager({ clientId, clientName, role }) {
         )}
         <Link className="inline-flex min-h-11 items-center text-sm underline underline-offset-4" to={`/queue?clientId=${encodeURIComponent(clientId || '')}`}>Open client work queue</Link>
         {open && clientId && <ClientAgentSettings key={`settings-${clientId}`} clientId={clientId} />}
+        {open && clientId && <PortalAssistantSettings clientId={clientId} />}
         {open && clientId && <TaskProposals clientId={clientId} />}
         {open && clientId && <ClientAssistantPreview key={clientId} clientId={clientId} clientName={clientName} />}
         {open && clientId && <details className="rounded-lg border border-border p-3" onToggle={(event) => { if (event.target === event.currentTarget) setConversationsOpen(event.currentTarget.open); }}>

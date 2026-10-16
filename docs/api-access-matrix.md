@@ -56,12 +56,12 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | api-key + scope ai_bridge:actions | 2 |
 | api-key + scope ai_bridge:read | 1 |
 | bot-secret | 40 |
-| client-portal | 31 |
+| client-portal | 38 |
 | public | 51 |
 | recent-auth + staff | 9 |
-| staff | 465 |
+| staff | 469 |
 | staff (inline) | 1 |
-| **total** | 668 |
+| **total** | 679 |
 
 ## Routes by prefix
 
@@ -329,6 +329,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
 | GET | `/api/client-assistants/:clientId/brief` | staff | scoped |  |
+| GET | `/api/client-assistants/:clientId/portal-config` | staff | scoped |  |
+| PATCH | `/api/client-assistants/:clientId/portal-config` | staff | scoped |  |
 | POST | `/api/client-assistants/:clientId/preview` | staff | scoped |  |
 | GET | `/api/client-assistants/:clientId/profile` | staff | scoped |  |
 | PATCH | `/api/client-assistants/:clientId/profile` | staff | scoped |  |
@@ -363,6 +365,13 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/client-portal/projects/:id/account-manager-requests` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects/:id/account-manager-requests/:requestId` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects/:id/account-manager-requests/by-intent/:key` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id/assistant` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/assistant/runs` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id/assistant/runs/:runId` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/assistant/runs/:runId/cancel` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/assistant/runs/:runId/dispatch` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/assistant/runs/:runId/recover` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id/assistant/runs/by-intent/:key` | client-portal | exempt |  |
 | POST | `/api/client-portal/projects/:id/chat-uploads` | client-portal | exempt |  |
 | DELETE | `/api/client-portal/projects/:id/chat-uploads/:attachmentId` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects/:id/documents` | client-portal | exempt |  |
@@ -402,9 +411,11 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/clients/:clientId/assistant/task-actions/:actionId/reject` | recent-auth + staff | scoped |  |
 | GET | `/api/clients/:clientId/assistant/task-actions/by-intent/:key` | staff | scoped |  |
 | POST | `/api/clients/:clientId/assistant/task-actions/by-intent/:key/reject` | recent-auth + staff | scoped |  |
+| GET | `/api/clients/:clientId/service-panel-credentials` | staff | scoped |  |
 | GET | `/api/clients/:clientId/service-panels` | staff | scoped |  |
 | POST | `/api/clients/:clientId/service-panels` | staff | scoped |  |
 | PATCH | `/api/clients/:clientId/service-panels/:mappingId` | staff | scoped |  |
+| POST | `/api/clients/:clientId/service-panels/:mappingId/refresh` | staff | scoped |  |
 | POST | `/api/clients/:clientId/service-panels/:mappingId/snapshots` | staff | scoped |  |
 | GET | `/api/clients/:id` | staff | scoped |  |
 | PUT | `/api/clients/:id` | staff | scoped |  |

@@ -39,7 +39,7 @@ function ProfileSettings({ clientId }) {
   return <details className="rounded-lg border border-border p-3" onToggle={(event) => { if (event.target === event.currentTarget) setOpen(event.currentTarget.open); }}>
     <summary className="min-h-11 cursor-pointer font-medium">Account manager settings</summary>
     {open && <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">Configure the staff account manager for this client. Client portal access is not enabled. Saving settings does not run the agent.</p>
+      <p className="text-sm text-muted-foreground">Configure the staff account manager for this client. These settings apply to staff. Client portal AI has separate settings. Saving settings does not run the agent.</p>
       {query.isPending && <p role="status">Loading profile…</p>}
       {query.isError && <div role="alert"><p>The profile could not be loaded.</p><Button type="button" variant="outline" disabled={query.isFetching} onClick={() => query.refetch()}>Retry profile</Button></div>}
       {!query.isError && profile && <form className="space-y-3" onSubmit={save}>

@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClientServicePanels from '../components/ClientServicePanels';
 
-const { api, auth } = vi.hoisted(() => ({ api: Object.fromEntries(['getClientServicePanels', 'createClientServiceMapping', 'updateClientServiceMapping', 'publishClientServiceSnapshot'].map((name) => [name, vi.fn()])), auth: { user: { id: 'staff', organizationId: 'org', role: 'TEAM' } } }));
+const { api, auth } = vi.hoisted(() => ({ api: Object.fromEntries(['getClientServiceCredentials', 'refreshClientServiceReports', 'getClientServicePanels', 'createClientServiceMapping', 'updateClientServiceMapping', 'publishClientServiceSnapshot'].map((name) => [name, vi.fn()])), auth: { user: { id: 'staff', organizationId: 'org', role: 'TEAM' } } }));
 vi.mock('../lib/api', () => ({ api }));
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => auth }));
 const report = { id: 'r1', providerReportId: 'source1', title: 'Keyword review', summary: 'Stored source summary', sourceReportedAt: '2026-10-12T10:00:00Z', hubStoredAt: '2026-10-16T12:00:00Z', sourceUrl: 'https://unverified.example/report' };
@@ -16,8 +16,8 @@ function setup(clientId = 'client1') {
   const view = (id) => <QueryClientProvider client={cache}><MemoryRouter><ClientServicePanels key={id} clientId={id} /></MemoryRouter></QueryClientProvider>;
   return { ...render(view(clientId)), view };
 }
-async function open() { fireEvent.click(screen.getByText('Saved reports')); return screen.findByText(/Staff-published snapshots/); }
-beforeEach(() => { vi.resetAllMocks(); auth.user = { id: 'staff', organizationId: 'org', role: 'TEAM' }; api.getClientServicePanels.mockResolvedValue(payload()); });
+async function open() { fireEvent.click(screen.getByText('Saved reports')); return screen.findByText(/Saved reports stored in Hub/); }
+beforeEach(() => { vi.resetAllMocks(); auth.user = { id: 'staff', organizationId: 'org', role: 'TEAM' }; api.getClientServicePanels.mockResolvedValue(payload()); api.getClientServiceCredentials.mockResolvedValue({ credentials: [] }); });
 afterEach(() => { cleanup(); caches.splice(0).forEach((cache) => cache.clear()); });
 
 describe('saved service reports', () => {
@@ -89,4 +89,69 @@ describe('saved service reports', () => {
     await screen.findByText('The mapping changed. Reload saved reports before trying again.');
     expect(api.updateClientServiceMapping).toHaveBeenCalledExactlyOnceWith('client1', 'm1', { revision: 1, displayLabel: 'New label', enabled: true });
   });
+});
+
+
+describe('explicit saved-report pull', () => {
+  it('reads only storage on load and offers provider refresh only to configured admins', async () => {
+    auth.user.role = 'ADMIN';
+    api.getClientServicePanels.mockResolvedValue(payload([{ ...mapping, refreshConfigured: true, credentialId: 'credential1' }]));
+    api.refreshClientServiceReports.mockResolvedValue({ id: 'm1', revision: 2, outcome: 'EMPTY', partial: true });
+    setup(); await open(); await screen.findByText('Keyword review');
+    expect(api.refreshClientServiceReports).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Manage saved reports'));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh saved reports from OpenSEO' }));
+    await waitFor(() => expect(api.refreshClientServiceReports).toHaveBeenCalledExactlyOnceWith('client1', 'm1', { mappingRevision: 1 }));
+    expect(api.publishClientServiceSnapshot).not.toHaveBeenCalled();
+  });
+  it('disables refresh until bound and keeps provider edit time separate from metrics', async () => {
+    auth.user.role = 'ADMIN';
+    api.getClientServicePanels.mockResolvedValue(payload([{ ...mapping, refreshConfigured: false, refreshOutcome: 'EMPTY', refreshPartial: true, lastRefreshedAt: '2026-10-16T12:00:00Z', reports: [{ ...report, provenance: 'OPENSEO_SAVED_REPORT_PULL', providerEditedAt: '2026-10-15T12:00:00Z', sourceReportedAt: null }] }]));
+    setup(); await open(); await screen.findByText('Keyword review');
+    expect(screen.getByRole('button', { name: 'Refresh saved reports from OpenSEO' })).toBeDisabled();
+    expect(screen.getByText(/No reports returned; saved reports retained/)).toBeInTheDocument();
+    expect(screen.getByText(/Metric observation time unknown/)).toBeInTheDocument();
+    expect(api.refreshClientServiceReports).not.toHaveBeenCalled();
+  });
+});
+
+
+it('binds only an explicitly selected metadata-only credential choice', async () => {
+  auth.user.role = 'ADMIN';
+  api.getClientServiceCredentials.mockResolvedValue({ credentials: [{ id: 'credential1', label: 'Public OpenSEO proxy', usernamePresent: true }] });
+  api.updateClientServiceMapping.mockResolvedValue({ id: 'm1', revision: 2 });
+  setup(); await open();
+  await screen.findByRole('option', { name: 'Public OpenSEO proxy' });
+  fireEvent.click(screen.getByText('Manage saved reports'));
+  fireEvent.change(screen.getByLabelText('OpenSEO public proxy Basic credential'), { target: { value: 'credential1' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save mapping' }));
+  await waitFor(() => expect(api.updateClientServiceMapping).toHaveBeenCalledExactlyOnceWith('client1', 'm1', { revision: 1, displayLabel: 'Website SEO', enabled: true, credentialId: 'credential1' }));
+});
+
+it('allows disabling a mapping without changing its binding when credential metadata is unavailable', async () => {
+  auth.user.role = 'ADMIN';
+  api.getClientServicePanels.mockResolvedValue(payload([{ ...mapping, credentialId: 'existing-bound-credential' }]));
+  api.getClientServiceCredentials.mockRejectedValue(new Error('private vault details'));
+  api.updateClientServiceMapping.mockResolvedValue({ id: 'm1', revision: 2 });
+  setup(); await open();
+  await screen.findByText('Credential choices are unavailable. Reload before changing the binding.');
+  fireEvent.click(screen.getByText('Manage saved reports'));
+  fireEvent.click(screen.getByLabelText('Show this mapping to staff'));
+  fireEvent.click(screen.getByRole('button', { name: 'Save mapping' }));
+  await waitFor(() => expect(api.updateClientServiceMapping).toHaveBeenCalledExactlyOnceWith('client1', 'm1', { revision: 1, displayLabel: 'Website SEO', enabled: false }));
+  expect(screen.queryByText('private vault details')).not.toBeInTheDocument();
+});
+
+
+it('reports unavailable provider outcomes honestly across the mapping revision remount', async () => {
+  auth.user.role = 'ADMIN';
+  api.getClientServicePanels.mockResolvedValueOnce(payload([{ ...mapping, refreshConfigured: true }])).mockResolvedValue(payload([{ ...mapping, revision: 2, refreshConfigured: true, status: 'unavailable', refreshOutcome: 'UNAVAILABLE', refreshPartial: true, lastRefreshedAt: '2026-10-16T12:00:00Z' }]));
+  api.refreshClientServiceReports.mockResolvedValue({ id: 'm1', revision: 2, outcome: 'UNAVAILABLE', partial: true });
+  setup(); await open(); await screen.findByText('Keyword review');
+  fireEvent.click(screen.getByText('Manage saved reports'));
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh saved reports from OpenSEO' }));
+  await screen.findByText(/Unavailable; saved reports retained/);
+  expect(screen.queryByText('Saved.')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Reports read\./)).not.toBeInTheDocument();
+  expect(screen.getByText('Keyword review')).toBeInTheDocument();
 });

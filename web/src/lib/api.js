@@ -337,6 +337,8 @@ export const api = {
     request(`/clients/${id}`),
   listClientCommunications: (id, params = {}) => request(`/client-communications/${encodeURIComponent(id)}?${new URLSearchParams(Object.entries(params).filter(([, value]) => value != null))}`),
   getClientCommunication: (clientId, source, id) => request(`/client-communications/${encodeURIComponent(clientId)}/${encodeURIComponent(source)}/${encodeURIComponent(id)}`),
+  getClientServiceCredentials: (clientId) => request(`/clients/${encodeURIComponent(clientId)}/service-panel-credentials`, { silent: true, notifyUnauthorized: true }),
+  refreshClientServiceReports: (clientId, mappingId, data) => request(`/clients/${encodeURIComponent(clientId)}/service-panels/${encodeURIComponent(mappingId)}/refresh`, { method: 'POST', body: data, silent: true, notifyUnauthorized: true }),
   getClientServicePanels: (clientId) => request(`/clients/${encodeURIComponent(clientId)}/service-panels`, { silent: true, notifyUnauthorized: true }),
   createClientServiceMapping: (clientId, data) => request(`/clients/${encodeURIComponent(clientId)}/service-panels`, { method: 'POST', body: data, silent: true, notifyUnauthorized: true }),
   updateClientServiceMapping: (clientId, mappingId, data) => request(`/clients/${encodeURIComponent(clientId)}/service-panels/${encodeURIComponent(mappingId)}`, { method: 'PATCH', body: data, silent: true, notifyUnauthorized: true }),
@@ -351,6 +353,8 @@ export const api = {
   confirmClientTaskAction: (clientId, actionId) => request(`/clients/${encodeURIComponent(clientId)}/assistant/task-actions/${encodeURIComponent(actionId)}/confirm`, { method: 'POST', body: { confirm: true }, silent: true, notifyUnauthorized: true }),
   rejectClientTaskAction: (clientId, key) => request(`/clients/${encodeURIComponent(clientId)}/assistant/task-actions/by-intent/${encodeURIComponent(key)}/reject`, { method: 'POST', body: {}, silent: true, notifyUnauthorized: true }),
   getClientAgentProfile: (id) => request(`/client-assistants/${encodeURIComponent(id)}/profile`),
+  getPortalAssistantConfig: (id) => request(`/client-assistants/${encodeURIComponent(id)}/portal-config`),
+  updatePortalAssistantConfig: (id, data) => request(`/client-assistants/${encodeURIComponent(id)}/portal-config`, { method: 'PATCH', body: data }),
   updateClientAgentProfile: (id, data) => request(`/client-assistants/${encodeURIComponent(id)}/profile`, { method: 'PATCH', body: data }),
   listClientAgentConversations: (clientId, params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value != null)).toString();

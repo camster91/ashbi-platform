@@ -152,6 +152,12 @@ export const EXPORT_ENTITIES = Object.freeze([
   { name: 'revenue_snapshots', model: 'RevenueSnapshot', category: 'finance', where: (org) => ({ client: activeClient(org) }), description: 'Monthly revenue snapshots per client' },
 
   // Communication
+  // Like retained portal handoffs, these preserve their immutable original
+  // audience even after a project is reassigned or a contact/client is revoked.
+  // This is the operator-only owner export, never a client/staff HTTP reader.
+  { name: 'portal_assistant_configs', model: 'PortalAssistantConfig', category: 'communication', where: org => ({ organizationId: org }), description: 'Client-published portal assistant name, instructions and configuration revisions; organization-owner export only' },
+  { name: 'portal_assistant_conversations', model: 'PortalAssistantConversation', category: 'communication', where: org => ({ organizationId: org }), omit: ['creationSessionVersion'], description: 'Retained private portal conversation audience: organization, client, project, user and contact; organization-owner export only' },
+  { name: 'portal_assistant_runs', model: 'PortalAssistantRun', category: 'communication', where: org => ({ organizationId: org }), omit: ['creationSessionVersion', 'idempotencyKey', 'inputHash', 'claimToken'], description: 'Retained private portal questions, answers, outcomes and bounded public-context/private-turn provenance; organization-owner export only, internal session/intent/claim state omitted' },
   { name: 'portal_handoff_requests', model: 'PortalHandoffRequest', category: 'communication', where: org => ({ organizationId: org }), omit: ['idempotencyKey', 'inputHash'], description: 'Retained human portal handoffs with principal audience and staff lifecycle; organization-owner export only' },
   { name: 'client_agent_conversations', model: 'ClientAgentConversation', category: 'communication', where: (org) => ({ organizationId: org, client: activeClient(org) }), description: 'Client account-manager conversations, including explicit private sourceChannelId/sourceBindingId audience and archived conversations; organization-owner export only' },
   { name: 'client_agent_runs', model: 'ClientAgentRun', category: 'communication', where: (org) => ({ organizationId: org, conversation: { organizationId: org, client: activeClient(org) } }), omit: ['idempotencyKey', 'inputHash', 'claimToken'], description: 'Stored client account-manager questions, answers and run outcomes; internal intent and worker tokens omitted' },
@@ -244,6 +250,7 @@ export const EXCLUDED_FIELD_REASONS = Object.freeze({
   mfaFailedAttempts: 'internal MFA lockout state',
   mfaLockedUntil: 'internal MFA lockout state',
   sessionVersion: 'internal session revocation counter',
+  creationSessionVersion: 'internal session revocation counter captured at portal conversation or request creation; not a portable login or permission grant',
   viewToken: 'secret: public link capability',
   signToken: 'secret: public signing link capability',
   tokenHash: 'secret: share link token hash',

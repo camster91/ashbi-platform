@@ -6,6 +6,7 @@ import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/
 import { cn } from '../../lib/utils';
 import { portalFetch, downloadPortalDocument, deletePortalDocument, fmtRelative, projectStatusLabel, projectStatusColor, priorityLabel, priorityColor, Icons, useProjectChat, PortalChatComposer, PortalMessageAttachments, canSendPortalMessage, PortalProgress, PortalDocumentList, PortalUploadZone, StatusBadge, portalFieldStyles, pageTitleClass, sectionTitleClass, labelClass } from './shared';
 import PortalTeamRequests from '../../components/PortalTeamRequests';
+import PortalAssistant from '../../components/PortalAssistant';
 import { formatDate } from '../../lib/format';
 
 // The task board's columns, in order. The server maps every task status to
@@ -233,6 +234,7 @@ export default function ProjectDetail({ projectId, token, onBack, handoffIdentit
         <PortalProgress value={project.progressPct} tone={project.progressPct >= 80 ? 'bg-success' : 'bg-primary'} className="h-2.5" />
       </Card>
 
+      <PortalAssistant projectId={projectId} token={token} identity={handoffIdentity} />
       <PortalTeamRequests projectId={projectId} token={token} identity={handoffIdentity} />
 
       {project.milestones?.length > 0 && (

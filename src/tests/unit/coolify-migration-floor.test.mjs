@@ -34,7 +34,7 @@ test('invalid persisted floor cannot become a migration path', () => fixture(asy
 }));
 
 
-for (const name of ['20261016060000_mcp_action_binding', '20261016090000_workspace_account_manager_pilot', '20261016120000_gmail_ingest_identity']) test(`${name} confidentiality floor is retained by direct deploy, migration wrapper and backup catalog proof`, async () => {
+for (const name of ['20261016060000_mcp_action_binding', '20261016090000_workspace_account_manager_pilot', '20261016120000_gmail_ingest_identity', '20261016130000_openseo_saved_report_pull']) test(`${name} confidentiality floor is retained by direct deploy, migration wrapper and backup catalog proof`, async () => {
   assert.ok(FLOOR_MIGRATIONS.includes(name));
   const direct=await fs.readFile(new URL('../../../scripts/deploy-vps-direct.sh',import.meta.url),'utf8');
   const backup=await fs.readFile(new URL('../../../scripts/deploy/verify-production-backup.py',import.meta.url),'utf8');
@@ -69,7 +69,7 @@ test('pilot confidentiality floor refuses a pre-pilot candidate even when the ol
 
 
 test('the complete applied or persisted union blocks every singly missing migration and permits a complete candidate', () => fixture(async root => {
-  const expected = ['20260927030000_chat_message_visibility', '20261016060000_mcp_action_binding', '20261016090000_workspace_account_manager_pilot', '20261016120000_gmail_ingest_identity'];
+  const expected = ['20260927030000_chat_message_visibility', '20261016060000_mcp_action_binding', '20261016090000_workspace_account_manager_pilot', '20261016120000_gmail_ingest_identity', '20261016130000_openseo_saved_report_pull'];
   assert.deepEqual(FLOOR_MIGRATIONS, expected);
   for (const source of ['applied', 'persisted']) {
     if (source === 'persisted') await fs.writeFile(path.join(root, 'rollback-floor'), expected.join('\n') + '\n');
