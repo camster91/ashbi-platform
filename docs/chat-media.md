@@ -95,7 +95,7 @@ the atomic claim, and the purge).
 | Tool | Behaviour |
 | --- | --- |
 | Attach | Several files (up to 10 per message); unsupported types and files over 64 MiB are refused before upload with a message. |
-| Paste / drop | Clipboard screenshots and files, and files dropped on the composer. Clipboard images get a name; names are reduced to one extension (the policy refuses double extensions). |
+| Paste / drop | Clipboard screenshots and files, and files dropped on the composer. Unnamed clipboard images get a generated name; safe original names, including ordinary multi-period basenames, are preserved. Paths, control characters and executable or active-content double extensions are refused. |
 | Screenshot | One frame of a `getDisplayMedia` stream (the person picks a tab, window or screen), then a markup step: arrow, rectangle, freehand pen, text, colour, undo (button or Ctrl/Cmd+Z). Exported as PNG at the capture's resolution (longest edge capped at 3840 px). Attached images can be marked up the same way from the tray. |
 | Record | Screen only; screen + camera bubble (the camera is composited into the bottom-left corner of the screen video on a canvas and re-captured with `captureStream`; a worker-driven timer keeps drawing while the tab is in the background); or camera only. Microphone audio is mixed with tab/system audio when the browser provides both. 3-second countdown, pause/resume, stop, a visible timer and size meter, preview, re-record, attach. Recording stops itself at 64 MiB (with headroom for the last chunk) or at 15 minutes; chat recordings target about 1.2 Mbit/s. Ending the screen share stops the recording. Escape during a recording stops it and shows the preview instead of discarding it. |
 
