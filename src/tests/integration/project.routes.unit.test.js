@@ -114,7 +114,7 @@ describe('Project Routes (Unit)', () => {
       { duration: 120, billable: true, userId: 'u1', user: { hourlyRate: 100 } } // 2 hours * 100 = 200
     ];
     mockPrisma.expense.findMany = async () => [
-      { amount: 50 }
+      { amount: 50, currency: 'CAD' }
     ];
 
     const res = await fastify.inject({
@@ -124,8 +124,12 @@ describe('Project Routes (Unit)', () => {
 
     assert.equal(res.statusCode, 200);
     const body = JSON.parse(res.body);
-    assert.equal(body.budgetUsed, 250); // 200 + 50
-    assert.equal(body.budgetRemaining, 750);
+    assert.equal(body.totalCost, 200); // Complete recorded-rate scalar, currency unspecified.
+    assert.equal(body.expenses.byCurrency.CAD.total, 50);
+    assert.equal(body.budgetUsed, null); // No budget/rate currency exists to support a financial comparison.
+    assert.equal(body.budgetRemaining, null);
+    assert.equal(body.percentUsed, null);
+    assert.equal(body.hoursPercentUsed, 10);
     assert.equal(body.hoursRemaining, 18); // 20 - 2
   });
 });

@@ -30,6 +30,13 @@ const conflict = () => fail('SERVICE_PANEL_CONFLICT', 'The saved report mapping 
 function parse(schema, value) { const result = schema.safeParse(value); if (!result.success) fail('INVALID_INPUT', 'Provide valid saved report fields.'); return result.data; }
 const scope = (prisma, user) => { if (!user?.organizationId) fail('ROLE_DENIED', 'Active staff access required.', 403); return createScopedPrisma(prisma, user.organizationId); };
 async function admin(tx, user, clientId) { const actor = await authorizeClientAgentStaff(tx, user, clientId); if (actor.role !== 'ADMIN') fail('ROLE_DENIED', 'Administrator access required.', 403); return actor; }
+export async function requireClientServiceAdmin(prisma, identity, clientId) {
+  if (typeof identity?.id !== 'string' || !identity.id || typeof identity.organizationId !== 'string' || !identity.organizationId) fail('ROLE_DENIED', 'Administrator access required.', 403);
+  const actor = await prisma.user.findFirst({ where: { id: identity.id, organizationId: identity.organizationId, isActive: true }, select: { id: true, organizationId: true, role: true, isActive: true } });
+  if (!actor || actor.id !== identity.id || actor.organizationId !== identity.organizationId || actor.role !== 'ADMIN' || !actor.isActive) fail('ROLE_DENIED', 'Administrator access required.', 403);
+  await authorizeClientAgentStaff(prisma, actor, clientId);
+  return actor;
+}
 async function audit(tx, actor, row, action, metadata = {}) {
   const saved = await recordAuditEvent(tx, { organizationId: actor.organizationId, actorUserId: actor.id, actorType: 'USER',
     entityId: row.id, action: `client_service_project.${action}`, metadata: { clientId: row.clientId, revision: row.revision, ...metadata } });
@@ -81,30 +88,36 @@ export async function updateClientServiceMapping(prisma, user, clientId, mapping
 }
 export async function publishClientServiceSnapshot(prisma, user, clientId, mappingId, input) {
   ({ mappingId } = parse(serviceMappingParamsSchema, { clientId, mappingId })); const fields = parse(serviceSnapshotSchema, input);
-  return mutate(prisma, user, clientId, async (tx, actor) => {
-    const where = { id: mappingId, organizationId: actor.organizationId, clientId };
-    const mapping = await tx.clientServiceProject.findFirst({ where });
-    if (!mapping) throw recordNotFound('Saved report mapping not found');
-    if (!mapping.enabled || mapping.provider !== 'OPENSEO' || mapping.providerProjectId !== fields.providerProjectIdMatch || mapping.revision !== fields.mappingRevision) conflict();
-    const now = new Date();
-    if (fields.reports.some(row => row.sourceReportedAt && new Date(row.sourceReportedAt) > now)) fail('INVALID_INPUT', 'Source report times cannot be in the future.');
-    const success = fields.outcome !== 'UNAVAILABLE';
-    if ((await tx.clientServiceProject.updateMany({ where: { ...where, revision: fields.mappingRevision, enabled: true, providerProjectId: fields.providerProjectIdMatch },
-      data: { revision: { increment: 1 }, lastAttemptAt: now, lastOutcome: fields.outcome, failureCode: fields.failureCode,
-        ...(success ? { lastSuccessAt: now } : {}) } })).count !== 1) conflict();
-    if (success) {
-      if (fields.complete) await tx.clientServiceReport.deleteMany({ where: { organizationId: actor.organizationId, clientId, mappingId,
-        ...(fields.reports.length ? { providerReportId: { notIn: fields.reports.map(row => row.providerReportId) } } : {}) } });
-      for (const report of fields.reports) {
-        const reportWhere = { organizationId: actor.organizationId, clientId, mappingId, providerReportId: report.providerReportId };
-        const data = { title: report.title, summary: report.summary, sourceReportedAt: report.sourceReportedAt ? new Date(report.sourceReportedAt) : null, hubStoredAt: now };
-        const existing = await tx.clientServiceReport.findFirst({ where: reportWhere, select: { id: true } });
-        if (existing) await tx.clientServiceReport.updateMany({ where: { ...reportWhere, id: existing.id }, data });
-        else await tx.clientServiceReport.create({ data: { ...reportWhere, ...data } });
-      }
+  return mutate(prisma, user, clientId, (tx, actor) => publishClientServiceSnapshotInTransaction(tx, actor, clientId, mappingId, fields));
+}
+
+/** Caller must supply the executor transaction; authorization and audit remain inside it. */
+export async function publishClientServiceSnapshotInTransaction(tx, identity, clientId, mappingId, input) {
+  ({ mappingId } = parse(serviceMappingParamsSchema, { clientId, mappingId }));
+  const fields = parse(serviceSnapshotSchema, input);
+  const actor = await requireClientServiceAdmin(tx, identity, clientId);
+  const where = { id: mappingId, organizationId: actor.organizationId, clientId };
+  const mapping = await tx.clientServiceProject.findFirst({ where });
+  if (!mapping) throw recordNotFound('Saved report mapping not found');
+  if (!mapping.enabled || mapping.provider !== 'OPENSEO' || mapping.providerProjectId !== fields.providerProjectIdMatch || mapping.revision !== fields.mappingRevision) conflict();
+  const now = new Date();
+  if (fields.reports.some(row => row.sourceReportedAt && new Date(row.sourceReportedAt) > now)) fail('INVALID_INPUT', 'Source report times cannot be in the future.');
+  const success = fields.outcome !== 'UNAVAILABLE';
+  if ((await tx.clientServiceProject.updateMany({ where: { ...where, revision: fields.mappingRevision, enabled: true, providerProjectId: fields.providerProjectIdMatch },
+    data: { revision: { increment: 1 }, lastAttemptAt: now, lastOutcome: fields.outcome, failureCode: fields.failureCode,
+      ...(success ? { lastSuccessAt: now } : {}) } })).count !== 1) conflict();
+  if (success) {
+    if (fields.complete) await tx.clientServiceReport.deleteMany({ where: { organizationId: actor.organizationId, clientId, mappingId,
+      ...(fields.reports.length ? { providerReportId: { notIn: fields.reports.map(row => row.providerReportId) } } : {}) } });
+    for (const report of fields.reports) {
+      const reportWhere = { organizationId: actor.organizationId, clientId, mappingId, providerReportId: report.providerReportId };
+      const data = { title: report.title, summary: report.summary, sourceReportedAt: report.sourceReportedAt ? new Date(report.sourceReportedAt) : null, hubStoredAt: now };
+      const existing = await tx.clientServiceReport.findFirst({ where: reportWhere, select: { id: true } });
+      if (existing) await tx.clientServiceReport.updateMany({ where: { ...reportWhere, id: existing.id }, data });
+      else await tx.clientServiceReport.create({ data: { ...reportWhere, ...data } });
     }
-    const row = { ...mapping, revision: mapping.revision + 1 };
-    await audit(tx, actor, row, 'published', { outcome: fields.outcome, reportCount: fields.reports.length, complete: fields.complete });
-    return { id: mappingId, revision: row.revision, outcome: fields.outcome, storedReportCount: await tx.clientServiceReport.count({ where: { organizationId: actor.organizationId, clientId, mappingId } }) };
-  });
+  }
+  const row = { ...mapping, revision: mapping.revision + 1 };
+  await audit(tx, actor, row, 'published', { outcome: fields.outcome, reportCount: fields.reports.length, complete: fields.complete });
+  return { id: mappingId, revision: row.revision, outcome: fields.outcome, storedReportCount: await tx.clientServiceReport.count({ where: { organizationId: actor.organizationId, clientId, mappingId } }) };
 }

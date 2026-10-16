@@ -369,7 +369,7 @@ function AIModelSection() {
 // anything else). Labels are for the settings UI only.
 const API_KEY_SCOPE_OPTIONS = [
   { value: 'workspace:read', label: 'Read workspace', description: 'Projects, clients and tasks through API or MCP. No AI provider needed.' },
-  { value: 'workspace:actions', label: 'Workspace actions', description: 'Prepare and separately confirm tasks and calendar events.' },
+  { value: 'workspace:actions', label: 'Workspace actions', description: 'Prepare and separately confirm authorized workspace actions. Saved-report publication requires an administrator.' },
   { value: 'ai_bridge:read', label: 'Embedded AI chat (legacy)', description: 'Ask the AI bridge about projects, tasks, clients and retainers.' },
   { value: 'ai_bridge:actions', label: 'AI bridge actions (legacy)', description: 'Prepare and confirm tasks, calendar events and Slack messages.' },
 ];

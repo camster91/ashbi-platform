@@ -21,10 +21,11 @@ export const TOOL_ROLES = Object.freeze(['ADMIN', 'TEAM']);
 
 /**
  * Tools that may be `external` or `irreversible`. Proposal for owner approval
- * (docs/ai-tool-registry.md): only the Slack post, which was already
+ * (docs/ai-tool-registry.md): the Slack post and administrator-confirmed
+ * saved report snapshot replacement. The Slack post was already
  * confirm-gated by the AI bridge before this registry existed.
  */
-export const EXTERNAL_TOOL_ALLOWLIST = Object.freeze(['send_slack_message']);
+export const EXTERNAL_TOOL_ALLOWLIST = Object.freeze(['send_slack_message', 'publish_client_service_report_snapshot']);
 
 /** Longest time an approved action may wait for its approval. Proposal. */
 export const APPROVAL_TTL_MS = 10 * 60 * 1000;

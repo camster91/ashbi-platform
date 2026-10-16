@@ -38,53 +38,26 @@ jobs:
         run: node scripts/check-secrets.mjs .
       - name: Set up isolated image builder
         uses: docker/setup-buildx-action@v4
-      - name: Build exact amd64 image
+      - name: Build exact amd64 OCI gzip image
         shell: bash
         run: |
           set -euo pipefail
-          docker buildx build --load --platform linux/amd64 \
+          docker buildx build --platform linux/amd64 \
             --file Dockerfile --build-arg "APP_REVISION=$RELEASE_REVISION" \
             --label "org.opencontainers.image.revision=$RELEASE_REVISION" \
-            --tag "ashbi-platform:$RELEASE_REVISION" .
-      - name: Verify and save immutable image
+            --tag "ashbi-platform:$RELEASE_REVISION" \
+            --provenance=false --sbom=false \
+            --output "type=oci,dest=$RUNNER_TEMP/release-builder.oci.tar,compression=gzip,force-compression=true,oci-mediatypes=true" .
+      - name: Validate and canonicalize OCI artifact
         shell: bash
         run: |
           set -euo pipefail
-          export IMAGE="ashbi-platform:$RELEASE_REVISION"
-          export INSPECT_PATH="$RUNNER_TEMP/release-image-inspect.json"
           mkdir release-artifact
-          export ARCHIVE="release-artifact/ashbi-platform-$RELEASE_REVISION.tar"
-          docker image inspect "$IMAGE" > "$INSPECT_PATH"
-          docker image save --output "$ARCHIVE" "$IMAGE"
-          python3 - <<'PY'
-          import hashlib, json, os, re
-          from pathlib import Path
-          revision = os.environ['RELEASE_REVISION']
-          assert re.fullmatch(r'[0-9a-f]{40}', revision), 'Invalid source revision'
-          image = os.environ['IMAGE']
-          assert image == f'ashbi-platform:{revision}', 'Unexpected image tag'
-          inspected = json.loads(Path(os.environ['INSPECT_PATH']).read_text())
-          assert len(inspected) == 1, 'Expected one image'
-          info = inspected[0]
-          assert info['Architecture'] == 'amd64' and info['Os'] == 'linux', 'Unexpected image architecture'
-          assert re.fullmatch(r'sha256:[0-9a-f]{64}', info['Id']), 'Invalid immutable image ID'
-          assert [value for value in info['Config']['Env'] if value.startswith('APP_REVISION=')] == [f'APP_REVISION={revision}'], 'Image revision differs from source'
-          assert info['Config']['Labels']['org.opencontainers.image.revision'] == revision, 'Image label differs from source'
-          archive = Path(os.environ['ARCHIVE'])
-          assert archive == Path('release-artifact') / f'ashbi-platform-{revision}.tar', 'Unexpected archive path'
-          assert archive.stat().st_size > 0 and isinstance(info['Size'], int) and info['Size'] > 0, 'Empty release image'
-          def checksum(path):
-              digest = hashlib.sha256()
-              with path.open('rb') as stream:
-                  for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-                      digest.update(chunk)
-              return digest.hexdigest()
-          digest = checksum(archive)
-          metadata = {'revision': revision, 'image': image, 'imageId': info['Id'], 'size': info['Size'], 'architecture': info['Architecture'], 'archiveSha256': digest, 'archiveBytes': archive.stat().st_size}
-          path = archive.parent / 'metadata.json'
-          path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + '\n')
-          (archive.parent / 'SHA256SUMS').write_text(f'{digest}  {archive.name}\n{checksum(path)}  metadata.json\n')
-          PY
+          python3 scripts/deploy/prepare-oci-artifact.py \
+            --input "$RUNNER_TEMP/release-builder.oci.tar" \
+            --output "release-artifact/ashbi-platform-$RELEASE_REVISION-oci-gzip.tar" \
+            --revision "$RELEASE_REVISION" \
+            --builder-run-id "$GITHUB_RUN_ID" --repository "$GITHUB_REPOSITORY"
       - name: Retain image archive and verification metadata
         uses: actions/upload-artifact@v7
         with:
