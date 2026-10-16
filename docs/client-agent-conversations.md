@@ -1,9 +1,6 @@
 # Shared client account-manager conversations
 
-Status: **code-present, unshipped**. This documents the durable conversation
-follow-up under the existing agency plan. It does not establish production
-migration, a working provider connection, real-client acceptance or source-app
-cutover.
+Status: **deployed W1 foundation**, verified at `37d02b304898ec5c621199f4a2a880ebd64a6372` (#608). Required main CI [38808629217](https://github.com/camster91/ashbi-platform/actions/runs/38808629217) passed. The release passed 169 bounded live checks, including 47 agent-conversation CRUD checks, and normal browser creation/reload persistence followed by separate API archive cleanup. No Send or provider call was made during that acceptance. Prior-turn memory, persisted context observation/source evidence and real-provider/team acceptance remain open; deployment does not establish full W1 or source-app cutover. [#565](https://github.com/camster91/ashbi-platform/issues/565) owns the current queue.
 
 `ClientAgentConversation` attaches a staff-shared conversation to one canonical
 client and organization. `ClientAgentRun` stores each submitted question,
@@ -64,8 +61,9 @@ already spent preparing context. The worker aborts supported transports and
 releases its slot even if a provider ignores cancellation; late results cannot
 replace the terminal outcome. Cancellation/timeout still cannot prove that an
 upstream request incurred no usage.
-The user can submit a new explicit request with a new intent key. These are
-code behaviors awaiting migrated-database and deployment acceptance.
+The user can submit a new explicit request with a new intent key.
+Migrated-database CI and bounded deployed CRUD/browser acceptance passed;
+actual model/provider acceptance remains separate.
 
 The per-feature Claude SDK call uses `singleAttempt: true`, disabling SDK
 retries and setting a 90-second request timeout. The existing BYOK adapter

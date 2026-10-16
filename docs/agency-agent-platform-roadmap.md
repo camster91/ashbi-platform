@@ -2,6 +2,10 @@
 
 Approved October 14, 2026. This is the agent/agency workstream under the [master delivery plan](master-app-delivery-plan.md), not a second release checklist. [Product status](product-status.md) distinguishes code, CI, deployment and target acceptance. Approval establishes product scope; it does not establish missing provider connections, choose unresolved retention policies or complete acceptance.
 
+## October 15 delivery overlay
+
+The W1 foundation is deployed in #608 at `37d02b304898ec5c621199f4a2a880ebd64a6372`: shared staff saved questions, governed no-tools runs, exact-intent recovery, status/cancellation and bounded deadline recovery. Required main CI [38808629217](https://github.com/camster91/ashbi-platform/actions/runs/38808629217) and 169 bounded live checks passed, including 47 agent CRUD checks; normal browser creation/reload persistence followed by separate API archive cleanup passed without Send/provider calls. Prior-turn memory, persisted context observation/source evidence and real-provider/team acceptance remain incomplete W1 work. Restricted tools/MCP actions, portal assistants and later bot/provider integrations remain follow-ups. This does not close the full agency roadmap, whole-app acceptance or source cutover; [#565](https://github.com/camster91/ashbi-platform/issues/565) owns the execution queue.
+
 ## Product and architecture
 
 Hub holds canonical records and runs account-manager capabilities. Humans and clearly identified bots collaborate in the app; ChatGPT connects through Hub MCP. All entry points share backend services, client identities, permission checks, human approvals and action receipts. Client profiles must not duplicate clients or become permission boundaries. Agency and freelance work remain shared with the Ashbi team.
@@ -40,7 +44,7 @@ Keep asset origin, license/usage rights, supplied sources, AI involvement and ap
 
 The first slice provides a staff preview, curated read-only `client-work` plugin and shared deterministic brief. The [staff profile/messages follow-up](workspace-messages.md) adds persistent profile configuration and human company/direct conversations, with code presence distinct from merge/production acceptance.
 
-October 15, 2026 implementation overlay: [shared staff agent conversations and durable runs](client-agent-conversations.md) are **code-present, unshipped** in the follow-up branch, with stored questions/results, status, cancellation and requester intent recovery. Production migration, worker delivery and real-provider acceptance are not established by this overlay. Configurable provider plugin installations, app-wide bot execution, new mailbox connections, WhatsApp delivery and OpenSEO adapters remain unfinished. Existing task/finance/chat/email/portal code must be audited and extended before claiming any replacement is complete.
+October 15, 2026 release boundary: [shared staff questions and durable runs](client-agent-conversations.md) are deployed as the #608 W1 foundation at `37d02b3`, with stored questions/results, status, cancellation and requester intent recovery. Migrated CI and bounded deployed CRUD/browser acceptance passed; no live model request was submitted. Prior-turn memory, persisted context observation/source evidence and real-provider/team acceptance remain open. Configurable provider plugin installations, app-wide bot execution, new mailbox connections, WhatsApp delivery and OpenSEO adapters remain unfinished. Existing task/finance/chat/email/portal code must be audited and extended before claiming any replacement is complete.
 
 ## Standards references
 
