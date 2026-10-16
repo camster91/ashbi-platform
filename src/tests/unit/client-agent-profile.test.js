@@ -135,3 +135,18 @@ test('HTTP routes redact unexpected database failures and reject invalid bodies 
     assert.equal(failed.statusCode, 503); assert.doesNotMatch(failed.body, /password|private/);
   } finally { await app.close(); }
 });
+
+
+test('closed task plugin selection remains explicitly opt-in, with unique bounded string IDs', async () => {
+  const valid = [[], ['client-work'], ['client-task-actions'], ['client-work', 'client-task-actions'], ['client-task-actions', 'client-work']];
+  for (const pluginIds of valid) {
+    const { db } = fixture();
+    assert.deepEqual((await saveClientAgentProfile(db, user, client.id, { ...input, pluginIds })).pluginIds, pluginIds);
+  }
+  for (const pluginIds of [['client-work', 'client-work'], ['client-task-actions', 'client-task-actions'], ['client-work','client-task-actions','other'], ['other'], [1], [null], [[]], {}, null]) {
+    const { db, state } = fixture();
+    await assert.rejects(saveClientAgentProfile(db, user, client.id, { ...input, pluginIds }), { code: 'INVALID_INPUT' });
+    assert.equal(state.profile, null);
+  }
+  const { db } = fixture(); assert.deepEqual((await readClientAgentProfile(db, user, client.id)).pluginIds, ['client-work']);
+});
