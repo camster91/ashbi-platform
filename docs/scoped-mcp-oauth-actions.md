@@ -70,3 +70,14 @@ replays and transaction-time revocation. A disposable PostgreSQL regression
 checks the additive binding constraint/immutable trigger and publication
 transaction guard. If its loopback fixture is unavailable, report it skipped;
 unit or isolated SQL checks do not prove the full PostgreSQL path.
+
+
+## Rollback security floor
+
+Migration `20261016060000_mcp_action_binding` is registered in both the direct
+SSH controller and the Coolify migration wrapper confidentiality rollback floors.
+After it applies, images without the binding-aware implementation must not serve:
+older dedicated JWT task routes cannot enforce the new grant-bound receipt policy.
+The existing controller stops a below-floor old container and refuses an unsafe
+rollback; plan a binding-aware rollback candidate before releasing this feature.
+This code does not apply the migration or alter the current live rollback floor.
