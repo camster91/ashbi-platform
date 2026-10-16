@@ -126,6 +126,7 @@ export function AuthProvider({ children }) {
   const retryTimerRef = useRef(null);
   const checkAuthRef = useRef(null);
   const sessionExpiryCleanupRef = useRef(null);
+  const sessionExpiryOperationRef = useRef(null);
   // Failed sign-in/check attempts must not cancel a known session expiry.
   const sessionIdentitySequenceRef = useRef(0);
   userRef.current = user;
@@ -288,25 +289,35 @@ export function AuthProvider({ children }) {
     }
   }, [cancelPendingAuthCheck, navigate]);
 
-  const expireSession = useCallback(async (message = '', reason = sessionEndReason(message)) => {
+  const expireSession = useCallback((message = '', reason = sessionEndReason(message)) => {
+    const active = sessionExpiryOperationRef.current;
+    // Unauthorized responses for this identity share one expiry, including
+    // late responses on sign-in. Preserve its first deadline and return path.
+    // A successful identity transition increments the sequence and can expire anew.
+    if (active?.sequence === sessionIdentitySequenceRef.current) return active.promise;
     cancelPendingAuthCheck();
     const sequence = ++sessionIdentitySequenceRef.current;
     sessionExpiryCleanupRef.current?.abort();
     const controller = new AbortController();
     sessionExpiryCleanupRef.current = controller;
-    // Expiry must reach sign-in even when browser storage or service workers
-    // stall. Abort late enumeration before it can touch a replacement session.
-    await boundedBrowserCleanup(signal => Promise.allSettled([
-      clearBrowserPushSubscription({ signal }), purgePrivateCaches({ signal }),
-    ]), controller);
-    if (!mountedRef.current || sequence !== sessionIdentitySequenceRef.current) return;
-    // A check started during browser cleanup predates this committed expiry.
-    // Its eventual result must not restore the user or replace the expiry notice.
-    cancelPendingAuthCheck();
-    const returnTo = safeReturnPath(`${location.pathname}${location.search}${location.hash}`);
-    setUser(null);
-    setAuthState({ status: 'unauthenticated', reason, message });
-    navigate('/login', { replace: true, state: { reason, message, returnTo } });
+    const operation = { sequence, promise: null };
+    sessionExpiryOperationRef.current = operation;
+    operation.promise = (async () => {
+      // Expiry must reach sign-in even when browser storage or service workers
+      // stall. Abort late enumeration before it can touch a replacement session.
+      await boundedBrowserCleanup(signal => Promise.allSettled([
+        clearBrowserPushSubscription({ signal }), purgePrivateCaches({ signal }),
+      ]), controller);
+      if (!mountedRef.current || sequence !== sessionIdentitySequenceRef.current) return;
+      // A check started during browser cleanup predates this committed expiry.
+      // Its eventual result must not restore the user or replace the expiry notice.
+      cancelPendingAuthCheck();
+      const returnTo = safeReturnPath(`${location.pathname}${location.search}${location.hash}`);
+      setUser(null);
+      setAuthState({ status: 'unauthenticated', reason, message });
+      navigate('/login', { replace: true, state: { reason, message, returnTo } });
+    })();
+    return operation.promise;
   }, [cancelPendingAuthCheck, location.hash, location.pathname, location.search, navigate]);
 
   // Organization MFA requirement: any API answer of 403

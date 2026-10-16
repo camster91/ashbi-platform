@@ -107,6 +107,79 @@ describe('bounded session expiry', () => {
     expect(result.current.location.pathname + result.current.location.search).toBe('/projects?x=1');
   });
 
+  it('coalesces staggered unauthorized responses within the first expiry deadline', async () => {
+    const { result } = await mount();
+    serviceWorker.getRegistration.mockImplementation(() => new Promise(() => {}));
+    cacheStorage.keys.mockImplementation(() => new Promise(() => {}));
+    const expiries = [];
+    await act(async () => { expiries.push(result.current.expireSession('Your session expired.')); });
+    for (const elapsed of [1000, 1000, 900]) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(elapsed);
+        expiries.push(result.current.expireSession('Your session expired.'));
+      });
+    }
+    expect(result.current.location.pathname).toBe('/projects');
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    expect(result.current.user).toBeNull();
+    expect(result.current.location.pathname).toBe('/login');
+    expect(result.current.location.state).toEqual({ reason: 'expired', message: 'Your session expired.', returnTo: '/projects?x=1' });
+    expect(serviceWorker.getRegistration).toHaveBeenCalledOnce();
+    expect(serviceWorker.getRegistrations).toHaveBeenCalledOnce();
+    expect(cacheStorage.keys).toHaveBeenCalledOnce();
+    await act(async () => { await Promise.all(expiries); });
+  });
+
+  it('preserves the committed expiry notice and return path after late unauthorized events on sign-in', async () => {
+    const { result } = await mount();
+    let firstExpiry;
+    await act(async () => {
+      firstExpiry = result.current.expireSession('Your session expired.');
+      await firstExpiry;
+    });
+    let repeatedExpiry;
+    await act(async () => {
+      repeatedExpiry = result.current.expireSession('This session was revoked.');
+      await repeatedExpiry;
+    });
+    expect(result.current.user).toBeNull();
+    expect(result.current.authState).toEqual({ status: 'unauthenticated', reason: 'expired', message: 'Your session expired.' });
+    expect(result.current.location.state).toEqual({ reason: 'expired', message: 'Your session expired.', returnTo: '/projects?x=1' });
+    expect(serviceWorker.getRegistration).toHaveBeenCalledOnce();
+    expect(cacheStorage.keys).toHaveBeenCalledOnce();
+  });
+
+  it('starts a fresh expiry for a replacement identity while the cancelled operation settles', async () => {
+    const { result } = await mount();
+    serviceWorker.getRegistration.mockImplementation(() => new Promise(() => {}));
+    let firstExpiry;
+    let nextExpiry;
+    let repeatedExpiry;
+    await act(async () => { firstExpiry = result.current.expireSession('Your session expired.'); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+      await result.current.login('b@example.invalid', 'password', '/team');
+    });
+    await act(async () => { nextExpiry = result.current.expireSession('This session was revoked.'); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500);
+      await firstExpiry;
+    });
+    expect(result.current.user).toEqual(nextUser);
+    expect(result.current.location.pathname).toBe('/team');
+    await act(async () => { repeatedExpiry = result.current.expireSession('This session was revoked.'); });
+    expect(repeatedExpiry).toBe(nextExpiry);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+      await Promise.all([nextExpiry, repeatedExpiry]);
+    });
+    expect(result.current.user).toBeNull();
+    expect(result.current.location.pathname).toBe('/login');
+    expect(result.current.location.state).toEqual({ reason: 'revoked', message: 'This session was revoked.', returnTo: '/team' });
+    expect(serviceWorker.getRegistration).toHaveBeenCalledTimes(2);
+    expect(cacheStorage.keys).toHaveBeenCalledTimes(3); // A expiry, B sign-in, B expiry.
+  });
+
   it.each(['login', 'recheck'])('cancels expiry when a replacement %s succeeds before the deadline', async (attempt) => {
     const { result } = await mount();
     const pending = deferred();
