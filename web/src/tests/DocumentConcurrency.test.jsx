@@ -8,7 +8,7 @@ vi.mock('../hooks/useToast', () => ({ useToast: () => ({ success: vi.fn(), error
 vi.mock('../lib/api', () => ({ api: { getAllNotes: vi.fn(), getProjects: vi.fn(async () => ({ projects: [], pagination: { pages: 0 } })), getTeam: vi.fn(async () => []), getNoteTemplates: vi.fn(async () => []), updateNote: vi.fn(), getNote: vi.fn() } }));
 
 it('keeps the observed document revision through refetch and failed save, then reloads explicitly', async () => {
-  let note = { id: 'note', projectId: 'project', revision: 3, title: 'Team guide', content: 'Original', type: 'DOC', tags: [], mentions: [], updatedAt: '2026-10-14', project: { id: 'project', name: 'Project' } };
+  let note = { id: 'note', projectId: 'project', revision: 3, title: 'Team guide', content: 'Original', type: 'DOC', tags: [], mentions: [], permissions: { canRead: true, canEdit: true, canManage: true }, updatedAt: '2026-10-14', project: { id: 'project', name: 'Project' } };
   api.getAllNotes.mockImplementation(async () => ({ notes: [note], pagination: { page: 1, pages: 1 } }));
   api.updateNote.mockRejectedValue(new Error('Document changed since you started editing'));
   api.getNote.mockRejectedValueOnce(new Error('Offline')).mockImplementation(async () => note);
