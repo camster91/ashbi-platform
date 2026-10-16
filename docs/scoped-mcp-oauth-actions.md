@@ -13,8 +13,16 @@ authorization requests without explicit scopes default to `workspace:read`.
 active ADMIN. They never imply API-key `workspace:actions`, billing, calendar,
 generic records, arbitrary HTTP, provider access or assistant-run authority.
 
-OAuth requests must include `workspace:read` and may explicitly request either
-optional scope. Consent preview returns `scopes` (the read-only default),
+`workspace:resource-links:write` separately permits `create_resource_link`,
+`update_resource_link`, `archive_resource_link`, `restore_resource_link` and
+`reorder_resource_links`. It covers named task/project references, including
+explicit client-portal sharing, through previewed and confirmed actions. It
+does not grant file uploads, provider access or external sharing permissions.
+Existing grants remain unchanged; requesting and selecting this new optional
+scope requires a new explicit authorization. Its checkbox starts unchecked.
+
+OAuth requests must include `workspace:read` and may explicitly request one or
+more optional scopes. Consent preview returns `scopes` (the read-only default),
 `requestedScopes`, and `optionalScopes` (requested choices with labels).
 POST consent accepts optional `scopes`: omitted means read-only; a selection
 must include read and be a subset of the original request. Existing nonce,

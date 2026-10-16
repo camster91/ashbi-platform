@@ -12,7 +12,11 @@ import { createFakeToolDb, seedTwoOrganizations } from '../helpers/fake-tool-db.
 
 const ctx = (scopes = ['workspace:read']) => ({
   user: { id: 'user-1', role: 'TEAM', organizationId: 'org-1' }, scopes,
-  prisma: { project: { findMany: async () => [] } },
+  prisma: {
+    project: { findMany: async () => [] },
+    user: { findFirst: async ({ where }) => where.id === 'user-1' && where.organizationId === 'org-1' && where.isActive === true
+      ? { id: 'user-1', role: 'TEAM', organizationId: 'org-1', isActive: true } : null },
+  },
 });
 
 test('workspace catalog grants no implicit access to legacy keys or clients', () => {

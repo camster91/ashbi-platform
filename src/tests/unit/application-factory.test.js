@@ -104,7 +104,7 @@ test('project collaboration routes are owned by an ordered domain registrar', as
   const registrarUrl = new URL('../../domains/client-delivery/register-collaboration-routes.js', import.meta.url);
   const registrar = fs.readFileSync(registrarUrl, 'utf8');
   const { registerCollaborationRoutes } = await import(registrarUrl.href);
-  const routeNames = ['message', 'revision', 'calendar', 'comment', 'attachment', 'time', 'milestone', 'review', 'review-portal'];
+  const routeNames = ['message', 'revision', 'calendar', 'comment', 'attachment', 'resource-links', 'time', 'milestone', 'review', 'review-portal'];
   // Modules whose routes span several roots (e.g. /projects/:id/milestones
   // and /milestones/:id) mount at /api so their URLs are not double-prefixed.
   const expectedPrefixes = [
@@ -113,6 +113,7 @@ test('project collaboration routes are owned by an ordered domain registrar', as
     '/api/calendar',
     '/api',
     '/api/attachments',
+    '/api/resource-links',
     '/api',
     '/api',
     '/api/reviews',
@@ -388,7 +389,7 @@ test('every domain-registered route module has exactly one owner', () => {
   // media review staff and share-link APIs (#417), the domain event
   // outbox admin API (#412), and support impersonation / break-glass
   // recovery (#416), and the daily operator queue (#461).
-  assert.equal(owners.size, 90); // Includes principal-bound human portal handoffs.
+  assert.equal(owners.size, 91); // Includes principal-bound portal handoffs and named resource links.
 });
 
 test('route modules stay encapsulated so cross-domain registration order cannot leak hooks', () => {

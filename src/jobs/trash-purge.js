@@ -2,7 +2,7 @@
 // recovery window has expired.
 
 import { prisma, rawPrisma } from '../config/db.js';
-import { permanentlyDeleteTrashedItem } from '../services/trash-purge.service.js';
+import { permanentlyDeleteTrashedItem, isResourceLinkRetention } from '../services/trash-purge.service.js';
 import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -24,12 +24,13 @@ export async function purgeExpiredTrash(
 
   if (expired.length === 0) {
     console.log('[trash-purge] No expired items');
-    return { examined: 0, purged: 0, failed: 0 };
+    return { examined: 0, purged: 0, retained: 0, failed: 0 };
   }
 
   console.log(`[trash-purge] Purging ${expired.length} expired item(s)`);
   let purged = 0;
   let failed = 0;
+  let retained = 0;
 
   for (const item of expired) {
     try {
@@ -40,6 +41,7 @@ export async function purgeExpiredTrash(
       });
       purged++;
     } catch (error) {
+      if (isResourceLinkRetention(error)) { retained++; continue; }
       failed++;
       // Keep the ledger so a transient or configuration failure can retry.
       console.error(`[trash-purge] Retaining failed ledger ${item.id}:`, error.message);
@@ -47,7 +49,7 @@ export async function purgeExpiredTrash(
   }
 
   if (failed > 0) console.warn(`[trash-purge] ${failed} item(s) retained for retry`);
-  return { examined: expired.length, purged, failed };
+  return { examined: expired.length, purged, retained, failed };
 }
 
 export async function purgeExpiredTrashForAllOrganizations() {

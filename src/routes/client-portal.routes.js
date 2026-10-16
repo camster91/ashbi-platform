@@ -16,6 +16,8 @@ import { portalHandoffRoutes } from './portal-handoff.routes.js';
 import { revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
 import { clearStaleSessionCookie } from '../auth/request-session.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { listClientResourceLinks } from '../services/resource-links.service.js';
+import { resourceLinkPortalQuerySchema } from '../validators/resource-links.schemas.js';
 import { recordRejectedUpload, sha256Hex } from '../services/upload-integrity.service.js';
 import { contentDisposition } from '../utils/send-file.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation, isQuarantined } from '../services/media-review.service.js';
@@ -584,6 +586,14 @@ export default async function clientPortalRoutes(fastify) {
       metadata: { clientId, contactId, activityId: activity.id, messageLength: request.body.message.length },
     });
     return reply.status(201).send(activity);
+  });
+
+  fastify.get('/projects/:id/resource-links', { preHandler: [clientAuth, validateQuery(resourceLinkPortalQuerySchema)] }, request => {
+    const { organizationId, clientId } = request.clientUser;
+    return listClientResourceLinks(request.prisma, {
+      organizationId, clientId, projectId: request.params.id,
+      limit: request.query.limit, after: request.query.after,
+    });
   });
 
   // GET /api/client-portal/projects/:id/tasks — Kanban tasks

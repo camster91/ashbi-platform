@@ -183,6 +183,7 @@ export const EXPORT_ENTITIES = Object.freeze([
 
   // Files
   { name: 'attachments', model: 'Attachment', category: 'files', where: (org) => ({ organizationId: org }), description: 'Uploaded file metadata; the files themselves are under files/attachments/' },
+  { name: 'resource_links', model: 'ResourceLink', category: 'files', where: (org) => ({ organizationId: org }), omit: ['createIntentId', 'inputHash'], description: 'Named task/project URLs, immutable source references, visibility and archived history; no external content is fetched' },
 ]);
 
 /**
@@ -259,7 +260,8 @@ export const EXCLUDED_FIELD_REASONS = Object.freeze({
   inboundDeliveryKey: 'internal inbound email idempotency key',
   idempotencyKey: 'internal request idempotency key',
   payloadHash: 'internal request idempotency hash',
-  inputHash: 'internal account-manager request idempotency hash',
+  inputHash: 'internal request idempotency hash',
+  createIntentId: 'internal resource creation retry identity',
   claimToken: 'internal worker claim token',
 });
 

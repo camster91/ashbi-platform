@@ -30,7 +30,7 @@ import { relationsFor } from './tenant-relations.js';
 // Models that have a direct `organizationId` column. These get the
 // `where.organizationId = <jwt.orgId>` auto-inject (same as before).
 const DIRECT_SCOPED_MODELS = new Set([
-  'portalhandoffrequest', 'portalassistantconfig', 'portalassistantconversation', 'portalassistantrun',
+  'resourcelink', 'portalhandoffrequest', 'portalassistantconfig', 'portalassistantconversation', 'portalassistantrun',
   'client', 'project', 'user', 'integration', 'trasheditem', 'attachment', 'formdraft',
   'wpsite', 'wpbackup', 'wpreport', 'wpalert', 'wpfleetop',
   'wpmagicloginlog', 'wpbridgenonce', 'supporthourentry',
@@ -68,6 +68,7 @@ const APPEND_ONLY_BLOCKED_METHODS = new Set([
 // outbox (#412): its envelope is immutable (also enforced by a database
 // trigger); only dispatch bookkeeping changes, e.g. an admin replay.
 const BOOKKEEPING_ONLY_MODELS = {
+  resourcelink: new Set(['title','url','clientVisible','archivedAt','position','revision','updatedAt']),
   portalassistantconfig: new Set(['enabled', 'name', 'instructions', 'revision', 'changedById', 'updatedAt']),
   portalassistantrun: new Set(['status', 'response', 'claimToken', 'contextSnapshot', 'memorySnapshot', 'startedAt', 'finishedAt', 'errorCode', 'updatedAt']),
   portalhandoffrequest: new Set(['status', 'ownerId', 'claimedAt', 'resolvedAt', 'changedById', 'requeueReason', 'revision', 'updatedAt']),
@@ -99,6 +100,11 @@ const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platfor
 // redundant organizationId is not enough: the referenced parent must belong
 // to the same organization or the graph would span tenants.
 const DIRECT_PARENT_RELATIONS = {
+  resourcelink: [
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true },
+    { relation: 'task', field: 'taskId', model: 'task', delegate: 'task' },
+    { relation: 'createdBy', field: 'createdById', model: 'user', delegate: 'user', required: true },
+  ],
   portalassistantconfig: [{ relation: 'client', field: 'clientId', model: 'client', delegate: 'client', required: true }],
   portalassistantconversation: [
     { relation: 'client', field: 'clientId', model: 'client', delegate: 'client', required: true },

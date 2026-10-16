@@ -229,6 +229,16 @@ export const api = {
   // Raw request helper
   request,
 
+  // Named external references. Every write is explicit; uncertain creates use
+  // the caller's retained createIntentId rather than an automatic new request.
+  listResourceLinks: (params) => request(`/resource-links?${new URLSearchParams(params)}`, { silent: true }),
+  getResourceLink: (id) => request(`/resource-links/${encodeURIComponent(id)}`, { silent: true }),
+  createResourceLink: (data) => request('/resource-links', { method: 'POST', body: data, silent: true }),
+  updateResourceLink: (id, data) => request(`/resource-links/${encodeURIComponent(id)}`, { method: 'PATCH', body: data, silent: true }),
+  archiveResourceLink: (id, data) => request(`/resource-links/${encodeURIComponent(id)}/archive`, { method: 'POST', body: data, silent: true }),
+  reorderResourceLinks: (data) => request('/resource-links/reorder', { method: 'POST', body: data, silent: true }),
+  portalProjectResourceLinks: (projectId, token, params = {}) => request(`/client-portal/projects/${encodeURIComponent(projectId)}/resource-links?${new URLSearchParams(params)}`, { silent: true, headers: token ? { Authorization: `Bearer ${token}` } : {} }),
+
   // Auth
   login: (email, password) =>
     request('/auth/login', { method: 'POST', body: { email, password } }),

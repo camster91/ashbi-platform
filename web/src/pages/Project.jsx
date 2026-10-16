@@ -1,6 +1,7 @@
 import ProjectHumanHandoffs from '../components/ProjectHumanHandoffs';
 import ProjectBudget from '../components/ProjectBudget';
 import { useState } from 'react';
+import ResourceLinks from '../components/ResourceLinks';
 import { embeddedAiEnabled } from '../lib/features';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -438,6 +439,8 @@ export default function Project() {
       <ProjectMedia projectId={id} />
 
       <ProjectFiles projectId={id} />
+
+      <ResourceLinks key={`resources-${id}`} entityType="PROJECT" entityId={id} />
 
       <ProjectReviews projectId={id} />
 

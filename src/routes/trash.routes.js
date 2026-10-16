@@ -1,6 +1,6 @@
 import { authorizeNote } from '../services/note-access.service.js';
 import { rawPrisma } from '../config/db.js';
-import { permanentlyDeleteTrashedItem, restoreTrashedItem } from '../services/trash-purge.service.js';
+import { permanentlyDeleteTrashedItem, restoreTrashedItem, isResourceLinkRetention } from '../services/trash-purge.service.js';
 
 export default async function trashRoutes(fastify) {
   fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
@@ -35,7 +35,7 @@ export default async function trashRoutes(fastify) {
       });
       return { success: true, ...result };
     } catch (error) {
-      if (error.statusCode >= 400 && error.statusCode < 500) return reply.status(error.statusCode).send({ error: error.message });
+      if (error.statusCode >= 400 && error.statusCode < 500) return reply.status(error.statusCode).send({ error: error.message, ...(isResourceLinkRetention(error) ? { code: error.code } : {}) });
       throw error;
     }
   });
@@ -49,7 +49,7 @@ export default async function trashRoutes(fastify) {
       });
       return { success: true, ...result };
     } catch (error) {
-      if (error.statusCode >= 400 && error.statusCode < 500) return reply.status(error.statusCode).send({ error: error.message });
+      if (error.statusCode >= 400 && error.statusCode < 500) return reply.status(error.statusCode).send({ error: error.message, ...(isResourceLinkRetention(error) ? { code: error.code } : {}) });
       throw error;
     }
   });
@@ -71,7 +71,7 @@ export default async function trashRoutes(fastify) {
         // Only the service's own 4xx messages are caller-safe.
         const safe = error.statusCode >= 400 && error.statusCode < 500;
         if (!safe) request.log.error({ errorName: error?.name, trashId: item.id }, 'Permanent deletion failed');
-        failures.push({ id: item.id, error: safe ? error.message : 'Permanent deletion failed' });
+        failures.push({ id: item.id, error: safe ? error.message : 'Permanent deletion failed', ...(isResourceLinkRetention(error) ? { code: error.code } : {}) });
       }
     }
 

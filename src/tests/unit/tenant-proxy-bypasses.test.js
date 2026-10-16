@@ -186,12 +186,15 @@ test('the runtime relation map matches every @relation(fields: [...]) in the sch
     if (scalars.length > 1) {
       const serviceReportMapping = model === 'clientservicereport' && field[1] === 'mapping';
       const credentialBinding = model === 'clientserviceproject' && field[1] === 'credential';
-      assert.deepEqual(scalars, serviceReportMapping || credentialBinding ? [`${field[1]}Id`, 'organizationId', 'clientId'] : [`${field[1]}Id`, 'organizationId']);
+      // ResourceLink binds a task to its canonical project. Task ownership is
+      // inherited through project/client, rather than a direct organizationId.
+      const resourceTaskParent = model === 'resourcelink' && field[1] === 'task' && field[2] === 'Task';
+      assert.deepEqual(scalars, resourceTaskParent ? ['taskId', 'projectId'] : serviceReportMapping || credentialBinding ? [`${field[1]}Id`, 'organizationId', 'clientId'] : [`${field[1]}Id`, 'organizationId']);
       const referenced = /references:\s*\[([^\]]*)\]/.exec(field[3]);
-      assert.deepEqual(referenced?.[1].split(',').map(name => name.trim()), serviceReportMapping || credentialBinding ? ['id', 'organizationId', 'clientId'] : ['id', 'organizationId']);
-      assert.ok(['User', 'Client', 'WorkspaceCollection', 'WorkspaceChatChannel', 'ClientAgentConversation', 'ClientServiceProject', 'Credential', 'Project', 'ClientAgentProfile', 'WorkspaceAccountManagerBinding', 'WorkspaceChatMessage', 'ClientAgentRun', 'PortalAssistantConversation'].includes(field[2]));
+      assert.deepEqual(referenced?.[1].split(',').map(name => name.trim()), resourceTaskParent ? ['id', 'projectId'] : serviceReportMapping || credentialBinding ? ['id', 'organizationId', 'clientId'] : ['id', 'organizationId']);
+      assert.ok(resourceTaskParent || ['User', 'Client', 'WorkspaceCollection', 'WorkspaceChatChannel', 'ClientAgentConversation', 'ClientServiceProject', 'Credential', 'Project', 'ClientAgentProfile', 'WorkspaceAccountManagerBinding', 'WorkspaceChatMessage', 'ClientAgentRun', 'PortalAssistantConversation'].includes(field[2]));
       assert.equal(tenantModelPolicy[model], 'direct');
-      assert.equal(tenantModelPolicy[field[2].toLowerCase()], 'direct');
+      assert.equal(tenantModelPolicy[field[2].toLowerCase()], resourceTaskParent ? 'relation' : 'direct');
     }
     expected.add(`${model}.${scalars.join('+')}->${field[1]}:${field[2].toLowerCase()}`);
   }

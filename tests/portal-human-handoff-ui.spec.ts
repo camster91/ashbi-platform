@@ -32,6 +32,7 @@ for (const width of [1280, 390]) {
       if (pathname === '/api/client-portal/projects') return fulfill([project]);
       if (pathname === '/api/client-portal/projects/p1') return fulfill(project);
       if (pathname === '/api/client-portal/projects/p1/tasks') return fulfill({ columns: {} });
+      if (pathname === '/api/client-portal/projects/p1/resource-links' && request.method() === 'GET') return fulfill({ items: [], nextCursor: null });
       if (pathname.includes('/account-manager-requests/by-intent/')) {
         expect(pathname.endsWith(key)).toBe(true);
         return fulfill({ request: requests[0] });

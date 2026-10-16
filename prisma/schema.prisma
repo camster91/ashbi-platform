@@ -13,6 +13,7 @@ datasource db {
 // ==================== TENANCY ====================
 
 model Organization {
+  resourceLinks ResourceLink[]
   portalAssistantConversations PortalAssistantConversation[]
   portalAssistantRuns PortalAssistantRun[]
   portalAssistantConfigs PortalAssistantConfig[]
@@ -115,6 +116,7 @@ model Organization {
 }
 
 model User {
+  resourceLinks ResourceLink[]
   id                  String       @id @default(cuid())
   organizationId      String // Set for all users to support multi-tenancy
   organization        Organization @relation(fields: [organizationId], references: [id])
@@ -332,6 +334,7 @@ model Contact {
 }
 
 model Project {
+  resourceLinks ResourceLink[]
   portalAssistantConversations PortalAssistantConversation[]
   portalAssistantRuns PortalAssistantRun[]
 
@@ -449,6 +452,8 @@ model PortalHandoffRequest {
 }
 
 model Task {
+  resourceLinks ResourceLink[]
+  @@unique([id, projectId])
   id          String  @id @default(cuid())
   title       String
   description String? // Brief description/summary
@@ -3598,4 +3603,34 @@ model PortalAssistantRun {
  @@index([projectId, organizationId])
  @@index([conversationId, organizationId])
  @@map("portal_assistant_runs")
+}
+
+// Named external references are stored data, never fetched or embedded.
+model ResourceLink {
+  id String @id @default(cuid())
+  organizationId String
+  projectId String
+  taskId String?
+  createdById String
+  createIntentId String @db.Uuid
+  inputHash String @db.VarChar(64)
+  title String @db.VarChar(500)
+  url String @db.VarChar(8192)
+  source Json?
+  position Int @default(0)
+  revision Int @default(1)
+  clientVisible Boolean @default(false)
+  archivedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields:[organizationId], references:[id], onDelete:Restrict)
+  project Project @relation(fields:[projectId,organizationId], references:[id,organizationId], onDelete:Restrict)
+  task Task? @relation(fields:[taskId,projectId], references:[id,projectId], onDelete:Restrict)
+  createdBy User @relation(fields:[createdById,organizationId], references:[id,organizationId], onDelete:Restrict)
+  @@unique([organizationId,createdById,createIntentId], map:"resource_links_actor_intent_key")
+  @@index([organizationId,projectId,taskId,archivedAt,position,id], map:"resource_links_target_page_idx")
+  @@index([projectId,organizationId])
+  @@index([taskId,projectId])
+  @@index([createdById,organizationId])
+  @@map("resource_links")
 }

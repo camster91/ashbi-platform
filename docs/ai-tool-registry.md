@@ -104,8 +104,12 @@ AI caller ──invoke──► validate input ─► role ─► kill switches 
 ```
 
 1. **Invoke** (`executor.invoke`). In order: the tool must exist; the
-   serialized input must be at most 16 KB (*Proposal*,
-   `MAX_TOOL_INPUT_BYTES`); it must pass the Zod schema; the caller's role
+   serialized input is limited to 16 KiB by default. A closed list of ResourceLink
+   create/update/reorder tools and their previews allows 512 KiB so complete
+   500-record orders and exact URLs with provenance fit within the bound;
+   callers and tool metadata cannot expand either limit. See
+   `src/ai/tools/input-budgets.js` (`MAX_TOOL_INPUT_BYTES` retains the default).
+   It must pass the Zod schema; the caller's role
    must be allowed; the deployment and organization kill switches must be off;
    prepare/execute tools need an idempotency key; the scope resolver must
    succeed. Any refusal throws and records `ai.tool_denied` with a reason

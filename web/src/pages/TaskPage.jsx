@@ -1,6 +1,7 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect, useRef } from 'react';
+import ResourceLinks from '../components/ResourceLinks';
 import {
   ArrowLeft,
   MoreHorizontal,
@@ -650,6 +651,7 @@ export default function TaskPage() {
       />
 
       {/* Comments */}
+      <ResourceLinks key={`resources-${task.id}`} entityType="TASK" entityId={task.id} />
       <CommentsSection comments={task.comments} taskId={id} />
     </div>
   );

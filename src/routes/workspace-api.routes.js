@@ -11,7 +11,7 @@ export default async function workspaceApiRoutes(fastify, options = {}) {
   const service = options.service ?? createWorkspaceTools();
   const auth = { onRequest: [fastify.authenticateWithApiKey] };
   fastify.get('/agent/tools', auth, async request => ({
-    version: '1', tools: service.list(context(request)), mcp: '/api/mcp',
+    version: '1', tools: typeof service.listCurrent === 'function' ? await service.listCurrent(context(request)) : service.list(context(request)), mcp: '/api/mcp',
     authentication: 'Authorization: Bearer <API key>',
   }));
   fastify.post('/agent/tools/:name', { ...auth, schema: { body: { type: 'object' } } }, async (request, reply) => {

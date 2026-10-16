@@ -25,6 +25,7 @@ let cache = null;
 // edges bind a globally unique parent id to the same organization column the
 // request proxy stamps and filters. Arbitrary composite keys remain unsupported.
 export const COMPOSITE_TENANT_RELATIONS = Object.freeze({
+  resourcelink: { organization: ['organizationId'], project: ['projectId','organizationId'], task: ['taskId','projectId'], createdBy: ['createdById','organizationId'] },
   portalassistantconfig: { client: ['clientId', 'organizationId'] },
   portalassistantconversation: { client: ['clientId', 'organizationId'], project: ['projectId', 'organizationId'] },
   portalassistantrun: { client: ['clientId', 'organizationId'], project: ['projectId', 'organizationId'], conversation: ['conversationId', 'organizationId'] },
@@ -73,7 +74,8 @@ export function tenantRelationMap() {
       if (field.kind !== 'object') continue;
       const fk = scalars.has(`${field.name}Id`) ? `${field.name}Id` : null;
       const fkFields = COMPOSITE_TENANT_RELATIONS[model.name.toLowerCase()]?.[field.name] ?? (fk ? [fk] : []);
-      if (fkFields.some(key => !scalars.has(key)) || (fkFields.length > 1 && (fkFields[0] !== fk || fkFields[1] !== 'organizationId' || !['User', 'Client', 'WorkspaceCollection', 'WorkspaceChatChannel', 'ClientAgentConversation', 'ClientServiceProject', 'Credential', 'Project', 'ClientAgentProfile', 'WorkspaceAccountManagerBinding', 'WorkspaceChatMessage', 'ClientAgentRun', 'PortalAssistantConversation'].includes(field.type) || (fkFields.length > 2 && !(((model.name === 'ClientServiceReport' && field.name === 'mapping') || (model.name === 'ClientServiceProject' && field.name === 'credential')) && fkFields.length === 3 && fkFields[2] === 'clientId'))))) throw new Error('Tenancy Error: unsupported composite relation');
+      const resourceTaskParent = model.name === 'ResourceLink' && field.name === 'task' && field.type === 'Task' && fk === 'taskId' && fkFields.length === 2 && fkFields[0] === 'taskId' && fkFields[1] === 'projectId';
+      if (fkFields.some(key => !scalars.has(key)) || (fkFields.length > 1 && !resourceTaskParent && (fkFields[0] !== fk || fkFields[1] !== 'organizationId' || !['User', 'Client', 'WorkspaceCollection', 'WorkspaceChatChannel', 'ClientAgentConversation', 'ClientServiceProject', 'Credential', 'Project', 'ClientAgentProfile', 'WorkspaceAccountManagerBinding', 'WorkspaceChatMessage', 'ClientAgentRun', 'PortalAssistantConversation'].includes(field.type) || (fkFields.length > 2 && !(((model.name === 'ClientServiceReport' && field.name === 'mapping') || (model.name === 'ClientServiceProject' && field.name === 'credential')) && fkFields.length === 3 && fkFields[2] === 'clientId'))))) throw new Error('Tenancy Error: unsupported composite relation');
       relations[field.name] = { target: String(field.type).toLowerCase(), fk, fkFields };
       if (fk) foreignKeys[fk] = field.name;
     }
