@@ -32,7 +32,7 @@ describe('portal human questions', () => {
     expect(portalHandoffs.list).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText('Request human follow-up'));
     await screen.findByLabelText('Your question');
-    expect(portalHandoffs.list).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(portalHandoffs.list).toHaveBeenCalledTimes(1));
     first.unmount();
     localStorage.setItem('portal-team-request:o1:portal1:contact1:p1', JSON.stringify({ key: '11111111-1111-4111-8111-111111111111', status: 'UNKNOWN' }));
     setup(portal(), false);
