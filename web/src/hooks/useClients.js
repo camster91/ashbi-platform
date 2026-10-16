@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
 // The clients route clamps `limit` to 200 (src/routes/client.routes.js), so
@@ -71,4 +71,21 @@ export function useClientSearch(term, { enabled = true, limit = 50 } = {}) {
     enabled: enabled && search.length >= 2,
   });
   return { ...query, data: query.data ?? [] };
+}
+
+/** Explicitly paged canonical client pickers. Shares the clients cache root
+ * without confusing a partial first page with the complete options list. */
+export function useClientPages({ enabled = true, limit = CLIENT_OPTIONS_LIMIT, scope = [] } = {}) {
+  return useInfiniteQuery({
+    queryKey: [...CLIENTS_ROOT_KEY, 'pages', limit, ...scope],
+    enabled,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const page = await api.getClients({ limit, offset: pageParam });
+      if (!Array.isArray(page?.clients) || !Number.isInteger(page.total) || page.total < 0) throw new Error('Client options unavailable');
+      return page;
+    },
+    getNextPageParam: (page, _pages, offset) => offset + page.clients.length < page.total && page.clients.length ? offset + page.clients.length : undefined,
+    retry: false,
+  });
 }

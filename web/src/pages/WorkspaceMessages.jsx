@@ -1,3 +1,4 @@
+import { useClientPages } from '../hooks/useClients';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -74,9 +75,9 @@ function Conversation({ channel, userId }) {
   </section>;
 }
 
-async function scopePage(kind, params) {
-  const response = kind === 'clients' ? await api.getClients(params) : await api.getProjects(params);
-  if (!Array.isArray(response?.[kind])) throw new Error('Conversation scope unavailable');
+async function projectPage(params) {
+  const response = await api.getProjects(params);
+  if (!Array.isArray(response?.projects)) throw new Error('Conversation scope unavailable');
   return response;
 }
 
@@ -102,13 +103,11 @@ function StaffMessages({ user }) {
   const channelItems = paginatedItems(channels.data?.pages, (item) => item.id);
   const channel = channels.isError ? null : channelItems.find((item) => item.id === selected);
   const scopedKind = kind === 'CLIENT' || kind === 'PROJECT';
-  const clients = useInfiniteQuery({ queryKey: ['chat-create-clients', user.organizationId, user.id, user.role], enabled: newOpen && scopedKind,
-    initialPageParam: 0, queryFn: ({ pageParam }) => scopePage('clients', { limit: 100, offset: pageParam }),
-    getNextPageParam: (page, _pages, offset) => offset + page.clients.length < page.total && page.clients.length ? offset + page.clients.length : undefined, retry: false });
+  const clients = useClientPages({ enabled: newOpen && scopedKind, limit: 100, scope: [user.organizationId, user.id, user.role] });
   const clientItems = clients.isError ? [] : paginatedItems(clients.data?.pages.map(page => ({ items: page.clients })), item => item.id).filter(item => !item.deletedAt && (!item.organizationId || item.organizationId === user.organizationId));
   const selectedClient = !clients.isError && clientItems.find(item => item.id === clientId);
   const projects = useInfiniteQuery({ queryKey: ['chat-create-projects', user.organizationId, user.id, user.role, clientId], enabled: newOpen && kind === 'PROJECT' && Boolean(selectedClient),
-    initialPageParam: 0, queryFn: ({ pageParam }) => scopePage('projects', { clientId, limit: 100, offset: pageParam }),
+    initialPageParam: 0, queryFn: ({ pageParam }) => projectPage({ clientId, limit: 100, offset: pageParam }),
     getNextPageParam: (page, _pages, offset) => offset + page.projects.length < page.total && page.projects.length ? offset + page.projects.length : undefined, retry: false });
   const projectItems = projects.isError ? [] : paginatedItems(projects.data?.pages.map(page => ({ items: page.projects })), item => item.id).filter(item => item.clientId === clientId && !item.deletedAt && (!item.organizationId || item.organizationId === user.organizationId));
   const selectedProject = !projects.isError && projectItems.find(item => item.id === projectId);

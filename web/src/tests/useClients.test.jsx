@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import useClients, { CLIENT_OPTIONS_LIMIT, clientOptionsKey, normalizeClients } from '../hooks/useClients';
+import useClients, { useClientPages, CLIENTS_ROOT_KEY, CLIENT_OPTIONS_LIMIT, clientOptionsKey, normalizeClients } from '../hooks/useClients';
 import { api } from '../lib/api';
 
 vi.mock('../lib/api', () => ({ api: { getClients: vi.fn() } }));
@@ -66,6 +66,33 @@ describe('useClients', () => {
     expect(Object.keys(result.current).sort()).toEqual(
       ['clients', 'data', 'error', 'isComplete', 'isError', 'isFetching', 'isLoading', 'isSuccess', 'refetch', 'total'],
     );
+  });
+});
+
+describe('useClientPages', () => {
+  it('loads lazily, advances through actual server pages and shares root invalidation', async () => {
+    api.getClients.mockResolvedValueOnce({ clients: [{id:'c1',name:'First'}], total:2 })
+      .mockResolvedValueOnce({ clients: [{id:'c2',name:'Second'}], total:2 });
+    const queryClient = new QueryClient({defaultOptions:{queries:{retry:false}}});
+    const {result,rerender} = renderHook(({enabled}) => useClientPages({enabled,limit:100,scope:['org','staff','TEAM']}), {initialProps:{enabled:false},wrapper:wrapperFor(queryClient)});
+    expect(api.getClients).not.toHaveBeenCalled(); rerender({enabled:true});
+    await waitFor(()=>expect(result.current.isSuccess).toBe(true));
+    expect(api.getClients).toHaveBeenCalledWith({limit:100,offset:0}); expect(result.current.hasNextPage).toBe(true);
+    await act(()=>result.current.fetchNextPage());
+    expect(api.getClients).toHaveBeenLastCalledWith({limit:100,offset:1});
+    await waitFor(()=>expect(result.current.data.pages).toHaveLength(2));
+    expect(result.current.data.pages.flatMap(page=>page.clients).map(row=>row.id)).toEqual(['c1','c2']); expect(result.current.hasNextPage).toBe(false);
+    const key=['clients','pages',100,'org','staff','TEAM']; expect(queryClient.getQueryData(key).pages).toHaveLength(2);
+    expect(queryClient.getQueryData(clientOptionsKey())).toBeUndefined();
+    api.getClients.mockResolvedValue({clients:[{id:'c3',name:'Refreshed'}],total:1});
+    await act(()=>queryClient.invalidateQueries({queryKey:CLIENTS_ROOT_KEY}));
+    await waitFor(()=>expect(result.current.data.pages[0].clients[0].id).toBe('c3')); queryClient.clear();
+  });
+  it('keeps failed or malformed pages unavailable instead of fabricating a complete list', async () => {
+    api.getClients.mockResolvedValue({clients:'invalid',total:1});
+    const queryClient=new QueryClient({defaultOptions:{queries:{retry:false}}});
+    const {result}=renderHook(()=>useClientPages({scope:['other-org','staff']}),{wrapper:wrapperFor(queryClient)});
+    await waitFor(()=>expect(result.current.isError).toBe(true)); expect(result.current.data).toBeUndefined();queryClient.clear();
   });
 });
 
