@@ -21,6 +21,10 @@ const ACTOR_TYPE_SET = new Set(AUDIT_ACTOR_TYPES);
  * listed for the action are dropped.
  */
 export const AUDIT_EVENT_CATALOG = Object.freeze({
+  'portal_handoff.requested': { entityType: 'portal_handoff_request', metadata: ['projectId', 'clientId', 'status', 'revision'] },
+  'portal_handoff.claimed': { entityType: 'portal_handoff_request', metadata: ['projectId', 'clientId', 'status', 'revision'] },
+  'portal_handoff.resolved': { entityType: 'portal_handoff_request', metadata: ['projectId', 'clientId', 'status', 'revision'] },
+  'portal_handoff.requeued': { entityType: 'portal_handoff_request', metadata: ['projectId', 'clientId', 'status', 'revision', 'reason'] },
   'workspace_agent.installed': { entityType: 'workspace_account_manager_binding', metadata: ['channelId', 'clientId', 'profileId'] },
   'workspace_agent.updated': { entityType: 'workspace_account_manager_binding', metadata: ['channelId', 'enabled'] },
   'workspace_agent.requested': { entityType: 'workspace_account_manager_invocation', metadata: ['channelId', 'sourceMessageId', 'runId'] },

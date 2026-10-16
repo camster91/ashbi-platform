@@ -152,6 +152,7 @@ export const EXPORT_ENTITIES = Object.freeze([
   { name: 'revenue_snapshots', model: 'RevenueSnapshot', category: 'finance', where: (org) => ({ client: activeClient(org) }), description: 'Monthly revenue snapshots per client' },
 
   // Communication
+  { name: 'portal_handoff_requests', model: 'PortalHandoffRequest', category: 'communication', where: org => ({ organizationId: org }), omit: ['idempotencyKey', 'inputHash'], description: 'Retained human portal handoffs with principal audience and staff lifecycle; organization-owner export only' },
   { name: 'client_agent_conversations', model: 'ClientAgentConversation', category: 'communication', where: (org) => ({ organizationId: org, client: activeClient(org) }), description: 'Client account-manager conversations, including explicit private sourceChannelId/sourceBindingId audience and archived conversations; organization-owner export only' },
   { name: 'client_agent_runs', model: 'ClientAgentRun', category: 'communication', where: (org) => ({ organizationId: org, conversation: { organizationId: org, client: activeClient(org) } }), omit: ['idempotencyKey', 'inputHash', 'claimToken'], description: 'Stored client account-manager questions, answers and run outcomes; internal intent and worker tokens omitted' },
   { name: 'threads', model: 'Thread', category: 'communication', where: threadScope, omit: ['inboundDeliveryKey'], description: 'Email conversation threads' },

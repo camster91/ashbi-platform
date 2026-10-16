@@ -10571,6 +10571,7 @@
             "required": false,
             "schema": {
               "enum": [
+                "portal_handoff_request",
                 "workspace_account_manager_binding",
                 "workspace_account_manager_invocation",
                 "client_agent_run",
@@ -10627,6 +10628,10 @@
             "required": false,
             "schema": {
               "enum": [
+                "portal_handoff.requested",
+                "portal_handoff.claimed",
+                "portal_handoff.resolved",
+                "portal_handoff.requeued",
                 "workspace_agent.installed",
                 "workspace_agent.updated",
                 "workspace_agent.requested",
@@ -15756,6 +15761,274 @@
           }
         ],
         "summary": "GET /api/client-portal/projects/:id",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/projects/{id}/account-manager-requests": {
+      "get": {
+        "operationId": "get_api_client_portal_projects_id_account_manager_requests",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/client-portal/projects/:id/account-manager-requests",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      },
+      "post": {
+        "operationId": "post_api_client_portal_projects_id_account_manager_requests",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "idempotencyKey": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "question": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "question",
+                  "idempotencyKey"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/client-portal/projects/:id/account-manager-requests",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/projects/{id}/account-manager-requests/by-intent/{key}": {
+      "get": {
+        "operationId": "get_api_client_portal_projects_id_account_manager_requests_by_intent_key",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/client-portal/projects/:id/account-manager-requests/by-intent/:key",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/projects/{id}/account-manager-requests/{requestId}": {
+      "get": {
+        "operationId": "get_api_client_portal_projects_id_account_manager_requests_requestId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "requestId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/client-portal/projects/:id/account-manager-requests/:requestId",
         "tags": [
           "client-portal"
         ],
@@ -27959,6 +28232,401 @@
         ],
         "x-access": "staff",
         "x-tenancy": "scoped"
+      }
+    },
+    "/api/portal-handoffs": {
+      "get": {
+        "operationId": "get_api_portal_handoffs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "projectId",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "clientId",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "PENDING",
+                "CLAIMED",
+                "RESOLVED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "schema": {
+              "default": "everyone",
+              "enum": [
+                "me",
+                "everyone"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/portal-handoffs",
+        "tags": [
+          "portal-handoffs"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/portal-handoffs/{requestId}": {
+      "get": {
+        "operationId": "get_api_portal_handoffs_requestId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requestId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/portal-handoffs/:requestId",
+        "tags": [
+          "portal-handoffs"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/portal-handoffs/{requestId}/claim": {
+      "post": {
+        "operationId": "post_api_portal_handoffs_requestId_claim",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requestId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 2147483646,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "revision"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/portal-handoffs/:requestId/claim",
+        "tags": [
+          "portal-handoffs"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/portal-handoffs/{requestId}/requeue": {
+      "post": {
+        "operationId": "post_api_portal_handoffs_requestId_requeue",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requestId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "enum": [
+                      "OWNER_UNAVAILABLE",
+                      "RECOVERY"
+                    ],
+                    "type": "string"
+                  },
+                  "revision": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 2147483646,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "revision",
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/portal-handoffs/:requestId/requeue",
+        "tags": [
+          "portal-handoffs"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/portal-handoffs/{requestId}/resolve": {
+      "post": {
+        "operationId": "post_api_portal_handoffs_requestId_resolve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requestId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 2147483646,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "revision"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/portal-handoffs/:requestId/resolve",
+        "tags": [
+          "portal-handoffs"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "exempt"
       }
     },
     "/api/portal/booking": {
@@ -41687,6 +42355,9 @@
     },
     {
       "name": "portal"
+    },
+    {
+      "name": "portal-handoffs"
     },
     {
       "name": "projects"

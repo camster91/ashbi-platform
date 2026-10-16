@@ -321,3 +321,11 @@ Workspace account-manager pilot records `workspace_agent.installed`,
 and `workspace_agent.suppressed`. Metadata contains canonical IDs, enablement and
 run status only, never selected message text, preferences, prompts or answers.
 Request and settlement fail closed if the associated audit cannot be written.
+
+### Human client-portal handoffs
+
+`portal_handoff.requested`, `portal_handoff.claimed`, `portal_handoff.resolved`
+and `portal_handoff.requeued` commit with the associated request or transition.
+Metadata contains project/client IDs, status and revision; requeue also records
+its bounded reason enum. Client questions, intent keys and digests are excluded.
+An audit failure rolls back the state change. See [portal-human-handoffs.md](portal-human-handoffs.md).

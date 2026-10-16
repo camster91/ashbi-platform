@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-128 models, 0 enums, 74 tenant-scoped, 13 soft-deletable.
+129 models, 0 enums, 75 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -39,7 +39,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [CalendarEvent](#model-calendarevent) | `calendar_events` | no | no | 22 |
 | [ChatMessage](#model-chatmessage) | `chat_messages` | no | no | 22 |
 | [ChatReaction](#model-chatreaction) | `chat_reactions` | no | no | 7 |
-| [Client](#model-client) | `clients` | yes | yes | 59 |
+| [Client](#model-client) | `clients` | yes | yes | 60 |
 | [ClientAgentConversation](#model-clientagentconversation) | `client_agent_conversations` | yes | no | 18 |
 | [ClientAgentProfile](#model-clientagentprofile) | `client_agent_profiles` | yes | no | 18 |
 | [ClientAgentRun](#model-clientagentrun) | `client_agent_runs` | yes | no | 24 |
@@ -85,12 +85,13 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 83 |
+| [Organization](#model-organization) | `organizations` | no | no | 84 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
 | [PlatformSetting](#model-platformsetting) | `platform_settings` | no | no | 5 |
-| [Project](#model-project) | `projects` | yes | yes | 63 |
+| [PortalHandoffRequest](#model-portalhandoffrequest) | `portal_handoff_requests` | yes | no | 22 |
+| [Project](#model-project) | `projects` | yes | yes | 64 |
 | [ProjectBoard](#model-projectboard) | `project_boards` | yes | no | 16 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
@@ -657,6 +658,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
+| `portalHandoffRequests` | PortalHandoffRequest[] | list, required |  | → PortalHandoffRequest |  |
 | `id` | String | id, required | `cuid()` |  |  |
 | `organizationId` | String | required |  |  |  |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id) |  |
@@ -1954,6 +1956,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
+| `portalHandoffRequests` | PortalHandoffRequest[] | list, required |  | → PortalHandoffRequest |  |
 | `id` | String | id, required | `cuid()` |  |  |
 | `name` | String | required |  |  |  |
 | `slug` | String | unique, required |  |  |  |
@@ -2122,6 +2125,43 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `aiDisabledById` | String | optional |  |  | No FK: history must outlive the actor account |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 
+### Model PortalHandoffRequest
+
+- Table: `portal_handoff_requests`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([organizationId, requestedById, contactId, idempotencyKey], map: "portal_handoffs_principal_intent_key")`
+  - `@@index([organizationId, projectId, status, id], map: "portal_handoffs_project_status_id_idx")`
+  - `@@index([organizationId, requestedById, contactId, id], map: "portal_handoffs_principal_id_idx")`
+  - `@@index([clientId, organizationId])`
+  - `@@index([projectId, organizationId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `clientId` | String | required |  |  |  |
+| `projectId` | String | required |  |  |  |
+| `requestedById` | String | required |  |  |  |
+| `contactId` | String | required |  |  |  |
+| `creationSessionVersion` | Int | required |  |  |  |
+| `question` | String | required |  |  |  |
+| `idempotencyKey` | String | required |  |  |  |
+| `inputHash` | String | required |  |  |  |
+| `status` | String | required | `"PENDING"` |  |  |
+| `revision` | Int | required | `1` |  |  |
+| `ownerId` | String | optional |  |  |  |
+| `changedById` | String | required |  |  |  |
+| `requeueReason` | String | optional |  |  |  |
+| `claimedAt` | DateTime | optional |  |  |  |
+| `resolvedAt` | DateTime | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Restrict |  |
+| `client` | Client | required |  | → Client, via (clientId, organizationId) → (id, organizationId), onDelete Restrict |  |
+| `project` | Project | required |  | → Project, via (projectId, organizationId) → (id, organizationId), onDelete Restrict |  |
+
 ### Model Project
 
 - Table: `projects`
@@ -2136,6 +2176,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
+| `portalHandoffRequests` | PortalHandoffRequest[] | list, required |  | → PortalHandoffRequest |  |
 | `id` | String | id, required | `cuid()` |  |  |
 | `organizationId` | String | required |  |  |  |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id) |  |
