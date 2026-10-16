@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import workspaceChatRoutes from '../../routes/workspace-chat.routes.js';
+import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 import {
   createWorkspaceChatChannel, listWorkspaceChatChannels, listWorkspaceChatPeople,
   postWorkspaceChatMessage, getWorkspaceChatMessages, setWorkspaceChatMember,
@@ -78,6 +79,31 @@ function database() {
 }
 const rejectCode = code => error => error.code === code;
 async function direct(fixture) { return (await createWorkspaceChatChannel(fixture.db, actor, { kind: 'DIRECT', memberIds: ['b'] })).channel; }
+
+test('recipient HTTP acknowledgement works through request tenancy and remains idempotent', async t => {
+  const f = database(), channel = await direct(f);
+  const posted = await postWorkspaceChatMessage(f.db, actor, channel.id, { content: 'Scoped attention', idempotencyKey: 'scoped-attention', attentionRecipientIds: ['b'] });
+  const attentionId = posted.message.attention[0].id;
+  const recipient = { ...actor, id: 'b', role: 'TEAM' };
+  const app = Fastify();
+  app.decorate('authenticate', async r => { r.user = recipient; r.prisma = createScopedPrisma(f.db, recipient.organizationId); });
+  await app.register(workspaceChatRoutes, { prefix: '/api/workspace-chat' });
+  await app.ready(); t.after(() => app.close());
+  const url = `/api/workspace-chat/channels/${channel.id}/attention/${attentionId}/ack`;
+  f.db.failAudit = true;
+  const failed = await app.inject({ method: 'POST', url, payload: {} });
+  assert.equal(failed.statusCode, 503);
+  assert.equal(failed.json().code, 'AUDIT_UNAVAILABLE');
+  assert.equal(f.rows().workspaceChatAttention.find(row => row.id === attentionId).acknowledgedAt, null);
+  f.db.failAudit = false;
+  const first = await app.inject({ method: 'POST', url, payload: {} });
+  assert.equal(first.statusCode, 200, first.body);
+  const replay = await app.inject({ method: 'POST', url, payload: {} });
+  assert.equal(replay.statusCode, 200, replay.body);
+  assert.equal(first.json().attention.acknowledgedAt, replay.json().attention.acknowledgedAt);
+  assert.equal(f.rows().auditEvent.filter(row => row.action === 'workspace_chat.attention_acknowledged').length, 1);
+  assert.equal((await listWorkspaceChatAttention(createScopedPrisma(f.db, 'org'), recipient)).pendingCount, 0);
+});
 
 test('human attention is explicit, normalized, atomic with message and replay-sensitive', async () => {
   const f = database(), channel = await direct(f);

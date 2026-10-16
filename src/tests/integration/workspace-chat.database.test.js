@@ -9,6 +9,7 @@ import {
   listWorkspaceChatAttention, acknowledgeWorkspaceChatAttention, getWorkspaceChatMessageIntent,
 } from '../../services/workspace-chat.service.js';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
+import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 
 const url = process.env.TENANT_INTEGRATION_DATABASE_URL;
 test('workspace chat PostgreSQL tenant, membership, linkage, concurrent replay and fresh role boundaries', { skip: !url && 'Disposable database is not configured', timeout: 150_000 }, async () => {
@@ -50,7 +51,10 @@ test('workspace chat PostgreSQL tenant, membership, linkage, concurrent replay a
     assert.equal((await listWorkspaceChatAttention(raw, users[1])).items.length, 0);
     const attention = posts[0].message.attention[0];
     await assert.rejects(acknowledgeWorkspaceChatAttention(raw, users[0], channel.id, attention.id), { statusCode: 404 });
-    const acknowledgements = await Promise.all([acknowledgeWorkspaceChatAttention(raw, teammate, channel.id, attention.id), acknowledgeWorkspaceChatAttention(raw, teammate, channel.id, attention.id)]);
+    // Production routes pass request-scoped Prisma; the service scopes again
+    // inside its transaction. Exercise that composition, not only raw Prisma.
+    const recipientDb = createScopedPrisma(raw, teammate.organizationId);
+    const acknowledgements = await Promise.all([acknowledgeWorkspaceChatAttention(recipientDb, teammate, channel.id, attention.id), acknowledgeWorkspaceChatAttention(recipientDb, teammate, channel.id, attention.id)]);
     assert.equal(+acknowledgements[0].attention.acknowledgedAt, +acknowledgements[1].attention.acknowledgedAt);
     assert.equal(await raw.auditEvent.count({ where: { entityId: attention.id, action: 'workspace_chat.attention_acknowledged' } }), 1);
     assert.equal((await listWorkspaceChatAttention(raw, teammate)).pendingCount, 0);
