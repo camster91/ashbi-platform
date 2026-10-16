@@ -4,7 +4,15 @@
 
 This is the single current delivery/status entrypoint. [GitHub #565](https://github.com/camster91/ashbi-platform/issues/565) is the actionable execution checklist; the linked roadmap and dated implementation plans explain scope and acceptance, not competing build queues.
 
-Reviewed merged source: **`e7c7bed2654867146166c7303c1caa4e6405fd4a`**, [PR #640](https://github.com/camster91/ashbi-platform/pull/640), tree `ce38d6845c0253d107b45e700389212520b375e7`. This is a source snapshot, **not a production deployment claim**. Exact-main CI, matching image provenance, capacity, fresh backup and changed-workflow target QA remain release gates. The operator's active e7 release pin must remain unchanged until that release completes. Historical deployment and QA evidence below retains its original revision/date.
+## Verified deployment checkpoint — October 16, 2026 (6b62966)
+
+The latest verified deployment at this documentation checkpoint is **6b62966067d9f01d483cea07070bb1810fa299b5**, [PR #643](https://github.com/camster91/ashbi-platform/pull/643). All three PR and exact-main CI jobs passed (38875191830 and 38876941009), and artifact builder 38876954935 passed. The reviewed SSH deployment followed exact artifact/capacity checks and a fresh encrypted off-server-verified backup. API and worker matched healthy engine sha256:2aedb83777a88d41a35c45c3a1a983c87de7f0197eefcccc4f028b5c04aa1996; public strict readiness verified database, Redis and worker. Operational alert ownership/destination remains unset.
+
+Bounded live own-attention Daily Queue QA passed 65/65 with verified membership cleanup and two normal logout/401 readbacks. Earlier 482 attention/MCP 66/66 and Timesheets Chrome 31/31, and e7 navigation 125/125 and portal lifecycle 28/28, remain separate historical scopes. No combined whole-app score, live provider acceptance or populated company daily-use acceptance follows from them. Sources remain primary until verified migration and cutover.
+
+Current source work in [PR #644](https://github.com/camster91/ashbi-platform/pull/644) adds an explicit administrator OpenSEO saved-report pull using a client-owned public-proxy vault credential, plus document disclosure and queue keyboard focus fixes. The source is independently reviewed; required CI and deployment remain pending at this checkpoint. Credentials and client/project mappings have not been activated. Migration 130 preserves provenance through the existing rollback floor; after it applies, pre-130 images require a verified database restore before serving. See [saved-report contract](client-service-panels.md).
+
+Actual document conflict QA verified an owned synthetic save to revision 1 and a stale revision 0 rejection 409, then stopped on a rendered comparison assertion. Both sessions logged out with denied-session readbacks. This is partial acceptance, not completion; preserve the original failures and continue only after fresh same-record reconciliation. Company migration still requires normal company sign-in and a fresh destination baseline. [Issue #565](https://github.com/camster91/ashbi-platform/issues/565) is the live execution ledger.
 
 Implemented in this source, with deployment/provider/team acceptance kept separate:
 
@@ -18,10 +26,10 @@ Implemented in this source, with deployment/provider/team acceptance kept separa
 ### Validated remaining implementation and policy gaps
 
 1. **WhatsApp intake:** authenticated provider/mention transport and exact group-to-client mapping remain unimplemented; provider eligibility and approved account/number/group activation precede pairing. Outbound replies have a separate policy.
-2. **Live OpenSEO:** saved administrator-published panels already exist; the upstream read adapter and real mapping/freshness/coverage acceptance remain. No automatic paid research is authorized by loading a panel.
+2. **OpenSEO acceptance:** the explicit bounded saved-report pull is source-present in PR #644 and independently reviewed. Required CI, deployment, approved public-proxy credential binding and exact project mapping/provider acceptance remain. Loading a panel performs no upstream call or paid research.
 3. **Portal AI:** profile/SQL guards still enforce `portalEnabled=false`. A separately scoped client assistant remains unimplemented; human handoffs do not authorize staff transcripts or generic staff tools.
 4. **Full mailbox coverage, if required:** INBOX-window ingestion exists; durable history cursors and Sent/history backfill do not. Real mailbox ownership, connection, mapping holds and delivery/reconciliation acceptance are activation work, not a reason to rebuild receipts.
-5. **Unified attention projection:** the queue includes human portal requests, tasks, project approvals, reviews and finance follow-up. Workspace-chat attention and agent-run sources are not yet projected into that queue. Extend its existing permissions/partial-result contract if completing the roadmap's unified view.
+5. **Agent-run projection:** own human workspace-chat attention is deployed and verified in the existing Daily Queue through #643, alongside portal requests, tasks, approvals, reviews and finance follow-up. Broader agent-run rows still require actionable-state semantics and the existing permissions/partial-result contract. Do not rebuild the queue.
 6. **Profit/margin definitions:** missing-rate and original-currency reporting exist. Labor-cost basis, revenue recognition and budget/rate currency metadata need a defined policy/data model before trustworthy profitability; never infer profit or FX from unknown amounts.
 7. **Invoice-view producer policy:** invoice public reads do not emit a viewed event. Define identified-human versus scanner/preview fetch semantics, idempotency and any downstream effects before adding a producer; `VIEWED` status support does not establish tracking.
 
