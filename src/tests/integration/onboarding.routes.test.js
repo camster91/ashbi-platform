@@ -6,11 +6,13 @@ import onboardingRoutes, { tasksForRole } from '../../routes/onboarding.routes.j
 function createStore() {
   const progress = new Map();
   const facts = new Map();
+  const pages = [];
   const factsFor = userId => facts.get(userId) || {};
 
   return {
     progress,
     facts,
+    pages,
     prismaFor(user) {
       const model = {
         findFirst: async ({ where }) => progress.get(where.userId) || null,
@@ -37,13 +39,22 @@ function createStore() {
       };
       return {
         onboardingProgress: model,
-        user: { findFirst: async () => ({ ...user, isActive: true }) },
+        user: { findFirst: async () => factsFor(user.id).inactive ? null : ({ ...user, isActive: true }) },
         client: { count: async () => factsFor(user.id).clients || 0 },
         project: { count: async () => factsFor(user.id).projects || 0 },
         proposal: { count: async () => factsFor(user.id).proposals || 0 },
         task: { count: async () => factsFor(user.id).tasks || 0 },
         timeEntry: { count: async () => factsFor(user.id).timeEntries || 0 },
         note: { findMany: async () => Array.from({ length: factsFor(user.id).notes || 0 }, (_, index) => ({ id: 'onboarding-note-' + index, projectId: 'project', authorId: user.id, parentId: null, accessMode: 'TEAM', accessGrants: [], deletedAt: null })) },
+        workspacePage: { findMany: async ({ where, take }) => pages.filter(page =>
+          page.organizationId === where.organizationId
+          && (!where.authorId || page.authorId === where.authorId)
+          && (!Object.hasOwn(where, 'archivedAt') || page.archivedAt === where.archivedAt)
+          && (!where.id?.in || where.id.in.includes(page.id))
+          && (!where.id?.gt || page.id > where.id.gt)
+        ).sort((a, b) => a.id.localeCompare(b.id)).slice(0, take).map(page => ({
+          ...page, grants: (page.grants || []).filter(grant => grant.userId === user.id),
+        })) },
       };
     },
   };
@@ -162,6 +173,89 @@ test('invalid or cross-role task skips fail closed', async () => {
       method: 'POST', url: '/api/onboarding/progress/tasks/skip', payload: { taskId: '../admin' },
     });
     assert.equal(malformed.statusCode, 400);
+  } finally {
+    await app.close();
+  }
+});
+
+test('team document onboarding accepts a currently readable authored wiki page without notes', async () => {
+  const store = createStore();
+  store.pages.push({ id: 'wiki-a', organizationId: 'org-a', authorId: 'team-a', parentId: null, accessMode: 'TEAM', archivedAt: null });
+  const app = await buildApp(store);
+  try {
+    const response = await app.inject({ method: 'GET', url: '/api/onboarding/progress', headers: { 'x-test-user': 'teamA' } });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().tasks.find(task => task.id === 'create-document').completed, true);
+  } finally {
+    await app.close();
+  }
+});
+
+test('team document onboarding excludes foreign, archived, other-author and ancestor-hidden wiki pages', async () => {
+  const store = createStore();
+  store.pages.push(
+    { id: 'foreign', organizationId: 'org-b', authorId: 'team-a', parentId: null, accessMode: 'TEAM', archivedAt: null },
+    { id: 'archived', organizationId: 'org-a', authorId: 'team-a', parentId: null, accessMode: 'TEAM', archivedAt: new Date() },
+    { id: 'other-author', organizationId: 'org-a', authorId: 'admin-a', parentId: null, accessMode: 'TEAM', archivedAt: null },
+    { id: 'private-parent', organizationId: 'org-a', authorId: 'admin-a', parentId: null, accessMode: 'RESTRICTED', archivedAt: null },
+    { id: 'hidden-child', organizationId: 'org-a', authorId: 'team-a', parentId: 'private-parent', accessMode: 'TEAM', archivedAt: null },
+  );
+  const app = await buildApp(store);
+  try {
+    const response = await app.inject({ method: 'GET', url: '/api/onboarding/progress', headers: { 'x-test-user': 'teamA' } });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().tasks.find(task => task.id === 'create-document').completed, false);
+    assert.equal(JSON.stringify(response.json()).includes('hidden-child'), false);
+  } finally {
+    await app.close();
+  }
+});
+
+test('wiki onboarding follows current ancestor access grants and their revocation', async () => {
+  const store = createStore();
+  const parent = { id: 'parent', organizationId: 'org-a', authorId: 'admin-a', parentId: null, accessMode: 'RESTRICTED', archivedAt: null, grants: [{ userId: 'team-a', role: 'READ' }] };
+  store.pages.push(parent, { id: 'child', organizationId: 'org-a', authorId: 'team-a', parentId: parent.id, accessMode: 'TEAM', archivedAt: null });
+  const app = await buildApp(store);
+  try {
+    const readCompletion = async () => {
+      const response = await app.inject({ method: 'GET', url: '/api/onboarding/progress', headers: { 'x-test-user': 'teamA' } });
+      assert.equal(response.statusCode, 200);
+      return response.json().tasks.find(task => task.id === 'create-document').completed;
+    };
+    assert.equal(await readCompletion(), true);
+    parent.grants = [];
+    assert.equal(await readCompletion(), false);
+  } finally {
+    await app.close();
+  }
+});
+
+test('wiki onboarding reaches a visible authored page after a full batch of hidden children', async () => {
+  const store = createStore();
+  store.pages.push({ id: 'parent', organizationId: 'org-a', authorId: 'admin-a', parentId: null, accessMode: 'RESTRICTED', archivedAt: null });
+  for (let index = 0; index < 100; index++) {
+    store.pages.push({ id: `hidden-${String(index).padStart(3, '0')}`, organizationId: 'org-a', authorId: 'team-a', parentId: 'parent', accessMode: 'TEAM', archivedAt: null });
+  }
+  store.pages.push({ id: 'visible', organizationId: 'org-a', authorId: 'team-a', parentId: null, accessMode: 'TEAM', archivedAt: null });
+  const app = await buildApp(store);
+  try {
+    const response = await app.inject({ method: 'GET', url: '/api/onboarding/progress', headers: { 'x-test-user': 'teamA' } });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().tasks.find(task => task.id === 'create-document').completed, true);
+  } finally {
+    await app.close();
+  }
+});
+
+test('inactive staff cannot complete onboarding through an authored wiki page', async () => {
+  const store = createStore();
+  store.facts.set('team-a', { inactive: true });
+  store.pages.push({ id: 'wiki-a', organizationId: 'org-a', authorId: 'team-a', parentId: null, accessMode: 'TEAM', archivedAt: null });
+  const app = await buildApp(store);
+  try {
+    const response = await app.inject({ method: 'GET', url: '/api/onboarding/progress', headers: { 'x-test-user': 'teamA' } });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().tasks, undefined);
   } finally {
     await app.close();
   }
