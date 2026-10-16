@@ -204,6 +204,7 @@ export default function Notes({ projectId }) {
           onSave={(data) => updateMutation.mutate({ id: selectedNote.id, data: { ...data, revision: selectedNote.revision } })}
           saveError={updateMutation.error}
           onReload={note => { setSelectedNote(note); updateMutation.reset(); }}
+          onReconcile={({ current, draft }) => { setSelectedNote({ ...current, ...draft }); updateMutation.reset(); }}
           onHistoryRestored={() => {
             setSelectedNote(null);
             queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
@@ -220,7 +221,7 @@ export default function Notes({ projectId }) {
   );
 }
 
-function NoteEditor({ note, onSave, onDelete, onClose, isLoading, isDeleting = false, deleteError, saveError, onReload, onHistoryRestored }) {
+function NoteEditor({ note, onSave, onDelete, onClose, isLoading, isDeleting = false, deleteError, saveError, onReload, onReconcile, onHistoryRestored }) {
   const [formData, setFormData] = useState({
     title: note?.title || '',
     content: note?.content || '',
@@ -253,7 +254,7 @@ function NoteEditor({ note, onSave, onDelete, onClose, isLoading, isDeleting = f
     <Modal isOpen={!showDeleteConfirm && !showHistory} onClose={onClose} title={note ? 'Edit Note' : 'Create Note'} size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         {note && <button type="button" className="min-h-11 underline" disabled={isLoading || isDeleting} onClick={() => setShowHistory(true)}>Version history</button>}
-        {note && <DocumentSaveRecovery noteId={note.id} draft={formData} error={saveError} onReload={onReload} />}
+        {note && <DocumentSaveRecovery noteId={note.id} draft={formData} error={saveError} busy={isLoading} onReload={onReload} onReconcile={value => { setFormData({ title: value.current.title, content: value.current.content, type: value.current.type, tags: value.current.tags || [], ...value.draft }); onReconcile(value); }} />}
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="min-w-0 flex-1">
             <label className="block text-sm font-medium text-foreground mb-1">Title</label>

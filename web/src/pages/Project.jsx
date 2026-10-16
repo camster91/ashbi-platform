@@ -973,7 +973,7 @@ function ProjectNotes({ projectId }) {
               {expandedId === note.id && (
                 editingId === note.id ? (
                   <form onSubmit={handleUpdate} className="mt-3 space-y-2">
-                    <DocumentSaveRecovery noteId={note.id} draft={editForm} error={updateMutation.error} onReload={startEdit} />
+                    <DocumentSaveRecovery noteId={note.id} draft={editForm} error={updateMutation.error} busy={updateMutation.isPending} onReload={startEdit} onReconcile={({ current, draft }) => { startEdit(current); setEditForm(form => ({ ...form, ...draft })); }} />
                     <div className="flex flex-col sm:flex-row gap-2">
                       <input
                         value={editForm.title}

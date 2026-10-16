@@ -199,7 +199,7 @@ Use authorized saved data first; publish source ID, observation/fetch time and e
 
 1. First write a two-browser acceptance case for simultaneous editing, reconnect and permission revocation. Select a compatible collaboration implementation against the actual editor and authenticated realtime infrastructure; validate checkpoint/conflict recovery before adopting a library or storage format.
 2. Keep stale-write draft recovery throughout migration. Concurrent editing is complete only when both users' changes survive; presence indicators alone do not satisfy it.
-3. Implement retained snapshots and restore-as-a-new-revision only under an explicit bound/authority policy. The existing recommendation is **last 100 revisions, administrator restore**, and remains a proposal.
+3. Preserve the approved policy: **newest 100 recorded revisions including current, authorized staff reads, fresh administrator restore as a new revision, no automatic time-based purge**. Retained history is already implemented; see [the approved decision and evidence](../document-recovery-decision.md).
 4. Restore current authorization, hierarchy and permitted references; unavailable attachments/parents stay visible as unavailable rather than being recreated silently.
 
 **Exit:** two editors converge after reconnect without lost content; foreign/private history stays inaccessible; approved retention boundaries, restore concurrency, export and backup recovery are tested. Policy-independent collaboration work can proceed before the history decision.

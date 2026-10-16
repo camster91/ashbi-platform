@@ -1,0 +1,21 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { beforeEach, expect, it, vi } from 'vitest';
+import Notes from '../components/Notes';
+import { api } from '../lib/api';
+vi.mock('../hooks/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+vi.mock('../lib/api', () => ({ api: { getNotes: vi.fn(), getNote: vi.fn(), updateNote: vi.fn() } }));
+beforeEach(() => vi.resetAllMocks());
+it.each([0, 1])('prepares a reviewed note merge with current metadata and revision %s, without saving on apply', async revision => {
+  const initial = { id: 'note', title: 'Guide', type: 'DOC', content: 'Original', revision: 0, tags: ['initial'], permissions: { canEdit: true, canManage: true }, updatedAt: '2026-10-16T00:00:00Z' };
+  const current = { ...initial, revision, content: 'Saved by teammate', type: 'WIKI', tags: ['latest'] };
+  api.getNotes.mockResolvedValue([initial]);api.getNote.mockResolvedValue(current);api.updateNote.mockRejectedValue(new Error('Document changed'));
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><Notes projectId="project" /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Open note Guide' }));fireEvent.change(screen.getByLabelText('Document content'), { target: { value: 'Local unsaved edit' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));await screen.findByText(/Document changed/);
+  fireEvent.click(screen.getByRole('button', { name: 'Compare latest saved document' }));await screen.findByLabelText('Reviewed merged content');
+  fireEvent.change(screen.getByLabelText('Reviewed merged content'), { target: { value: 'Both human edits' } });fireEvent.click(screen.getByRole('button', { name: 'Use reviewed merge in editor' }));
+  expect(api.updateNote).toHaveBeenCalledTimes(1);expect(screen.getByLabelText('Document content')).toHaveValue('Both human edits');expect(screen.getByLabelText('Document type')).toHaveValue('WIKI');
+  fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+  await waitFor(() => expect(api.updateNote).toHaveBeenLastCalledWith('note', { title: 'Guide', content: 'Both human edits', type: 'WIKI', tags: ['latest'], revision }));
+});
