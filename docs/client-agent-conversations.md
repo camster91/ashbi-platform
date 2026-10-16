@@ -24,9 +24,16 @@ Questions are limited to 2,000 characters and conversation titles to 200.
 The transcript is application data, not audit metadata or an outbox payload.
 Each request uses the current bounded client/project snapshot and that run's
 question. Earlier conversation turns are stored for staff to read but are not
-sent as conversation memory to the provider. The run does not persist the
-context observation time (`observedAt`) or source references, so the complete
-W1 conversation-memory/context-evidence acceptance remains TODO.
+sent as conversation memory to the provider. Prepared runs retain one
+`contextObservedAt` timestamp and a versioned `contextSnapshot` containing only
+the canonical client's id/name/domain, up to 25 project id/name/status/date
+records, and a truncation flag. The worker commits this evidence with its
+permanent claim before inference and uses exactly that snapshot and timestamp
+in the prompt. Failed, cancelled or unknown runs can retain prepared evidence;
+it does not prove a provider request happened. Legacy runs remain null and
+never reconstruct history from current records. Database guards enforce the
+paired fields, bounded whitelist, canonical client and write-once evidence.
+Full W1 prior-conversation memory and real-provider acceptance remain TODO.
 Run-request events carry only `clientId`, `conversationId`, `runId` and
 `requestedById`. Safe HTTP projections exclude input hashes, intent keys,
 worker claim tokens and profile instructions. Provider credentials remain in

@@ -3159,6 +3159,8 @@ model ClientAgentRun {
   response String?
   status String @default("QUEUED")
   profileRevision Int?
+  contextObservedAt DateTime?
+  contextSnapshot Json?
   claimToken String?
   startedAt DateTime?
   finishedAt DateTime?

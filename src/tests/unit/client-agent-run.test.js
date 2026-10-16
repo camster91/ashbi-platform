@@ -80,6 +80,21 @@ test('same key with changed question or canonical conversation conflicts without
   await assert.rejects(service.start(db, user, client.id, 'conversation-b', input), { code: 'RUN_IDEMPOTENCY_CONFLICT' });
   assert.equal(state.runs.length, 1); assert.equal(state.events.length, 1);
 });
+
+test('status and requester intent expose retained evidence without internal tokens or profile instructions', async () => {
+  const f = fixture(); const saved = await f.start();
+  const contextObservedAt = new Date('2026-10-16T00:00:00.000Z');
+  const contextSnapshot = { version: 1, snapshot: { client: { id: client.id, name: 'Historical', domain: null }, projects: [], truncated: false } };
+  Object.assign(f.state.runs[0], { contextObservedAt, contextSnapshot, status: 'SUCCEEDED', response: 'Stored', instructions: 'Private' });
+  for (const row of [await f.service.read(f.db, user, client.id, conversation.id, saved.id),
+    await f.service.byIntent(f.db, user, client.id, conversation.id, input.idempotencyKey)]) {
+    assert.deepEqual(row.contextSnapshot, contextSnapshot); assert.deepEqual(row.contextObservedAt, contextObservedAt);
+    assert.doesNotMatch(JSON.stringify(row), /claimToken|inputHash|idempotencyKey|instructions|Private/);
+  }
+  f.state.actor.role = 'CLIENT';
+  await assert.rejects(f.service.read(f.db, user, client.id, conversation.id, saved.id), { statusCode: 403 });
+  await assert.rejects(f.service.byIntent(f.db, user, client.id, conversation.id, input.idempotencyKey), { statusCode: 403 });
+});
 test('another pending run blocks new keys, terminal runs permit the next turn', async () => {
   const { start, state } = fixture(); await start();
   for (const status of ['QUEUED', 'RUNNING']) {

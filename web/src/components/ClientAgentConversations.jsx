@@ -11,6 +11,43 @@ const denied = (error) => [401, 403, 404].includes(error?.status ?? error?.statu
 const itemsFrom = (pages, field) => [...new Map((pages || []).flatMap((page) => page[field] || []).map((item) => [item.id, item])).values()];
 const inputClass = 'w-full rounded-lg border border-input bg-background p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
+const sourceId = (value) => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(value);
+const storedText = (value) => typeof value === 'string' && value.length <= 2000;
+const storedDomain = (value) => value === null || (typeof value === 'string' && value.length <= 2048);
+const storedDate = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T.*Z$/.test(value) && Number.isFinite(Date.parse(value));
+
+function RetainedContext({ run }) {
+  const evidence = run.contextSnapshot;
+  const snapshot = evidence?.snapshot;
+  const client = snapshot?.client;
+  const projects = snapshot?.projects;
+  const valid = evidence?.version === 1 && storedDate(run.contextObservedAt) &&
+    sourceId(client?.id) && storedText(client?.name) && storedDomain(client.domain) &&
+    typeof snapshot?.truncated === 'boolean' && Array.isArray(projects) && projects.length <= 25 &&
+    projects.every((project) => sourceId(project?.id) && storedText(project?.name) && storedText(project?.status) &&
+      (project.startDate === null || storedDate(project.startDate)) && (project.endDate === null || storedDate(project.endDate)));
+
+  if (!valid) return <p className="text-sm text-muted-foreground">Retained context evidence is unavailable for this run. Current records are not substituted for its historical context.</p>;
+
+  return <details className="rounded-lg border border-border p-3 text-sm">
+    <summary tabIndex={0} className="cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Retained context for this run</summary>
+    <div className="mt-3 space-y-3">
+      <p>Context observed at <time dateTime={run.contextObservedAt}>{run.contextObservedAt}</time> (UTC).</p>
+      <p>{run.status === 'SUCCEEDED' ? 'Stored client and project context used to prepare this answer.' : 'Stored context prepared for this request. This does not confirm that a provider received it or completed an answer.'}</p>
+      <p>These are historical values. Source links open current records, which may have changed or become unavailable.</p>
+      <p className="break-words">Client: <a className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/client/${encodeURIComponent(client.id)}`}>{client.name}</a>{client.domain ? ` — ${client.domain}` : ' — No domain recorded'}</p>
+      {projects.length ? <ul aria-label="Retained project context" className="space-y-2">
+        {projects.map((project, index) => <li key={`${project.id}:${index}`} className="break-words">
+          <a className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/project/${encodeURIComponent(project.id)}`}>{project.name}</a>
+          <p>Status: {project.status}</p>
+          <p>Start: {project.startDate ? <time dateTime={project.startDate}>{project.startDate}</time> : 'Not recorded'}; end: {project.endDate ? <time dateTime={project.endDate}>{project.endDate}</time> : 'Not recorded'}</p>
+        </li>)}
+      </ul> : <p>No projects were included in this context.</p>}
+      {snapshot.truncated && <p>Context was limited to 25 projects. Other projects were not included.</p>}
+    </div>
+  </details>;
+}
+
 function readIntent(storageKey) {
   const raw = sessionStorage.getItem(storageKey);
   if (!raw) return null;
@@ -129,6 +166,7 @@ function Conversation({ clientId, conversationId, profileEnabled, user }) {
           {run.status === 'FAILED' && <p>The request failed. Review the workspace AI settings before explicitly sending another question.</p>}
           {run.status === 'UNKNOWN' && <p>The provider outcome is unknown and may have incurred a cost. This request will not be retried automatically.</p>}
           {run.status === 'CANCELLED' && <p>This run was cancelled. An in-flight provider request may still complete and incur a cost.</p>}
+          <RetainedContext run={run} />
         </li>)}
       </ol>
       {detail.hasNextPage && <Button type="button" variant="outline" disabled={detail.isFetchingNextPage} onClick={() => detail.fetchNextPage()}>Load more saved questions</Button>}
