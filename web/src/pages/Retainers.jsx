@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import useClients from '../hooks/useClients';
+import { useAuth } from '../hooks/useAuth';
 import {
   buildRetainerCreatePayload,
   buildRetainerUpdatePayload,
@@ -45,6 +46,8 @@ function HoursBar({ percentUsed }) {
 
 export default function Retainers() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canEdit = user?.role === 'ADMIN';
   const toast = useToast();
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -70,7 +73,7 @@ export default function Retainers() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['all-retainers'] });
       setShowCreate(false);
-      setCreateForm({ clientId: '', tier: 'custom', hoursPerMonth: 20, monthlyAmountUsd: '', monthlyAmountCad: '' });
+      setCreateForm({ clientId: '', tier: 'custom', hoursPerMonth: 20, monthlyAmountUsd: '', monthlyAmountCad: '', serviceDescription: undefined });
       toast.success('Retainer plan created');
     },
     onError: () => toast.error('Failed to create retainer plan'),
@@ -109,7 +112,7 @@ export default function Retainers() {
   });
 
   const [createForm, setCreateForm] = useState({
-    clientId: '', tier: 'custom', hoursPerMonth: 20, monthlyAmountUsd: '', monthlyAmountCad: ''
+    clientId: '', tier: 'custom', hoursPerMonth: 20, monthlyAmountUsd: '', monthlyAmountCad: '', serviceDescription: undefined
   });
   const [editForm, setEditForm] = useState({});
   const [logForm, setLogForm] = useState({ hours: '', description: '' });
@@ -121,6 +124,7 @@ export default function Retainers() {
       // A stored 0 stays 0; only a missing amount shows as empty.
       monthlyAmountUsd: plan.monthlyAmountUsd ?? '',
       monthlyAmountCad: plan.monthlyAmountCad ?? '',
+      serviceDescription: plan.serviceDescription ?? '',
     });
   };
 
@@ -144,9 +148,9 @@ export default function Retainers() {
           <Button variant="outline" size="sm" onClick={() => refetch()} leftIcon={<RefreshCw className="w-4 h-4" />}>
             Refresh
           </Button>
-          <Button leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowCreate(true)}>
+          {canEdit && <Button leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowCreate(true)}>
             Add Retainer
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -174,7 +178,7 @@ export default function Retainers() {
       )}
 
       {/* Create Form */}
-      {showCreate && (
+      {canEdit && showCreate && (
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Add Retainer Plan</h2>
@@ -232,6 +236,7 @@ export default function Retainers() {
                 />
               </div>
             </div>
+            <div><label htmlFor="retainer-included-work" className="block text-sm font-medium mb-1">Included-work notes (optional)</label><textarea id="retainer-included-work" className="w-full rounded-lg border border-border bg-background p-3 text-sm" value={createForm.serviceDescription ?? ''} maxLength={4000} onChange={(event) => setCreateForm({ ...createForm, serviceDescription: event.target.value })} /><p className="text-xs text-muted-foreground">Record the agreed scope in plain text. Notes do not change hours, prices or client commitments.</p></div>
             <div className="flex gap-2">
               <Button type="submit" loading={createMutation.isPending} leftIcon={<Save className="w-4 h-4" />}>
                 Save Plan
@@ -264,7 +269,7 @@ export default function Retainers() {
         <div className="space-y-4">
           {allRetainers.map((plan) => (
             <Card key={plan.id} className="p-5">
-              {editingId === plan.clientId ? (
+              {canEdit && editingId === plan.clientId ? (
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -301,6 +306,7 @@ export default function Retainers() {
                       />
                     </div>
                   </div>
+                  <div><label htmlFor={`retainer-edit-included-work-${plan.clientId}`} className="block text-sm font-medium mb-1">Included-work notes (optional)</label><textarea id={`retainer-edit-included-work-${plan.clientId}`} className="w-full rounded-lg border border-border bg-background p-3 text-sm" value={editForm.serviceDescription} maxLength={4000} onChange={(event) => setEditForm({ ...editForm, serviceDescription: event.target.value })} /><p className="text-xs text-muted-foreground">Record the agreed scope in plain text. Clear this field to remove the notes.</p></div>
                   <div className="flex items-center gap-3">
                     <Button size="sm" type="submit" loading={updateMutation.isPending}>Save</Button>
                     <Button size="sm" variant="outline" type="button"
@@ -349,12 +355,13 @@ export default function Retainers() {
                       >
                         <Receipt className="w-4 h-4" />
                       </button>
-                      <button type="button" onClick={() => handleEdit(plan)} aria-label={`Edit retainer ${plan.name || plan.client?.name || ''}`} className="min-h-11 min-w-11 inline-flex items-center justify-center p-1 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      {canEdit && <button type="button" onClick={() => handleEdit(plan)} aria-label={`Edit retainer ${plan.name || plan.client?.name || ''}`} className="min-h-11 min-w-11 inline-flex items-center justify-center p-1 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                         <Edit2 className="w-4 h-4" />
-                      </button>
+                      </button>}
                     </div>
                   </div>
 
+                  <div className="mb-3"><h3 className="text-sm font-medium">Included-work notes</h3><p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{plan.serviceDescription?.trim() || 'Not provided'}</p></div>
                   <div className="space-y-1">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">

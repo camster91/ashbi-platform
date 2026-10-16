@@ -635,7 +635,13 @@ export const RETAINER_TIER_VALUES = [
 ];
 const retainerTier = z.enum(RETAINER_TIER_VALUES);
 
+// Supplied scope notes only; omission preserves existing notes, empty clears them.
+const retainerServiceDescription = z.string().trim().max(4000)
+  .refine(value => !/[<>]/.test(value) && ![...value].some(char => char.charCodeAt(0) < 32 && !['\n', '\r', '\t'].includes(char)), 'Use plain text for included-work notes')
+  .transform(value => value || null).nullable().optional();
+
 export const createRetainerSchema = z.object({
+  serviceDescription: retainerServiceDescription,
   clientId: cuidId,
   tier: retainerTier.default('custom'),
   // RetainerPlan.hoursPerMonth is an Int column.
@@ -645,6 +651,7 @@ export const createRetainerSchema = z.object({
 });
 
 export const updateRetainerSchema = z.object({
+  serviceDescription: retainerServiceDescription,
   tier: retainerTier.optional(),
   hoursPerMonth: z.number().int().positive().optional(),
   // null clears a monthly amount.

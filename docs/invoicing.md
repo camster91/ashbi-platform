@@ -116,6 +116,14 @@ the public link): one reminder, then one escalation from 7 days overdue
 
 ## Retainer invoices
 
+Retainer cards also show supplied **Included-work notes**, stored in the existing
+`RetainerPlan.serviceDescription` field. Only administrators can create or edit
+these plain-text notes (maximum 4,000 characters). Omitting the field preserves
+existing notes; explicitly clearing it stores `null`, shown as **Not provided**.
+Notes do not change included hours, prices, invoice amounts or automatically
+communicate scope changes to clients. Revision allowances and approved scope
+changes remain separate workflows.
+
 Retainer plans hold a monthly CAD and/or USD amount. A retainer invoice
 defaults to CAD and bills only the amount in its currency; it is refused
 (`RETAINER_RATE_MISSING`) when that amount is not set.

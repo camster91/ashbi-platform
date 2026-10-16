@@ -11,6 +11,7 @@ export function toOptionalNumber(value) {
 
 export function buildRetainerCreatePayload(form) {
   return {
+    ...(form.serviceDescription !== undefined ? { serviceDescription: form.serviceDescription?.trim() || null } : {}),
     clientId: form.clientId,
     tier: form.tier || 'custom',
     hoursPerMonth: toOptionalNumber(form.hoursPerMonth),
@@ -23,6 +24,7 @@ export function buildRetainerCreatePayload(form) {
 // amount is sent as null to clear it.
 export function buildRetainerUpdatePayload(form) {
   return {
+    ...(form.serviceDescription !== undefined ? { serviceDescription: form.serviceDescription?.trim() || null } : {}),
     hoursPerMonth: toOptionalNumber(form.hoursPerMonth),
     monthlyAmountUsd: toOptionalNumber(form.monthlyAmountUsd) ?? null,
     monthlyAmountCad: toOptionalNumber(form.monthlyAmountCad) ?? null,
