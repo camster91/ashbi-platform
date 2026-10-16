@@ -2530,6 +2530,17 @@
             "minimum": 0,
             "type": "number"
           },
+          "serviceDescription": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "tier": {
             "default": "custom",
             "enum": [
@@ -7219,6 +7230,17 @@
           },
           "resetHours": {
             "type": "boolean"
+          },
+          "serviceDescription": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "tier": {
             "enum": [
