@@ -216,6 +216,30 @@ test('work queue is tenant-scoped, role-filtered, and assigns each source record
     const foreign = await queue('adminB', `?clientId=${clientA.id}`);
     assert.equal(foreign.total, 0);
 
+    // Due ranges are applied by PostgreSQL before each source cap. More than
+    // 100 older tasks cannot hide the matching leap-day task, and timestamps
+    // on the final UTC millisecond remain in the selected whole day.
+    const leapDay = new Date('2028-02-29T00:00:00.000Z');
+    await raw.task.createMany({ data: Array.from({ length: 102 }, (_, index) => ({
+      title: `Older due task ${index}`, projectId: projectA.id, assigneeId: teamA.id,
+      dueDate: new Date('2027-01-01T00:00:00Z'),
+    })) });
+    await raw.task.update({ where: { id: tAssigned.id }, data: { dueDate: leapDay } });
+    await task({ title: 'Next UTC midnight excluded', assigneeId: teamA.id, dueDate: new Date('2028-03-01T00:00:00Z') });
+    await raw.task.updateMany({ where: { projectId: projectB.id }, data: { dueDate: leapDay } });
+    await raw.approval.update({ where: { id: approvalA.id }, data: { expiresAt: new Date('2028-02-29T23:59:59.999Z') } });
+    await raw.proposal.update({ where: { id: proposalA.id }, data: { validUntil: leapDay } });
+    await raw.invoice.update({ where: { id: invSent.id }, data: { dueDate: leapDay } });
+    const dueQuery = '?dueFrom=2028-02-29&dueTo=2028-02-29';
+    const dated = await queue('adminA', dueQuery);
+    assert.deepEqual(new Set(dated.rows.map(row => row.id)), new Set([tAssigned.id, approvalA.id, proposalA.id, invSent.id]));
+    assert.deepEqual(dated.sources, ['tasks', 'approvals', 'proposals', 'invoices']);
+    assert.deepEqual(dated.truncatedSources, []);
+    assert.equal(dated.partial, false);
+    assert.deepEqual((await queue('teamA', dueQuery)).rows.map(row => row.id), [tAssigned.id]);
+    assert.equal((await queue('adminB', `${dueQuery}&projectId=${projectA.id}`)).total, 0);
+    assert.equal((await queue('adminA', `${dueQuery}&clientId=${clientA2.id}`)).total, 0);
+
     // ── Refused principals and invalid input ──
     const bot = await app.inject({ method: 'GET', url: '/api/work-queue', headers: { 'x-test-user': 'botA' } });
     assert.equal(bot.statusCode, 403);

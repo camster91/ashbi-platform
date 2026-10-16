@@ -1,6 +1,6 @@
 import { useId, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import { api } from '../lib/api';
 import useClients from '../hooks/useClients';
@@ -24,6 +24,18 @@ export const QUEUE_VIEWS = [
 
 // Matches WORK_QUEUE_SOURCE_LIMIT in src/services/work-queue.service.js.
 const QUEUE_SOURCE_LIMIT = 100;
+const PROJECT_PAGE_SIZE = 50;
+
+function dueRangeError(from, to) {
+  const valid = value => {
+    if (!value) return true;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  };
+  if (!valid(from) || !valid(to)) return 'Enter valid due dates in YYYY-MM-DD format (UTC).';
+  return from && to && from > to ? 'Due from must not be after due to (UTC).' : '';
+}
 
 
 const TYPE_LABELS = {
@@ -116,6 +128,10 @@ export default function WorkQueue() {
   const requestedOwner = searchParams.get('owner');
   const owner = isAdmin && requestedOwner === 'me' ? 'me' : 'everyone';
   const clientId = searchParams.get('clientId') || '';
+  const projectId = searchParams.get('projectId') || '';
+  const dueFrom = searchParams.get('dueFrom') || '';
+  const dueTo = searchParams.get('dueTo') || '';
+  const dateError = dueRangeError(dueFrom, dueTo);
 
   const updateParams = (changes) => {
     const next = new URLSearchParams(searchParams);
@@ -127,17 +143,32 @@ export default function WorkQueue() {
   };
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ['work-queue', owner, clientId],
-    queryFn: () => api.getWorkQueue({ owner, clientId: clientId || undefined }),
+    queryKey: ['work-queue', owner, clientId, projectId, dueFrom, dueTo],
+    queryFn: () => api.getWorkQueue({ owner, clientId: clientId || undefined,
+      ...(projectId ? { projectId } : {}), ...(dueFrom ? { dueFrom } : {}), ...(dueTo ? { dueTo } : {}) }),
+    enabled: !dateError,
   });
+
+  const projectsQuery = useInfiniteQuery({
+    queryKey: ['work-queue-project-options', user?.id, user?.role, clientId],
+    queryFn: ({ pageParam }) => api.getProjects({ limit: PROJECT_PAGE_SIZE, offset: pageParam, ...(clientId ? { clientId } : {}) }),
+    initialPageParam: 0,
+    getNextPageParam: page => {
+      const items = Array.isArray(page.projects) ? page.projects : [];
+      const next = (page.offset || 0) + items.length;
+      return items.length > 0 && next < page.total ? next : undefined;
+    },
+  });
+  const projectOptions = projectsQuery.isError ? [] : [...new Map((projectsQuery.data?.pages || []).flatMap(page => page.projects || []).map(project => [project.id, project])).values()];
+  const selectedProjectMissing = Boolean(projectId) && !projectOptions.some(project => project.id === projectId);
 
   const { data: clientOptions, isSuccess: clientsLoaded } = useClients();
   // A deep link can name a client beyond the loaded options (or not yet
   // loaded): keep it selectable instead of silently showing "All clients".
   const selectedClientMissing = Boolean(clientId) && !clientOptions.some((client) => client.id === clientId);
 
-  const counts = data?.counts || {};
-  const rows = (data?.rows || []).filter((row) => row.view === activeView);
+  const counts = dateError ? {} : data?.counts || {};
+  const rows = (dateError ? [] : data?.rows || []).filter((row) => row.view === activeView);
   const activeMeta = QUEUE_VIEWS.find((view) => view.key === activeView);
 
   const selectTab = (index) => {
@@ -155,6 +186,8 @@ export default function WorkQueue() {
 
   const ownerId = `${baseId}-owner`;
   const clientSelectId = `${baseId}-client`;
+  const projectSelectId = `${baseId}-project`;
+  const dateErrorId = `${baseId}-date-error`;
   const panelId = `${baseId}-panel`;
 
   return (
@@ -191,7 +224,7 @@ export default function WorkQueue() {
             <select
               id={clientSelectId}
               value={clientId}
-              onChange={(event) => updateParams({ clientId: event.target.value })}
+              onChange={(event) => updateParams({ clientId: event.target.value, projectId: '' })}
               className="min-h-11 max-w-[16rem] rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">All clients</option>
@@ -203,13 +236,33 @@ export default function WorkQueue() {
               ))}
             </select>
           </div>
+          <div className="flex min-w-0 flex-col gap-1">
+            <label htmlFor={projectSelectId} className="text-xs font-medium text-muted-foreground">Project</label>
+            <select id={projectSelectId} value={projectId} onChange={event => updateParams({ projectId: event.target.value })}
+              className="min-h-11 max-w-[16rem] rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <option value="">All projects</option>
+              {selectedProjectMissing && <option value={projectId}>Selected project</option>}
+              {projectOptions.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+            {projectsQuery.isLoading && <span role="status" className="text-xs text-muted-foreground">Loading project options…</span>}
+            {projectsQuery.isError && <p role="alert" className="text-xs text-destructive">Project options could not be loaded. <button type="button" className="underline" onClick={() => projectsQuery.refetch()}>Retry project options</button></p>}
+            {projectsQuery.hasNextPage && !projectsQuery.isError && <button type="button" disabled={projectsQuery.isFetchingNextPage} onClick={() => projectsQuery.fetchNextPage()} className="min-h-11 text-left text-xs text-primary underline">{projectsQuery.isFetchingNextPage ? 'Loading projects…' : 'Load more projects'}</button>}
+          </div>
+          {['dueFrom', 'dueTo'].map(key => <div key={key} className="flex flex-col gap-1">
+            <label htmlFor={`${baseId}-${key}`} className="text-xs font-medium text-muted-foreground">{key === 'dueFrom' ? 'Due from (UTC)' : 'Due to (UTC)'}</label>
+            <input id={`${baseId}-${key}`} type="date" value={key === 'dueFrom' ? dueFrom : dueTo} aria-invalid={Boolean(dateError)} aria-describedby={dateError ? dateErrorId : undefined}
+              onChange={event => updateParams({ [key]: event.target.value })}
+              className="min-h-11 max-w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+          </div>)}
+          {(clientId || projectId || dueFrom || dueTo || owner === 'me') && <button type="button" onClick={() => updateParams({ owner: '', clientId: '', projectId: '', dueFrom: '', dueTo: '' })} className="min-h-11 text-sm text-primary underline">Clear filters</button>}
         </div>
       </div>
+      {(dueFrom || dueTo) && <p className="text-xs text-muted-foreground">Due dates include the whole UTC day. Undated work, reviews, contracts and attention requests are excluded while a due range is active.</p>}
 
       <div className="flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="Queue views">
         {QUEUE_VIEWS.map((view, index) => {
           const selected = view.key === activeView;
-          const count = data ? (counts[view.key] ?? 0) : null;
+          const count = data && !dateError ? (counts[view.key] ?? 0) : null;
           return (
             <button
               key={view.key}
@@ -239,7 +292,7 @@ export default function WorkQueue() {
       </div>
 
       <div id={panelId} role="tabpanel" aria-labelledby={`${baseId}-tab-${activeView}`} tabIndex={0} className="space-y-4 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        {isLoading ? (
+        {dateError ? <p id={dateErrorId} role="alert" className="text-sm text-destructive">{dateError}</p> : isLoading ? (
           <LoadingState label="Loading queue…" />
         ) : isError ? (
           <QueryErrorState error={error} onRetry={() => refetch()} isRetrying={isFetching} />
@@ -257,13 +310,13 @@ export default function WorkQueue() {
             )}
             {data?.truncatedSources?.length > 0 && (
               <p className="text-xs text-muted-foreground" role="note">
-                Showing the first {QUEUE_SOURCE_LIMIT} items from {listSources(data.truncatedSources)}. Filter by client to see the rest.
+                Showing the first {QUEUE_SOURCE_LIMIT} items from {listSources(data.truncatedSources)}. Narrow the queue by client, project or due date.
               </p>
             )}
             {rows.length === 0 ? (
               <EmptyState
                 icon="success"
-                title={`${activeMeta.label}: all clear`}
+                title={data?.partial || data?.truncatedSources?.length ? `${activeMeta.label}: no matching items loaded` : `${activeMeta.label}: all clear`}
                 description={isAdmin && owner === 'me'
                   ? `${activeMeta.empty} Switch Owner to Everyone to see the whole team's queue.`
                   : activeMeta.empty}
