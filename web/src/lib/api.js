@@ -353,6 +353,8 @@ export const api = {
   confirmClientTaskAction: (clientId, actionId) => request(`/clients/${encodeURIComponent(clientId)}/assistant/task-actions/${encodeURIComponent(actionId)}/confirm`, { method: 'POST', body: { confirm: true }, silent: true, notifyUnauthorized: true }),
   rejectClientTaskAction: (clientId, key) => request(`/clients/${encodeURIComponent(clientId)}/assistant/task-actions/by-intent/${encodeURIComponent(key)}/reject`, { method: 'POST', body: {}, silent: true, notifyUnauthorized: true }),
   getClientAgentProfile: (id) => request(`/client-assistants/${encodeURIComponent(id)}/profile`),
+  getPortalAssistantConfig: (id) => request(`/client-assistants/${encodeURIComponent(id)}/portal-config`),
+  updatePortalAssistantConfig: (id, data) => request(`/client-assistants/${encodeURIComponent(id)}/portal-config`, { method: 'PATCH', body: data }),
   updateClientAgentProfile: (id, data) => request(`/client-assistants/${encodeURIComponent(id)}/profile`, { method: 'PATCH', body: data }),
   listClientAgentConversations: (clientId, params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value != null)).toString();
