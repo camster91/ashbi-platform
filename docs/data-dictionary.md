@@ -42,7 +42,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Client](#model-client) | `clients` | yes | yes | 56 |
 | [ClientAgentConversation](#model-clientagentconversation) | `client_agent_conversations` | yes | no | 13 |
 | [ClientAgentProfile](#model-clientagentprofile) | `client_agent_profiles` | yes | no | 17 |
-| [ClientAgentRun](#model-clientagentrun) | `client_agent_runs` | yes | no | 22 |
+| [ClientAgentRun](#model-clientagentrun) | `client_agent_runs` | yes | no | 23 |
 | [ClientEmailMapping](#model-clientemailmapping) | `client_email_mappings` | no | no | 8 |
 | [ClientEmbedding](#model-clientembedding) | `client_embeddings` | no | no | 10 |
 | [ClientInvitation](#model-clientinvitation) | `client_invitations` | no | no | 8 |
@@ -793,6 +793,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `profileRevision` | Int | optional |  |  |  |
 | `contextObservedAt` | DateTime | optional |  |  |  |
 | `contextSnapshot` | Json | optional |  |  |  |
+| `memorySnapshot` | Json | optional |  |  |  |
 | `claimToken` | String | optional |  |  |  |
 | `startedAt` | DateTime | optional |  |  |  |
 | `finishedAt` | DateTime | optional |  |  |  |

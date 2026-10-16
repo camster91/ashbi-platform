@@ -15,7 +15,7 @@ const conversationSelect = { id: true, organizationId: true, clientId: true, tit
   revision: true, archivedAt: true, createdAt: true, updatedAt: true };
 const runSelect = { id: true, organizationId: true, conversationId: true, requestedById: true,
   prompt: true, response: true, status: true, profileRevision: true, startedAt: true, finishedAt: true,
-  errorCode: true, contextObservedAt: true, contextSnapshot: true, createdAt: true, updatedAt: true };
+  errorCode: true, contextObservedAt: true, contextSnapshot: true, memorySnapshot: true, createdAt: true, updatedAt: true };
 const refuse = (code, message, statusCode) => { throw new ToolError(code, message, { statusCode }); };
 const conflict = () => refuse('CONVERSATION_CONFLICT', 'The conversation changed. Reload before saving.', 409);
 function parse(schema, value) {
