@@ -19,6 +19,7 @@ const floorBlock = script.slice(script.indexOf('# --- rollback floor ---'), scri
 const CHAT = '20260927030000_chat_message_visibility';
 const OAUTH = '20261016060000_mcp_action_binding';
 const INGEST = '20261016120000_gmail_ingest_identity';
+const PULL = '20261016130000_openseo_saved_report_pull';
 
 function bash(releaseDir, images, body) {
   // An image named broken:* makes the probe itself fail (docker exits 125).
@@ -119,7 +120,7 @@ docker() { echo "$1" >> "$LOG"; case $1 in inspect) echo false ;; esac; }`;
 test('a probe that cannot run fails closed: the floor is still raised and the image is refused', () => {
   const { dir, images } = fixture();
   bash(dir, images, 'raise_rollback_floor broken:1');
-  assert.equal(fs.readFileSync(path.join(dir, 'rollback-floor'), 'utf8'), `${CHAT}\n${OAUTH}\n20261016090000_workspace_account_manager_pilot\n${INGEST}\n`, 'recorded despite the failed probe');
+  assert.equal(fs.readFileSync(path.join(dir, 'rollback-floor'), 'utf8'), `${CHAT}\n${OAUTH}\n20261016090000_workspace_account_manager_pilot\n${INGEST}\n${PULL}\n`, 'recorded despite the failed probe');
   assert.equal(bash(dir, images, 'if missing=$(image_meets_floor broken:1); then echo allowed; else echo "blocked $missing"; fi'), `blocked ${CHAT}\n`);
   assert.equal(bash(dir, images, 'image_has_migration broken:1 x && echo 0 || echo $?'), '2\n');
 });
@@ -152,9 +153,9 @@ test('pilot confidentiality floor blocks otherwise chat-compatible older image',
 });
 
 
-test('combined rollback floor requires chat, OAuth binding, private pilot and Gmail receipt migrations in every serving image', () => {
+test('combined rollback floor requires chat, OAuth binding, private pilot Gmail receipt and saved-report provenance migrations in every serving image', () => {
   const { dir, images } = fixture();
-  const all = [CHAT, OAUTH, '20261016090000_workspace_account_manager_pilot', INGEST];
+  const all = [CHAT, OAUTH, '20261016090000_workspace_account_manager_pilot', INGEST, PULL];
   fs.appendFileSync(images, all.map(name => `complete:1 /app/prisma/migrations/${name}\n`).join(''));
   for (let index = 0; index < all.length; index++) {
     fs.appendFileSync(images, all.filter(name => name !== all[index]).map(name => `missing:${index} /app/prisma/migrations/${name}\n`).join(''));

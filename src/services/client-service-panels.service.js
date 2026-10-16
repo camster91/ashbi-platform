@@ -1,3 +1,4 @@
+import { isOpenSeoCredential } from './openseo-report-reader.js';
 import { z } from 'zod';
 import { ToolError, recordNotFound } from '../ai/tools/registry.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
@@ -10,7 +11,7 @@ export const servicePanelParamsSchema = z.object({ clientId: opaque }).strict();
 export const serviceMappingParamsSchema = servicePanelParamsSchema.extend({ mappingId: opaque });
 export const servicePanelQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(50).default(20) }).strict();
 export const serviceMappingCreateSchema = z.object({ provider: z.literal('OPENSEO'), providerProjectId: opaque, displayLabel: plain(100) }).strict();
-export const serviceMappingUpdateSchema = z.object({ revision: z.number().int().min(1).max(2147483646), displayLabel: plain(100), enabled: z.boolean() }).strict();
+export const serviceMappingUpdateSchema = z.object({ revision: z.number().int().min(1).max(2147483646), displayLabel: plain(100), enabled: z.boolean(), credentialId: opaque.nullable().optional() }).strict();
 export const serviceSnapshotSchema = z.object({
   mappingRevision: z.number().int().min(1).max(2147483646), providerProjectIdMatch: opaque,
   outcome: z.enum(['OK', 'EMPTY', 'UNAVAILABLE']), complete: z.boolean(),
@@ -42,26 +43,28 @@ async function audit(tx, actor, row, action, metadata = {}) {
     entityId: row.id, action: `client_service_project.${action}`, metadata: { clientId: row.clientId, revision: row.revision, ...metadata } });
   if (!saved) fail('SERVICE_PANEL_AUDIT_UNAVAILABLE', 'Saved reports could not be updated with an audit record.', 503);
 }
-function projection(row, limit, now) {
+function projection(row, limit, now, actor) {
   const hasMoreReports = row.reports.length > limit;
   // A Hub-storage-ordered bounded page cannot establish the newest source date
   // for the whole mapping. Keep completeness uncertainty explicit.
-  const latest = hasMoreReports ? null : row.reports.reduce((result, report) => report.sourceReportedAt && (!result || report.sourceReportedAt > result) ? report.sourceReportedAt : result, null);
+  const latest = hasMoreReports || row.reports.some(report => !report.sourceReportedAt) ? null : row.reports.reduce((result, report) => report.sourceReportedAt && (!result || report.sourceReportedAt > result) ? report.sourceReportedAt : result, null);
   return { id: row.id, provider: row.provider, providerProjectId: row.providerProjectId, displayLabel: row.displayLabel,
     enabled: row.enabled, revision: row.revision, status: !row.lastAttemptAt ? 'never-fetched' : row.lastOutcome === 'UNAVAILABLE' ? 'unavailable' : row.reports.length ? 'ready' : 'empty',
+    ...(actor.role === 'ADMIN' ? { credentialId: row.credentialId ?? null, refreshConfigured: !!row.credential && isOpenSeoCredential(row.credential) } : {}),
+    refreshOutcome: row.refreshOutcome ?? null, refreshPartial: row.refreshPartial ?? null, providerTotalCount: row.providerTotalCount ?? null, lastRefreshedAt: row.lastRefreshedAt ?? null,
     lastAttemptAt: row.lastAttemptAt, lastSuccessAt: row.lastSuccessAt, lastOutcome: row.lastOutcome, failureCode: row.failureCode,
     stale: !row.lastSuccessAt || now - new Date(row.lastSuccessAt).getTime() > 86400000,
     sourceObservedAt: latest, sourceFreshness: latest ? (now - new Date(latest).getTime() > 86400000 ? 'stale' : 'recent') : 'unknown', hasMoreReports,
     reports: row.reports.slice(0, limit).map(report => ({ id: report.id, providerReportId: report.providerReportId,
-      title: report.title, summary: report.summary, sourceReportedAt: report.sourceReportedAt, hubStoredAt: report.hubStoredAt, sourceUrl: null })) };
+      title: report.title, summary: report.summary, provenance: report.provenance ?? 'ADMIN_PUBLISHED_SNAPSHOT', providerEditedAt: report.providerEditedAt ?? null, sourceReportedAt: report.sourceReportedAt, hubStoredAt: report.hubStoredAt, sourceUrl: null })) };
 }
 export async function readClientServicePanels(prisma, user, clientId, query = {}) {
   ({ clientId } = parse(servicePanelParamsSchema, { clientId })); const { limit } = parse(servicePanelQuerySchema, query);
   const db = scope(prisma, user); const actor = await authorizeClientAgentStaff(db, user, clientId);
   const projects = await db.clientServiceProject.findMany({ where: { organizationId: actor.organizationId, clientId, ...(actor.role === 'ADMIN' ? {} : { enabled: true }) },
-    orderBy: { id: 'asc' }, take: 51, include: { reports: { where: { organizationId: actor.organizationId, clientId }, orderBy: [{ hubStoredAt: 'desc' }, { id: 'asc' }], take: limit + 1 } } });
-  return { clientId, source: 'ADMIN_PUBLISHED_SNAPSHOT', staleAfterHours: 24, hasMoreProjects: projects.length > 50,
-    projects: projects.slice(0, 50).map(row => projection(row, limit, Date.now())) };
+    orderBy: { id: 'asc' }, take: 51, include: { ...(actor.role === 'ADMIN' ? { credential: { select: { id: true, username: true, url: true, projectId: true } } } : {}), reports: { where: { organizationId: actor.organizationId, clientId }, orderBy: [{ hubStoredAt: 'desc' }, { id: 'asc' }], take: limit + 1 } } });
+  return { clientId, source: 'HUB_SAVED_REPORTS', staleAfterHours: 24, hasMoreProjects: projects.length > 50,
+    projects: projects.slice(0, 50).map(row => projection(row, limit, Date.now(), actor)) };
 }
 async function mutate(prisma, user, clientId, fn) {
   ({ clientId } = parse(servicePanelParamsSchema, { clientId })); const db = scope(prisma, user);
@@ -80,6 +83,10 @@ export async function createClientServiceMapping(prisma, user, clientId, input) 
 export async function updateClientServiceMapping(prisma, user, clientId, mappingId, input) {
   ({ mappingId } = parse(serviceMappingParamsSchema, { clientId, mappingId })); const { revision, ...fields } = parse(serviceMappingUpdateSchema, input);
   return mutate(prisma, user, clientId, async (tx, actor) => {
+    if (fields.credentialId) {
+      const credential = await tx.credential.findFirst({ where: { id: fields.credentialId, organizationId: actor.organizationId, clientId, projectId: null } });
+      if (!credential || credential.organizationId !== actor.organizationId || credential.clientId !== clientId || !isOpenSeoCredential(credential)) fail('INVALID_INPUT', 'Select a client-owned OpenSEO public proxy credential.');
+    }
     const where = { id: mappingId, clientId, organizationId: actor.organizationId, revision };
     if ((await tx.clientServiceProject.updateMany({ where, data: { ...fields, revision: { increment: 1 } } })).count !== 1) conflict();
     const row = await tx.clientServiceProject.findFirst({ where: { id: mappingId, organizationId: actor.organizationId, clientId } });
@@ -111,7 +118,7 @@ export async function publishClientServiceSnapshotInTransaction(tx, identity, cl
       ...(fields.reports.length ? { providerReportId: { notIn: fields.reports.map(row => row.providerReportId) } } : {}) } });
     for (const report of fields.reports) {
       const reportWhere = { organizationId: actor.organizationId, clientId, mappingId, providerReportId: report.providerReportId };
-      const data = { title: report.title, summary: report.summary, sourceReportedAt: report.sourceReportedAt ? new Date(report.sourceReportedAt) : null, hubStoredAt: now };
+      const data = { title: report.title, summary: report.summary, provenance: 'ADMIN_PUBLISHED_SNAPSHOT', providerEditedAt: null, sourceReportedAt: report.sourceReportedAt ? new Date(report.sourceReportedAt) : null, hubStoredAt: now };
       const existing = await tx.clientServiceReport.findFirst({ where: reportWhere, select: { id: true } });
       if (existing) await tx.clientServiceReport.updateMany({ where: { ...reportWhere, id: existing.id }, data });
       else await tx.clientServiceReport.create({ data: { ...reportWhere, ...data } });

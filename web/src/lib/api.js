@@ -337,6 +337,8 @@ export const api = {
     request(`/clients/${id}`),
   listClientCommunications: (id, params = {}) => request(`/client-communications/${encodeURIComponent(id)}?${new URLSearchParams(Object.entries(params).filter(([, value]) => value != null))}`),
   getClientCommunication: (clientId, source, id) => request(`/client-communications/${encodeURIComponent(clientId)}/${encodeURIComponent(source)}/${encodeURIComponent(id)}`),
+  getClientServiceCredentials: (clientId) => request(`/clients/${encodeURIComponent(clientId)}/service-panel-credentials`, { silent: true, notifyUnauthorized: true }),
+  refreshClientServiceReports: (clientId, mappingId, data) => request(`/clients/${encodeURIComponent(clientId)}/service-panels/${encodeURIComponent(mappingId)}/refresh`, { method: 'POST', body: data, silent: true, notifyUnauthorized: true }),
   getClientServicePanels: (clientId) => request(`/clients/${encodeURIComponent(clientId)}/service-panels`, { silent: true, notifyUnauthorized: true }),
   createClientServiceMapping: (clientId, data) => request(`/clients/${encodeURIComponent(clientId)}/service-panels`, { method: 'POST', body: data, silent: true, notifyUnauthorized: true }),
   updateClientServiceMapping: (clientId, mappingId, data) => request(`/clients/${encodeURIComponent(clientId)}/service-panels/${encodeURIComponent(mappingId)}`, { method: 'PATCH', body: data, silent: true, notifyUnauthorized: true }),

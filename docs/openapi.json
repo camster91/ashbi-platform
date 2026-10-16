@@ -10639,6 +10639,7 @@
                 "workspace_agent.suppressed",
                 "client_service_project.created",
                 "client_service_project.updated",
+                "client_service_project.refreshed",
                 "client_service_project.published",
                 "client_agent_conversation.created",
                 "client_agent_conversation.archived",
@@ -18205,6 +18206,61 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/clients/{clientId}/service-panel-credentials": {
+      "get": {
+        "operationId": "get_api_clients_clientId_service_panel_credentials",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/clients/:clientId/service-panel-credentials",
+        "tags": [
+          "clients"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/clients/{clientId}/service-panels": {
       "get": {
         "operationId": "get_api_clients_clientId_service_panels",
@@ -18390,6 +18446,19 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "credentialId": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "pattern": "^[a-zA-Z0-9_-]+$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "displayLabel": {
                     "maxLength": 100,
                     "minLength": 1,
@@ -18447,6 +18516,93 @@
           }
         ],
         "summary": "PATCH /api/clients/:clientId/service-panels/:mappingId",
+        "tags": [
+          "clients"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/clients/{clientId}/service-panels/{mappingId}/refresh": {
+      "post": {
+        "operationId": "post_api_clients_clientId_service_panels_mappingId_refresh",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "mappingId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "mappingRevision": {
+                    "maximum": 2147483646,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "mappingRevision"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/clients/:clientId/service-panels/:mappingId/refresh",
         "tags": [
           "clients"
         ],

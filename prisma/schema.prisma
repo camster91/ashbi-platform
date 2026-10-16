@@ -1590,9 +1590,12 @@ model Credential {
   client  Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  serviceProjects ClientServiceProject[]
+
   @@index([clientId])
   @@index([projectId])
   @@index([organizationId])
+  @@unique([id, organizationId, clientId], map: "credentials_id_org_client_key")
   @@map("credentials")
 }
 
@@ -3386,6 +3389,13 @@ model ClientServiceProject {
   updatedAt DateTime @updatedAt
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client Client @relation(fields: [clientId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  credentialId String?
+  credential Credential? @relation(fields: [credentialId, organizationId, clientId], references: [id, organizationId, clientId], onDelete: Restrict, onUpdate: Restrict, map: "service_project_credential_fkey")
+  refreshOutcome String?
+  refreshPartial Boolean?
+  providerTotalCount Int?
+  lastRefreshedAt DateTime?
+  @@index([credentialId, organizationId, clientId], map: "service_project_credential_idx")
   reports ClientServiceReport[]
   @@unique([organizationId, clientId, provider, providerProjectId], map: "service_project_provider_key")
   @@unique([id, organizationId, clientId])
@@ -3403,6 +3413,8 @@ model ClientServiceReport {
   title String
   summary String
   sourceReportedAt DateTime?
+  providerEditedAt DateTime?
+  provenance String @default("ADMIN_PUBLISHED_SNAPSHOT")
   hubStoredAt DateTime @default(now())
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client Client @relation(fields: [clientId, organizationId], references: [id, organizationId], onDelete: Cascade)

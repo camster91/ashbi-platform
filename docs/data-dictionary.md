@@ -47,12 +47,12 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [ClientEmbedding](#model-clientembedding) | `client_embeddings` | no | no | 10 |
 | [ClientInvitation](#model-clientinvitation) | `client_invitations` | no | no | 8 |
 | [ClientPortalLinkRedemption](#model-clientportallinkredemption) | `client_portal_link_redemptions` | no | no | 4 |
-| [ClientServiceProject](#model-clientserviceproject) | `client_service_projects` | yes | no | 17 |
-| [ClientServiceReport](#model-clientservicereport) | `client_service_reports` | yes | no | 12 |
+| [ClientServiceProject](#model-clientserviceproject) | `client_service_projects` | yes | no | 23 |
+| [ClientServiceReport](#model-clientservicereport) | `client_service_reports` | yes | no | 14 |
 | [Contact](#model-contact) | `contacts` | no | no | 9 |
 | [Contract](#model-contract) | `contracts` | no | yes | 31 |
 | [CreativeBrief](#model-creativebrief) | `creative_briefs` | no | no | 16 |
-| [Credential](#model-credential) | `credentials` | yes | no | 16 |
+| [Credential](#model-credential) | `credentials` | yes | no | 17 |
 | [CredentialAccessAudit](#model-credentialaccessaudit) | `credential_access_audits` | yes | no | 11 |
 | [DocumentNumberSequence](#model-documentnumbersequence) | `document_number_sequences` | yes | no | 6 |
 | [DomainEvent](#model-domainevent) | `domain_events` | yes | no | 23 |
@@ -910,6 +910,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Tenant-scoped: yes (`organizationId`)
 - Soft-deletable: no
 - Constraints and indexes:
+  - `@@index([credentialId, organizationId, clientId], map: "service_project_credential_idx")`
   - `@@unique([organizationId, clientId, provider, providerProjectId], map: "service_project_provider_key")`
   - `@@unique([id, organizationId, clientId])`
   - `@@index([organizationId, clientId, enabled])`
@@ -933,6 +934,12 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `client` | Client | required |  | → Client, via (clientId, organizationId) → (id, organizationId), onDelete Cascade |  |
+| `credentialId` | String | optional |  |  |  |
+| `credential` | Credential | optional |  | → Credential, via (credentialId, organizationId, clientId) → (id, organizationId, clientId), onDelete Restrict |  |
+| `refreshOutcome` | String | optional |  |  |  |
+| `refreshPartial` | Boolean | optional |  |  |  |
+| `providerTotalCount` | Int | optional |  |  |  |
+| `lastRefreshedAt` | DateTime | optional |  |  |  |
 | `reports` | ClientServiceReport[] | list, required |  | → ClientServiceReport |  |
 
 ### Model ClientServiceReport
@@ -956,6 +963,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `title` | String | required |  |  |  |
 | `summary` | String | required |  |  |  |
 | `sourceReportedAt` | DateTime | optional |  |  |  |
+| `providerEditedAt` | DateTime | optional |  |  |  |
+| `provenance` | String | required | `"ADMIN_PUBLISHED_SNAPSHOT"` |  |  |
 | `hubStoredAt` | DateTime | required | `now()` |  |  |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `client` | Client | required |  | → Client, via (clientId, organizationId) → (id, organizationId), onDelete Cascade |  |
@@ -1062,6 +1071,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([clientId])`
   - `@@index([projectId])`
   - `@@index([organizationId])`
+  - `@@unique([id, organizationId, clientId], map: "credentials_id_org_client_key")`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1081,6 +1091,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `client` | Client | optional |  | → Client, via (clientId) → (id), onDelete Cascade |  |
 | `project` | Project | optional |  | → Project, via (projectId) → (id), onDelete Cascade |  |
+| `serviceProjects` | ClientServiceProject[] | list, required |  | → ClientServiceProject |  |
 
 ### Model CredentialAccessAudit
 

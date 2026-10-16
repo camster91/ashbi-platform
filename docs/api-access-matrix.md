@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 31 |
 | public | 51 |
 | recent-auth + staff | 9 |
-| staff | 465 |
+| staff | 467 |
 | staff (inline) | 1 |
-| **total** | 668 |
+| **total** | 670 |
 
 ## Routes by prefix
 
@@ -402,9 +402,11 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/clients/:clientId/assistant/task-actions/:actionId/reject` | recent-auth + staff | scoped |  |
 | GET | `/api/clients/:clientId/assistant/task-actions/by-intent/:key` | staff | scoped |  |
 | POST | `/api/clients/:clientId/assistant/task-actions/by-intent/:key/reject` | recent-auth + staff | scoped |  |
+| GET | `/api/clients/:clientId/service-panel-credentials` | staff | scoped |  |
 | GET | `/api/clients/:clientId/service-panels` | staff | scoped |  |
 | POST | `/api/clients/:clientId/service-panels` | staff | scoped |  |
 | PATCH | `/api/clients/:clientId/service-panels/:mappingId` | staff | scoped |  |
+| POST | `/api/clients/:clientId/service-panels/:mappingId/refresh` | staff | scoped |  |
 | POST | `/api/clients/:clientId/service-panels/:mappingId/snapshots` | staff | scoped |  |
 | GET | `/api/clients/:id` | staff | scoped |  |
 | PUT | `/api/clients/:id` | staff | scoped |  |

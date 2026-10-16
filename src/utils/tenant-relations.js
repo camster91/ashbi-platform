@@ -30,7 +30,7 @@ export const COMPOSITE_TENANT_RELATIONS = Object.freeze({
   workspaceaccountmanagerinvocation: { binding: ['bindingId', 'organizationId'], sourceMessage: ['sourceMessageId', 'organizationId'], requestedBy: ['requestedById', 'organizationId'], conversation: ['conversationId', 'organizationId'], run: ['runId', 'organizationId'] },
 
   gmailsendreceipt: { user: ['userId', 'organizationId'] },
-  clientserviceproject: { client: ['clientId', 'organizationId'] },
+  clientserviceproject: { client: ['clientId', 'organizationId'], credential: ['credentialId', 'organizationId', 'clientId'] },
   clientservicereport: { client: ['clientId', 'organizationId'], mapping: ['mappingId', 'organizationId', 'clientId'] },
   clientagentprofile: { createdBy: ['createdById', 'organizationId'], updatedBy: ['updatedById', 'organizationId'] },
   clientagentconversation: { createdBy: ['createdById', 'organizationId'], sourceChannel: ['sourceChannelId', 'organizationId'], sourceBinding: ['sourceBindingId', 'organizationId'] },
@@ -70,7 +70,7 @@ export function tenantRelationMap() {
       if (field.kind !== 'object') continue;
       const fk = scalars.has(`${field.name}Id`) ? `${field.name}Id` : null;
       const fkFields = COMPOSITE_TENANT_RELATIONS[model.name.toLowerCase()]?.[field.name] ?? (fk ? [fk] : []);
-      if (fkFields.some(key => !scalars.has(key)) || (fkFields.length > 1 && (fkFields[0] !== fk || fkFields[1] !== 'organizationId' || !['User', 'Client', 'WorkspaceCollection', 'WorkspaceChatChannel', 'ClientAgentConversation', 'ClientServiceProject', 'Project', 'ClientAgentProfile', 'WorkspaceAccountManagerBinding', 'WorkspaceChatMessage', 'ClientAgentRun'].includes(field.type) || (fkFields.length > 2 && !(model.name === 'ClientServiceReport' && field.name === 'mapping' && fkFields.length === 3 && fkFields[2] === 'clientId'))))) throw new Error('Tenancy Error: unsupported composite relation');
+      if (fkFields.some(key => !scalars.has(key)) || (fkFields.length > 1 && (fkFields[0] !== fk || fkFields[1] !== 'organizationId' || !['User', 'Client', 'WorkspaceCollection', 'WorkspaceChatChannel', 'ClientAgentConversation', 'ClientServiceProject', 'Credential', 'Project', 'ClientAgentProfile', 'WorkspaceAccountManagerBinding', 'WorkspaceChatMessage', 'ClientAgentRun'].includes(field.type) || (fkFields.length > 2 && !(((model.name === 'ClientServiceReport' && field.name === 'mapping') || (model.name === 'ClientServiceProject' && field.name === 'credential')) && fkFields.length === 3 && fkFields[2] === 'clientId'))))) throw new Error('Tenancy Error: unsupported composite relation');
       relations[field.name] = { target: String(field.type).toLowerCase(), fk, fkFields };
       if (fk) foreignKeys[fk] = field.name;
     }

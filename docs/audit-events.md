@@ -329,3 +329,5 @@ and `portal_handoff.requeued` commit with the associated request or transition.
 Metadata contains project/client IDs, status and revision; requeue also records
 its bounded reason enum. Client questions, intent keys and digests are excluded.
 An audit failure rolls back the state change. See [portal-human-handoffs.md](portal-human-handoffs.md).
+
+`client_service_project.refreshed` records an explicit administrator read of existing OpenSEO reports. It contains only client ID, mapping revision, outcome, report count and partial flag. The report upserts, mapping observation and audit record commit atomically; credentials, provider response bodies and challenges are excluded.

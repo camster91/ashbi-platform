@@ -32,6 +32,7 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'workspace_agent.suppressed': { entityType: 'client_agent_run', metadata: ['channelId', 'runId', 'status'] },
   'client_service_project.created': { entityType: 'client_service_project', metadata: ['clientId', 'revision', 'enabled'] },
   'client_service_project.updated': { entityType: 'client_service_project', metadata: ['clientId', 'revision', 'enabled'] },
+  'client_service_project.refreshed': { entityType: 'client_service_project', metadata: ['clientId', 'revision', 'outcome', 'reportCount', 'partial'] },
   'client_service_project.published': { entityType: 'client_service_project', metadata: ['clientId', 'revision', 'outcome', 'reportCount', 'complete'] },
   'client_agent_conversation.created': { entityType: 'client_agent_conversation', metadata: ['clientId', 'revision'] },
   'client_agent_conversation.archived': { entityType: 'client_agent_conversation', metadata: ['clientId', 'revision'] },
