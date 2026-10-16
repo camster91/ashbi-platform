@@ -1710,7 +1710,7 @@ export const attachmentCreateSchema = z.object({
   // which has separate validation (see ALLOWED_EXTENSIONS in schemas.js)
   filename: z.string().min(1).max(255),
   mimeType: z.string().min(1).max(100),
-  size: z.number().int().positive().max(50 * 1024 * 1024), // 50MB
+  size: z.number().int().positive().max(MAX_UPLOAD_SIZE),
   entityType: z.enum(['CLIENT', 'PROJECT', 'TASK', 'INVOICE', 'CONTRACT', 'PROPOSAL', 'THREAD', 'MESSAGE', 'NOTE']),
   entityId: cuidId,
 });

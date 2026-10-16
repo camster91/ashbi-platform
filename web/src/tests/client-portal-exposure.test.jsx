@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { clientPortalSource } from './helpers/clientPortalSource';
 
 // The client-facing views show no internal health rating, AI summary, pinned
@@ -45,6 +45,15 @@ describe('client portal project detail', () => {
     vi.stubGlobal('fetch', fetchMock);
   });
   afterEach(() => vi.unstubAllGlobals());
+
+  it('prepares an untyped multi-period original from the project Documents view', async () => {
+    render(<ProjectDetail projectId="p-1" token={null} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole('tab', {name:'Documents'}));
+    fireEvent.change(screen.getByLabelText('Choose project documents to upload'),{target:{files:[new File(['original'],'design.final.v2.psd')]}});
+    await waitFor(()=>expect(fetchMock.mock.calls.some(([url,options])=>String(url).endsWith('/upload')&&options?.method==='POST')).toBe(true));
+    const sent=fetchMock.mock.calls.find(([url,options])=>String(url).endsWith('/upload')&&options?.method==='POST')[1].body.get('file');
+    expect(sent.name).toBe('design.final.v2.psd');expect(sent.type).toBe('image/vnd.adobe.photoshop');expect(sent.size).toBe(8);
+  });
 
   it('shows a "Waiting on you" column and every other status column', async () => {
     render(<ProjectDetail projectId="p-1" token={null} onBack={() => {}} />);

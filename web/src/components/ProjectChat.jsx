@@ -385,7 +385,7 @@ export default function ProjectChat({ projectId }) {
             {sendMutation.isPending ? '...' : 'Send'}
           </button>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">Paste or drop screenshots and files here (up to {draft.max}, 50 MB each).</p>
+        <p className="mt-1 text-xs text-muted-foreground">Paste or drop screenshots and files here (up to {draft.max}, 64 MiB each).</p>
         {sendError && <div role="alert" className="mt-2 flex items-center justify-between gap-2 text-sm text-destructive"><span>{sendError}</span><button type="button" onClick={sendCurrent} disabled={sendMutation.isPending || !canSend} className="underline">Try again</button></div>}
       </form>
       {capture.element}

@@ -1,5 +1,15 @@
 # Internal pilot launch status
 
+## Dated verification — October 16, 2026, 13:25 UTC
+
+[Issue #565](https://github.com/camster91/ashbi-platform/issues/565) owns the current queue. At this checkpoint, [#648](https://github.com/camster91/ashbi-platform/pull/648) is deployed as **1cee30fe085bb3e000d37e05a8bba7ac9430f093**, with exact healthy API/worker engine **sha256:95a4eeda673c4d08ea7ad8a9266ad55f4ef4bbe58edcc12da7db67ae785110e4** and public/core readiness verified. All required PR/main CI, the real queue and eleven portal PostgreSQL fixtures, hosted artifact verification, fresh encrypted off-server-verified backup and reviewed SSH release passed. Changed-feature read-only API QA passed **34/34**, with both normal QA logouts verified. Empty observed queues do not establish populated live boundaries.
+
+Separately, wiki-only synthetic API acceptance on an existing TEAM QA account proved the onboarding document fact changed from false to true after exactly one authored wiki page, without an authored note. The page was retained archived through revision-checked cleanup and logout was verified. Earlier helper failures and the first actor's existing-note stop remain recorded; no onboarding reset or note deletion was used. This does not establish real-team/browser/manual assistive-technology acceptance. Evidence: outputs/wiki-only-1cee-qa2-acceptance.json and outputs/wiki-only-1cee-live-evidence-review.md in the execution record.
+
+Original-file compatibility is being extended in this change to bounded **64 MiB** uploads, HEIC/HEIF, PSD, JSON, strict BOM-marked UTF-16 CSV and safe multi-period original names. These are code-present changes pending release and live original-byte roundtrip verification; they are not capabilities verified on the deployed 1cee revision. Stored bytes, SHA-256, current tenant/visibility/scanning guards and authenticated downloads remain the preservation contract. Two corrupt source captures remain held; upload admission is not an archival integrity certificate. Sources remain primary until company input is reconciled. Actual ChatGPT consent, configured model/mailbox/client workflows, team use and operational alert ownership/destination remain open.
+
+Earlier checkpoints below retain their own release attribution and pending gates.
+
 ## Dated verification — October 16, 2026, 12:04 UTC
 
 [Issue #565](https://github.com/camster91/ashbi-platform/issues/565) owns the current execution queue. This is a dated evidence record, not a continuously updated serving-revision claim. Earlier checkpoints below retain their original failures, pending gates and release attribution; read them as history.

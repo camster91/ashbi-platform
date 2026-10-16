@@ -38,7 +38,7 @@ import {
 const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
 const loomFixture = path.join(fixtures, 'loom-import-basic');
 const markupFixture = path.join(fixtures, 'markup-import-basic');
-const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+import { MAX_UPLOAD_SIZE } from '../../security/file-upload-policy.js';
 
 function tempCopy(fixture) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-operator-import-'));
@@ -107,13 +107,15 @@ test('inspectMediaFile applies the upload policy without reading oversized files
     fs.writeFileSync(path.join(directory, 'fake.webm'), 'text, not EBML');
     fs.writeFileSync(path.join(directory, 'clip.mov'), 'x');
     fs.writeFileSync(path.join(directory, 'double.v2.mp4'), fs.readFileSync(path.join(loomFixture, 'kickoff.mp4')));
+    fs.writeFileSync(path.join(directory, 'double.exe.mp4'), fs.readFileSync(path.join(loomFixture, 'kickoff.mp4')));
     fs.symlinkSync(path.join(directory, 'ok.mp4'), path.join(directory, 'link.mp4'));
     const code = async (name) => (await inspectMediaFile(directory, name, LOOM_FILE_TYPES)).problem?.code ?? null;
     assert.equal(await code('ok.mp4'), null);
     assert.equal(await code('big.mp4'), 'FILE_TOO_LARGE');
     assert.equal(await code('fake.webm'), 'INVALID_CONTENT');
     assert.equal(await code('clip.mov'), 'UNSUPPORTED_TYPE');
-    assert.equal(await code('double.v2.mp4'), 'INVALID_CONTENT');
+    assert.equal(await code('double.v2.mp4'), null, 'ordinary original basename is preserved');
+    assert.equal(await code('double.exe.mp4'), 'INVALID_CONTENT', 'dangerous embedded extension remains refused');
     assert.equal(await code('link.mp4'), 'UNSAFE_PATH');
     assert.equal(await code('absent.mp4'), 'MISSING_FILE');
     const ok = await inspectMediaFile(directory, 'ok.mp4', LOOM_FILE_TYPES);

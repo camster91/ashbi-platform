@@ -216,7 +216,7 @@ export default function BrandSettings() {
                 )}
               </div>
               <div>
-                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+                <input ref={fileInputRef} type="file" accept=".png,.jpg,.jpeg,.webp" onChange={handleLogoUpload} className="hidden" />
                 <Button
                   variant="outline"
                   onClick={() => fileInputRef.current?.click()}
@@ -225,7 +225,7 @@ export default function BrandSettings() {
                 >
                   {uploading ? 'Uploading...' : 'Upload Logo'}
                 </Button>
-                <p className="text-xs text-muted-foreground mt-2">PNG, JPEG, SVG, or WebP. Max 50MB.</p>
+                <p className="text-xs text-muted-foreground mt-2">PNG, JPEG, or WebP. Max 64 MiB.</p>
               </div>
             </div>
           </Card>

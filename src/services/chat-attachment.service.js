@@ -73,7 +73,7 @@ export function sendChatAttachmentError(reply, err) {
 }
 
 /**
- * Validate a multipart file (extension + MIME + magic bytes, 50 MB) and write
+ * Validate a multipart file (extension + MIME + magic bytes, 64 MiB) and write
  * it under a random name. Returns the stored-file fields of an Attachment row
  * (with the SHA-256 of the bytes written, hashed from the same buffer), or
  * `{ error, rejected }` when the file is refused: `rejected` is what the

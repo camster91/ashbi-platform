@@ -59,7 +59,7 @@ must contain every required column; extra columns are reported
 Recordings must be **MP4** (Loom's download format) or **WebM**, and pass the
 same upload policy as every upload ([upload-security.md](upload-security.md)):
 extension, MIME type and file signature must agree, and each file is at most
-**50 MB**. The limit is unchanged for imports; larger recordings are reported
+**64 MiB**. Imports use the shared 67,108,864-byte upload limit; larger recordings are reported
 and not imported (trim or re-export them, or keep them in Loom).
 
 ## Mapping
@@ -105,7 +105,7 @@ code.
 | Recording or row changed since its import (`SOURCE_CHANGED`) | `errors` | yes |
 | Recording imported into a different project than the manifest now says (`PROJECT_MAPPING_CHANGED`) | `errors` | yes |
 | File changed between inspection and storage (`FILE_CHANGED_DURING_IMPORT`) | `errors` | yes |
-| File over 50 MB (`FILE_TOO_LARGE`) | `unsupported` | no: reported, not imported |
+| File over 64 MiB (`FILE_TOO_LARGE`) | `unsupported` | no: reported, not imported |
 | Not MP4/WebM (`UNSUPPORTED_TYPE`) | `unsupported` | no: reported, not imported |
 | Signature/MIME/extension mismatch, e.g. a saved error page or a double extension (`INVALID_CONTENT`) | `unsupported` | no: reported, not imported |
 | Owner email blank or not an active staff user (`UNKNOWN_OWNER`, plus `ATTRIBUTED_TO_OPERATOR` per row) | `owners.unmapped`, `warnings` | no: imported, attributed to the operator |
@@ -217,7 +217,7 @@ error) is listed by path in the command's error message; delete it by hand.
   recording at `loom_url`. The URL and timestamp are recorded as provenance.
 - Loom comments, reactions, transcripts, chapters, view counts and call-to-
   action links are not imported.
-- Recordings over 50 MB are not imported (the limit is deliberately kept).
+- Recordings over 64 MiB are not imported (the limit is deliberately kept).
 - Changes after import are conflicts, not updates. To take a newer version,
   roll back the run and import again.
 - An attachment deleted in the Hub after import is never re-imported, even

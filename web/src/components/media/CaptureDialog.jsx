@@ -8,7 +8,7 @@ import { formatDuration } from '../../lib/call-resilience';
 import { formatBytes } from '../../lib/upload';
 
 export const COUNTDOWN_SECONDS = 3;
-// Chat recordings aim for about 1.2 Mbit/s so a 50 MB clip lasts several
+// Chat recordings aim for about 1.2 Mbit/s so a 64 MiB clip lasts several
 // minutes (screen content compresses well at this rate).
 const CHAT_RECORDING_BITRATE = { video: 1_200_000, audio: 96_000 };
 
@@ -130,7 +130,7 @@ function RecordPanel({ support, onAttach, onCancel, controlRef, onActiveChange }
   const finish = useCallback(({ blob, reason, overLimit, mimeType, durationMs }) => {
     release();
     controllerRef.current = null;
-    if (reason === 'size') setNotice('The recording reached the 50 MB upload limit, so it stopped.');
+    if (reason === 'size') setNotice('The recording reached the 64 MiB upload limit, so it stopped.');
     else if (reason === 'duration') setNotice(`The recording reached the ${Math.round(MAX_RECORDING_DURATION_MS / 60000)}-minute limit, so it stopped.`);
     else if (reason === 'ended') setNotice('Screen sharing ended, so the recording stopped.');
     if (!blob.size) {
@@ -139,7 +139,7 @@ function RecordPanel({ support, onAttach, onCancel, controlRef, onActiveChange }
       return;
     }
     if (overLimit) {
-      setError('This recording is over the 50 MB upload limit. Record a shorter clip.');
+      setError('This recording is over the 64 MiB upload limit. Record a shorter clip.');
       setPhase('setup');
       return;
     }
@@ -272,10 +272,10 @@ function RecordPanel({ support, onAttach, onCancel, controlRef, onActiveChange }
               {formatDuration(progress.elapsedMs)} <span className="text-sm font-normal text-muted-foreground">/ {formatDuration(MAX_RECORDING_DURATION_MS)} max</span>
             </p>
             <div>
-              <div role="progressbar" aria-label="Recording size" aria-valuemin={0} aria-valuemax={100} aria-valuenow={sizePercent} aria-valuetext={`${formatBytes(progress.bytes)} of 50 MB`} className="h-2 w-full overflow-hidden rounded bg-muted">
+              <div role="progressbar" aria-label="Recording size" aria-valuemin={0} aria-valuemax={100} aria-valuenow={sizePercent} aria-valuetext={`${formatBytes(progress.bytes)} of 64 MiB`} className="h-2 w-full overflow-hidden rounded bg-muted">
                 <div className={`h-full ${sizePercent > 85 ? 'bg-destructive' : 'bg-primary'}`} style={{ width: `${sizePercent}%` }} />
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">{formatBytes(progress.bytes)} of 50 MB · {micActive ? <><Mic className="inline h-3 w-3" aria-hidden="true" /> microphone on</> : <><MicOff className="inline h-3 w-3" aria-hidden="true" /> no microphone</>}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{formatBytes(progress.bytes)} of 64 MiB · {micActive ? <><Mic className="inline h-3 w-3" aria-hidden="true" /> microphone on</> : <><MicOff className="inline h-3 w-3" aria-hidden="true" /> no microphone</>}</p>
             </div>
           </div>
         )}
@@ -314,7 +314,7 @@ function RecordPanel({ support, onAttach, onCancel, controlRef, onActiveChange }
         <Mic className="h-4 w-4" aria-hidden="true" /> Record my microphone
       </label>
       <p className="text-xs text-muted-foreground">
-        Recordings stop automatically at {Math.round(MAX_RECORDING_DURATION_MS / 60000)} minutes or 50 MB. Tab or system audio is included when your browser offers it. You can preview before attaching.
+        Recordings stop automatically at {Math.round(MAX_RECORDING_DURATION_MS / 60000)} minutes or 64 MiB. Tab or system audio is included when your browser offers it. You can preview before attaching.
       </p>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {notice && <p className="text-sm text-muted-foreground">{notice}</p>}

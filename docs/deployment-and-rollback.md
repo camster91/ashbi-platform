@@ -137,7 +137,7 @@ future migration needs longer (for example
 `REQUEST_TIMEOUT_MS` (default 120000, clamped to 10s-15min) is Node's
 `requestTimeout`: the time a client has to finish *sending* a request, which
 closes slow-body connections. It does not cap handler time (the AI session has
-its own 90s deadline), and it must stay long enough for 50 MB uploads on slow
+its own 90s deadline), and it must stay long enough for 64 MiB uploads on slow
 links. Job enqueues fail within 5s with 503 `QUEUE_UNAVAILABLE` while Redis is
 down instead of hanging the request.
 

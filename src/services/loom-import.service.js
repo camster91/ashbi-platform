@@ -58,7 +58,7 @@ const DESCRIPTION_MAX = 5000;
 const STAFF_ROLES = new Set(['ADMIN', 'TEAM']);
 
 // Findings that skip one recording but do not block the run: the file is
-// reported and not imported (the owner keeps the 50 MB limit).
+// reported and not imported (the owner keeps the 64 MiB limit).
 const SKIPPED_FILE_CODES = new Set(['UNSUPPORTED_TYPE', 'FILE_TOO_LARGE', 'INVALID_CONTENT']);
 
 export { OperatorImportBlockedError as LoomImportBlockedError, OperatorImportError as LoomImportError };

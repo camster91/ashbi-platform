@@ -1,3 +1,4 @@
+import { prepareUploadFile } from '../../lib/upload';
 import { useState, useEffect, useRef } from 'react';
 import { preferredScrollBehavior } from '../../lib/motion';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -92,7 +93,9 @@ export default function ProjectDetail({ projectId, token, onBack, handoffIdentit
     setUploadError(null);
     const failed = [];
     try {
-      for (const file of files) {
+      for (const original of files) {
+        const { file, error } = prepareUploadFile(original);
+        if (error) { failed.push({ name: original.name, error }); continue; }
         const formData = new FormData();
         formData.append('file', file);
         const res = await portalFetch(`/api/client-portal/projects/${projectId}/upload`, token, {
@@ -108,7 +111,7 @@ export default function ProjectDetail({ projectId, token, onBack, handoffIdentit
       const data = await res.json();
       setDocuments(Array.isArray(data) ? data : []);
       if (failed.length > 0) {
-        setUploadError(`${failed.length} file(s) failed to upload — ${failed.map(f => f.name).join(', ')}`);
+        setUploadError(`${failed.length} file(s) failed to upload — ${failed.map(f => f.error ? `${f.name}: ${f.error}` : f.name).join(', ')}`);
       }
     } catch (err) {
       setUploadError(err?.message ?? 'Upload failed — please try again');

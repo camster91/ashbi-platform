@@ -11,7 +11,7 @@
 // - unsent uploads older than 24 hours are purged, row and bytes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import Fastify from 'fastify';
@@ -26,6 +26,8 @@ import clientPortalRoutes from '../../routes/client-portal.routes.js';
 import { signUserSession } from '../../auth/session.js';
 import { purgeStalePendingChatUploads } from '../../services/chat-attachment.service.js';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
+import { MAX_UPLOAD_SIZE } from '../../security/file-upload-policy.js';
+import { heicFixture, psdFixture, utf16Fixture } from '../fixtures/original-upload-files.js';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
@@ -84,7 +86,7 @@ test('chat media: atomic send, client isolation and pending purge', {
     const emitted = [];
     app = Fastify({ logger: false });
     await app.register(cookie);
-    await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
+    await app.register(multipart, { limits: { fileSize: MAX_UPLOAD_SIZE } });
     await app.register(jwt, { secret: `chat-media-${randomUUID()}`, cookie: { cookieName: 'token', signed: false } });
     app.decorate('authenticate', async (request) => {
       request.user = { id: currentStaff, name: 'Staff', organizationId: ids.org, role: 'TEAM' };
@@ -185,6 +187,30 @@ test('chat media: atomic send, client isolation and pending purge', {
     const ownFile = await download(clientShot.id, asClientA);
     assert.equal(ownFile.statusCode, 200, ownFile.body);
     assert.deepEqual(ownFile.rawPayload, PNG);
+    // Original creative/data files roundtrip byte-for-byte through normal
+    // multipart storage, real rows, message claim and authorized download.
+    for (const [name, mime, bytes] of [
+      ['photo.original.heic', 'image/heic', heicFixture()],
+      ['photo.original.heif', 'image/heif', heicFixture('mif1')],
+      ['design.v2.final.psd', 'image/vnd.adobe.photoshop', psdFixture()],
+      ['board.export.v1.json', 'application/json', Buffer.from('{"description":"<html>as source data</html>"}')],
+      ['data.export.csv', 'text/csv', utf16Fixture('Name,Notes\r\nCafé,Original\r\n')],
+    ]) {
+      const uploaded = await staffUpload(ids.projectA, name, mime, bytes);
+      const row = await raw.attachment.findUnique({ where: { id: uploaded.id } });
+      assert.equal(row.originalName, name);
+      assert.equal(row.size, bytes.length);
+      assert.equal(row.checksumSha256, createHash('sha256').update(bytes).digest('hex'));
+      assert.equal(row.organizationId, ids.org);
+      const sent = await staffSend({ content: '', visibility: 'CLIENT', attachmentIds: [uploaded.id] });
+      assert.equal(sent.statusCode, 201, sent.body);
+      const original = await download(uploaded.id, asClientA);
+      assert.equal(original.statusCode, 200);
+      assert.deepEqual(original.rawPayload, bytes);
+      assert.match(original.headers['content-disposition'], /^attachment;/);
+      assert.equal(original.headers['x-content-type-options'], 'nosniff');
+      assert.equal((await download(uploaded.id, asClientB)).statusCode, 404);
+    }
     const ranged = await app.inject({ method: 'GET', url: `/api/client-portal/chat-attachments/${clientVideo.id}`, headers: { ...asClientA, range: 'bytes=0-3' } });
     assert.equal(ranged.statusCode, 206, 'recorded video seeks with byte ranges');
     assert.equal((await download(internalShot.id, asClientA)).statusCode, 404, 'file on an INTERNAL message');

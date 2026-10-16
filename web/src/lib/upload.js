@@ -7,7 +7,8 @@
 // file that is bound to be refused.
 export const UPLOAD_TYPES = Object.freeze({
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp',
-  '.pdf': 'application/pdf',
+  '.pdf': 'application/pdf', '.heic': 'image/heic', '.heif': 'image/heif',
+  '.psd': 'image/vnd.adobe.photoshop', '.json': 'application/json',
   '.doc': 'application/msword', '.xls': 'application/vnd.ms-excel', '.ppt': 'application/vnd.ms-powerpoint',
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -16,7 +17,7 @@ export const UPLOAD_TYPES = Object.freeze({
   '.mp4': 'video/mp4', '.webm': 'video/webm', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
 });
 export const UPLOAD_ACCEPT = Object.keys(UPLOAD_TYPES).join(',');
-export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 
 const MIME_EXTENSIONS = Object.freeze({
   'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp',
@@ -25,29 +26,33 @@ const MIME_EXTENSIONS = Object.freeze({
 
 function extensionOf(name) {
   const match = /\.[^.]+$/.exec(String(name || ''));
-  return match ? match[0].toLowerCase() : '';
+  return match && match.index > 0 ? match[0].toLowerCase() : '';
 }
 
-/**
- * A file the upload policy can accept: one extension only (the server refuses
- * double extensions), an extension for unnamed clipboard images, and a MIME
- * type inferred from the extension when the browser supplied none.
- * Returns `{ file }` or `{ error }`.
- * @param {File} file
- * @param {{ fallbackBase?: string }} [options]
- */
+const MIME_ALIASES = Object.freeze({
+  '.psd': ['application/x-photoshop'], '.json': ['text/json'],
+  '.csv': ['text/plain'], '.zip': ['application/x-zip-compressed'],
+  '.webm': ['audio/webm'], '.wav': ['audio/x-wav'],
+});
+const UNSAFE_NAME = /[\\/:\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+const ACTIVE_EXTENSION = /^(?:exe|com|bat|cmd|ps1|js|mjs|cjs|vbs|vbe|jse|wsf|wsh|scr|pif|cpl|msi|msp|mst|reg|hta|html|htm|xhtml|svg|php\d*|phtml|asp|aspx|jsp|jar|sh|bash|zsh|py|rb|pl|dll|so|dylib|url|lnk|scf|sct|cgi)$/i;
+
+/** Preserve original safe names/bytes; generate a name only for unnamed captures. */
 export function prepareUploadFile(file, { fallbackBase = 'attachment' } = {}) {
   if (!file) return { error: 'No file selected.' };
-  if (file.size > MAX_UPLOAD_BYTES) return { error: `${file.name || 'This file'} is larger than the 50 MB limit.` };
+  if (file.size > MAX_UPLOAD_BYTES) return { error: `${file.name || 'This file'} is larger than the 64 MiB limit.` };
   if (file.size === 0) return { error: `${file.name || 'This file'} is empty.` };
   const baseType = String(file.type || '').split(';')[0].toLowerCase();
-  let ext = extensionOf(file.name);
-  if (!ext && MIME_EXTENSIONS[baseType]) ext = MIME_EXTENSIONS[baseType];
-  if (!UPLOAD_TYPES[ext]) return { error: `${file.name || 'This file'} is not a supported file type.` };
-  const rawBase = String(file.name || '').slice(0, file.name && extensionOf(file.name) ? -extensionOf(file.name).length : undefined);
-  const base = rawBase.replace(/[\\/]/g, '-').replace(/\./g, '-').trim() || fallbackBase;
+  const name = file.name || (MIME_EXTENSIONS[baseType] ? `${fallbackBase}${MIME_EXTENSIONS[baseType]}` : '');
+  if (!name || UNSAFE_NAME.test(name) || [...name].some(char => char.charCodeAt(0) < 32 || (char.charCodeAt(0) >= 127 && char.charCodeAt(0) <= 159)) || /[. ]$/.test(name) || /^\.+$/.test(name) || new Blob([name]).size > 255 || name.split('.').slice(1, -1).some(part => ACTIVE_EXTENSION.test(part))) {
+    return { error: 'This filename is not safe to upload.' };
+  }
+  const ext = extensionOf(name);
+  if (!UPLOAD_TYPES[ext]) return { error: `${name} is not a supported file type.` };
+  if (baseType && baseType !== UPLOAD_TYPES[ext] && !MIME_ALIASES[ext]?.includes(baseType)) {
+    return { error: `${name} has a file type that does not match its extension.` };
+  }
   const type = baseType || UPLOAD_TYPES[ext];
-  const name = `${base}${ext}`;
   if (name === file.name && type === file.type) return { file };
   return { file: new File([file], name, { type, lastModified: file.lastModified }) };
 }
@@ -63,6 +68,9 @@ export function prepareUploadFile(file, { fallbackBase = 'attachment' } = {}) {
  */
 export function uploadFileWithProgress(url, file, { method = 'POST', headers = {}, onProgress, signal, fieldName = 'file', fields = {} } = {}) {
   return new Promise((resolve, reject) => {
+    const prepared = prepareUploadFile(file);
+    if (prepared.error) return reject(new Error(prepared.error));
+    file = prepared.file;
     const xhr = new XMLHttpRequest();
     xhr.open(method, url);
     xhr.withCredentials = true;

@@ -5,8 +5,8 @@ Status: code-present (2026-09-29); not target verified. See
 
 Staff project chat and the client-portal conversation accept files inside
 messages: pasted or dropped screenshots and files, a markup step for
-screenshots, and Loom-style screen/camera recordings. Storage and limits are
-unchanged by owner decision: local-disk uploads, 50 MB per file, the existing
+screenshots, and Loom-style screen/camera recordings. Files use local-disk
+storage, a bounded 64 MiB (67,108,864 bytes) per-file limit and the existing
 upload policy ([upload-security.md](upload-security.md)).
 
 ## Flow: upload first, send second
@@ -94,10 +94,10 @@ the atomic claim, and the purge).
 
 | Tool | Behaviour |
 | --- | --- |
-| Attach | Several files (up to 10 per message); unsupported types and files over 50 MB are refused before upload with a message. |
+| Attach | Several files (up to 10 per message); unsupported types and files over 64 MiB are refused before upload with a message. |
 | Paste / drop | Clipboard screenshots and files, and files dropped on the composer. Clipboard images get a name; names are reduced to one extension (the policy refuses double extensions). |
 | Screenshot | One frame of a `getDisplayMedia` stream (the person picks a tab, window or screen), then a markup step: arrow, rectangle, freehand pen, text, colour, undo (button or Ctrl/Cmd+Z). Exported as PNG at the capture's resolution (longest edge capped at 3840 px). Attached images can be marked up the same way from the tray. |
-| Record | Screen only; screen + camera bubble (the camera is composited into the bottom-left corner of the screen video on a canvas and re-captured with `captureStream`; a worker-driven timer keeps drawing while the tab is in the background); or camera only. Microphone audio is mixed with tab/system audio when the browser provides both. 3-second countdown, pause/resume, stop, a visible timer and size meter, preview, re-record, attach. Recording stops itself at 50 MB (with headroom for the last chunk) or at 15 minutes; chat recordings target about 1.2 Mbit/s. Ending the screen share stops the recording. Escape during a recording stops it and shows the preview instead of discarding it. |
+| Record | Screen only; screen + camera bubble (the camera is composited into the bottom-left corner of the screen video on a canvas and re-captured with `captureStream`; a worker-driven timer keeps drawing while the tab is in the background); or camera only. Microphone audio is mixed with tab/system audio when the browser provides both. 3-second countdown, pause/resume, stop, a visible timer and size meter, preview, re-record, attach. Recording stops itself at 64 MiB (with headroom for the last chunk) or at 15 minutes; chat recordings target about 1.2 Mbit/s. Ending the screen share stops the recording. Escape during a recording stops it and shows the preview instead of discarding it. |
 
 The recorder is shared with the project "Record screen" panel
 (`web/src/lib/media-recorder.js`, used by `ProjectMedia.jsx`), which now also
@@ -124,7 +124,7 @@ ClientPortal or PortalReview route chunks
 - Other chats (AI assistant chat, task comments): not wired to these tools.
 - Object storage, larger limits, server-side transcoding, thumbnails and
   recording transcripts: not implemented (owner decision to keep local disk
-  and 50 MB for now).
+  and 64 MiB per file).
 - Retention of chat media follows the general upload retention decision
   ([#310](https://github.com/camster91/ashbi-platform/issues/310)).
 - Malware/content scanning: the same vendor decision as
@@ -137,4 +137,4 @@ ClientPortal or PortalReview route chunks
   lock_timeout = '5s'; … COMMIT;`).
 - Restart the worker so it registers the hourly `chat-upload-cleanup-hourly`
   schedule on the scheduled-maintenance queue.
-- Disk use grows with recordings (up to 50 MB each); watch the uploads volume.
+- Disk use grows with recordings (up to 64 MiB each); watch the uploads volume.

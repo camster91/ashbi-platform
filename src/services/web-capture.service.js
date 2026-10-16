@@ -442,7 +442,7 @@ export async function captureWebPage(input, {
       }
       throw new WebCaptureError('WEB_CAPTURE_FAILED', 'The page could not be loaded.', 502);
     }
-    if (result.png.length > MAX_UPLOAD_SIZE) throw new WebCaptureError('WEB_CAPTURE_TOO_LARGE', 'The screenshot is larger than the 50 MB file limit.', 422);
+    if (result.png.length > MAX_UPLOAD_SIZE) throw new WebCaptureError('WEB_CAPTURE_TOO_LARGE', 'The screenshot is larger than the 64 MiB file limit.', 422);
     if (!validateUploadBuffer(result.png, { ext: '.png' }).valid) throw new WebCaptureError('WEB_CAPTURE_FAILED', 'The browser did not produce a PNG image.', 502);
     return {
       png: result.png,

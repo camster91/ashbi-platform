@@ -7,7 +7,7 @@
 // Everything here is pure or read-only: strict RFC 4180 CSV parsing, strict
 // ISO 8601 timestamps, safe file names inside the input root (no links, no
 // traversal), streamed SHA-256 hashes and upload-policy checks that reuse
-// src/security/file-upload-policy.js (extension, MIME, magic bytes, 50 MB).
+// src/security/file-upload-policy.js (extension, MIME, magic bytes, 64 MiB).
 import crypto from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -208,7 +208,7 @@ export async function readInputCsv(root, name) {
  * Inspect one media file named by the CSV against the upload policy, without
  * keeping its bytes: existence (MISSING_FILE), a regular file (UNSAFE_PATH),
  * an allowed extension (`allowed` maps extension to MIME type;
- * UNSUPPORTED_TYPE), the 50 MB limit (FILE_TOO_LARGE, reported and never
+ * UNSUPPORTED_TYPE), the 64 MiB limit (FILE_TOO_LARGE, reported and never
  * read into memory) and extension + MIME + magic bytes (INVALID_CONTENT).
  * Every file that exists gets a SHA-256 for reconciliation.
  *
@@ -228,7 +228,7 @@ export async function inspectMediaFile(root, fileName, allowed) {
     return { ...inspected, problem: { code: 'UNSUPPORTED_TYPE', error: `File type "${ext || '(none)'}" is not supported by this importer` } };
   }
   if (stat.size > MAX_UPLOAD_SIZE) {
-    return { ...inspected, problem: { code: 'FILE_TOO_LARGE', error: `The file is ${stat.size} bytes; the upload limit is ${MAX_UPLOAD_SIZE} bytes (50 MB)` } };
+    return { ...inspected, problem: { code: 'FILE_TOO_LARGE', error: `The file is ${stat.size} bytes; the upload limit is ${MAX_UPLOAD_SIZE} bytes (64 MiB)` } };
   }
   const validation = validateUploadedFile(fileName, allowed[ext], await fs.readFile(target));
   if (!validation.valid) {
