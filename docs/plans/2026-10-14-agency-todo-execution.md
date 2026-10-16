@@ -12,9 +12,15 @@ Prepared October 14, 2026 from three parallel read-only agent audits of main `80
 
 ## Current execution overlay — October 15, 2026
 
-[Launch evidence](../launch-status.md) supersedes the release snapshot below. `4349f6d` is deployed by the owner-authorized direct-VPS controller with strict readiness and 41/41 API/MCP checks. #597 already implements saved client-agent profiles and human channels/DM membership; #598 implements the stored client timeline; #600 implements Gmail dispatch receipts. W1/W4/W7 must extend those implementations, not recreate them. Saved client-agent conversations, durable runs, bot execution and mailbox ingestion remain open. Finish the focused internal-pilot acceptance before widening implementation. The work-package descriptions below retain their October 14 design context; the current delivery ledger owns status.
+[Launch evidence](../launch-status.md) records verified production `37d02b304898ec5c621199f4a2a880ebd64a6372`, including #608 saved staff questions/durable runs, #609 unused-export cleanup and #606 retained document history. Required main CI 38808629217 and 169/169 bounded live API checks passed. Normal browser creation/full-reload persistence and separate API archive cleanup passed without Send or provider calls. This is the shipped W1 foundation, not complete W1 or whole-app acceptance.
 
-## 1. Starting point and completion rule
+Prior-turn memory, persisted context observation/source evidence, real-provider/team acceptance, restricted tools/MCP actions, portal assistants, bot execution, reliable mailbox ingestion, WhatsApp/OpenSEO adapters, simultaneous editing and cutover remain open. Reuse deployed #597 profiles/human messaging, #598 stored timelines, #600 Gmail receipts and #608 conversation/run services. [#565](https://github.com/camster91/ashbi-platform/issues/565) and the [master delivery ledger](../master-app-delivery-plan.md) own current status and order; the work packages below retain their dated design context.
+
+For the shipped conversation/run foundation, the actual schema/service names and `/api/clients/:clientId/assistant/conversations` contracts in [client-agent-conversations.md](../client-agent-conversations.md) supersede the proposed W1/W2 names and routes below. Extend that implementation for remaining memory, tools and approvals; do not create another runtime from the historical design sketch.
+
+## 1. Historical starting point — October 14 plan baseline
+
+The following list preserves the original planning baseline and earlier reconciliation notes. Its **Still missing** and **Release snapshot** entries are historical, not the current implementation queue; use the current overlay and delivery ledger above. The completion rule after the list still applies to remaining work.
 
 - **Merged:** #592 Note audiences, #593 navigation simplification, #594 export repair and #595 client account-manager brief/plugin discovery. Do not reopen them as implementation TODOs.
 - **Already available:** project chat, threads, files/reactions, portal visibility rules, email inbox/draft workflows, Gmail transport, project communication history, workload/time/billing/reviews, governed AI sessions, action receipts, MCP and workers. Extend these modules rather than replacing them wholesale.

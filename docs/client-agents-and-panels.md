@@ -1,6 +1,6 @@
 # Client assistants, mention intake and dashboard panels
 
-This extends the shared Ashbi workspace. Agents are optional capabilities attached to existing clients and projects, not duplicate client records or a new top-level navigation system. The first implementation slice is a staff-only account-manager panel and assistant preview. WhatsApp transport, client-facing conversations and OpenSEO dashboard adapters are planned and are not installed or enabled by this slice.
+This extends the shared Ashbi workspace. Agents are optional capabilities attached to existing clients and projects, not duplicate client records or a new top-level navigation system. The initial slice provided a staff-only account-manager panel and assistant preview; #608 adds the deployed saved-question/run foundation described in the release overlay below. WhatsApp transport, client-facing conversations and OpenSEO dashboard adapters remain planned.
 
 Approved follow-through, including email and human/bot chat: [agency-agent roadmap](agency-agent-platform-roadmap.md).
 
@@ -12,7 +12,7 @@ The workspace MCP server now exposes `list_account_manager_plugins` and `get_cli
 
 The staff HTTP preview still generates answers only on explicit submission. MCP returns deterministic context for ChatGPT to reason over; it does not invoke a second model. Existing workspace MCP access does not establish durable-job access or acceptance.
 
-October 15, 2026 implementation overlay: [shared staff conversations and durable runs](client-agent-conversations.md) are now **code-present, unshipped** in the follow-up branch. They retain questions/results and support run status, cancellation and requester intent recovery. Production migration, worker delivery and real-provider acceptance remain separate checks. The legacy single-question preview described below keeps its own endpoint and does not itself persist a conversation.
+October 15, 2026 release overlay: [shared staff questions and durable runs](client-agent-conversations.md) shipped in #608 at `37d02b304898ec5c621199f4a2a880ebd64a6372`. Required main CI 38808629217 and 169 bounded live checks passed, including 47 agent-conversation CRUD checks. Normal browser creation/full-reload persistence and separate API archive cleanup passed without Send/provider calls. This is the W1 foundation: prior-turn memory, persisted context observation/source evidence and real-provider/team acceptance remain open. The legacy single-question preview below retains its separate endpoint and does not itself persist a conversation; the new Saved conversations section does. See [#565](https://github.com/camster91/ashbi-platform/issues/565) for current work.
 
 ## Staff account manager and profile settings
 
