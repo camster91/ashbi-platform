@@ -38,7 +38,7 @@ import {
 } from '../validators/schemas.js';
 
 const STAFF_ROLES = ['ADMIN', 'TEAM'];
-// These two client/source-bound receipts require their dedicated fresh-authority
+// These closed client/source-bound receipts require their dedicated fresh-authority
 // routes/MCP controls, including after execution, profile edits or reassignment.
 const genericAction = row => !isWorkspaceBoundAction(row?.action);
 

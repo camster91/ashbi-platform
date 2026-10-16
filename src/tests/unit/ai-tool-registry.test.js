@@ -25,8 +25,8 @@ test('optional action transaction isolation accepts Serializable and rejects unk
   assert.throws(() => defineTool({ ...base, execution: { ...base.execution, isolationLevel: 'Unknown' } }), ToolRegistrationError);
 });
 
-test('the external allowlist holds only the existing, confirm-gated Slack post', () => {
-  assert.deepEqual([...EXTERNAL_TOOL_ALLOWLIST], ['send_slack_message']);
+test('the closed irreversible allowlist contains Slack delivery and confirmed saved-report replacement', () => {
+  assert.deepEqual([...EXTERNAL_TOOL_ALLOWLIST], ['send_slack_message', 'publish_client_service_report_snapshot']);
   const slack = toolRegistry.get('send_slack_message');
   assert.equal(slack.external, true);
   assert.equal(slack.irreversible, true);
