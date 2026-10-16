@@ -12,7 +12,7 @@ export const clientAgentRunStartSchema = z.object({ question: z.string().trim().
   idempotencyKey: intentKey }).strict();
 const runSelect = { id: true, organizationId: true, conversationId: true, requestedById: true,
   prompt: true, response: true, status: true, profileRevision: true, startedAt: true, finishedAt: true,
-  errorCode: true, createdAt: true, updatedAt: true };
+  errorCode: true, contextObservedAt: true, contextSnapshot: true, createdAt: true, updatedAt: true };
 const activeStatuses = ['QUEUED', 'RUNNING'];
 const refuse = (code, message, statusCode) => { throw new ToolError(code, message, { statusCode }); };
 const conflict = () => refuse('RUN_CONFLICT', 'The account manager run changed. Reload before trying again.', 409);

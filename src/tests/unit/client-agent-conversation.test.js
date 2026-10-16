@@ -63,6 +63,19 @@ test('create trims title, fixes creator and scope, and records no transcript in 
   assert.doesNotMatch(JSON.stringify(state.audits), /Planning|title|prompt|response/);
 });
 
+test('detail and independently loaded active run preserve historical evidence with safe projections', async () => {
+  const f = fixture();
+  const contextObservedAt = new Date('2026-10-16T00:00:00.000Z');
+  const contextSnapshot = { version: 1, snapshot: { client: { id: client.id, name: 'Historical', domain: null }, projects: [], truncated: false } };
+  f.state.runs.push({ id: 'run-a', organizationId: user.organizationId, conversationId: base.id, status: 'RUNNING',
+    contextObservedAt, contextSnapshot, claimToken: 'private', inputHash: 'private', instructions: 'private' });
+  const detail = await f.service.read(f.db, user, client.id, base.id);
+  for (const row of [detail.runs[0], detail.activeRun]) {
+    assert.deepEqual(row.contextSnapshot, contextSnapshot); assert.deepEqual(row.contextObservedAt, contextObservedAt);
+    assert.doesNotMatch(JSON.stringify(row), /claimToken|inputHash|instructions|private/);
+  }
+});
+
 for (const actor of [{ role: 'CLIENT' }, { role: 'BOT' }, { isActive: false }, { organizationId: 'org-b' }, { id: 'staff-b' }]) {
   test(`fresh stored authority blocks every operation ${JSON.stringify(actor)}`, async () => {
     const { db, service } = fixture({ actor });
