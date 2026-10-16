@@ -1,5 +1,8 @@
 name: Reusable release gates
 
+# Deliberately pin hosted runners while ubuntu-latest moves to Ubuntu 26.04 (#549).
+# Move only after pgvector/Redis, Prisma and Playwright gates pass on that image.
+
 on:
   workflow_call:
 
@@ -9,7 +12,7 @@ permissions:
 jobs:
   quality:
     name: Type, lint, unit, integration, and build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
       postgres:
@@ -121,7 +124,7 @@ jobs:
         # Keep the simulated traces so a budget failure on the hosted runner can
         # be diagnosed instead of re-run blind.
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lighthouse-reports
           path: .lighthouseci/
@@ -130,7 +133,7 @@ jobs:
 
   browser:
     name: Browser and accessibility smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # The official Playwright image ships Chromium, Firefox, WebKit and their
     # system libraries, so the gate no longer depends on apt mirror speed.
@@ -180,7 +183,7 @@ jobs:
           CI: true
       - name: Upload sanitized failure evidence
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: required-browser-gate-failure-evidence
           path: |
@@ -191,7 +194,7 @@ jobs:
 
   stack-e2e:
     name: Full-stack E2E smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -230,7 +233,7 @@ jobs:
           docker compose -p ashbi-e2e -f tests/e2e/docker-compose.test.yml logs --no-color --tail 12000 hub > test-results/stack/hub-diagnostics.log
       - name: Upload E2E output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: required-full-stack-gate-output
           path: |

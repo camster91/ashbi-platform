@@ -19,7 +19,7 @@ concurrency:
 jobs:
   compliance:
     name: Lint & Compliance Scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -49,7 +49,7 @@ jobs:
 
   backend-tests:
     name: Backend Unit Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:
@@ -124,7 +124,7 @@ jobs:
 
   frontend-tests:
     name: Frontend Unit Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
