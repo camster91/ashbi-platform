@@ -60,7 +60,7 @@ export default function Milestones({ projectId }) {
         duration: 10000,
         action: {
           label: `Undo delete ${name}`,
-          onClick: () => restoreMutation.mutate(result.trashId),
+          onClick: () => restoreMutation.mutateAsync(result.trashId),
         },
       });
     },

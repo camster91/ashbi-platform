@@ -13,7 +13,11 @@ export const workQueueQuerySchema = z.object({
   owner: z.enum(['me', 'everyone']).default('everyone'),
   clientId: recordId.optional(),
   projectId: recordId.optional(),
-}).strict();
+  dueFrom: z.string().date().optional(),
+  dueTo: z.string().date().optional(),
+}).strict().refine(value => !value.dueFrom || !value.dueTo || value.dueFrom <= value.dueTo, {
+  message: 'Due from must not be after due to', path: ['dueTo'],
+});
 
 /** The queue is a staff workspace: bots and other principals are refused. */
 async function requireQueueStaff(request, reply) {
@@ -24,7 +28,7 @@ async function requireQueueStaff(request, reply) {
 }
 
 export default async function workQueueRoutes(fastify) {
-  // GET /api/work-queue?view=&owner=&clientId=&projectId=
+  // GET /api/work-queue?view=&owner=&clientId=&projectId=&dueFrom=&dueTo=
   fastify.get('/', {
     onRequest: [fastify.authenticate],
     preHandler: [requireQueueStaff, validateQuery(workQueueQuerySchema)],

@@ -58,7 +58,7 @@ export default function Notes({ projectId }) {
         duration: 10000,
         action: {
           label: `Undo delete ${title}`,
-          onClick: () => restoreMutation.mutate(result.trashId),
+          onClick: () => restoreMutation.mutateAsync(result.trashId),
         },
       });
     },

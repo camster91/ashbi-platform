@@ -34,6 +34,30 @@ export function seesAllTasks(role) {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const DATED_SOURCES = new Set(['tasks', 'approvals', 'proposals', 'invoices']);
+
+/** Inclusive UTC calendar-day filters, represented as a half-open SQL range. */
+export function workQueueDueRange({ dueFrom, dueTo } = {}) {
+  const parse = (value) => {
+    if (value === undefined) return undefined;
+    const date = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? new Date(`${value}T00:00:00.000Z`) : new Date(NaN);
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+      throw Object.assign(new Error('Due dates must be valid YYYY-MM-DD dates'), { statusCode: 400 });
+    }
+    return date;
+  };
+  const from = parse(dueFrom);
+  const to = parse(dueTo);
+  if (from && to && from > to) throw Object.assign(new Error('Due from must not be after due to'), { statusCode: 400 });
+  if (!from && !to) return null;
+  return { not: null, ...(from ? { gte: from } : {}), ...(to ? { lt: new Date(to.getTime() + DAY_MS) } : {}) };
+}
+
+function dueWhere(filters, field) {
+  const range = workQueueDueRange(filters);
+  return range ? { [field]: range } : {};
+}
 const OPEN_TASK_STATUSES = ['PENDING', 'IN_PROGRESS', 'BLOCKED'];
 const FAILED_DELIVERY = new Set(['FAILED', 'BOUNCED', 'COMPLAINED']);
 const ROLE_OWNER_ADMIN = Object.freeze({ id: null, name: 'Admins', role: 'ADMIN' });
@@ -313,6 +337,7 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
     async load(prisma, { filters, user, now }) {
       const where = {
         deletedAt: null,
+        ...dueWhere(filters, 'dueDate'),
         status: { in: OPEN_TASK_STATUSES },
         project: {
           deletedAt: null,
@@ -350,6 +375,7 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
       const approvals = await prisma.approval.findMany({
         where: {
           status: 'PENDING',
+          ...dueWhere(filters, 'expiresAt'),
           // Approvals on a trashed project are not actionable.
           project: {
             is: {
@@ -409,6 +435,7 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
       const proposals = await prisma.proposal.findMany({
         where: {
           deletedAt: null,
+          ...dueWhere(filters, 'validUntil'),
           status: { in: ['SENT', 'VIEWED'] },
           ...(filters.clientId ? { clientId: filters.clientId } : {}),
           ...(filters.projectId ? { projectId: filters.projectId } : {}),
@@ -458,6 +485,7 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
       const invoices = await prisma.invoice.findMany({
         where: {
           deletedAt: null,
+          ...dueWhere(filters, 'dueDate'),
           status: { in: [...UNPAID_INVOICE_STATUSES] },
           ...(filters.clientId ? { clientId: filters.clientId } : {}),
           ...(filters.projectId ? { projectId: filters.projectId } : {}),
@@ -493,10 +521,13 @@ export function sourcesForRole(role) {
  * listed in `failedSources`; the other sources still load.
  *
  * @param {any} prisma request-scoped Prisma client
- * @param {{ user: {id: string, role: string}, filters?: {view?: string, owner?: string, clientId?: string, projectId?: string}, now?: Date, sources?: typeof WORK_QUEUE_SOURCES }} options
+ * @param {{ user: {id: string, role: string}, filters?: {view?: string, owner?: string, clientId?: string, projectId?: string, dueFrom?: string, dueTo?: string}, now?: Date, sources?: typeof WORK_QUEUE_SOURCES }} options
  */
 export async function buildWorkQueue(prisma, { user, filters = {}, now = new Date(), sources } = /** @type {any} */ ({})) {
-  const active = sources ?? sourcesForRole(user.role);
+  const dueRange = workQueueDueRange(filters);
+  // These sources have no due date. Skip their reads when a range is active,
+  // rather than filling a capped source page and filtering it afterward.
+  const active = (sources ?? sourcesForRole(user.role)).filter(source => !dueRange || DATED_SOURCES.has(source.key));
   const settled = await Promise.allSettled(active.map((source) => source.load(prisma, { filters, user, now })));
   const rows = [];
   const failedSources = [];

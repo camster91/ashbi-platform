@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import WorkQueue from '../pages/WorkQueue';
@@ -12,6 +12,7 @@ vi.mock('../lib/api', () => ({
   api: {
     getWorkQueue: vi.fn(),
     getClients: vi.fn(),
+    getProjects: vi.fn(),
   },
 }));
 
@@ -69,6 +70,9 @@ function renderQueue(path = '/queue') {
   );
 }
 
+beforeEach(() => {
+  api.getProjects.mockReset().mockResolvedValue({ projects: [], total: 0, limit: 50, offset: 0 });
+});
 afterEach(() => {
   vi.clearAllMocks();
   authState.user = { id: 'u1', name: 'Ada Admin', role: 'ADMIN' };
@@ -148,7 +152,7 @@ describe('WorkQueue page', () => {
     api.getClients.mockResolvedValue({ clients: [] });
     renderQueue();
 
-    expect(await screen.findByRole('note')).toHaveTextContent('Showing the first 100 items from Workspace attention, Client questions. Filter by client to see the rest.');
+    expect(await screen.findByRole('note')).toHaveTextContent('Showing the first 100 items from Workspace attention, Client questions. Narrow the queue by client, project or due date.');
     expect(screen.getByRole('link', { name: /Task: Write homepage copy/ })).toBeInTheDocument();
   });
 
@@ -277,6 +281,97 @@ describe('WorkQueue page', () => {
     api.getClients.mockResolvedValue({ clients: [] });
     renderQueue();
     expect(screen.getByRole('status', { name: 'Loading queue…' })).toBeInTheDocument();
+  });
+
+  it('restores project and UTC due filters from a link, then clears project when client changes', async () => {
+    const user = userEvent.setup();
+    api.getWorkQueue.mockResolvedValue(QUEUE);
+    api.getClients.mockResolvedValue({ clients: [{ id: 'c1', name: 'Acme' }, { id: 'c2', name: 'Globex' }] });
+    renderQueue('/queue?owner=me&view=at_risk&clientId=c1&projectId=not-loaded&dueFrom=2024-02-29&dueTo=2024-02-29');
+    await waitFor(() => expect(api.getWorkQueue).toHaveBeenCalledWith({ owner: 'me', clientId: 'c1', projectId: 'not-loaded', dueFrom: '2024-02-29', dueTo: '2024-02-29' }));
+    expect(screen.getByLabelText('Project')).toHaveValue('not-loaded');
+    expect(screen.getByRole('option', { name: 'Selected project' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Due from (UTC)')).toHaveValue('2024-02-29');
+    expect(screen.getByLabelText('Due to (UTC)')).toHaveValue('2024-02-29');
+    await screen.findByRole('option', { name: 'Globex' });
+    await user.selectOptions(screen.getByLabelText('Client'), 'c2');
+    await waitFor(() => expect(api.getWorkQueue).toHaveBeenLastCalledWith({ owner: 'me', clientId: 'c2', dueFrom: '2024-02-29', dueTo: '2024-02-29' }));
+    expect(screen.getByLabelText('Project')).toHaveValue('');
+    expect(screen.getByTestId('location')).not.toHaveTextContent('projectId=');
+    expect(screen.getByTestId('location')).toHaveTextContent('view=at_risk');
+    expect(api.getProjects).toHaveBeenLastCalledWith({ limit: 50, offset: 0, clientId: 'c2' });
+  });
+
+  it('pages authorized project options, deduplicates them and refetches queue for the selected project', async () => {
+    const user = userEvent.setup();
+    api.getWorkQueue.mockResolvedValue(QUEUE);
+    api.getClients.mockResolvedValue({ clients: [] });
+    api.getProjects.mockResolvedValueOnce({ projects: [{ id: 'p1', name: 'First' }, { id: 'p2', name: 'Second' }], total: 3, offset: 0 })
+      .mockResolvedValueOnce({ projects: [{ id: 'p2', name: 'Second' }, { id: 'p3', name: 'Third' }], total: 3, offset: 2 });
+    renderQueue();
+    await user.click(await screen.findByRole('button', { name: 'Load more projects' }));
+    await screen.findByRole('option', { name: 'Third' });
+    expect(screen.getAllByRole('option', { name: 'Second' })).toHaveLength(1);
+    expect(api.getProjects).toHaveBeenLastCalledWith({ limit: 50, offset: 2 });
+    await user.selectOptions(screen.getByLabelText('Project'), 'p3');
+    await waitFor(() => expect(api.getWorkQueue).toHaveBeenLastCalledWith({ owner: 'everyone', clientId: undefined, projectId: 'p3' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('projectId=p3');
+  });
+
+  it('keeps the selected project generic on option-read failure and offers a scoped retry', async () => {
+    const user = userEvent.setup();
+    api.getWorkQueue.mockResolvedValue(QUEUE);
+    api.getClients.mockResolvedValue({ clients: [] });
+    api.getProjects.mockRejectedValueOnce(Object.assign(new Error('denied'), { status: 403 }))
+      .mockResolvedValueOnce({ projects: [{ id: 'selected', name: 'Available project' }], total: 1, offset: 0 });
+    renderQueue('/queue?clientId=c1&projectId=selected');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Project options could not be loaded');
+    expect(screen.getByLabelText('Project')).toHaveValue('selected');
+    expect(screen.getByRole('option', { name: 'Selected project' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Retry project options' }));
+    expect(await screen.findByRole('option', { name: 'Available project' })).toBeInTheDocument();
+    expect(api.getProjects).toHaveBeenLastCalledWith({ limit: 50, offset: 0, clientId: 'c1' });
+    expect(screen.getByTestId('location')).toHaveTextContent('projectId=selected');
+  });
+
+  it('requests a one-sided due bound and clears the cached unfiltered rows while it loads', async () => {
+    api.getWorkQueue.mockResolvedValueOnce(QUEUE).mockImplementationOnce(() => new Promise(() => {}));
+    api.getClients.mockResolvedValue({ clients: [] });
+    renderQueue();
+    await screen.findByRole('link', { name: /Write homepage copy/ });
+    fireEvent.change(screen.getByLabelText('Due from (UTC)'), { target: { value: '2026-10-16' } });
+    await waitFor(() => expect(api.getWorkQueue).toHaveBeenLastCalledWith({ owner: 'everyone', clientId: undefined, dueFrom: '2026-10-16' }));
+    expect(screen.queryByRole('link', { name: /Write homepage copy/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading queue…' })).toBeInTheDocument();
+  });
+
+  it.each(['dueFrom=2026-02-30', 'dueFrom=bad', 'dueFrom=2026-10-20&dueTo=2026-10-10'])('blocks invalid date URL %s without a request or false all-clear', async query => {
+    const user = userEvent.setup();
+    api.getWorkQueue.mockResolvedValue(QUEUE);
+    api.getClients.mockResolvedValue({ clients: [] });
+    renderQueue(`/queue?${query}`);
+    expect(screen.getByRole('alert')).toHaveTextContent(/valid due dates|must not be after/);
+    expect(screen.getByLabelText('Due from (UTC)')).toHaveAttribute('aria-invalid', 'true');
+    expect(api.getWorkQueue).not.toHaveBeenCalled();
+    expect(screen.queryByText(/all clear/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+    await waitFor(() => expect(api.getWorkQueue).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('location')).toHaveTextContent('/queue');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps invalid edited ranges local until corrected, then preserves partial-result recovery', async () => {
+    const user = userEvent.setup();
+    api.getWorkQueue.mockResolvedValueOnce({ ...QUEUE, rows: [], partial: true, failedSources: ['invoices'] }).mockResolvedValueOnce(QUEUE);
+    api.getClients.mockResolvedValue({ clients: [] });
+    renderQueue('/queue?dueFrom=2026-10-20&dueTo=2026-10-10');
+    fireEvent.change(screen.getByLabelText('Due to (UTC)'), { target: { value: '2026-10-25' } });
+    expect(await screen.findByText('Some queue sources did not load: Invoices')).toBeInTheDocument();
+    expect(screen.queryByText(/all clear/)).not.toBeInTheDocument();
+    expect(api.getWorkQueue).toHaveBeenLastCalledWith({ owner: 'everyone', clientId: undefined, dueFrom: '2026-10-20', dueTo: '2026-10-25' });
+    await user.click(screen.getByRole('button', { name: 'Retry Invoices' }));
+    expect(await screen.findByRole('link', { name: /Task: Write homepage copy/ })).toBeInTheDocument();
+    expect(screen.queryByText('Some queue sources did not load: Invoices')).not.toBeInTheDocument();
   });
 });
 

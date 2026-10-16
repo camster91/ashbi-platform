@@ -1,4 +1,5 @@
 import { visibleNoteIds } from '../services/note-access.service.js';
+import { pageAccessContext, pageAccessSelect } from '../services/workspace-page-authorization.js';
 import { onboardClient } from '../services/onboarding.service.js';
 import {
   validateBody,
@@ -63,6 +64,27 @@ export function tasksForRole(role) {
   return ROLE_TASKS[role] || [];
 }
 
+async function hasVisibleAuthoredWorkspacePage(prisma, actor) {
+  const access = await pageAccessContext(prisma, actor);
+  let after;
+  while (true) {
+    const rows = await prisma.workspacePage.findMany({
+      where: {
+        organizationId: access.user.organizationId,
+        authorId: access.user.id,
+        archivedAt: null,
+        ...(after ? { id: { gt: after } } : {}),
+      },
+      orderBy: { id: 'asc' }, take: 100, select: pageAccessSelect(access.user.id),
+    });
+    await access.load(rows.map(row => row.id), rows);
+    if (rows.some(row => access.rights(row.id).canRead)) return true;
+    access.clear();
+    if (rows.length < 100) return false;
+    after = rows.at(-1).id;
+  }
+}
+
 async function completionFacts(request) {
   const userId = request.user.id;
   if (request.user.role === 'ADMIN') {
@@ -86,7 +108,7 @@ async function completionFacts(request) {
     return {
       'complete-task': completedTaskCount > 0,
       'log-time': timeEntryCount > 0,
-      'create-document': noteCount > 0,
+      'create-document': noteCount > 0 || await hasVisibleAuthoredWorkspacePage(request.prisma, request.user),
     };
   }
   return {};

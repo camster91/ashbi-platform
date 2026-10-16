@@ -20,8 +20,22 @@ in the source record's own workflow and approval boundary.
 | `owner` | `me`, `everyone` | `everyone` (the page shows this filter to admins only; see [Owner filter](#owner-filter)) |
 | `clientId` | client id | all clients |
 | `projectId` | project id | all projects |
+| `dueFrom` | valid `YYYY-MM-DD`, inclusive start of UTC day | no lower bound |
+| `dueTo` | valid `YYYY-MM-DD`, inclusive whole UTC day | no upper bound |
 
 Unknown parameters are rejected with `400`.
+Invalid calendar dates (including non-leap February 29), timestamps instead of
+dates, and reversed ranges are rejected with `400`. Either bound may be used
+alone. SQL uses `>=` the first UTC midnight and `<` the midnight after the last
+day, including timestamps through the last instant of that day. These filters
+do not change the queue's existing overdue classification.
+
+With either due bound active, only dated tasks (`dueDate`), approvals
+(`expiresAt`), proposals (`validUntil`) and invoices (`dueDate`) are read.
+The predicate excludes null dates **before** each source's 101-row database
+read. Reviews, contracts, portal handoffs and human attention have no due date
+and are omitted from the response's source list for this range. Without date
+filters, source behavior is unchanged.
 
 ## Response
 
@@ -118,15 +132,28 @@ reviews they can open.
   says so.
 - The page loads up to 200 clients for the Client filter (the clients route's
   maximum); a client id from a link that is not among them stays selected.
+- Project options use the existing authorized project endpoint, 50 per explicit
+  **Load more projects** page, optionally scoped by client. Duplicate options
+  across offset pages are deduplicated; changing source data may shift pages.
+  A deep-linked project not loaded or no longer available keeps a generic
+  **Selected project** option without exposing an unauthorized name. Changing
+  Client clears Project. Project, owner, client and UTC due bounds persist in
+  the URL and queue query key; tabs retain the other filters. **Clear filters**
+  preserves the selected view. Invalid date ranges show an inline error without
+  requesting the queue or claiming it is all clear.
 - Sources load independently. A source that throws is logged, listed in
   `failedSources`, and the response is `partial: true` with the remaining rows
   and counts. The page labels the queue as incomplete and offers a retry.
+  Empty partial or truncated results say no matching items loaded, not all clear.
 
 ## Tests
 
 - `src/tests/unit/work-queue.service.test.js`: row mapping, view assignment,
   sorting, counts, role source selection, partial and truncated results, query
   validation.
+- `src/tests/unit/work-queue-due.test.js`: UTC/leap/one-sided range validation,
+  invalid HTTP queries, pre-cap predicates, undated-source omission and retained
+  role/partial/truncation behavior.
 - `src/tests/integration/work-queue.database.test.js`: two organizations on real
   PostgreSQL; tenant isolation, admin versus team rows and counts, views,
   owner/client/project filters, bot refusal.
