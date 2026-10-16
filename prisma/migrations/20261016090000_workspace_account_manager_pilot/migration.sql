@@ -1,57 +1,57 @@
 BEGIN;
-CREATE UNIQUE INDEX IF NOT EXISTS projects_id_organizationId_key ON projects(id,"organizationId");
-CREATE UNIQUE INDEX IF NOT EXISTS workspace_chat_messages_id_organizationId_key ON workspace_chat_messages(id,"organizationId");
-CREATE UNIQUE INDEX IF NOT EXISTS client_agent_runs_id_organizationId_key ON client_agent_runs(id,"organizationId");
+CREATE UNIQUE INDEX IF NOT EXISTS "projects_id_organizationId_key" ON projects(id,"organizationId");
+CREATE UNIQUE INDEX IF NOT EXISTS "workspace_chat_messages_id_organizationId_key" ON workspace_chat_messages(id,"organizationId");
+CREATE UNIQUE INDEX IF NOT EXISTS "client_agent_runs_id_organizationId_key" ON client_agent_runs(id,"organizationId");
 CREATE TABLE workspace_account_manager_bindings (
- id TEXT PRIMARY KEY, "organizationId" TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+ id TEXT PRIMARY KEY, "organizationId" TEXT NOT NULL CONSTRAINT "workspace_account_manager_bindings_organizationId_fkey" REFERENCES organizations(id) ON DELETE CASCADE ON UPDATE CASCADE,
  "channelId" TEXT NOT NULL, "clientId" TEXT NOT NULL, "projectId" TEXT, "profileId" TEXT NOT NULL,
  "createdById" TEXT NOT NULL, "updatedById" TEXT NOT NULL,
  enabled BOOLEAN NOT NULL DEFAULT false, revision INTEGER NOT NULL DEFAULT 1 CHECK(revision>0),
  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
- UNIQUE(id,"organizationId"), UNIQUE("organizationId","channelId"),
- FOREIGN KEY("channelId","organizationId") REFERENCES workspace_chat_channels(id,"organizationId") ON DELETE RESTRICT,
- FOREIGN KEY("clientId","organizationId") REFERENCES clients(id,"organizationId") ON DELETE RESTRICT,
- FOREIGN KEY("projectId","organizationId") REFERENCES projects(id,"organizationId") ON DELETE RESTRICT,
- FOREIGN KEY("profileId","organizationId") REFERENCES client_agent_profiles(id,"organizationId") ON DELETE RESTRICT,
- FOREIGN KEY("createdById","organizationId") REFERENCES users(id,"organizationId") ON DELETE RESTRICT,
- FOREIGN KEY("updatedById","organizationId") REFERENCES users(id,"organizationId") ON DELETE RESTRICT
+ CONSTRAINT "workspace_account_manager_bindings_id_organizationId_key" UNIQUE(id,"organizationId"), CONSTRAINT "workspace_account_manager_bindings_organizationId_channelId_key" UNIQUE("organizationId","channelId"),
+ CONSTRAINT "workspace_account_manager_bindings_channelId_organizationI_fkey" FOREIGN KEY("channelId","organizationId") REFERENCES workspace_chat_channels(id,"organizationId") ON DELETE RESTRICT ON UPDATE CASCADE,
+ CONSTRAINT "workspace_account_manager_bindings_clientId_organizationId_fkey" FOREIGN KEY("clientId","organizationId") REFERENCES clients(id,"organizationId") ON DELETE RESTRICT ON UPDATE CASCADE,
+ CONSTRAINT "workspace_account_manager_bindings_projectId_organizationI_fkey" FOREIGN KEY("projectId","organizationId") REFERENCES projects(id,"organizationId") ON DELETE RESTRICT ON UPDATE CASCADE,
+ CONSTRAINT "workspace_account_manager_bindings_profileId_organizationI_fkey" FOREIGN KEY("profileId","organizationId") REFERENCES client_agent_profiles(id,"organizationId") ON DELETE RESTRICT ON UPDATE CASCADE,
+ CONSTRAINT "workspace_account_manager_bindings_createdById_organizatio_fkey" FOREIGN KEY("createdById","organizationId") REFERENCES users(id,"organizationId") ON DELETE RESTRICT ON UPDATE CASCADE,
+ CONSTRAINT "workspace_account_manager_bindings_updatedById_organizatio_fkey" FOREIGN KEY("updatedById","organizationId") REFERENCES users(id,"organizationId") ON DELETE RESTRICT ON UPDATE CASCADE
 );
-CREATE INDEX ON workspace_account_manager_bindings("channelId","organizationId");
-CREATE INDEX ON workspace_account_manager_bindings("clientId","organizationId");
-CREATE INDEX ON workspace_account_manager_bindings("projectId","organizationId");
-CREATE INDEX ON workspace_account_manager_bindings("profileId","organizationId");
-CREATE INDEX ON workspace_account_manager_bindings("createdById","organizationId");
-CREATE INDEX ON workspace_account_manager_bindings("updatedById","organizationId");
+CREATE INDEX "workspace_account_manager_bindings_channelId_organizationId_idx" ON workspace_account_manager_bindings("channelId","organizationId");
+CREATE INDEX "workspace_account_manager_bindings_clientId_organizationId_idx" ON workspace_account_manager_bindings("clientId","organizationId");
+CREATE INDEX "workspace_account_manager_bindings_projectId_organizationId_idx" ON workspace_account_manager_bindings("projectId","organizationId");
+CREATE INDEX "workspace_account_manager_bindings_profileId_organizationId_idx" ON workspace_account_manager_bindings("profileId","organizationId");
+CREATE INDEX "workspace_account_manager_bindings_createdById_organization_idx" ON workspace_account_manager_bindings("createdById","organizationId");
+CREATE INDEX "workspace_account_manager_bindings_updatedById_organization_idx" ON workspace_account_manager_bindings("updatedById","organizationId");
 ALTER TABLE client_agent_conversations ADD COLUMN "sourceChannelId" TEXT, ADD COLUMN "sourceBindingId" TEXT,
  ADD CHECK (("sourceChannelId" IS NULL) = ("sourceBindingId" IS NULL)),
- ADD FOREIGN KEY("sourceChannelId","organizationId") REFERENCES workspace_chat_channels(id,"organizationId") ON DELETE RESTRICT,
- ADD FOREIGN KEY("sourceBindingId","organizationId") REFERENCES workspace_account_manager_bindings(id,"organizationId") ON DELETE RESTRICT;
-CREATE INDEX ON client_agent_conversations("sourceChannelId","organizationId");
-CREATE INDEX ON client_agent_conversations("sourceBindingId","organizationId");
+ ADD CONSTRAINT "client_agent_conversations_sourceChannelId_organizationId_fkey" FOREIGN KEY("sourceChannelId","organizationId") REFERENCES workspace_chat_channels(id,"organizationId") ON DELETE RESTRICT ON UPDATE CASCADE,
+ ADD CONSTRAINT "client_agent_conversations_sourceBindingId_organizationId_fkey" FOREIGN KEY("sourceBindingId","organizationId") REFERENCES workspace_account_manager_bindings(id,"organizationId") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE INDEX "client_agent_conversations_sourceChannelId_organizationId_idx" ON client_agent_conversations("sourceChannelId","organizationId");
+CREATE INDEX "client_agent_conversations_sourceBindingId_organizationId_idx" ON client_agent_conversations("sourceBindingId","organizationId");
 CREATE TABLE workspace_account_manager_invocations (
- id TEXT PRIMARY KEY, "organizationId" TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+ id TEXT PRIMARY KEY, "organizationId" TEXT NOT NULL CONSTRAINT "workspace_account_manager_invocations_organizationId_fkey" REFERENCES organizations(id) ON DELETE CASCADE ON UPDATE CASCADE,
  "bindingId" TEXT NOT NULL, "sourceMessageId" TEXT NOT NULL, "requestedById" TEXT NOT NULL,
- "conversationId" TEXT NOT NULL UNIQUE, "runId" TEXT NOT NULL UNIQUE,
+ "conversationId" TEXT NOT NULL CONSTRAINT "workspace_account_manager_invocations_conversationId_key" UNIQUE, "runId" TEXT NOT NULL CONSTRAINT "workspace_account_manager_invocations_runId_key" UNIQUE,
  "idempotencyKey" TEXT NOT NULL CHECK("idempotencyKey" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
  "inputHash" TEXT NOT NULL CHECK("inputHash" ~ '^[0-9a-f]{64}$'),
  "bindingRevision" INTEGER NOT NULL CHECK("bindingRevision">0), "profileRevision" INTEGER NOT NULL CHECK("profileRevision">0),
  "deliveryState" TEXT NOT NULL DEFAULT 'PENDING' CHECK("deliveryState" IN ('PENDING','DELIVERED','SUPPRESSED')),
  "deliveryCode" TEXT CHECK(length("deliveryCode")<=80), "deliveredAt" TIMESTAMP(3), "suppressedAt" TIMESTAMP(3),
  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
- UNIQUE("organizationId","sourceMessageId","bindingId"), UNIQUE("organizationId","requestedById","idempotencyKey"),
- UNIQUE("conversationId","organizationId"), UNIQUE("runId","organizationId"),
- FOREIGN KEY("bindingId","organizationId") REFERENCES workspace_account_manager_bindings(id,"organizationId") ON DELETE RESTRICT,
- FOREIGN KEY("sourceMessageId","organizationId") REFERENCES workspace_chat_messages(id,"organizationId") ON DELETE RESTRICT,
- FOREIGN KEY("requestedById","organizationId") REFERENCES users(id,"organizationId") ON DELETE RESTRICT,
- FOREIGN KEY("conversationId","organizationId") REFERENCES client_agent_conversations(id,"organizationId") ON DELETE RESTRICT,
- FOREIGN KEY("runId","organizationId") REFERENCES client_agent_runs(id,"organizationId") ON DELETE RESTRICT,
+ CONSTRAINT "workspace_account_manager_invocations_organizationId_source_key" UNIQUE("organizationId","sourceMessageId","bindingId"), CONSTRAINT "workspace_account_manager_invocations_organizationId_reques_key" UNIQUE("organizationId","requestedById","idempotencyKey"),
+ CONSTRAINT "workspace_account_manager_invocations_conversationId_organi_key" UNIQUE("conversationId","organizationId"), CONSTRAINT "workspace_account_manager_invocations_runId_organizationId_key" UNIQUE("runId","organizationId"),
+ CONSTRAINT "workspace_account_manager_invocations_bindingId_organizati_fkey" FOREIGN KEY("bindingId","organizationId") REFERENCES workspace_account_manager_bindings(id,"organizationId") ON DELETE RESTRICT ON UPDATE CASCADE,
+ CONSTRAINT "workspace_account_manager_invocations_sourceMessageId_orga_fkey" FOREIGN KEY("sourceMessageId","organizationId") REFERENCES workspace_chat_messages(id,"organizationId") ON DELETE RESTRICT ON UPDATE CASCADE,
+ CONSTRAINT "workspace_account_manager_invocations_requestedById_organi_fkey" FOREIGN KEY("requestedById","organizationId") REFERENCES users(id,"organizationId") ON DELETE RESTRICT ON UPDATE CASCADE,
+ CONSTRAINT "workspace_account_manager_invocations_conversationId_organ_fkey" FOREIGN KEY("conversationId","organizationId") REFERENCES client_agent_conversations(id,"organizationId") ON DELETE RESTRICT ON UPDATE CASCADE,
+ CONSTRAINT "workspace_account_manager_invocations_runId_organizationId_fkey" FOREIGN KEY("runId","organizationId") REFERENCES client_agent_runs(id,"organizationId") ON DELETE RESTRICT ON UPDATE CASCADE,
  CHECK(("deliveryState"='DELIVERED')=("deliveredAt" IS NOT NULL)),
  CHECK(("deliveryState"='SUPPRESSED')=("suppressedAt" IS NOT NULL))
 );
-CREATE INDEX ON workspace_account_manager_invocations("bindingId","organizationId");
-CREATE INDEX ON workspace_account_manager_invocations("sourceMessageId","organizationId");
-CREATE INDEX ON workspace_account_manager_invocations("requestedById","organizationId");
-CREATE INDEX ON workspace_account_manager_invocations("organizationId","deliveryState","createdAt");
+CREATE INDEX "workspace_account_manager_invocations_bindingId_organizatio_idx" ON workspace_account_manager_invocations("bindingId","organizationId");
+CREATE INDEX "workspace_account_manager_invocations_sourceMessageId_organ_idx" ON workspace_account_manager_invocations("sourceMessageId","organizationId");
+CREATE INDEX "workspace_account_manager_invocations_requestedById_organiz_idx" ON workspace_account_manager_invocations("requestedById","organizationId");
+CREATE INDEX "workspace_account_manager_invocations_organizationId_delive_idx" ON workspace_account_manager_invocations("organizationId","deliveryState","createdAt");
 
 CREATE FUNCTION workspace_agent_authority(binding_id TEXT, org_id TEXT, actor_id TEXT, profile_revision INTEGER, binding_revision INTEGER) RETURNS BOOLEAN LANGUAGE sql AS $$
  SELECT EXISTS(SELECT 1 FROM workspace_account_manager_bindings b
