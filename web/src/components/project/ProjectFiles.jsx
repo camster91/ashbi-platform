@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, EyeOff, FolderOpen, Loader2, Upload } from 'lucide-react';
+import { Download, Eye, EyeOff, FolderOpen, Loader2, Upload } from 'lucide-react';
 import { api } from '../../lib/api';
 import { prepareUploadFile, UPLOAD_ACCEPT } from '../../lib/upload';
 import { useAuth } from '../../hooks/useAuth';
@@ -355,7 +355,18 @@ export default function ProjectFiles({ projectId }) {
                     {[formatFileSize(file.size), file.uploadedBy?.name, formatDate(file.createdAt)].filter(Boolean).join(' · ')}
                   </p>
                 </div>
-                <div className="flex flex-col items-end">
+                <div className="flex flex-col items-end gap-1">
+                  {typeof file.filename === 'string' && file.filename.length > 0 && (
+                    <a
+                      href={api.attachmentFileUrl(file.filename)}
+                      download={file.originalName}
+                      aria-label={`Download ${file.originalName}`}
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-primary hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <Download className="h-4 w-4" aria-hidden="true" />
+                      Download
+                    </a>
+                  )}
                   <label
                     className={`inline-flex min-h-11 items-center gap-2 text-sm text-foreground ${canChange(file) ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
                     title={canChange(file) ? undefined : 'Only the uploader or an admin can change this'}
