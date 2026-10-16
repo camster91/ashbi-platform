@@ -6,11 +6,13 @@ import {
   channelInputSchema, messageInputSchema, messagesQuerySchema, channelsQuerySchema,
   listWorkspaceChatPeople, listWorkspaceChatChannels, createWorkspaceChatChannel,
   getWorkspaceChatMessages, postWorkspaceChatMessage, markWorkspaceChatRead, setWorkspaceChatMember,
+  attentionQuerySchema, listWorkspaceChatAttention, acknowledgeWorkspaceChatAttention, getWorkspaceChatMessageIntent,
 } from '../services/workspace-chat.service.js';
 
 const id = z.string().trim().min(1).max(100);
 const channelParams = z.object({ channelId: id }).strict();
 const memberParams = z.object({ channelId: id, userId: id }).strict();
+const attentionParams = z.object({ channelId: id, attentionId: id }).strict();
 function handler(operation) {
   return async (request, reply) => {
     try { return await operation(request); }
@@ -26,6 +28,9 @@ export default async function workspaceChatRoutes(fastify) {
   const onRequest = [fastify.authenticate, requireStaff];
   fastify.get('/channels', { onRequest, preHandler: [validateQuery(channelsQuerySchema)] }, handler(r => listWorkspaceChatChannels(r.prisma, r.user, r.query)));
   fastify.get('/people', { onRequest }, handler(r => listWorkspaceChatPeople(r.prisma, r.user)));
+  fastify.get('/attention', { onRequest, preHandler: [validateQuery(attentionQuerySchema)] }, handler(r => listWorkspaceChatAttention(r.prisma, r.user, r.query)));
+  fastify.post('/channels/:channelId/attention/:attentionId/ack', { onRequest, preHandler: [validateParams(attentionParams), validateBody(z.object({}).strict())] }, handler(r => acknowledgeWorkspaceChatAttention(r.prisma, r.user, r.params.channelId, r.params.attentionId)));
+  fastify.get('/channels/:channelId/messages/by-intent/:key', { onRequest, preHandler: [validateParams(z.object({ channelId: id, key: z.string().min(8).max(128) }).strict())] }, handler(r => getWorkspaceChatMessageIntent(r.prisma, r.user, r.params.channelId, r.params.key)));
   fastify.post('/channels', { onRequest, preHandler: [validateBody(channelInputSchema)], config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, handler(r => createWorkspaceChatChannel(r.prisma, r.user, r.body)));
   fastify.get('/channels/:channelId/messages', { onRequest, preHandler: [validateParams(channelParams), validateQuery(messagesQuerySchema)] }, handler(r => getWorkspaceChatMessages(r.prisma, r.user, r.params.channelId, r.query)));
   fastify.post('/channels/:channelId/messages', { onRequest, preHandler: [validateParams(channelParams), validateBody(messageInputSchema)], config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, handler(r => postWorkspaceChatMessage(r.prisma, r.user, r.params.channelId, r.body)));

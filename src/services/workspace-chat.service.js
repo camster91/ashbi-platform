@@ -9,15 +9,16 @@ export const channelInputSchema = z.object({
   kind: z.enum(['COMPANY', 'CLIENT', 'PROJECT', 'DIRECT']), name: z.string().trim().min(1).max(120).optional(),
   clientId: id.optional(), projectId: id.optional(), memberIds: z.array(id).max(30).default([]),
 }).strict();
-export const messageInputSchema = z.object({ content: z.string().trim().min(1).max(4000), parentId: id.optional(), idempotencyKey: z.string().min(8).max(128) }).strict();
+export const messageInputSchema = z.object({ content: z.string().trim().min(1).max(4000), parentId: id.optional(), idempotencyKey: z.string().min(8).max(128), attentionRecipientIds: z.array(id).max(29).default([]) }).strict();
+export const attentionQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(50).default(20), after: id.optional() }).strict();
 export const messagesQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(50).default(30), after: id.optional() }).strict();
 export const channelsQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50), after: id.optional() }).strict();
 const authorSelect = { id: true, name: true, role: true };
 const channelInclude = {
-  members: { where: { leftAt: null }, select: { userId: true, leftAt: true, user: { select: authorSelect } } },
+  members: { where: { leftAt: null }, select: { userId: true, leftAt: true, user: { select: { ...authorSelect, isActive: true } } } },
   project: { select: { id: true, organizationId: true, clientId: true, deletedAt: true } },
 };
-const messageInclude = { author: { select: { id: true, name: true } } };
+const messageInclude = { author: { select: { id: true, name: true } }, attention: { select: { id: true, recipientId: true, acknowledgedAt: true, recipient: { select: { id: true, name: true } } }, orderBy: { recipientId: 'asc' } } };
 const activeParents = organizationId => [
   { OR: [{ clientId: null }, { client: { organizationId, deletedAt: null } }] },
   { OR: [{ projectId: null }, { project: { organizationId, deletedAt: null } }] },
@@ -129,16 +130,60 @@ export async function getWorkspaceChatMessages(prisma, user, channelId, input = 
   return { channel, items: page.reverse(), nextCursor: rows.length > limit ? rows[limit - 1].id : null };
 }
 export async function postWorkspaceChatMessage(prisma, user, channelId, input) {
-  const { content, parentId, idempotencyKey } = parse(messageInputSchema, input);
+  const { content, parentId, idempotencyKey, attentionRecipientIds: requested } = parse(messageInputSchema, input);
+  const attentionRecipientIds = [...new Set(requested)].sort();
+  const intentHash = createHash('sha256').update(JSON.stringify({ content, parentId: parentId ?? null, attentionRecipientIds })).digest('hex');
   return transaction(prisma, user, async ({ db, actor, organizationId }) => {
     const channel = await channelForMember(db, actor, channelId);
     await lockChannel(db, actor, channel);
+    if (attentionRecipientIds.includes(actor.id)) refuse('INVALID_INPUT', 400);
+    if (attentionRecipientIds.length) {
+      const recipients = await db.workspaceChatMember.findMany({ where: { channelId, organizationId, userId: { in: attentionRecipientIds }, leftAt: null, user: { organizationId, isActive: true, role: { in: ['ADMIN', 'TEAM'] } } }, select: { userId: true } });
+      if (recipients.length !== attentionRecipientIds.length || !attentionRecipientIds.every(value => recipients.some(row => row.userId === value))) refuse();
+    }
     const existing = await db.workspaceChatMessage.findFirst({ where: { channelId, organizationId, clientKey: idempotencyKey }, include: messageInclude });
-    if (existing) { if (existing.authorId !== actor.id || existing.content !== content || (existing.parentId ?? null) !== (parentId ?? null)) refuse('CHAT_CONFLICT', 409); return { message: existing, duplicate: true }; }
+    if (existing) { if (existing.authorId !== actor.id || JSON.stringify(existing.attentionRecipientIds || []) !== JSON.stringify(attentionRecipientIds) || (existing.intentHash ? existing.intentHash !== intentHash : existing.content !== content || (existing.parentId ?? null) !== (parentId ?? null))) refuse('CHAT_CONFLICT', 409); return { message: existing, duplicate: true }; }
     if (parentId && !await db.workspaceChatMessage.findFirst({ where: { id: parentId, channelId, organizationId }, select: { id: true } })) refuse();
-    const message = await db.workspaceChatMessage.create({ data: { organizationId, channelId, authorId: actor.id, content, parentId: parentId ?? null, clientKey: idempotencyKey }, include: messageInclude });
-    await audit(db, actor, 'workspace_chat.message_created', message.id, { channelId, parentId: parentId ?? null });
-    return { message, duplicate: false };
+    const message = await db.workspaceChatMessage.create({ data: { organizationId, channelId, authorId: actor.id, content, parentId: parentId ?? null, clientKey: idempotencyKey, attentionRecipientIds, intentHash }, include: messageInclude });
+    if (attentionRecipientIds.length) await db.workspaceChatAttention.createMany({ data: attentionRecipientIds.map(recipientId => ({ organizationId, channelId, messageId: message.id, recipientId })) });
+    await audit(db, actor, 'workspace_chat.message_created', message.id, { channelId, parentId: parentId ?? null, attentionCount: attentionRecipientIds.length });
+    return { message: await db.workspaceChatMessage.findFirst({ where: { id: message.id, channelId, organizationId }, include: messageInclude }), duplicate: false };
+  });
+}
+
+export async function getWorkspaceChatMessageIntent(prisma, user, channelId, key) {
+  parse(z.string().min(8).max(128), key);
+  const { db, actor, organizationId } = await actorScope(prisma, user);
+  await channelForMember(db, actor, channelId);
+  const message = await db.workspaceChatMessage.findFirst({ where: { channelId, organizationId, authorId: actor.id, clientKey: key }, include: messageInclude });
+  if (!message) refuse();
+  return { message };
+}
+
+export async function listWorkspaceChatAttention(prisma, user, input = {}) {
+  const { limit, after } = parse(attentionQuerySchema, input);
+  const { db, actor, organizationId } = await actorScope(prisma, user);
+  const rows = await db.workspaceChatAttention.findMany({ where: { organizationId, recipientId: actor.id, acknowledgedAt: null, ...(after ? { id: { gt: after } } : {}), channel: { organizationId, archivedAt: null, AND: activeParents(organizationId), members: { some: { userId: actor.id, organizationId, leftAt: null } } } },
+    include: { channel: { include: channelInclude }, message: { include: messageInclude } }, orderBy: { id: 'asc' }, take: limit + 1 });
+  const scanned = rows.slice(0, limit);
+  const items = scanned.filter(row => canonicalProject(row.channel));
+  return { items, nextCursor: rows.length > limit ? scanned.at(-1).id : null, pendingCount: items.length, countScope: 'page' };
+}
+
+export async function acknowledgeWorkspaceChatAttention(prisma, user, channelId, attentionId) {
+  parse(id, attentionId);
+  return transaction(prisma, user, async ({ db, actor, organizationId }) => {
+    const channel = await channelForMember(db, actor, channelId);
+    await lockChannel(db, actor, channel);
+    const where = { id: attentionId, channelId, organizationId, recipientId: actor.id };
+    const attention = await db.workspaceChatAttention.findFirst({ where });
+    if (!attention) refuse();
+    if (!attention.acknowledgedAt) {
+      const result = await db.workspaceChatAttention.updateMany({ where: { ...where, acknowledgedAt: null }, data: { acknowledgedAt: new Date() } });
+      if (result.count !== 1) refuse('CHAT_CONFLICT', 409);
+      await audit(db, actor, 'workspace_chat.attention_acknowledged', attentionId, { channelId, messageId: attention.messageId });
+    }
+    return { attention: await db.workspaceChatAttention.findFirst({ where }) };
   });
 }
 export async function markWorkspaceChatRead(prisma, user, channelId) {

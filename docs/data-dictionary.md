@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-125 models, 0 enums, 71 tenant-scoped, 13 soft-deletable.
+126 models, 0 enums, 72 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -85,7 +85,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 80 |
+| [Organization](#model-organization) | `organizations` | no | no | 81 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -127,7 +127,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [TimeSession](#model-timesession) | `time_sessions` | no | no | 16 |
 | [TrashedItem](#model-trasheditem) | `trashed_items` | yes | yes | 9 |
 | [UnmatchedEmail](#model-unmatchedemail) | `unmatched_emails` | yes | no | 16 |
-| [User](#model-user) | `users` | yes | no | 66 |
+| [User](#model-user) | `users` | yes | no | 67 |
 | [WPAlert](#model-wpalert) | `wp_alerts` | yes | no | 9 |
 | [WPBackup](#model-wpbackup) | `wp_backups` | yes | no | 15 |
 | [WPBridgeNonce](#model-wpbridgenonce) | `wp_bridge_nonces` | yes | no | 7 |
@@ -136,9 +136,10 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [WPReport](#model-wpreport) | `wp_reports` | yes | no | 14 |
 | [WPSite](#model-wpsite) | `wp_sites` | yes | no | 32 |
 | [WeeklyDigest](#model-weeklydigest) | `weekly_digests` | yes | no | 14 |
-| [WorkspaceChatChannel](#model-workspacechatchannel) | `workspace_chat_channels` | yes | no | 18 |
+| [WorkspaceChatAttention](#model-workspacechatattention) | `workspace_chat_attention` | yes | no | 11 |
+| [WorkspaceChatChannel](#model-workspacechatchannel) | `workspace_chat_channels` | yes | no | 19 |
 | [WorkspaceChatMember](#model-workspacechatmember) | `workspace_chat_members` | yes | no | 10 |
-| [WorkspaceChatMessage](#model-workspacechatmessage) | `workspace_chat_messages` | yes | no | 14 |
+| [WorkspaceChatMessage](#model-workspacechatmessage) | `workspace_chat_messages` | yes | no | 17 |
 | [WorkspaceCollection](#model-workspacecollection) | `workspace_collections` | yes | no | 16 |
 | [WorkspacePage](#model-workspacepage) | `workspace_pages` | yes | no | 18 |
 | [WorkspacePageGrant](#model-workspacepagegrant) | `workspace_page_grants` | yes | no | 9 |
@@ -2018,6 +2019,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `workspaceChatChannels` | WorkspaceChatChannel[] | list, required |  | → WorkspaceChatChannel |  |
 | `workspaceChatMembers` | WorkspaceChatMember[] | list, required |  | → WorkspaceChatMember |  |
 | `workspaceChatMessages` | WorkspaceChatMessage[] | list, required |  | → WorkspaceChatMessage |  |
+| `workspaceChatAttention` | WorkspaceChatAttention[] | list, required |  | → WorkspaceChatAttention |  |
 | `gmailSendReceipts` | GmailSendReceipt[] | list, required |  | → GmailSendReceipt |  |
 
 ### Model OutreachSequence
@@ -3293,6 +3295,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdWorkspaceChatChannels` | WorkspaceChatChannel[] | list, required |  | → WorkspaceChatChannel, "WorkspaceChatCreator" |  |
 | `workspaceChatMemberships` | WorkspaceChatMember[] | list, required |  | → WorkspaceChatMember |  |
 | `workspaceChatMessages` | WorkspaceChatMessage[] | list, required |  | → WorkspaceChatMessage, "WorkspaceChatAuthor" |  |
+| `workspaceChatAttention` | WorkspaceChatAttention[] | list, required |  | → WorkspaceChatAttention |  |
 | `gmailSendReceipts` | GmailSendReceipt[] | list, required |  | → GmailSendReceipt |  |
 
 ### Model WPAlert
@@ -3518,6 +3521,32 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `fullDigest` | String | required |  |  | Full AI-generated digest text |
 | `createdAt` | DateTime | required | `now()` |  |  |
 
+### Model WorkspaceChatAttention
+
+- Table: `workspace_chat_attention`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([messageId, recipientId])`
+  - `@@index([organizationId, recipientId, acknowledgedAt, id])`
+  - `@@index([channelId, organizationId])`
+  - `@@index([messageId, organizationId])`
+  - `@@index([recipientId, organizationId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `channelId` | String | required |  |  |  |
+| `messageId` | String | required |  |  |  |
+| `recipientId` | String | required |  |  |  |
+| `acknowledgedAt` | DateTime | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `channel` | WorkspaceChatChannel | required |  | → WorkspaceChatChannel, via (channelId, organizationId) → (id, organizationId), onDelete Cascade |  |
+| `message` | WorkspaceChatMessage | required |  | → WorkspaceChatMessage, via (messageId, organizationId) → (id, organizationId), onDelete Cascade |  |
+| `recipient` | User | required |  | → User, via (recipientId, organizationId) → (id, organizationId), onDelete Restrict |  |
+
 ### Model WorkspaceChatChannel
 
 - Table: `workspace_chat_channels`
@@ -3551,6 +3580,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdBy` | User | required |  | → User, via (createdById, organizationId) → (id, organizationId), onDelete Restrict, "WorkspaceChatCreator" |  |
 | `members` | WorkspaceChatMember[] | list, required |  | → WorkspaceChatMember |  |
 | `messages` | WorkspaceChatMessage[] | list, required |  | → WorkspaceChatMessage |  |
+| `attention` | WorkspaceChatAttention[] | list, required |  | → WorkspaceChatAttention |  |
 
 ### Model WorkspaceChatMember
 
@@ -3582,6 +3612,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Tenant-scoped: yes (`organizationId`)
 - Soft-deletable: no
 - Constraints and indexes:
+  - `@@unique([id, organizationId])`
   - `@@unique([channelId, clientKey])`
   - `@@index([organizationId, channelId, createdAt, id])`
   - `@@index([channelId, organizationId])`
@@ -3597,6 +3628,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `content` | String | required |  |  |  |
 | `parentId` | String | optional |  |  |  |
 | `clientKey` | String | optional |  |  |  |
+| `attentionRecipientIds` | String[] | list, required | `[]` |  |  |
+| `intentHash` | String | optional |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
@@ -3604,6 +3637,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `author` | User | required |  | → User, via (authorId, organizationId) → (id, organizationId), onDelete Restrict, "WorkspaceChatAuthor" |  |
 | `parent` | WorkspaceChatMessage | optional |  | → WorkspaceChatMessage, via (parentId) → (id), onDelete SetNull, "WorkspaceChatReplies" |  |
 | `replies` | WorkspaceChatMessage[] | list, required |  | → WorkspaceChatMessage, "WorkspaceChatReplies" |  |
+| `attention` | WorkspaceChatAttention[] | list, required |  | → WorkspaceChatAttention |  |
 
 ### Model WorkspaceCollection
 
