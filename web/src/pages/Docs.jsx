@@ -275,7 +275,7 @@ export default function Docs() {
       </div>
 
       {/* Filters */}
-      {editingId && <DocumentSaveRecovery noteId={editingId} draft={editForm} error={updateMutation.error} onReload={startEdit} />}
+      {editingId && <DocumentSaveRecovery noteId={editingId} draft={editForm} error={updateMutation.error} busy={updateMutation.isPending} onReload={startEdit} onReconcile={({ current, draft }) => { startEdit(current); setEditForm(form => ({ ...form, ...draft })); }} />}
       <div className="flex flex-col sm:flex-row gap-3">
         <PortfolioFilter value={portfolio} disabled={Boolean(editingId) || showNewNote} onChange={value => { const next = new URLSearchParams(searchParams); if (value) next.set('portfolio', value); else next.delete('portfolio'); setSearchParams(next); }} />
         <div className="relative flex-1 max-w-md">

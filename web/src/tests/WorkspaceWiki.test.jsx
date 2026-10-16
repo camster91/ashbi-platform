@@ -46,6 +46,22 @@ it('retains a wiki draft and observed revision through background refetch and fa
   fireEvent.click(screen.getByRole('button', { name: 'Reload document and discard draft' }));
   await waitFor(() => expect(screen.getByLabelText('Page content')).toHaveValue('Team edit'));
 });
+it('rebases an explicit reviewed merge with current metadata without saving and still refuses a third edit', async () => {
+  let page = { id: 'page', title: 'Handbook', content: 'Original', revision: 2, parentId: null, permissions: { canEdit: true, canManage: true } };
+  api.getWorkspacePage.mockImplementation(async () => page);
+  api.updateWorkspacePage.mockImplementation(async (_id, input) => { if (input.revision !== page.revision) throw new Error('Knowledge page changed');page = { ...page, ...input, revision: page.revision + 1 };return page; });
+  mount('/wiki/page');fireEvent.click(await screen.findByRole('button', { name: 'Edit page' }));fireEvent.change(screen.getByLabelText('Page content'), { target: { value: 'Local edit' } });
+  page = { ...page, revision: 3, content: 'Teammate edit', parentId: 'saved-parent' };
+  fireEvent.click(screen.getByRole('button', { name: 'Save page' }));await screen.findByText(/Knowledge page changed/);
+  fireEvent.click(screen.getByRole('button', { name: 'Compare latest saved document' }));await screen.findByLabelText('Reviewed merged content');
+  fireEvent.change(screen.getByLabelText('Reviewed merged content'), { target: { value: 'Local and teammate edit' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Use reviewed merge in editor' }));expect(api.updateWorkspacePage).toHaveBeenCalledTimes(1);
+  expect(screen.getByLabelText('Page content')).toHaveValue('Local and teammate edit');
+  page = { ...page, revision: 4, content: 'Third edit' };
+  fireEvent.click(screen.getByRole('button', { name: 'Save page' }));await screen.findByText(/Knowledge page changed/);
+  expect(api.updateWorkspacePage).toHaveBeenLastCalledWith('page', expect.objectContaining({ revision: 3, parentId: 'saved-parent', content: 'Local and teammate edit' }));
+  expect(screen.getByLabelText('Page content')).toHaveValue('Local and teammate edit');
+});
 it('resets draft identity when following another knowledge page link', async () => {
   api.getWorkspacePage.mockImplementation(async id => ({ id, title: id, content: `Content ${id}`, revision: 0, parentId: null, permissions: { canEdit: true, canManage: true } }));
   api.getWorkspacePages.mockImplementation(async input => ({ items: input.parentId === 'first' ? [{ id: 'second', title: 'Second page' }] : [], nextCursor: null }));
