@@ -2372,6 +2372,7 @@ model AiBridgeAction {
   source           String    @default("ai_bridge") // ai_bridge, assistant
   toolClass        String    @default("execute") // prepare, execute
   correlationId    String?
+  authorizationBinding Json? // Immutable optional MCP OAuth grant binding; NULL for existing API-key/session actions
   inputScope       Json? // Record ids the scope resolver proved belong to the organization
   approverId       String? // No foreign key: the receipt outlives the approver's account
   approvalEvidence Json? // { method, approverRole, requesterApproved, reauthenticated }

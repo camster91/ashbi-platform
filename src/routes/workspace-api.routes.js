@@ -5,7 +5,7 @@ import { ToolError } from '../ai/tools/registry.js';
 import { MCP_OAUTH_PREFIX } from '../auth/mcp-oauth-provider.js';
 
 const context = request => ({ prisma: request.prisma, user: request.user, scopes: request.apiKeyScopes ?? [],
-  requestId: request.id, ip: request.ip, log: request.log });
+  oauth: request.mcpOAuth ?? null, requestId: request.id, ip: request.ip, log: request.log });
 
 export default async function workspaceApiRoutes(fastify, options = {}) {
   const service = options.service ?? createWorkspaceTools();
@@ -30,6 +30,7 @@ export default async function workspaceApiRoutes(fastify, options = {}) {
     try {
       const info = await oauth.verifyAccessToken(token);
       request.user = info.extra.user;
+      request.mcpOAuth = info.extra.oauth;
       request.apiKeyScopes = info.scopes;
     } catch {
       return reply.code(401).send({ error: 'MCP connection expired or revoked; reconnect' });

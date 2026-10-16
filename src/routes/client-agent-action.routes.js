@@ -1,3 +1,4 @@
+import { assertMcpActionAuthority } from '../auth/mcp-action-authority.js';
 import { authorizeClientAgentStaff } from '../services/client-agent-profile.service.js';
 import { z } from 'zod';
 import { requireStaff } from '../middleware/require-staff.js';
@@ -40,6 +41,7 @@ export default async function clientAgentActionRoutes(fastify, options = {}) {
     const row = await r.prisma.aiBridgeAction.findFirst({ where: { organizationId: r.user.organizationId, userId: r.user.id,
       action: 'create_client_task', source: 'ai_bridge', ...(byIntent ? { idempotencyKey: r.params.key } : { id: r.params.actionId }) } });
     if (!row || row.input?.clientId !== r.params.clientId) throw new ToolError('NOT_FOUND', 'Action not found', { statusCode: 404 });
+    await assertMcpActionAuthority(r.prisma, context(r), row.action, row);
     await authorizeClientTaskReceipt(r.prisma, r.user, row);
     return row;
   }
@@ -68,6 +70,7 @@ export default async function clientAgentActionRoutes(fastify, options = {}) {
       const row = await tx.aiBridgeAction.findFirst({ where: { organizationId: r.user.organizationId, userId: r.user.id,
         action: 'create_client_task', source: 'ai_bridge', ...(byIntent ? { idempotencyKey: r.params.key } : { id: r.params.actionId }) } });
       if (!row || row.input?.clientId !== r.params.clientId) throw new ToolError('NOT_FOUND', 'Action not found', { statusCode: 404 });
+      await assertMcpActionAuthority(tx, context(r), row.action, row);
       if (['EXECUTED', 'REJECTED', 'EXPIRED'].includes(row.status)) return { action: { id: row.id, status: row.status } };
       if (row.status === 'FAILED' && row.outcome === 'failed') return { action: { id: row.id, status: 'FAILED', outcome: 'failed' } };
       if (row.status !== 'PENDING_CONFIRMATION') throw new ToolError('ACTION_UNAVAILABLE', 'Action outcome is not confirmed', { statusCode: 409 });
