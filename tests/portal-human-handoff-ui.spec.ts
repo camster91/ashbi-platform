@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url);
 for (const width of [1280, 390]) {
   test(`human team request recovers after reload at ${width}px without replaying a POST`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
+    await page.routeWebSocket('**/*', socket => socket.close());
     let posts = 0;
     let key = '';
     const requests: Record<string, unknown>[] = [];
@@ -16,6 +17,7 @@ for (const width of [1280, 390]) {
     // read-only dependency junction outside Vite's application allow-list.
     await page.route('**/*.woff2', async route => {
       const pathname = new URL(route.request().url()).pathname;
+      if (!pathname.includes('/@fs/') && !pathname.includes('/node_modules/')) return route.continue();
       const family = pathname.includes('instrument-serif') ? 'instrument-serif' : 'dm-sans';
       const directory = path.dirname(require.resolve(`@fontsource/${family}/400.css`, { paths: [path.resolve('web')] }));
       return route.fulfill({ path: path.join(directory, 'files', path.basename(pathname)), contentType: 'font/woff2' });

@@ -1176,7 +1176,12 @@ export const api = {
     request(`/projects/${projectId}/context`, { method: 'POST', body: data }),
 
   listPortalHandoffs: (params = {}) => request(`/portal-handoffs?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined))}`, { silent: true }),
-  transitionPortalHandoff: (id, operation, body) => request(`/portal-handoffs/${encodeURIComponent(id)}/${operation}`, { method: 'POST', body, silent: true }),
+  transitionPortalHandoff: (id, operation, body) => {
+    if (operation === 'claim') return request(`/portal-handoffs/${encodeURIComponent(id)}/claim`, { method: 'POST', body, silent: true });
+    if (operation === 'resolve') return request(`/portal-handoffs/${encodeURIComponent(id)}/resolve`, { method: 'POST', body, silent: true });
+    if (operation === 'requeue') return request(`/portal-handoffs/${encodeURIComponent(id)}/requeue`, { method: 'POST', body, silent: true });
+    throw new Error('Unsupported human handoff action.');
+  },
 
   // ===== GMAIL =====
   getGmailStatus: () =>
