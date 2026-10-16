@@ -77,3 +77,11 @@ hashes and worker claim tokens. Children of trashed clients follow the
 existing export exclusion. This export is private organization data and must
 be delivered through the established offboarding process, not a public or
 client-portal transcript endpoint.
+
+## Bounded prior-turn memory (stacked implementation, not yet deployed)
+
+Newly prepared runs retain `memorySnapshot` alongside their unchanged context v1 snapshot in the same permanent claim. Its v1 schema is `{version:1,turns:[{runId,prompt,response,responseTruncated}],truncated:boolean}`. Legacy NULL means no retained memory evidence; an explicit empty turns array means preparation found no eligible history.
+
+History is limited to four successful prior question/answer pairs from this exact organization and conversation, oldest to newest. Sources must have finished strictly before the new run was created; creation time and run ID form the chronological cutoff and tie breaker. The query takes five candidates to detect omitted older history. Prompts retain their exact original text (at most 2,000 JavaScript UTF-16 code units); response prefixes retain at most 4,000 code units and never split a Unicode surrogate pair. The serialized UTF-8 memory limit is 8,192 bytes; the builder reserves 100 bytes for PostgreSQL JSONB serialization whitespace. Older pairs are removed first, then the latest answer prefix is shortened if necessary. Truncation is explicit. Total provider prompt input is capped at 96 KiB.
+
+The exact retained memory is supplied as quoted prompt data, never as system instructions or reconstructed current facts. Current shareable client/project context takes precedence. Snapshot preparation checks current staff/client/conversation access and enabled profile revision in the database. Guards reject foreign, failed, future or duplicate source runs, changed original question text, invented answer text, unmarked response prefixes and later replacement/backfill. Run replay, cancellation, deadline expiry and ambiguous provider outcomes never rebuild memory or dispatch a second inference. Existing staff permissions protect retained history in API reads and workspace exports. Provider-backed and team acceptance remain separate from mock-provider CI evidence.

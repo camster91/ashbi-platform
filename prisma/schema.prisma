@@ -3161,6 +3161,7 @@ model ClientAgentRun {
   profileRevision Int?
   contextObservedAt DateTime?
   contextSnapshot Json?
+  memorySnapshot Json?
   claimToken String?
   startedAt DateTime?
   finishedAt DateTime?

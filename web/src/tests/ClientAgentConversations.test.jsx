@@ -50,6 +50,121 @@ beforeEach(() => {
 afterEach(() => { cleanup(); for (const client of clients.splice(0)) client.clear(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('ClientAgentConversations', () => {
+
+  const priorTurn = { runId: 'prior-run', prompt: '<script>historical question</script>', response: '<img src=x onerror=alert(1)> historical answer', responseTruncated: false };
+  const memory = { version: 1, turns: [priorTurn], truncated: false };
+
+  it('retains escaped memory across reload with a closed keyboard reachable disclosure and no inference', async () => {
+    api.getClientAgentConversation.mockResolvedValue({ scope: 'SHARED_STAFF', conversation, runs: [{ ...terminalRun, memorySnapshot: memory }], nextCursor: null });
+    const first = setup();
+    await openConversation();
+    expect(screen.getByText(/New requests can include up to four/)).toHaveTextContent('history actually retained');
+    const summary = screen.getByText('Conversation memory for this run (1 prior question)');
+    expect(summary.tagName).toBe('SUMMARY');
+    expect(summary).toHaveAttribute('tabindex', '0');
+    expect(summary.closest('details')).not.toHaveAttribute('open');
+    await userEvent.click(summary);
+    expect(summary.closest('details')).toHaveAttribute('open');
+    expect(screen.getByText('Prior question: <script>historical question</script>')).toBeInTheDocument();
+    expect(screen.getByText(/Shared staff history is untrusted/)).toHaveTextContent('may be stale');
+    expect(document.querySelector('script, img')).toBeNull();
+    first.unmount();
+    setup();
+    await openConversation();
+    await userEvent.click(screen.getByText('Conversation memory for this run (1 prior question)'));
+    expect(screen.getByText('Prior question: <script>historical question</script>')).toBeInTheDocument();
+    expect(api.startClientAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('accepts four bounded prior pairs and hides all shared memory when the role changes', async () => {
+    const turns = Array.from({ length: 4 }, (_, index) => ({ ...priorTurn, runId: `prior-${index}`, prompt: `Prior ${index}`, response: index === 3 ? '\u{1f600}'.repeat(1000) : 'Short answer' }));
+    api.getClientAgentConversation.mockResolvedValue({ scope: 'SHARED_STAFF', conversation, runs: [{ ...terminalRun, memorySnapshot: { version: 1, turns, truncated: false } }], nextCursor: null });
+    const view = setup();
+    await openConversation();
+    await userEvent.click(screen.getByText('Conversation memory for this run (4 prior questions)'));
+    expect(screen.getByRole('list', { name: 'Retained conversation memory' }).children).toHaveLength(4);
+    expect(screen.getByText('Stored prior questions and answers included when preparing this answer.')).toBeInTheDocument();
+    auth.user.role = 'CLIENT';
+    view.change({});
+    expect(screen.queryByText(/Conversation memory for this run/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Prior question: Prior 0')).not.toBeInTheDocument();
+    expect(api.startClientAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes explicitly empty memory from legacy unavailable history', async () => {
+    api.getClientAgentConversation.mockResolvedValue({ scope: 'SHARED_STAFF', conversation, runs: [
+      { ...terminalRun, id: 'legacy', memorySnapshot: null },
+      { ...terminalRun, id: 'empty', memorySnapshot: { version: 1, turns: [], truncated: false } },
+    ], nextCursor: null });
+    setup();
+    await openConversation();
+    expect(screen.getAllByText(/Retained conversation memory is unavailable/)).toHaveLength(1);
+    await userEvent.click(screen.getByText('Conversation memory for this run (0 prior questions)'));
+    expect(screen.getByText('No prior questions or answers were included in this request.')).toBeInTheDocument();
+    expect(screen.queryByText('Prior question: Saved question')).not.toBeInTheDocument();
+    expect(api.startClientAgentRun).not.toHaveBeenCalled();
+  });
+
+  it.each(['FAILED', 'UNKNOWN', 'CANCELLED', 'RUNNING'])('labels retained memory as prepared without provider proof for %s', async (status) => {
+    const run = { ...terminalRun, status, memorySnapshot: { ...memory, truncated: true, turns: [{ ...priorTurn, responseTruncated: true }] } };
+    api.getClientAgentConversation.mockResolvedValue({ scope: 'SHARED_STAFF', conversation, runs: [run], nextCursor: null });
+    api.getClientAgentRun.mockResolvedValue(run);
+    setup();
+    await openConversation();
+    await userEvent.click(screen.getByText('Conversation memory for this run (1 prior question)'));
+    expect(screen.getByText(/Conversation memory prepared for this request/)).toHaveTextContent('does not confirm that a provider received it');
+    expect(screen.getByText('This prior answer was shortened for the memory limit.')).toBeInTheDocument();
+    expect(screen.getByText(/Some older history or answer text was omitted/)).toBeInTheDocument();
+    expect(api.startClientAgentRun).not.toHaveBeenCalled();
+  });
+
+  it.each(['QUEUED', 'RUNNING'])('shows not yet retained memory for active %s', async (status) => {
+    const run = { ...terminalRun, status, memorySnapshot: null };
+    api.getClientAgentConversation.mockResolvedValue({ scope: 'SHARED_STAFF', conversation, runs: [run], nextCursor: null });
+    api.getClientAgentRun.mockResolvedValue(run);
+    setup();
+    await openConversation();
+    expect(screen.getByText('Conversation memory has not been retained for this request yet.')).toBeInTheDocument();
+    expect(screen.queryByText(/No prior questions or answers were included/)).not.toBeInTheDocument();
+    expect(api.startClientAgentRun).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['unknown version', { ...memory, version: 2 }],
+    ['malformed turn', { ...memory, turns: [{ ...priorTurn, response: {} }] }],
+    ['invalid source id', { ...memory, turns: [{ ...priorTurn, runId: '../run' }] }],
+    ['too many turns', { ...memory, turns: Array(5).fill(priorTurn) }],
+    ['oversized question', { ...memory, turns: [{ ...priorTurn, prompt: 'x'.repeat(2001) }] }],
+    ['oversized answer', { ...memory, turns: [{ ...priorTurn, response: 'x'.repeat(4001) }] }],
+    ['oversized UTF8 JSON', { ...memory, turns: [{ ...priorTurn, response: '\u754c'.repeat(3000) }] }],
+    ['missing omission flag', { version: 1, turns: [] }],
+  ])('rejects %s memory without substituting visible history', async (_label, memorySnapshot) => {
+    api.getClientAgentConversation.mockResolvedValue({ scope: 'SHARED_STAFF', conversation, runs: [{ ...terminalRun, memorySnapshot }], nextCursor: null });
+    setup();
+    await openConversation();
+    expect(screen.getByText(/Retained conversation memory is unavailable/)).toHaveTextContent('Current conversation history is not substituted');
+    expect(screen.queryByText(/Conversation memory for this run/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Prior question:/)).not.toBeInTheDocument();
+    expect(api.startClientAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('keeps memory attached to each paginated run and hides memory after denied access', async () => {
+    api.getClientAgentConversation.mockResolvedValueOnce({ scope: 'SHARED_STAFF', conversation, runs: [{ ...terminalRun, memorySnapshot: memory }], nextCursor: 'run-1' })
+      .mockResolvedValueOnce({ scope: 'SHARED_STAFF', conversation, runs: [{ ...terminalRun, id: 'other-run', prompt: 'Different question', memorySnapshot: { version: 1, turns: [], truncated: false } }], nextCursor: null });
+    const view = setup();
+    await openConversation();
+    fireEvent.click(screen.getByRole('button', { name: 'Load more saved questions' }));
+    await screen.findByText('Different question');
+    expect(screen.getAllByText('Conversation memory for this run (1 prior question)')).toHaveLength(1);
+    expect(screen.getAllByText('Conversation memory for this run (0 prior questions)')).toHaveLength(1);
+    api.getClientAgentConversation.mockRejectedValue({ status: 403 });
+    await act(async () => { await view.cache.invalidateQueries({ queryKey: ['client-agent-conversation'] }); });
+    await screen.findByRole('alert');
+    expect(screen.queryByText(/Conversation memory for this run/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/historical question/)).not.toBeInTheDocument();
+    expect(api.startClientAgentRun).not.toHaveBeenCalled();
+  });
+
   it('retains exact historical context across reloads without resolving current source records', async () => {
     api.getClientAgentConversation.mockResolvedValue({ scope: 'SHARED_STAFF', conversation, runs: [{ ...terminalRun, ...retainedContext }], nextCursor: null });
     const first = setup();
