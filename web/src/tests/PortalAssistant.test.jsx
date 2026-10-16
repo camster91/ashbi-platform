@@ -102,3 +102,24 @@ it('expired reconciliation is explicit and UNKNOWN remains frozen without anothe
   localStorage.setItem(storage, JSON.stringify({ key, dispatched: true, runId: 'run1' })); assistant.list.mockResolvedValue(listing([run({ status: 'RUNNING', deadlineAt: '2020-01-01T00:00:00Z' })])); assistant.recover.mockResolvedValue({ run: run({ status: 'UNKNOWN' }) });
   render(ui()); await screen.findByText('Reconcile expired request'); expect(assistant.recover).not.toHaveBeenCalled(); fireEvent.click(screen.getByText('Reconcile expired request')); await screen.findByText('Outcome unknown'); expect(localStorage.getItem(storage)).not.toBeNull(); expect(screen.getByText('Send to AI assistant')).toBeDisabled(); expect(assistant.dispatch).not.toHaveBeenCalled();
 });
+it('fresh same-ID UNKNOWN read allows explicit new empty question without retrying old run or deleting its history', async () => {
+  assistant.create.mockResolvedValue({ run: run({ message: 'Old draft' }) }); assistant.dispatch.mockResolvedValue({ run: run({ message: 'Old draft', status: 'UNKNOWN' }) }); assistant.get.mockResolvedValue({ run: run({ message: 'Old draft', status: 'UNKNOWN' }) });
+  render(ui()); await open(); fireEvent.change(screen.getByLabelText('Message to the AI assistant'), { target: { value: 'Old draft' } }); fireEvent.click(screen.getByText('Send to AI assistant'));
+  await screen.findByText('Outcome unknown'); expect(screen.queryByText('Continue with a new question')).toBeNull(); expect(localStorage.getItem(storage)).not.toBeNull(); expect(screen.getByLabelText('Message to the AI assistant')).toHaveValue('Old draft');
+  fireEvent.click(screen.getByText('Check reply status')); await screen.findByText('Continue with a new question'); expect(localStorage.getItem(storage)).not.toBeNull();
+  fireEvent.click(screen.getByText('Continue with a new question')); expect(localStorage.getItem(storage)).toBeNull(); expect(screen.getByLabelText('Message to the AI assistant')).toHaveValue(''); expect(screen.getByLabelText('Message to the AI assistant')).not.toBeDisabled(); expect(screen.getByText('Outcome unknown')).toBeInTheDocument(); expect(assistant.create).toHaveBeenCalledTimes(1); expect(assistant.dispatch).toHaveBeenCalledTimes(1);
+});
+it.each([404, 403, 503])('failed fresh UNKNOWN read (%s) never permits resetting the held intent', async status => {
+  localStorage.setItem(storage, JSON.stringify({ key, runId: 'run1', dispatched: true })); assistant.list.mockResolvedValue(listing([run({ status: 'UNKNOWN' })])); assistant.get.mockRejectedValue({ status }); render(ui()); await screen.findByText('Outcome unknown'); fireEvent.click(screen.getByText('Check reply status'));
+  await screen.findByText(/outcome could not be confirmed/); expect(localStorage.getItem(storage)).not.toBeNull(); expect(screen.queryByText('Continue with a new question')).toBeNull(); expect(assistant.dispatch).not.toHaveBeenCalled();
+});
+it('explicit continuation cannot clear another tab’s newer intent after terminal confirmation', async () => {
+  localStorage.setItem(storage, JSON.stringify({ key, runId: 'run1', dispatched: true })); assistant.list.mockResolvedValue(listing([run({ status: 'UNKNOWN' })])); assistant.get.mockResolvedValue({ run: run({ status: 'UNKNOWN' }) }); render(ui()); await screen.findByText('Outcome unknown'); fireEvent.click(screen.getByText('Check reply status')); await screen.findByText('Continue with a new question');
+  const newer = { key: '22222222-2222-4222-8222-222222222222', dispatched: false }; localStorage.setItem(storage, JSON.stringify(newer)); fireEvent.click(screen.getByText('Continue with a new question'));
+  expect(JSON.parse(localStorage.getItem(storage))).toEqual(newer); expect(screen.getByLabelText('Message to the AI assistant')).toBeDisabled(); expect(assistant.dispatch).not.toHaveBeenCalled(); expect(assistant.create).not.toHaveBeenCalled();
+});
+it('a late fresh terminal read after principal switch cannot authorize continuation or clear old intent', async () => {
+  localStorage.setItem(storage, JSON.stringify({ key, runId: 'run1', dispatched: true })); assistant.list.mockResolvedValue(listing([run({ status: 'UNKNOWN' })])); let resolve; assistant.get.mockImplementation(() => new Promise(done => { resolve = done; }));
+  const view = render(ui()); await screen.findByText('Outcome unknown'); fireEvent.click(screen.getByText('Check reply status')); await waitFor(() => expect(assistant.get).toHaveBeenCalledTimes(1)); view.rerender(ui({ identity: { ...identity, contactId: 'new-contact' } }));
+  await act(async () => resolve({ run: run({ status: 'UNKNOWN' }) })); expect(localStorage.getItem(storage)).not.toBeNull(); expect(screen.queryByText('Continue with a new question')).toBeNull(); expect(screen.queryByText('Outcome unknown')).toBeNull();
+});
