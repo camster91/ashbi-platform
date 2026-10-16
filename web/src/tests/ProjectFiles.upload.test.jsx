@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/api', () => ({
   api: {
@@ -9,6 +9,7 @@ vi.mock('../lib/api', () => ({
     setAttachmentClientVisibility: vi.fn(),
     setProjectAttachmentsClientVisibility: vi.fn(),
     uploadAttachmentWithProgress: vi.fn(),
+    attachmentFileUrl: vi.fn(() => 'https://configured-api.example.invalid/original-download'),
   },
 }));
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'u-sam', role: 'TEAM' } }) }));
@@ -25,6 +26,7 @@ function renderPanel() {
 const pdf = () => new File(['%PDF-1.4 brief'], 'brief.pdf', { type: 'application/pdf' });
 
 describe('project files upload', () => {
+  beforeEach(() => { api.attachmentFileUrl.mockReturnValue('https://configured-api.example.invalid/original-download'); });
   afterEach(() => { vi.clearAllMocks(); });
 
   it('offers an authenticated per-file Download with exact original names and keyboard focus', async () => {
@@ -35,9 +37,11 @@ describe('project files upload', () => {
     renderPanel();const user=userEvent.setup();
     const pdfLink=await screen.findByRole('link',{name:'Download brief.final.v2.pdf'});
     const heicLink=screen.getByRole('link',{name:'Download photo.original.v3.HEIC'});
-    expect(pdfLink).toHaveAttribute('href','/api/attachments/uploads/11111111-1111-4111-8111-111111111111.pdf');
+    expect(pdfLink).toHaveAttribute('href','https://configured-api.example.invalid/original-download');
+    expect(api.attachmentFileUrl).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111.pdf');
     expect(pdfLink).toHaveAttribute('download','brief.final.v2.pdf');
-    expect(heicLink).toHaveAttribute('href','/api/attachments/uploads/22222222-2222-4222-8222-222222222222.heic');
+    expect(heicLink).toHaveAttribute('href','https://configured-api.example.invalid/original-download');
+    expect(api.attachmentFileUrl).toHaveBeenCalledWith('22222222-2222-4222-8222-222222222222.heic');
     expect(heicLink).toHaveAttribute('download','photo.original.v3.HEIC');
     expect(pdfLink).toHaveTextContent('Download');expect(pdfLink.className).toMatch(/min-h-11/);expect(pdfLink.className).toMatch(/focus-visible:ring-2/);
     await user.tab();expect(screen.getByRole('button',{name:'Upload file'})).toHaveFocus();
@@ -48,12 +52,15 @@ describe('project files upload', () => {
     expect(api.uploadAttachmentWithProgress).not.toHaveBeenCalled();
   });
 
-  it('encodes stored filenames into the authenticated route and never uses public paths or asset URLs', async () => {
+  it('uses the configured API helper URL verbatim and passes the original stored filename for encoding', async () => {
     const filename='../evil?name=#original.psd';
+    const configuredUrl='https://configured-api.example.invalid/v1/attachments/uploads/..%2Fevil%3Fname%3D%23original.psd';
+    api.attachmentFileUrl.mockReturnValue(configuredUrl);
     api.getAttachments.mockResolvedValue([{id:'a-special',filename,originalName:'design.final.v2.psd',path:'https://foreign.invalid/public.psd',size:22,createdAt:'2026-10-01T12:00:00Z',uploadedBy:{id:'u-sam'},clientVisible:false}]);
     renderPanel();const link=await screen.findByRole('link',{name:'Download design.final.v2.psd'});
-    expect(link).toHaveAttribute('href',`/api/attachments/uploads/${encodeURIComponent(filename)}`);
-    expect(link.getAttribute('href')).not.toContain('https://');
+    expect(api.attachmentFileUrl).toHaveBeenCalledWith(filename);
+    expect(link).toHaveAttribute('href',configuredUrl);
+    expect(link.getAttribute('href')).not.toContain('foreign.invalid');
     expect(link).toHaveAttribute('download','design.final.v2.psd');
   });
 
