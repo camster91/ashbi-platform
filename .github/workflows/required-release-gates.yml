@@ -26,21 +26,22 @@ jobs:
   backup-rehearsal:
     name: Production backup rehearsal (no deployment)
     if: github.event_name == 'workflow_dispatch' && inputs.verify_production_backup
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     # Recovery-only operation uses repository-scoped backup credentials.
     # It has no Coolify token or deployment command; release environment policy
     # remains enforced by checked-coolify-deploy.yml.
     steps:
       - name: Checkout requested revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
+          package-manager-cache: false
       - name: Verify encrypted production backup and off-server copy
         env:
           RELEASE_SHA: ${{ github.sha }}
@@ -48,7 +49,7 @@ jobs:
           ASHBI_VPS_KNOWN_HOSTS: ${{ vars.ASHBI_VPS_KNOWN_HOSTS }}
         run: node scripts/deploy/production-backup.mjs
       - name: Retain encrypted recovery artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ashbi-backup-rehearsal-${{ github.run_id }}
           path: ${{ runner.temp }}/ashbi-release-backup/

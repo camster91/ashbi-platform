@@ -13,7 +13,7 @@ export function validateCoolifyReleaseWorkflow(source) {
     'ref.data.object.sha === run.head_sha', 'ref: ${{ github.event.workflow_run.head_sha }}',
     'persist-credentials: false', 'node --test src/tests/unit/coolify-release.test.mjs',
     'RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}', 'node scripts/deploy/coolify-release.mjs',
-    'node scripts/deploy/production-backup.mjs', 'uses: actions/upload-artifact@v4',
+    'node scripts/deploy/production-backup.mjs', 'uses: actions/upload-artifact@v7',
     'ASHBI_VPS_KNOWN_HOSTS: ${{ vars.ASHBI_VPS_KNOWN_HOSTS }}', 'if-no-files-found: error',
   ];
   const failures = required.filter(value => !source.includes(value)).map(value => `checked-coolify-deploy.yml lacks ${value}`);

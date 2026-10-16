@@ -17,7 +17,7 @@ jobs:
     # Dependency-update PRs already receive deterministic CI/security checks;
     # do not spend external AI-review API usage on automated Dependabot churn.
     if: github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       pull-requests: write
