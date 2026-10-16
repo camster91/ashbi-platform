@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
 import { ToolError } from '../ai/tools/registry.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
@@ -15,9 +16,31 @@ const eligible = (row, actor, clientId) => row && row.organizationId === actor.o
 
 export async function listClientServiceCredentials(prisma, user, clientId) {
   const actor = await requireClientServiceAdmin(prisma, user, clientId);
-  const rows = await prisma.credential.findMany({ where: { organizationId: actor.organizationId, clientId, projectId: null },
-    select: { id: true, organizationId: true, clientId: true, projectId: true, label: true, username: true, url: true }, orderBy: { id: 'asc' }, take: 101 });
-  return { credentials: rows.slice(0, 100).filter(row => eligible(row, actor, clientId)).map(row => ({ id: row.id, label: row.label, usernamePresent: true })), truncated: rows.length > 100 };
+  const choices = [];
+  const deadline = performance.now() + 5000;
+  let after, truncated = false;
+  // Keep only one 100-row metadata page and at most 101 eligible choices.
+  // Exhaust ordered candidates or find a 101st eligible row before reporting
+  // truncation. A slow traversal fails closed rather than silently omitting
+  // late valid choices. URL substring filters would exclude valid normalized
+  // forms, such as encoded hostnames/default ports, so parsing stays decisive.
+  while (true) {
+    if (performance.now() >= deadline) fail('SERVICE_PANEL_UNAVAILABLE', 'Credential choices could not be completely checked. Try again.', 503);
+    const rows = await prisma.credential.findMany({ where: { organizationId: actor.organizationId, clientId, projectId: null,
+      username: { not: '' }, url: { not: null }, ...(after ? { id: { gt: after } } : {}) },
+    select: { id: true, organizationId: true, clientId: true, projectId: true, label: true, username: true, url: true }, orderBy: { id: 'asc' }, take: 100 });
+    if (performance.now() >= deadline) fail('SERVICE_PANEL_UNAVAILABLE', 'Credential choices could not be completely checked. Try again.', 503);
+    for (const row of rows) {
+      if (eligible(row, actor, clientId)) choices.push({ id: row.id, label: row.label, usernamePresent: true });
+      if (choices.length === 101) break;
+    }
+    if (choices.length === 101) { truncated = true; break; }
+    if (rows.length < 100) break;
+    after = rows.at(-1).id;
+  }
+  // Traversal must not return metadata after the caller's authority changed.
+  await requireClientServiceAdmin(prisma, user, clientId);
+  return { credentials: choices.slice(0, 100), truncated };
 }
 
 async function lockAuthority(tx, user, clientId, credentialId) {
