@@ -67,3 +67,28 @@ membership, DM identity, pagination, reply scope, idempotency, stale channel/cli
 views and safe rendering. PostgreSQL integration tests cover actual concurrency,
 raw-write boundaries, role changes and transaction rollback. Their local absence
 is a skip; required CI must run them against its disposable migrated database.
+
+## Client and project channel creation
+
+The Team messages form offers staff direct messages, client channels and project
+channels. Only administrators see company channel creation, matching the existing
+backend policy. Client/project selectors read the canonical paginated APIs; project
+choices are restricted to the selected client and reset when that client changes.
+Changing a selector or opening the form sends no creation request.
+
+Channel membership stays explicit: the creator and selected active staff receive
+access. A client/project label does not invite the client, grant portal access, or
+change assignments, billing or underlying record permissions. The backend rechecks
+the current staff actor, members and canonical non-deleted client/project on submit.
+
+A failed lookup blocks creation and offers retry. On an uncertain non-direct channel
+creation response, the form preserves its draft, blocks repeat creation and offers
+Reload conversations (and existing channel pagination) so the user can locate the
+result. Reload never posts again. This is bounded recovery in the current form;
+non-direct creation does not yet have a durable server idempotency key, so this UI
+does not claim exactly-once recovery across browser reloads. Direct-message
+creation retains the backend's existing participant-set deduplication.
+
+Bot participation, structured mentions, handoff execution and source-linked agent
+replies remain separate unfinished work. No new bot identity, provider call or
+transport is added by these selectors.

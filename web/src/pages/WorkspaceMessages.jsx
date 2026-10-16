@@ -74,6 +74,12 @@ function Conversation({ channel, userId }) {
   </section>;
 }
 
+async function scopePage(kind, params) {
+  const response = kind === 'clients' ? await api.getClients(params) : await api.getProjects(params);
+  if (!Array.isArray(response?.[kind])) throw new Error('Conversation scope unavailable');
+  return response;
+}
+
 function StaffMessages({ user }) {
   const cache = useQueryClient();
   const [selected, setSelected] = useState(null);
@@ -82,6 +88,12 @@ function StaffMessages({ user }) {
   const [members, setMembers] = useState([]);
   const [creating, setCreating] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [creationUnknown, setCreationUnknown] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
+  const [clientId, setClientId] = useState('');
+  const [projectId, setProjectId] = useState('');
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const creatingRef = useRef(false);
   const id = useId();
   const channelQueryKey = ['workspace-chat-channels', user.id];
@@ -89,20 +101,37 @@ function StaffMessages({ user }) {
   const people = useQuery({ queryKey: ['workspace-chat-people', user.id], queryFn: () => api.listWorkspaceChatPeople(), retry: false });
   const channelItems = paginatedItems(channels.data?.pages, (item) => item.id);
   const channel = channels.isError ? null : channelItems.find((item) => item.id === selected);
+  const scopedKind = kind === 'CLIENT' || kind === 'PROJECT';
+  const clients = useInfiniteQuery({ queryKey: ['chat-create-clients', user.organizationId, user.id, user.role], enabled: newOpen && scopedKind,
+    initialPageParam: 0, queryFn: ({ pageParam }) => scopePage('clients', { limit: 100, offset: pageParam }),
+    getNextPageParam: (page, _pages, offset) => offset + page.clients.length < page.total && page.clients.length ? offset + page.clients.length : undefined, retry: false });
+  const clientItems = clients.isError ? [] : paginatedItems(clients.data?.pages.map(page => ({ items: page.clients })), item => item.id).filter(item => !item.deletedAt && (!item.organizationId || item.organizationId === user.organizationId));
+  const selectedClient = !clients.isError && clientItems.find(item => item.id === clientId);
+  const projects = useInfiniteQuery({ queryKey: ['chat-create-projects', user.organizationId, user.id, user.role, clientId], enabled: newOpen && kind === 'PROJECT' && Boolean(selectedClient),
+    initialPageParam: 0, queryFn: ({ pageParam }) => scopePage('projects', { clientId, limit: 100, offset: pageParam }),
+    getNextPageParam: (page, _pages, offset) => offset + page.projects.length < page.total && page.projects.length ? offset + page.projects.length : undefined, retry: false });
+  const projectItems = projects.isError ? [] : paginatedItems(projects.data?.pages.map(page => ({ items: page.projects })), item => item.id).filter(item => item.clientId === clientId && !item.deletedAt && (!item.organizationId || item.organizationId === user.organizationId));
+  const selectedProject = !projects.isError && projectItems.find(item => item.id === projectId);
+  const peopleItems = people.isError ? [] : (people.data?.items || []).filter(person => person.id !== user.id && person.isActive !== false && (!person.role || ['ADMIN', 'TEAM'].includes(person.role)) && (!person.organizationId || person.organizationId === user.organizationId));
+  const validMembers = members.every(member => peopleItems.some(person => person.id === member));
+  const cannotCreate = creating || creationUnknown || people.isPending || people.isError || !validMembers || (kind === 'DIRECT' ? members.length !== 1 : !name.trim())
+    || (kind === 'COMPANY' && (!members.length || user.role !== 'ADMIN')) || (scopedKind && (!selectedClient || clients.isFetching)) || (kind === 'PROJECT' && (!selectedProject || projects.isFetching));
+
 
   async function create(event) {
     event.preventDefault();
-    if (creatingRef.current || (kind === 'COMPANY' && (!name.trim() || !members.length || user.role !== 'ADMIN')) || (kind === 'DIRECT' && members.length !== 1)) return;
+    if (creatingRef.current || cannotCreate) return;
     creatingRef.current = true; setCreating(true); setFailed(false);
     try {
-      const result = await api.createWorkspaceChatChannel({ kind, ...(kind === 'COMPANY' ? { name: name.trim(), memberIds: members } : { memberIds: members }) });
+      const result = await api.createWorkspaceChatChannel({ kind, memberIds: members, ...(kind !== 'DIRECT' ? { name: name.trim() } : {}), ...(scopedKind ? { clientId } : {}), ...(kind === 'PROJECT' ? { projectId } : {}) });
+      if (!alive.current) return;
       await cache.invalidateQueries({ queryKey: channelQueryKey });
       // A new channel can sort beyond the first page. Keep the server-created
       // result reachable immediately; later pages are deduplicated by id.
       cache.setQueryData(channelQueryKey, (current) => current ? { ...current, pages: current.pages.map((page, index) => index === 0 ? { ...page, items: [...page.items.filter((item) => item.id !== result.channel.id), result.channel] } : page) } : { pages: [{ items: [result.channel], nextCursor: null }], pageParams: [undefined] });
       setSelected(result.channel.id); setName(''); setMembers([]);
-    } catch { setFailed(true); }
-    finally { creatingRef.current = false; setCreating(false); }
+    } catch (error) { if (alive.current) { setFailed(true); setCreationUnknown(kind !== 'DIRECT' && ![400, 401, 403, 404, 409, 429].includes(error?.status ?? error?.statusCode)); } }
+    finally { creatingRef.current = false; if (alive.current) setCreating(false); }
   }
 
   return <div className="space-y-5 p-4 sm:p-6">
@@ -115,13 +144,24 @@ function StaffMessages({ user }) {
         {!channels.isError && <ul>{channelItems.map((item) => <li key={item.id}><button type="button" className="min-h-11 w-full rounded-lg px-3 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring" aria-pressed={item.id === selected} onClick={() => setSelected(item.id)}>{conversationName(item, user.id)}<span className="block text-xs text-muted-foreground">{item.kind.toLowerCase()}</span></button></li>)}</ul>}
         {!channels.isPending && !channels.isError && channelItems.length === 0 && <p className="text-sm text-muted-foreground">No conversations yet.</p>}
         {!channels.isError && channels.hasNextPage && <Button variant="outline" disabled={channels.isFetchingNextPage} onClick={() => channels.fetchNextPage()}>Load more conversations</Button>}
-        <details><summary className="min-h-11 cursor-pointer font-medium">New conversation</summary>
+        <details onToggle={(event) => { if (event.target === event.currentTarget) setNewOpen(event.currentTarget.open); }}><summary className="min-h-11 cursor-pointer font-medium">New conversation</summary>
           <form onSubmit={create} className="space-y-3">
-            {user.role === 'ADMIN' && <div><label htmlFor={`${id}-kind`}>Conversation type</label><select id={`${id}-kind`} className={inputStyles()} value={kind} disabled={creating} onChange={(event) => { setKind(event.target.value); setMembers([]); }}><option value="DIRECT">Direct message</option><option value="COMPANY">Company channel</option></select></div>}
-            {kind === 'COMPANY' ? <div><label htmlFor={`${id}-name`}>Channel name</label><Input id={`${id}-name`} value={name} maxLength={100} required disabled={creating} onChange={(event) => setName(event.target.value)} /><p className="text-xs text-muted-foreground">Only you and the selected members can access this channel.</p><fieldset><legend>Channel members</legend>{(people.data?.items || []).filter((person) => person.id !== user.id).map((person) => <label key={person.id} className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={members.includes(person.id)} disabled={creating || (!members.includes(person.id) && members.length >= 29)} onChange={(event) => setMembers(event.target.checked ? [...members, person.id] : members.filter((member) => member !== person.id))} />{person.name}</label>)}</fieldset></div> : <div><label htmlFor={`${id}-person`}>Team member</label><select id={`${id}-person`} className={inputStyles()} disabled={creating || people.isError || people.isPending} value={members[0] || ''} required onChange={(event) => setMembers(event.target.value ? [event.target.value] : [])}><option value="">Choose a team member</option>{(people.data?.items || []).filter((person) => person.id !== user.id).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></div>}
+            <div><label htmlFor={`${id}-kind`}>Conversation type</label><select id={`${id}-kind`} className={inputStyles()} value={kind} disabled={creating || creationUnknown} onChange={(event) => { setKind(event.target.value); setMembers([]); setClientId(''); setProjectId(''); setFailed(false); }}><option value="DIRECT">Direct message</option>{user.role === 'ADMIN' && <option value="COMPANY">Company channel</option>}<option value="CLIENT">Client channel</option><option value="PROJECT">Project channel</option></select></div>
+            {scopedKind && <div className="space-y-2"><label htmlFor={`${id}-client`}>Client</label><select id={`${id}-client`} className={inputStyles()} required value={clientId} disabled={creating || creationUnknown || clients.isPending || clients.isError} onChange={(event) => { setClientId(event.target.value); setProjectId(''); }}><option value="">Choose a client</option>{clientItems.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</select>
+              {clients.isPending && <p role="status">Loading clients...</p>}{clients.isError && <div role="alert">Clients could not be loaded.<Button type="button" variant="outline" onClick={() => clients.refetch()}>Retry clients</Button></div>}
+              {!clients.isPending && !clients.isError && !clientItems.length && <p role="status">No available clients.</p>}
+              {clients.hasNextPage && <Button type="button" variant="outline" disabled={clients.isFetchingNextPage || creating || creationUnknown} onClick={() => clients.fetchNextPage()}>Load more clients</Button>}
+            </div>}
+            {kind === 'PROJECT' && selectedClient && <div className="space-y-2"><label htmlFor={`${id}-project`}>Project</label><select id={`${id}-project`} className={inputStyles()} required value={projectId} disabled={creating || creationUnknown || projects.isPending || projects.isError} onChange={(event) => setProjectId(event.target.value)}><option value="">Choose a client project</option>{projectItems.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select>
+              {projects.isPending && <p role="status">Loading client projects...</p>}{projects.isError && <div role="alert">Projects could not be loaded.<Button type="button" variant="outline" onClick={() => projects.refetch()}>Retry client projects</Button></div>}
+              {!projects.isPending && !projects.isError && !projectItems.length && <p role="status">This client has no available projects.</p>}
+              {projects.hasNextPage && <Button type="button" variant="outline" disabled={projects.isFetchingNextPage || creating || creationUnknown} onClick={() => projects.fetchNextPage()}>Load more client projects</Button>}
+            </div>}
+            {kind !== 'DIRECT' ? <div><label htmlFor={`${id}-name`}>Channel name</label><Input id={`${id}-name`} value={name} maxLength={100} required disabled={creating || creationUnknown} onChange={(event) => setName(event.target.value)} /><p className="text-xs text-muted-foreground">Only you and the selected staff members can access this channel. Client and project channels do not invite clients or grant portal access.</p>{selectedClient && <p className="text-sm">Client: {selectedClient.name}{kind === 'PROJECT' && selectedProject ? ` / Project: ${selectedProject.name}` : ''}</p>}<fieldset><legend>Channel members</legend>{peopleItems.map((person) => <label key={person.id} className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={members.includes(person.id)} disabled={creating || creationUnknown || (!members.includes(person.id) && members.length >= 29)} onChange={(event) => setMembers(event.target.checked ? [...members, person.id] : members.filter((member) => member !== person.id))} />{person.name}</label>)}</fieldset></div> : <div><label htmlFor={`${id}-person`}>Team member</label><select id={`${id}-person`} className={inputStyles()} disabled={creating || creationUnknown || people.isError || people.isPending} value={members[0] || ''} required onChange={(event) => setMembers(event.target.value ? [event.target.value] : [])}><option value="">Choose a team member</option>{peopleItems.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></div>}
             {people.isError && <div role="alert"><p>Team members could not be loaded.</p><Button type="button" variant="outline" onClick={() => people.refetch()}>Retry team members</Button></div>}
-            {failed && <p role="alert">The conversation could not be created. Check your choices and try again.</p>}
-            <Button type="submit" loading={creating} disabled={kind === 'DIRECT' ? members.length !== 1 : !name.trim() || !members.length}>Create conversation</Button>
+            {failed && <p role="alert">{creationUnknown ? 'Conversation creation could not be confirmed. Your draft is preserved. Reload conversations and check for the channel before creating another; this form will not repeat the request.' : 'The conversation could not be created. Check your choices and try again.'}</p>}
+            {creationUnknown && <Button type="button" variant="outline" disabled={channels.isFetching} onClick={() => channels.refetch()}>Reload conversations</Button>}
+            <Button type="submit" loading={creating} disabled={cannotCreate}>Create conversation</Button>
           </form>
         </details>
       </aside>
