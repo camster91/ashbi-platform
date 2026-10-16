@@ -159,12 +159,12 @@ export default function Invoices() {
       setInvoiceToVoid(null);
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       const invoiceNumber = invoices.find((invoice) => invoice.id === id)?.invoiceNumber || 'invoice';
-      const duration = Math.max(1000, new Date(result.undoExpiresAt).getTime() - Date.now());
       toast.success({
         title: `${invoiceNumber} voided`,
-        duration,
+        duration: 10000,
         action: {
           label: `Undo void ${invoiceNumber}`,
+          expiresAt: result.undoExpiresAt,
           onClick: async () => {
             try {
               await api.undoInvoiceVoid(id);
@@ -176,6 +176,7 @@ export default function Invoices() {
                 message: error.message,
                 duration: 0,
               });
+              if (error.status !== 410) throw error;
             }
           },
         },
