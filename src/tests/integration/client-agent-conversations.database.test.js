@@ -295,7 +295,9 @@ test('migrated client agent conversations preserve tenant, intent, outbox and pe
         { ...memory, turns: [{ ...turn, response: 'x'.repeat(8193) }] },
       ];
       for (const memorySnapshot of bad) await assert.rejects(raw.clientAgentRun.update({ where: { id: saved.id }, data: { ...preparation, memorySnapshot } }));
-      await assert.rejects(raw.clientAgentRun.update({ where: { id: saved.id }, data: preparation }));
+      // Context-only preparation remains valid for previous workers; the
+      // dedicated compatibility test exercises that path and NULL evidence.
+      assert.equal((await raw.clientAgentRun.findUnique({ where: { id: saved.id } })).contextSnapshot, null);
       await assert.rejects(raw.clientAgentRun.update({ where: { id: saved.id }, data: { memorySnapshot: memory } }));
       await raw.clientAgentProfile.updateMany({ where: { organizationId: orgs[0], clientId: client.id }, data: { enabled: false } });
       try { await assert.rejects(raw.clientAgentRun.update({ where: { id: saved.id }, data: { ...preparation, memorySnapshot: memory } })); }
