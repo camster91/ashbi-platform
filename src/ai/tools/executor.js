@@ -435,7 +435,7 @@ export function createToolExecutor(options = {}) {
           await claim(tx);
           const input = parseStored();
           const result = await withTimeout(
-            Promise.resolve(tool.execution.execute({ prisma: tx, input, user: requester, approver: ctx.user })),
+            Promise.resolve(tool.execution.execute({ prisma: tx, input, user: requester, approver: ctx.user, preview: initial.preview })),
             tool.timeoutMs,
           );
           return transition({ prisma: tx }, initial.id, 'EXECUTING', succeeded(result));
