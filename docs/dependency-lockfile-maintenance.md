@@ -45,16 +45,22 @@ If a bot lockfile fails, use npm to regenerate it with the matching manifest:
 ```sh
 npm install --package-lock-only --ignore-scripts --no-audit --no-fund
 npm ci --ignore-scripts --no-audit --no-fund
-node --test src/tests/unit/dependency-proxy-peer-lock.test.js
 ```
 
 Run these in a disposable ordinary directory containing copies of root
 `package.json`, `package-lock.json` and `.npmrc`, with that directory as the
 working directory. Never install into a shared/junction `node_modules` directory.
 For a lockfile-only repair, compare all non-development locked package paths and
-versions with main. Copy back only the reviewed manifest/lockfile, then run the
-normal required CI, including its clean install, native dependency setup, tests
-and build. A no-scripts install proves lock consistency, not app runtime behavior.
+versions with main. Copy back only the reviewed manifest/lockfile. From the
+reviewed repository checkout, run the committed regression:
+
+```sh
+node --test src/tests/unit/dependency-proxy-peer-lock.test.js
+```
+
+Then run the normal required CI, including its clean install, native dependency
+setup, tests and build. A no-scripts install proves lock consistency, not app
+runtime behavior.
 
 The committed regression verifies the explicit peer, both version placements,
 and complete required proxy dependency closures, including a deliberately missing
