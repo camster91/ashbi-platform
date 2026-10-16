@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import WorkspaceMessages from '../pages/WorkspaceMessages';
 
-const { api, auth } = vi.hoisted(() => ({ api: Object.fromEntries(['listWorkspaceChatChannels', 'listWorkspaceChatPeople', 'createWorkspaceChatChannel', 'getWorkspaceChatMessages', 'postWorkspaceChatMessage', 'markWorkspaceChatRead', 'getClients', 'getProjects', 'listWorkspaceChatAttention', 'acknowledgeWorkspaceChatAttention', 'getWorkspaceChatMessageIntent'].map((key) => [key, vi.fn()])), auth: { user: { id: 'u1', role: 'ADMIN' } } }));
+const { api, auth } = vi.hoisted(() => ({ api: Object.fromEntries(['listWorkspaceChatChannels', 'listWorkspaceChatPeople', 'createWorkspaceChatChannel', 'getWorkspaceChatMessages', 'postWorkspaceChatMessage', 'markWorkspaceChatRead', 'getClients', 'getProjects', 'listWorkspaceChatAttention', 'acknowledgeWorkspaceChatAttention', 'getWorkspaceChatMessageIntent', 'getWorkspaceAccountManager', 'listWorkspaceAccountManagerRequests', 'getClientAgentProfile', 'requestWorkspaceAccountManager'].map((key) => [key, vi.fn()])), auth: { user: { id: 'u1', role: 'ADMIN' } } }));
 vi.mock('../lib/api', () => ({ api }));
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => auth }));
 const channels = [{ id: 'a', name: 'Agency', kind: 'COMPANY' }, { id: 'b', name: 'Client work', kind: 'CLIENT' }];
@@ -333,4 +333,30 @@ describe('workspace messages', () => {
     expect(screen.getByRole('button', { name: 'Create conversation' })).toBeDisabled(); expect(api.createWorkspaceChatChannel).not.toHaveBeenCalled(); expect(screen.queryByText('private scope details')).not.toBeInTheDocument();
   });
 
+});
+
+describe('combined human attention and account manager channel UI', () => {
+  it('preserves explicit human recipients while the separate draft source picker is open', async () => {
+    const channel = { ...channels[1], clientId: 'c1', members: [
+      { userId: 'u1', user: { id: 'u1', name: 'Cameron', role: 'ADMIN', isActive: true } },
+      { userId: 'u2', user: { id: 'u2', name: 'Bianca', role: 'TEAM', isActive: true } },
+    ] };
+    api.getWorkspaceChatMessages.mockResolvedValue({ channel, items: [message] });
+    api.getWorkspaceAccountManager.mockResolvedValue({ binding: { id: 'binding', enabled: true, revision: 1 } });
+    api.listWorkspaceAccountManagerRequests.mockResolvedValue({ items: [], nextCursor: null });
+    api.getClientAgentProfile.mockResolvedValue({ id: 'profile', enabled: true, pluginIds: ['client-work'] });
+    api.postWorkspaceChatMessage.mockResolvedValue({ message });
+    const view = setup(); fireEvent.click(await screen.findByRole('button', { name: /Client work/ }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Bianca' }));
+    fireEvent.click(await screen.findByText('Channel account manager', { exact: true }));
+    const source = await screen.findByLabelText('Source message for AI draft'); fireEvent.change(source, { target: { value: 'm1' } });
+    expect(screen.getByRole('checkbox', { name: 'Bianca' })).toBeChecked();
+    expect(view.container.querySelector('#workspace-message-m1')).toHaveTextContent('Review the draft');
+    fireEvent.change(screen.getByLabelText('Message', { exact: true }), { target: { value: 'Please review @Bianca' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message', exact: true }));
+    await waitFor(() => expect(api.postWorkspaceChatMessage).toHaveBeenCalledWith('b', expect.objectContaining({ content: 'Please review @Bianca', attentionRecipientIds: ['u2'] })));
+    expect(api.requestWorkspaceAccountManager).not.toHaveBeenCalled();
+    expect(source).toHaveValue('m1');
+    expect(api.getWorkspaceAccountManager).toHaveBeenCalledWith('b');
+  });
 });

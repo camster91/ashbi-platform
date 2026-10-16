@@ -1,5 +1,6 @@
 import { useClientPages } from '../hooks/useClients';
-import { useEffect, useId, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
+const WorkspaceAccountManager = lazy(() => import('../components/WorkspaceAccountManager'));
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -104,7 +105,7 @@ function Conversation({ channel, user }) {
       {history.hasNextPage && <Button variant="outline" disabled={history.isFetchingNextPage} onClick={() => history.fetchNextPage()}>Load older messages</Button>}
       {!messages.length && <p className="text-sm text-muted-foreground">No messages yet. Start the conversation.</p>}
       <ol aria-label="Messages" className="space-y-3">
-        {messages.map((message) => <li key={message.id} className="rounded-lg border border-border p-3">
+        {messages.map((message) => <li key={message.id} id={`workspace-message-${message.id}`} className="rounded-lg border border-border p-3">
           <div className="flex flex-wrap items-center gap-2 text-sm"><span className="font-medium">{message.author?.name || 'Team member'}</span><time className="text-xs text-muted-foreground" dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString()}</time></div>
           {message.parentId && <p className="text-xs text-muted-foreground">Reply to {messages.find((parent) => parent.id === message.parentId)?.author?.name || 'an earlier message'}</p>}
           <p className="whitespace-pre-wrap break-words text-sm">{message.content}</p>
@@ -115,6 +116,7 @@ function Conversation({ channel, user }) {
           <Button type="button" size="sm" variant="ghost" disabled={frozen} aria-label={`Reply to ${message.author?.name || 'team member'}: ${message.content.slice(0, 40)}`} onClick={() => { setReply(message); if (!uncertain) intent.current = null; }}>Reply</Button>
         </li>)}
       </ol>
+      {history.data?.pages[0]?.channel && <Suspense fallback={<p role="status">Loading channel account manager…</p>}><WorkspaceAccountManager channel={history.data.pages[0].channel} user={user} messages={messages} /></Suspense>}
       <form onSubmit={send} className="space-y-2">
         {reply && <div className="text-sm"><p>Replying to {reply.author?.name || 'team member'}: {reply.content.slice(0, 80)}</p><Button type="button" variant="ghost" disabled={frozen} onClick={() => { setReply(null); if (!uncertain) intent.current = null; }}>Cancel reply</Button></div>}
         <label htmlFor={id}>Message</label>
