@@ -55,7 +55,7 @@ test('client profiles persist, isolate tenants, resolve concurrent writes and ro
       name: 'Forbidden tenant edge', createdById: people[0].id, updatedById: people[0].id } }));
     // The migrated CHECK must agree with the API's closed, unique plugin set.
     // This exercises raw database writes, independent of Zod or tenant proxy.
-    const profileWhere = { clientId: clients[0].id };
+    const profileWhere = { organizationId_clientId: { organizationId: orgs[0], clientId: clients[0].id } };
     for (const pluginIds of [[], ['client-work'], ['client-task-actions'], ['client-work','client-task-actions'], ['client-task-actions','client-work']]) {
       const row = await raw.clientAgentProfile.update({ where: profileWhere, data: { pluginIds } });
       assert.deepEqual(row.pluginIds, pluginIds);

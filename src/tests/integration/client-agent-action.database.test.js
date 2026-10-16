@@ -60,9 +60,11 @@ test('client task plugin PostgreSQL concurrency, revocation and task/receipt rol
       await assert.rejects(tools.call(ctx, 'get_action', { actionId: pending.action.id }));
       await assert.rejects(executor.approve(ctx, pending.action.id), { code: 'EXECUTION_FAILED' });
       assert.equal(await count(), 1);
+      // Restore the principal before touching a profile whose SQL guard checks
+      // that its recorded creator/updater remains active staff.
+      await raw.user.update({ where: { id: users[0].id }, data: { role: 'ADMIN' } });
       await raw.clientAgentProfile.updateMany({ where: { clientId: clients[0].id }, data: { enabled: true, pluginIds: ['client-work', 'client-task-actions'] } });
       await raw.project.update({ where: { id: projects[0].id }, data: { clientId: clients[0].id } });
-      await raw.user.update({ where: { id: users[0].id }, data: { role: 'ADMIN' } });
     }
     // A revoked preview remains withdrawable without exposing its saved fields.
     const revokedIntent = randomUUID(); const revoked = await prepare(revokedIntent);
