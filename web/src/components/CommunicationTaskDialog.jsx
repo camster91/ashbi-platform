@@ -93,7 +93,7 @@ export default function CommunicationTaskDialog({ clientId, message, user, onClo
       setError('The preview could not be confirmed. Check the saved request, or retry the exact same details.');
     } finally { busy.current = false; if (alive.current) setPending(false); }
   }
-  async function confirm() {
+  async function confirmTask() {
     if (busy.current || forbidden || confirmationUnknown || !action?.preview || action.status !== 'PENDING_CONFIRMATION' || action.expired || recovery.blocked) return;
     busy.current = true; setPending(true); setError('');
     try {
@@ -115,7 +115,8 @@ export default function CommunicationTaskDialog({ clientId, message, user, onClo
     try {
       sessionStorage.removeItem(name);
       if (sessionStorage.getItem(name) !== null) throw new Error('Storage unavailable');
-      setRecovery({ intent: null, blocked: false }); setAction(null); setError('');
+      setRecovery({ intent: null, blocked: false }); setAction(null); setError(''); setConfirmationUnknown(false);
+      projects.refetch();
     } catch { setRecovery((value) => ({ ...value, blocked: true })); }
   }
   const preview = !forbidden && action?.preview;
@@ -142,7 +143,7 @@ export default function CommunicationTaskDialog({ clientId, message, user, onClo
           <p>Project: {preview.destination.projectName}</p><p>Priority: {preview.task.priority}</p><p>Due: {preview.task.dueDate || 'No due date'}</p>
           <p className="break-words">Source email: {preview.source.subject || 'No subject'}</p><p className="break-words">From: {preview.source.sender}</p><p>Received: {preview.source.receivedAt || 'Date unavailable'}</p>
           {preview.source.threadId && <Link className="inline-flex min-h-11 items-center underline" to={`/thread/${encodeURIComponent(preview.source.threadId)}`}>Open source thread</Link>}
-          {action.status === 'PENDING_CONFIRMATION' && !action.expired && <Button type="button" disabled={pending || recovery.blocked || confirmationUnknown} loading={pending} onClick={confirm}>Confirm create task</Button>}
+          {action.status === 'PENDING_CONFIRMATION' && !action.expired && <Button type="button" disabled={pending || recovery.blocked || confirmationUnknown} loading={pending} onClick={confirmTask}>Confirm create task</Button>}
         </section>}
         {action?.status === 'EXECUTED' && action.result?.task?.id && <div role="status"><p>Task created.</p><Link className="inline-flex min-h-11 items-center underline" to={`/task/${encodeURIComponent(action.result.task.id)}`}>Open created task</Link></div>}
         {action && action.status !== 'PENDING_CONFIRMATION' && action.status !== 'EXECUTED' && <p role="status">{action.status === 'EXECUTING' || action.outcome === 'unknown' ? 'The outcome is not yet confirmed. Check the saved status before starting another request.' : 'This request did not create a confirmed task.'}</p>}

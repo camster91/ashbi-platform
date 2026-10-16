@@ -40,6 +40,16 @@ beforeEach(() => {
 afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.clear()); vi.unstubAllGlobals(); });
 
 describe('email to task confirmation', () => {
+  it('releases a server-rejected stale destination and refreshes active projects for a new preview', async () => {
+    api.confirmCommunicationTask.mockResolvedValueOnce({ action: { id: 'action1', status: 'REJECTED', preview: null, result: null } });
+    setup(); await preview();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm create task' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Start another task' }));
+    expect(sessionStorage.length).toBe(0);
+    expect(screen.queryByRole('region', { name: 'Task preview' })).not.toBeInTheDocument();
+    await waitFor(() => expect(api.getProjects).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('button', { name: 'Preview task' })).toBeInTheDocument();
+  });
   it('keeps the preview available after cancelling reauthentication without claiming access was revoked', async () => {
     api.confirmCommunicationTask.mockRejectedValueOnce({ status: 403, data: { code: 'REAUTH_REQUIRED' } });
     setup(); await preview();
