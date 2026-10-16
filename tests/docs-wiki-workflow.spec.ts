@@ -51,7 +51,13 @@ test('creates a nested document from a tenant template with authorized mentions'
   expect(createdPayload).toEqual({ title: 'Nested launch guide', parentId: 'root-note', mentionUserIds: ['user-b'] });
   await page.getByRole('button', { name: 'Edit Project home' }).click();
   await page.getByLabel('Notify mentioned teammates for Project home').selectOption('user-b');
+  const updateResponse = page.waitForResponse(response =>
+    new URL(response.url()).pathname === '/api/notes/root-note'
+    && response.request().method() === 'PUT'
+    && response.status() === 200);
   await page.getByRole('button', { name: 'Save' }).click();
+  await updateResponse;
+  await expect(page.getByLabel('Notify mentioned teammates for Project home')).toHaveCount(0);
   expect(updatedPayload).toMatchObject({ mentionUserIds: ['user-b'] });
   const dimensions = await page.evaluate(() => ({ clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }));
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
