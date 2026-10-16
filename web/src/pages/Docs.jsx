@@ -1,5 +1,5 @@
 import NoteAudience from '../components/NoteAudience';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -595,6 +595,7 @@ function NoteCard({
   note, expanded, editing, editForm, setEditForm,
   onToggle, onEdit, onUpdate, onCancelEdit, onDelete, onPin, updatePending, projectNotes = [], team = []
 }) {
+  const contentId = useId();
   return (
     <Card className={cn('p-4 transition-shadow', expanded && 'shadow-md')}>
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -602,6 +603,8 @@ function NoteCard({
           type="button"
           onClick={onToggle}
           aria-label={`Toggle note ${note.title}`}
+          aria-expanded={expanded}
+          aria-controls={expanded ? contentId : undefined}
           className="min-h-11 text-sm font-medium text-foreground hover:text-primary transition-colors text-left flex-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {note.isPinned && <Pin className="w-3 h-3 text-primary inline mr-1" />}
@@ -639,7 +642,7 @@ function NoteCard({
       {expanded && note.permissions?.canManage && !editing && <NoteAudience noteId={note.id} />}
       {expanded && (
         editing ? (
-          <form onSubmit={onUpdate} className="mt-3 space-y-2">
+          <form id={contentId} onSubmit={onUpdate} className="mt-3 space-y-2">
             <div className="flex flex-col sm:flex-row gap-2">
               <input
                 value={editForm.title}
@@ -717,6 +720,7 @@ function NoteCard({
         ) : (
           note.content ? (
             <div
+              id={contentId}
               tabIndex={0}
               role="region"
               aria-label={`${note.title} content`}
@@ -724,7 +728,7 @@ function NoteCard({
               dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content) }}
             />
           ) : (
-            <p className="mt-3 text-sm text-muted-foreground italic">No content. Click edit to add.</p>
+            <p id={contentId} className="mt-3 text-sm text-muted-foreground italic">No content. Click edit to add.</p>
           )
         )
       )}

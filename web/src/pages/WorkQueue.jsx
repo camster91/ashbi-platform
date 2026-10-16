@@ -238,7 +238,7 @@ export default function WorkQueue() {
         })}
       </div>
 
-      <div id={panelId} role="tabpanel" aria-labelledby={`${baseId}-tab-${activeView}`} tabIndex={0} className="space-y-4 focus-visible:outline-none">
+      <div id={panelId} role="tabpanel" aria-labelledby={`${baseId}-tab-${activeView}`} tabIndex={0} className="space-y-4 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {isLoading ? (
           <LoadingState label="Loading queue…" />
         ) : isError ? (
