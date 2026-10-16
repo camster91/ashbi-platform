@@ -34,7 +34,7 @@ export default function WorkspaceConnectionGuide({ oauthEnabled = false }) {
   return (
     <div className="space-y-4 rounded-lg border border-border p-4 mb-5">
       <h3 className="text-sm font-semibold">Connect your assistant</h3>
-      {oauthEnabled && <p className="text-sm">For a direct ChatGPT connection, add the MCP endpoint below in ChatGPT’s connector setup, choose OAuth, and sign in to Ashbi. Review the read-only consent screen before allowing access. No API key is needed for that connection.</p>}
+      {oauthEnabled && <p className="text-sm">For a direct ChatGPT connection, add the MCP endpoint below in ChatGPT’s connector setup, choose OAuth, and sign in to Ashbi. Access defaults to read-only. Review any requested optional actions and select them explicitly on the consent screen. No API key is needed for that connection.</p>}
       {oauthEnabled && <p className="text-sm font-medium">API key setup for GPT Actions and other MCP clients</p>}
       <ol className="list-decimal pl-5 space-y-1 text-sm text-muted-foreground">
         <li>Create a named key below with Read workspace access.</li>
@@ -59,7 +59,7 @@ export default function WorkspaceConnectionGuide({ oauthEnabled = false }) {
         <div className="space-y-3 mt-3 text-muted-foreground">
           <p>In your custom GPT’s Actions settings, import this schema and configure API key authentication with Bearer auth. It already uses this app’s URL. Test list_projects in GPT Preview.</p>
           <Button variant="secondary" size="sm" onClick={downloadSchema} leftIcon={<Download className="w-4 h-4" />}>Download Actions schema</Button>
-          <p>{oauthEnabled ? 'Direct ChatGPT MCP connections use the read-only OAuth flow. GPT Actions and other MCP clients can use API keys separately.' : 'Direct ChatGPT MCP connections need OAuth, which is not enabled on this deployment. Other MCP clients that accept a Bearer API key can use the endpoint above.'}</p>
+          <p>{oauthEnabled ? 'Direct ChatGPT MCP connections use OAuth with read-only access by default. Existing connections remain read-only; optional actions require a new consent. GPT Actions and other MCP clients can use API keys separately.' : 'Direct ChatGPT MCP connections need OAuth, which is not enabled on this deployment. Other MCP clients that accept a Bearer API key can use the endpoint above.'}</p>
         </div>
       </details>
       <p className="text-xs text-muted-foreground">Add Workspace actions only when needed. Task and calendar writes return a preview; review it before confirming. Never paste your key into a chat or prompt.</p>
