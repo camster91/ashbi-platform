@@ -186,8 +186,8 @@ export default function Layout({ children }) {
     { name: 'Messages', href: '/messages', icon: MessageSquare },
     { name: 'Projects', href: '/projects', icon: FolderOpen, id: 'projects-link' },
     { name: 'Schedule', href: '/schedule', icon: Calendar },
+    ...((isAdmin || user?.role === 'TEAM') ? [{ name: 'Timesheets', href: '/timesheets', icon: Clock }] : []),
     ...(isAdmin ? [
-      { name: 'Timesheets', href: '/timesheets', icon: Clock },
       { name: 'Approvals', href: '/approvals', icon: ListChecks },
     ] : []),
     ...(embeddedAiEnabled ? [{ name: 'Project Planner', href: '/project-planner', icon: LayoutTemplate }] : []),

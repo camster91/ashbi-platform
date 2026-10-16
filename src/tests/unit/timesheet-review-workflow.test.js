@@ -66,3 +66,27 @@ test('timesheet UI calls the rejection API and renders persisted review state', 
   assert.match(page, /entry\.reviewStatus === 'APPROVED'/);
   assert.match(page, /entry\.reviewStatus === 'REJECTED'/);
 });
+
+
+test('TEAM weekly timesheets scope to the current actor and reject review writes', async t => {
+  const app = Fastify({ logger: false });
+  const queries = []; let updates = 0;
+  const entries = ['member-a', 'member-b'].map((userId, index) => ({ id: `entry-${index}`, userId,
+    date: new Date('2026-10-12T12:00:00Z'), duration: 60, billable: true,
+    user: { id: userId, name: userId, hourlyRate: 50 }, project: { id: 'project-a', name: 'Project' }, task: null }));
+  app.decorate('authenticate', async request => { request.user = { id: 'member-a', role: 'TEAM' }; });
+  app.addHook('onRequest', async request => { request.prisma = { timeEntry: {
+    findMany: async args => { queries.push(args); return entries.filter(row => !args.where.userId || row.userId === args.where.userId); },
+    update: async () => { updates++; },
+  } }; });
+  await app.register(timeRoutes, { prefix: '/api' }); t.after(() => app.close());
+  const response = await app.inject('/api/timesheets/weekly?weekStart=2026-10-12T00:00:00Z&userId=member-b');
+  assert.equal(response.statusCode, 200);
+  assert.equal(queries[0].where.userId, 'member-a');
+  assert.deepEqual(response.json().timesheets.map(row => row.user.id), ['member-a']);
+  for (const action of ['approve', 'reject']) {
+    const result = await app.inject({ method: 'PATCH', url: `/api/timesheets/entry-0/${action}`, ...(action === 'reject' ? { payload: { reason: 'Unauthorized review' } } : {}) });
+    assert.equal(result.statusCode, 403);
+  }
+  assert.equal(updates, 0);
+});
