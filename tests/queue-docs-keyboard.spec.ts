@@ -31,12 +31,12 @@ async function mockReadOnlyUi(page: Page) {
   return unknown;
 }
 
-async function keyboardReach(page: Page, target: ReturnType<Page['getByRole']>) {
+async function keyboardReach(page: Page, target: ReturnType<Page['getByRole']>, key: 'Tab' | 'Shift+Tab' = 'Tab') {
   for (let i = 0; i < 45; i++) {
     if (await target.evaluate(element => element === document.activeElement)) return;
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(key);
   }
-  throw Error('Target was not reachable with Tab');
+  throw Error(`Target was not reachable with ${key}`);
 }
 
 test('queue panel keeps a visible keyboard focus indicator after roving tabs', async ({page}, info) => {
@@ -92,14 +92,16 @@ test('document disclosures expose accurate state and existing controlled targets
   await expect(content).toHaveCount(0);
   await expect(toggle).toBeFocused();
   const empty = page.getByRole('button',{name:'Toggle note Empty document',exact:true});
-  await keyboardReach(page,empty); await page.keyboard.press('Enter');
+  // Docs sorts Empty before Keyboard. Traverse backward within the page rather
+  // than relying on forward Tab wrapping through the browser's chrome.
+  await keyboardReach(page,empty,'Shift+Tab'); await expect(empty).toBeFocused(); await page.keyboard.press('Enter');
   await expect(empty).toHaveAttribute('aria-expanded','true');
   const emptyId = await empty.getAttribute('aria-controls'); expect(emptyId).toBeTruthy();
   await expect(page.getByText('No content. Click edit to add.',{exact:true})).toHaveAttribute('id',emptyId!);
   expect(emptyId).not.toBe(contentId); await page.keyboard.press('Space');
   await expect(empty).not.toHaveAttribute('aria-controls');
   const edit = page.getByRole('button',{name:'Edit Keyboard document',exact:true});
-  await keyboardReach(page,edit); await page.keyboard.press('Enter');
+  await keyboardReach(page,edit); await expect(edit).toBeFocused(); await page.keyboard.press('Enter');
   await expect(toggle).toHaveAttribute('aria-expanded','true'); await expect(toggle).toHaveAttribute('aria-controls',contentId!);
   const title = page.getByLabel('Edit Keyboard document title',{exact:true}); await expect(title).toBeVisible();
   expect(await title.evaluate(element=>element.closest('form')?.id)).toBe(contentId);
