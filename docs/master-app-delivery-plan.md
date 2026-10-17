@@ -1,10 +1,18 @@
 # Ashbi master-app delivery plan
 
-## Current status entrypoint — October 16, 2026
+## Current status entrypoint — October 17, 2026
 
 This is the single current delivery/status entrypoint. [GitHub #565](https://github.com/camster91/ashbi-platform/issues/565) is the actionable execution checklist; the linked roadmap and dated implementation plans explain scope and acceptance, not competing build queues.
 
-## Current checkpoint — October 16, 2026, 21:35 UTC
+## Current checkpoint — October 17, 2026, 01:03:41 UTC
+
+[Issue #565](https://github.com/camster91/ashbi-platform/issues/565) owns the execution queue. [PR #663](https://github.com/camster91/ashbi-platform/pull/663) is deployed as **4d83f3e4987f1b13d8a9037bcbaa60a1ab7eda50**, with healthy API and worker on **sha256:0c329f16324c042458bb0f090b3da30a2557aa61f3c327b5ec9f452f1a5278fd**. Fresh public HTTP 200/exact-revision core readiness and established migration 150 checksum, enabled guard and four restrictive foreign keys passed independent deployed-evidence review. Public **degraded:true** remains the operational-alert owner/destination gate. Sources remain primary; company input/cutover, provider activation and real-invoice financial acceptance remain open.
+
+Recording recovery now retains the original local File for explicit Save/Retry/Discard after failed upload, distinguishes confirmed upload from failed list refresh, and clears private takes on actor/organization changes. Session expiry uses bounded cancellable cleanup, coalesces repeated unauthorized events and rejects stale identity responses. Issues [#660](https://github.com/camster91/ashbi-platform/issues/660) and [#661](https://github.com/camster91/ashbi-platform/issues/661) are closed. Superseded docs PR #662 was closed unmerged; its reviewed content shipped in #663. The failed earlier 295 CI remains historical; the bounded notification-consent test correction retained all seven policy cases.
+
+Scoped local browser QA passed **6/6** on desktop Chromium/Mobile Chrome emulation with synthetic device/API boundaries, real native exact-byte downloads and cropped recovery-panel review. This is not whole-app, physical-device, playable-codec, company or manual assistive-technology acceptance. The separate standard **15-case browser-test follow-up is not yet CI verified** and is not part of the deployed image. Real provider/team/company-original, operational-alert and cutover gates remain open. Earlier Files/Resources/original-byte QA retains its own revision attribution; it was not rerun as whole-app acceptance on 4d83. See the [current launch checkpoint](launch-status.md) for exact release evidence.
+
+## Historical checkpoint — October 16, 2026, 21:35 UTC
 
 [Issue #565](https://github.com/camster91/ashbi-platform/issues/565) owns the current execution queue. [PR #658](https://github.com/camster91/ashbi-platform/pull/658) is deployed as **073e0ff351e64439facb32327c3c9369d112901e**, with healthy API and worker on **sha256:5c7a48a86614e1ae1acb05c506596280d43250699911185958db5db10ec2b410**. Fresh exact-revision public HTTP 200/core readiness and migration 150 guard/four restrictive foreign-key checks passed. Public **degraded:true** remains the unresolved operational-alert owner/destination gate. Sources remain primary; no company input/cutover, provider activation or real-invoice financial mutation is established.
 
