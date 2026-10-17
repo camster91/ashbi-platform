@@ -79,6 +79,35 @@ afterEach(() => {
 });
 
 describe('WorkQueue page', () => {
+  it('starts with a compact filter disclosure and keeps queue help optional', async () => {
+    const user = userEvent.setup();
+    api.getWorkQueue.mockResolvedValue(QUEUE);
+    api.getClients.mockResolvedValue({ clients: [] });
+    renderQueue();
+    await screen.findByRole('link', { name: /Write homepage copy/ });
+    const summary = screen.getByText('Filters');
+    const details = summary.closest('details');
+    expect(details).not.toHaveAttribute('open');
+    expect(screen.getByText('How the queue works').closest('details')).not.toHaveAttribute('open');
+    await user.click(summary);
+    expect(details).toHaveAttribute('open');
+    await user.selectOptions(screen.getByLabelText('Owner'), 'me');
+    expect(screen.getByText('1 active')).toBeVisible();
+    expect(details).toHaveAttribute('open');
+    expect(screen.getByTestId('location')).toHaveTextContent('owner=me');
+  });
+
+  it('reveals active filters from a deep link without hiding the queue', async () => {
+    api.getWorkQueue.mockResolvedValue(QUEUE);
+    api.getClients.mockResolvedValue({ clients: [] });
+    renderQueue('/queue?clientId=c1&dueFrom=2026-10-17');
+    await screen.findByRole('link', { name: /Write homepage copy/ });
+    expect(screen.getByText('Filters').closest('details')).toHaveAttribute('open');
+    expect(screen.getByText('2 active')).toBeVisible();
+    expect(screen.getByLabelText('Client')).toHaveValue('c1');
+    expect(screen.getByLabelText('Due from (UTC)')).toHaveValue('2026-10-17');
+  });
+
   it('shows four named tabs with counts, and rows that link to their source records', async () => {
     const user = userEvent.setup();
     api.getWorkQueue.mockResolvedValue(QUEUE);

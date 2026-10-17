@@ -7,9 +7,10 @@ import useClients from '../hooks/useClients';
 import { useAuth } from '../hooks/useAuth';
 import { formatDate, formatDateTime } from '../lib/format';
 import { cn } from '../lib/utils';
+import { statusLabel } from '../lib/status';
 import QueryErrorState from '../components/QueryErrorState';
 import PartialSectionNotice from '../components/PartialSectionNotice';
-import { Badge, Card, EmptyState, LoadingState } from '../components/ui';
+import { Badge, Card, EmptyState, LoadingState, PageHeading, FilterPanel } from '../components/ui';
 
 // Daily operator queue (#461): one list over tasks, approvals, reviews and
 // client-facing documents. Each row opens its source record; nothing is
@@ -88,6 +89,10 @@ function formatDue(row) {
 function QueueRow({ row }) {
   const context = [row.client?.name, row.project?.name].filter(Boolean).join(' · ');
   const age = describeAge(row.ageDays);
+  const statusDomain = ['task', 'approval', 'proposal', 'contract', 'invoice', 'review'].includes(row.type) ? row.type : null;
+  const readableState = statusDomain
+    ? statusLabel(statusDomain, row.type === 'review' ? row.state?.toLowerCase() : row.state)
+    : String(row.state || 'Unknown').replaceAll('_', ' ').toLowerCase();
   return (
     <li>
       <Link
@@ -104,7 +109,7 @@ function QueueRow({ row }) {
           <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {context && <span>{context}</span>}
             <span>Owner: {row.owner?.name || 'Unassigned'}</span>
-            <span>State: {row.state}</span>
+            <span>State: {readableState}</span>
             {row.dueAt && <span>Due {formatDue(row)}</span>}
             {age && <span>Age {age}</span>}
           </p>
@@ -194,19 +199,16 @@ export default function WorkQueue() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground">Daily queue</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            What needs attention across client delivery. Open a row to act on it in its own record. Attention requests always show requests sent to you. Account manager runs show your failed or uncertain requests until you explicitly mark them reviewed.
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+      <PageHeading title="Daily queue" description="Your next steps across projects and clients.">
+
+        {!isAdmin && (
+          <p className="text-xs text-muted-foreground" data-testid="queue-scope-note">
+            Shows the tasks assigned to you and the reviews you can open.
           </p>
-          {!isAdmin && (
-            <p className="mt-1 text-xs text-muted-foreground" data-testid="queue-scope-note">
-              Shows the tasks assigned to you and the reviews you can open.
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-3">
+        )}
+      </PageHeading>
+      <FilterPanel activeCount={[owner === 'me', clientId, projectId, dueFrom, dueTo].filter(Boolean).length}>
           {isAdmin && (
             <div className="flex flex-col gap-1">
               <label htmlFor={ownerId} className="text-xs font-medium text-muted-foreground">Owner</label>
@@ -214,7 +216,7 @@ export default function WorkQueue() {
                 id={ownerId}
                 value={owner}
                 onChange={(event) => updateParams({ owner: event.target.value === 'me' ? 'me' : '' })}
-                className="min-h-11 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                className="min-h-11 w-full min-w-0 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="everyone">Everyone</option>
                 <option value="me">Me</option>
@@ -227,7 +229,7 @@ export default function WorkQueue() {
               id={clientSelectId}
               value={clientId}
               onChange={(event) => updateParams({ clientId: event.target.value, projectId: '' })}
-              className="min-h-11 max-w-[16rem] rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 w-full min-w-0 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">All clients</option>
               {selectedClientMissing && (
@@ -241,7 +243,7 @@ export default function WorkQueue() {
           <div className="flex min-w-0 flex-col gap-1">
             <label htmlFor={projectSelectId} className="text-xs font-medium text-muted-foreground">Project</label>
             <select id={projectSelectId} value={projectId} onChange={event => updateParams({ projectId: event.target.value })}
-              className="min-h-11 max-w-[16rem] rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
+              className="min-h-11 w-full min-w-0 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
               <option value="">All projects</option>
               {selectedProjectMissing && <option value={projectId}>Selected project</option>}
               {projectOptions.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
@@ -254,14 +256,14 @@ export default function WorkQueue() {
             <label htmlFor={`${baseId}-${key}`} className="text-xs font-medium text-muted-foreground">{key === 'dueFrom' ? 'Due from (UTC)' : 'Due to (UTC)'}</label>
             <input id={`${baseId}-${key}`} type="date" value={key === 'dueFrom' ? dueFrom : dueTo} aria-invalid={Boolean(dateError)} aria-describedby={dateError ? dateErrorId : undefined}
               onChange={event => updateParams({ [key]: event.target.value })}
-              className="min-h-11 max-w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" />
+              className="min-h-11 w-full min-w-0 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" />
           </div>)}
           {(clientId || projectId || dueFrom || dueTo || owner === 'me') && <button type="button" onClick={() => updateParams({ owner: '', clientId: '', projectId: '', dueFrom: '', dueTo: '' })} className="min-h-11 text-sm text-primary underline">Clear filters</button>}
-        </div>
+      </FilterPanel>
       </div>
       {(dueFrom || dueTo) && <p className="text-xs text-muted-foreground">Due dates include the whole UTC day. Undated work, reviews, contracts and attention requests are excluded while a due range is active.</p>}
 
-      <div className="flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="Queue views">
+      <div className="grid grid-cols-2 gap-1 border-b border-border pb-1 md:grid-cols-4" role="tablist" aria-label="Queue views">
         {QUEUE_VIEWS.map((view, index) => {
           const selected = view.key === activeView;
           const count = data && !dateError ? (counts[view.key] ?? 0) : null;
@@ -278,13 +280,13 @@ export default function WorkQueue() {
               onClick={() => updateParams({ view: view.key })}
               onKeyDown={(event) => onTabKeyDown(event, index)}
               className={cn(
-                'flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
+                'flex min-h-11 min-w-0 items-center justify-between gap-2 border-b-2 px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
                 selected ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
               )}
             >
-              {view.label}
+              <span className="min-w-0">{view.label}</span>
               {count !== null && (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" aria-label={`${count} items`}>
+                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" aria-label={`${count} items`}>
                   {count}
                 </span>
               )}
@@ -333,6 +335,10 @@ export default function WorkQueue() {
           </>
         )}
       </div>
+        <details className="mt-1 text-sm text-muted-foreground">
+          <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-md underline decoration-border underline-offset-4 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">How the queue works</summary>
+          <p className="max-w-2xl pb-2 leading-relaxed">Open a row to act on it in its own record. Attention requests always show requests sent to you. Account manager runs show your failed or uncertain requests until you explicitly mark them reviewed.</p>
+        </details>
     </div>
   );
 }

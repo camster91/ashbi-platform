@@ -40,3 +40,6 @@ export {
 export { default as StatCard } from './StatCard';
 export { default as LoadingState } from './LoadingState';
 export { default as SlowNotice, SlowMessage } from './SlowNotice';
+
+export { PageHeading } from './PageHeading';
+export { FilterPanel } from './FilterPanel';
