@@ -22,7 +22,7 @@ export default function ClientAgentRunAttention({ run, user, clientId, conversat
     return value;
   }
 
-  function confirm(value) {
+  function applyConfirmedReview(value) {
     setConfirmedAt(value.attentionReviewedAt);
     cache.setQueriesData({ queryKey: key }, (old) => {
       if (old?.pages) return { ...old, pages: old.pages.map((page) => ({ ...page, runs: page.runs?.map((entry) => entry.id === run.id ? value : entry) })) };
@@ -40,7 +40,7 @@ export default function ClientAgentRunAttention({ run, user, clientId, conversat
     try {
       const value = validate(await (recheck ? api.getClientAgentRun(clientId, conversationId, run.id) : api.reviewClientAgentRun(clientId, conversationId, run.id)));
       if (!alive.current) return;
-      if (reviewed(value.attentionReviewedAt)) { confirm(value); setState('confirmed'); }
+      if (reviewed(value.attentionReviewedAt)) { applyConfirmedReview(value); setState('confirmed'); }
       else setState(recheck ? 'retry' : 'unknown');
     } catch (error) {
       if (!alive.current) return;
