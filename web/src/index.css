@@ -12,8 +12,8 @@
   --default-ring-color: hsl(217.21925133689840 91.21951219512198% 59.80392156862745%);
 }
 
-/* Self-hosted fonts avoid third-party requests. Body text uses swap so
-   sign-in controls stay readable while the branded font downloads. */
+/* Self-hosted fonts avoid third-party requests. Swap keeps text readable
+   while the branded body and heading fonts download. */
 @font-face {
   font-family: 'DM Sans';
   font-style: normal;
@@ -46,14 +46,14 @@
   font-family: 'Instrument Serif';
   font-style: normal;
   font-weight: 400;
-  font-display: optional;
+  font-display: swap;
   src: url('@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2') format('woff2');
 }
 @font-face {
   font-family: 'Instrument Serif';
   font-style: italic;
   font-weight: 400;
-  font-display: optional;
+  font-display: swap;
   src: url('@fontsource/instrument-serif/files/instrument-serif-latin-400-italic.woff2') format('woff2');
 }
 
