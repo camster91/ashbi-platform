@@ -21,8 +21,12 @@ test('the Coolify stack migrates first and persists data across redeploys', () =
     assert.ok(service.volumes.includes('appconfig:/app/config'), `${name} loses runtime config on redeploy`);
     assert.ok(service.healthcheck, `${name} has no health check`);
   }
-  assert.match(services.postgres.image, /^pgvector\/pgvector:pg16/);
-  assert.ok(services.postgres.volumes.includes('pgdata:/var/lib/postgresql/data'));
+  assert.match(services.postgres.image, /^pgvector\/pgvector:pg18/);
+  assert.ok(services.postgres.volumes.includes('pgdata:/var/lib/postgresql'));
+  assert.equal(services.postgres.environment.PGDATA, '/var/lib/postgresql/18/docker');
+  assert.deepEqual(services.postgres.entrypoint.slice(0, 2), ['/bin/sh', '-ec']);
+  assert.match(services.postgres.entrypoint[2], /refusing initialization/);
+  assert.equal(services.redis.image, 'redis:8.10.2-alpine');
   assert.ok(services.redis.volumes.includes('redisdata:/data'));
   for (const volume of ['pgdata', 'redisdata', 'uploads', 'appconfig']) assert.ok(volume in volumes, `missing volume ${volume}`);
 });
