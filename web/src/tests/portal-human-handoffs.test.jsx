@@ -113,7 +113,7 @@ describe('portal human questions', () => {
     rerender(view(portal({ identity: { ...identity, contactId: 'replacement' } })));
     fireEvent.click(screen.getByText('Request human follow-up'));
     await screen.findByLabelText('Your question');
-    expect(screen.getByLabelText('Your question')).toBeEnabled();
+    await waitFor(() => expect(screen.getByLabelText('Your question')).toBeEnabled());
     rerender(view(portal({ identity: undefined })));
     expect(screen.getByText(/Sign in again/)).toBeInTheDocument();
   });

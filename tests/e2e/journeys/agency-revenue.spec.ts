@@ -179,6 +179,7 @@ test('agency sells, contracts, invoices and collects payment end to end', async 
     const listed = page.getByText(invoice.invoiceNumber, { exact: true }).filter({ visible: true });
     await page.goto('/invoices');
     await expect(listed).toHaveCount(1);
+    await page.getByText('Filters', { exact: true }).click();
     const statusFilters = page.getByRole('group', { name: 'Filter by status' });
     await statusFilters.getByRole('button', { name: 'Sent', exact: true }).click();
     await expect(statusFilters.getByRole('button', { name: 'Sent', exact: true })).toHaveAttribute('aria-pressed', 'true');

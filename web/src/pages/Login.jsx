@@ -15,9 +15,9 @@ import {
   Globe,
   ShieldCheck
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { clsx } from 'clsx';
 
-const inputClass = cn(
+const inputClass = clsx(
   'w-full px-4 py-3 bg-card border border-border rounded-xl',
   'text-card-foreground placeholder:text-muted-foreground',
   'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent',
@@ -122,7 +122,7 @@ export function MfaChallengeForm({ challengeToken, returnTo, onCancel, onExpired
             maxLength={7}
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            className={cn(inputClass, 'tracking-[0.3em] font-mono text-lg')}
+            className={clsx(inputClass, 'tracking-[0.3em] font-mono text-lg')}
             autoComplete="one-time-code"
             autoFocus
             required
@@ -142,7 +142,7 @@ export function MfaChallengeForm({ challengeToken, returnTo, onCancel, onExpired
         type="submit"
         disabled={isVerifying}
         aria-busy={isVerifying}
-        className={cn(
+        className={clsx(
           'w-full min-h-11 flex items-center justify-center gap-2 py-3 px-6',
           'bg-primary text-primary-foreground rounded-full hover:bg-primary/90',
           'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
@@ -316,7 +316,7 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder={t('auth.emailPlaceholder')}
-                    className={cn(
+                    className={clsx(
                       'w-full pl-11 pr-4 py-3 bg-card border border-border rounded-xl',
                       'text-card-foreground placeholder:text-muted-foreground',
                       'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent',
@@ -342,7 +342,7 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder={t('auth.passwordPlaceholder')}
-                    className={cn(
+                    className={clsx(
                       'w-full pl-11 pr-12 py-3 bg-card border border-border rounded-xl',
                       'text-card-foreground placeholder:text-muted-foreground',
                       'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent',
@@ -387,7 +387,7 @@ export default function Login() {
               disabled={isLoading}
               aria-busy={isLoading}
               aria-describedby={error ? 'login-error' : undefined}
-              className={cn(
+              className={clsx(
                 'w-full min-h-11 flex items-center justify-center gap-2 py-3 px-6',
                 'bg-primary text-primary-foreground rounded-full',
                 'hover:bg-primary/90',

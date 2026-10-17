@@ -47,7 +47,7 @@ describe('login route chunk preload with a non-root base', () => {
 });
 
 
-it('keeps a workspace-only icon out of the public entry import graph', async () => {
+it('keeps workspace icons and the Tailwind merge registry out of the public entry import graph', async () => {
   const entryId = '\0public-icon-entry';
   const workspaceId = '\0workspace-icon-page';
   const result = await build({
@@ -61,8 +61,8 @@ it('keeps a workspace-only icon out of the public entry import graph', async () 
         if (id === 'workspace-icon-page') return workspaceId;
       },
       load(id) {
-        if (id === entryId) return "import { ArrowRight } from 'lucide-react'; globalThis.publicIcon = ArrowRight; globalThis.loadWorkspace = () => import('workspace-icon-page');";
-        if (id === workspaceId) return "import { ImageUpscale } from 'lucide-react'; globalThis.workspaceIcon = ImageUpscale;";
+        if (id === entryId) return "import { ArrowRight } from 'lucide-react'; import { clsx } from 'clsx'; globalThis.publicClass = clsx('public'); globalThis.publicIcon = ArrowRight; globalThis.loadWorkspace = () => import('workspace-icon-page');";
+        if (id === workspaceId) return "import { ImageUpscale } from 'lucide-react'; import { twMerge } from 'tailwind-merge'; globalThis.workspaceClass = twMerge('p-2', 'p-4'); globalThis.workspaceIcon = ImageUpscale;";
       },
     }],
     build: {
@@ -88,5 +88,8 @@ it('keeps a workspace-only icon out of the public entry import graph', async () 
   expect([...graph].some(ownsPublicIcon)).toBe(true);
   expect(chunks.some(ownsWorkspaceIcon)).toBe(true);
   expect([...graph].some(ownsWorkspaceIcon)).toBe(false);
+  const ownsMergeRegistry = chunk => Object.keys(chunk.modules).some(id => /[\\/]tailwind-merge[\\/]/.test(id));
+  expect(chunks.some(ownsMergeRegistry)).toBe(true);
+  expect([...graph].some(ownsMergeRegistry)).toBe(false);
   expect(entry.dynamicImports).toHaveLength(1);
 });

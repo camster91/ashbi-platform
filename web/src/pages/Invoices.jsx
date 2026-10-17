@@ -10,7 +10,7 @@ import useClients from '../hooks/useClients';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import {
-  Button, Card, EmptyState, LoadingState, SlowNotice, StatusBadge, Tab, TabList, TabPanel, Tabs,
+  Button, Card, EmptyState, FilterPanel, LoadingState, PageHeading, SlowNotice, StatusBadge, Tab, TabList, TabPanel, Tabs,
 } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
@@ -248,31 +248,85 @@ export default function Invoices() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground">Invoices</h1>
-          <p className="text-sm text-muted-foreground mt-1">Track payments and billing</p>
+      <PageHeading
+        title="Invoices"
+        description="Track invoices, payments and overdue balances."
+        actions={!showCreate && <>
+          <Button leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowCreate(true)}>New Invoice</Button>
+          <details className="relative">
+            <summary className="flex min-h-11 cursor-pointer items-center rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">More actions</summary>
+            <div className="absolute right-0 z-20 mt-2 grid min-w-52 gap-1 rounded-xl border border-border bg-card p-2 shadow-lg">
+              {isAdmin && <Button variant="ghost" onClick={() => navigate('/invoices/unbilled')}>Bill approved work</Button>}
+              <Button variant="ghost" leftIcon={<Download className="w-4 h-4" />} onClick={() => exportToCSV(invoices)}>Export CSV</Button>
+            </div>
+          </details>
+        </>}
+      />
+
+      {/* Create Form */}
+      {showCreate && (
+        <InvoiceCreateForm
+          form={form}
+          clients={clients}
+          projects={projects}
+          templates={templates}
+          formSubtotal={formSubtotal}
+          formDiscount={formDiscount}
+          formTax={formTax}
+          formTotal={formTotal}
+          onFormChange={setForm}
+          onLineItemUpdate={updateLineItem}
+          onLineItemAdd={addLineItem}
+          onLineItemRemove={removeLineItem}
+          onApplyTemplate={applyTemplate}
+          onSubmit={handleCreate}
+          onCancel={() => { setShowCreate(false); resetForm(); }}
+          loading={createMutation.isPending}
+          error={createMutation.error?.message}
+          draftState={formDraft}
+        />
+      )}
+
+
+      {!showCreate && <>
+      {/* Filters */}
+      <div className="space-y-3">
+        <div className="relative min-w-0">
+          <label htmlFor="invoice-search" className="sr-only">Search invoices</label>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+          <input
+            id="invoice-search"
+            type="search"
+            placeholder="Search invoices..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="min-h-11 w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-background"
+          />
         </div>
-        <div className="flex items-center gap-2">
-          {isAdmin && <Button variant="outline" onClick={() => navigate('/invoices/unbilled')}>Bill approved work</Button>}
-          <Button variant="outline" size="sm" leftIcon={<Download className="w-4 h-4" />}
-            onClick={() => exportToCSV(invoices)}>
-            Export CSV
-          </Button>
-          <Button leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowCreate(true)}>
-            New Invoice
-          </Button>
+        <FilterPanel activeCount={Number(Boolean(filterStatus)) + Number(Boolean(portfolio))}>
+          <PortfolioFilter value={portfolio} disabled={showCreate} onChange={value => { const next = new URLSearchParams(searchParams); if (value) next.set('portfolio', value); else next.delete('portfolio'); setSearchParams(next); }} />
+        {/* Chips wrap onto a second line on narrow screens instead of
+            pushing the page sideways. */}
+        <div className="flex flex-wrap gap-1 max-w-full" role="group" aria-label="Filter by status">
+          {STATUS_FILTERS.map((s) => (
+            <button key={s} type="button" aria-pressed={filterStatus === s} onClick={() => setFilterStatus(s)}
+              className={`min-h-11 px-3 py-1.5 text-xs rounded-lg transition-colors font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${
+                filterStatus === s
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              }`}>
+              {s ? statusLabel('invoice', s) : 'All'}
+            </button>
+          ))}
         </div>
+        </FilterPanel>
       </div>
 
-      {/* Tabs */}
-      <PortfolioFilter value={portfolio} disabled={showCreate} onChange={value => { const next = new URLSearchParams(searchParams); if (value) next.set('portfolio', value); else next.delete('portfolio'); setSearchParams(next); }} />
       {hasNextPage && <Button variant="outline" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>{isFetchingNextPage ? 'Loading invoices...' : 'Load more invoices'}</Button>}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabList aria-label="Invoice views">
-          <Tab value="list">All Invoices</Tab>
-          <Tab value="collections">Collections Dashboard</Tab>
+          <Tab value="list" className="justify-center px-2">Invoices</Tab>
+          <Tab value="collections" className="justify-center px-2">Collections</Tab>
         </TabList>
 
         <TabPanel value="collections">
@@ -280,66 +334,13 @@ export default function Invoices() {
         </TabPanel>
         <TabPanel value="list" className="space-y-6">
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
             <StatCard label="Outstanding" value={statMoney(stats, 'totalOutstanding')} icon={DollarSign} color="blue" />
             <StatCard label="Paid (all time)" value={statMoney(stats, 'paid')} icon={CheckCircle} color="green" />
             <StatCard label="Overdue" value={stats.overdue?.count || 0} sub={stats.overdue?.count > 0 ? statMoney(stats, 'overdue') : undefined} icon={AlertTriangle} color="red" />
             <StatCard label="Draft" value={stats.draft?.count || 0} sub={statMoney(stats, 'draft')} icon={FileText} color="gray" />
           </div>
 
-          {/* Filters */}
-          <div className="flex gap-2 flex-wrap items-center">
-            <div className="relative flex-1 min-w-48">
-              <label htmlFor="invoice-search" className="sr-only">Search invoices</label>
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
-              <input
-                id="invoice-search"
-                type="search"
-                placeholder="Search invoices..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-background"
-              />
-            </div>
-            {/* Chips wrap onto a second line on narrow screens instead of
-                pushing the page sideways. */}
-            <div className="flex flex-wrap gap-1 max-w-full" role="group" aria-label="Filter by status">
-              {STATUS_FILTERS.map((s) => (
-                <button key={s} type="button" aria-pressed={filterStatus === s} onClick={() => setFilterStatus(s)}
-                  className={`min-h-11 px-3 py-1.5 text-xs rounded-lg transition-colors font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${
-                    filterStatus === s
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  }`}>
-                  {s ? statusLabel('invoice', s) : 'All'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Create Form */}
-          {showCreate && (
-            <InvoiceCreateForm
-              form={form}
-              clients={clients}
-              projects={projects}
-              templates={templates}
-              formSubtotal={formSubtotal}
-              formDiscount={formDiscount}
-              formTax={formTax}
-              formTotal={formTotal}
-              onFormChange={setForm}
-              onLineItemUpdate={updateLineItem}
-              onLineItemAdd={addLineItem}
-              onLineItemRemove={removeLineItem}
-              onApplyTemplate={applyTemplate}
-              onSubmit={handleCreate}
-              onCancel={() => { setShowCreate(false); resetForm(); }}
-              loading={createMutation.isPending}
-              error={createMutation.error?.message}
-              draftState={formDraft}
-            />
-          )}
 
           {/* Invoice List */}
           {isError ? (
@@ -386,6 +387,7 @@ export default function Invoices() {
           />
         </TabPanel>
       </Tabs>
+      </>}
     </div>
   );
 }
@@ -415,7 +417,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
             </div>
             <p className="text-sm text-muted-foreground truncate">{invoice.client?.name}</p>
           </div>
-          <span className="text-lg font-semibold text-right">{fmt(invoice.total, invoice.currency)}</span>
+          <span className="max-w-[48%] break-words text-right text-base font-semibold tabular-nums">{fmt(invoice.total, invoice.currency)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           {leftToPay && <span className="font-medium text-warning">{leftToPay}</span>}
@@ -713,12 +715,12 @@ function InvoiceCreateForm({
                         onChange={(e) => onLineItemUpdate(idx, 'description', e.target.value)}
                         placeholder="Description"
                         aria-label={`Line item ${idx + 1} description`}
-                        className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm mb-2"
+                        className="min-h-11 w-full min-w-0 px-2 py-1.5 rounded border border-border bg-background text-sm mb-2"
                         required />
                       <select value={li.itemType}
                         aria-label={`Line item ${idx + 1} type`}
                         onChange={(e) => onLineItemUpdate(idx, 'itemType', e.target.value)}
-                        className="w-full px-2 py-1.5 rounded border border-border bg-background text-xs">
+                        className="min-h-11 w-full min-w-0 px-2 py-1.5 rounded border border-border bg-background text-xs">
                         <option value="LABOR">Labor</option>
                         <option value="MATERIALS">Materials</option>
                         <option value="EXPENSE">Expense</option>
@@ -732,22 +734,22 @@ function InvoiceCreateForm({
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid min-w-0 grid-cols-2 gap-3">
                     <div>
                       <label htmlFor={`invoice-line-${idx}-qty`} className="block text-xs text-muted-foreground mb-0.5">Qty</label>
                       <input id={`invoice-line-${idx}-qty`} type="number" value={li.quantity} min="0" step="0.5"
                         onChange={(e) => onLineItemUpdate(idx, 'quantity', e.target.value)}
-                        className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm text-center" />
+                        className="min-h-11 w-full min-w-0 px-2 py-1.5 rounded border border-border bg-background text-sm text-center" />
                     </div>
                     <div>
                       <label htmlFor={`invoice-line-${idx}-price`} className="block text-xs text-muted-foreground mb-0.5">Unit Price</label>
                       <input id={`invoice-line-${idx}-price`} type="number" value={li.unitPrice} min="0" step="0.01"
                         onChange={(e) => onLineItemUpdate(idx, 'unitPrice', e.target.value)}
-                        className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
+                        className="min-h-11 w-full min-w-0 px-2 py-1.5 rounded border border-border bg-background text-sm" />
                     </div>
-                    <div>
-                      <span className="block text-xs text-muted-foreground mb-0.5">Total</span>
-                      <div className="px-2 py-1.5 text-sm font-medium">
+                    <div className="col-span-2 flex items-center justify-between gap-3 border-t border-border pt-2">
+                      <span className="text-xs text-muted-foreground">Total</span>
+                      <div className="min-w-0 break-words text-right text-sm font-medium tabular-nums">
                         {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), form.currency)}
                       </div>
                     </div>
@@ -908,14 +910,14 @@ const COLOR_MAP = {
 
 function StatCard({ label, value, sub, icon: Icon, color }) {
   return (
-    <Card className="p-4">
-      <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-lg ${COLOR_MAP[color]}`}>
-          <Icon className="w-5 h-5" />
+    <Card padding="none" className="min-w-0 p-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <div className={`hidden shrink-0 rounded-lg p-2 sm:block ${COLOR_MAP[color]}`}>
+          <Icon className="w-5 h-5" aria-hidden="true" />
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs text-muted-foreground">{label}</p>
-          <p className="text-lg font-semibold">{value}</p>
+          <p className="break-words text-base font-semibold tabular-nums sm:text-lg">{value}</p>
           {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
         </div>
       </div>
