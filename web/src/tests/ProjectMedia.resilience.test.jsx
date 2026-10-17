@@ -10,7 +10,7 @@ import {
   STATS_INTERVAL_MS,
 } from '../lib/call-resilience';
 
-const { socket, apiMock } = vi.hoisted(() => {
+const { socket, apiMock, auth } = vi.hoisted(() => {
   const handlers = new Map();
   const socket = {
     connected: true,
@@ -31,10 +31,11 @@ const { socket, apiMock } = vi.hoisted(() => {
     getIceServers: async () => ({ iceServers: [{ urls: 'stun:example.test' }] }),
     uploadAttachment: async () => ({}),
   };
-  return { socket, apiMock };
+  return { socket, apiMock, auth: { user: { id: 'alice', organizationId: 'org-1' } } };
 });
 
 vi.mock('../lib/api', () => ({ api: apiMock }));
+vi.mock('../hooks/useAuth', () => ({ useAuth: () => auth }));
 vi.mock('../hooks/useSocket', () => ({ useSocket: () => ({ socket }) }));
 
 const { default: ProjectMedia } = await import('../components/project/ProjectMedia');
@@ -43,7 +44,8 @@ const PROJECT = 'p1';
 
 function render(ui) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return renderUI(ui, { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+  const view = renderUI(ui, { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+  return { ...view, client };
 }
 
 function deferred() {
@@ -124,11 +126,12 @@ async function flush(ms = 0) {
 }
 
 async function joinCall() {
-  render(<ProjectMedia projectId={PROJECT} />);
+  const view = render(<ProjectMedia projectId={PROJECT} />);
   await flush();
   fireEvent.click(screen.getByRole('button', { name: 'Join project audio and video call' }));
   await flush();
   expect(screen.getByText('Waiting for another project member to join…')).toBeInTheDocument();
+  return view;
 }
 
 const signals = () => socket.emitted.filter(({ event }) => event === 'call:signal').map(({ args }) => args[0]);
@@ -140,13 +143,14 @@ async function receive(event, payload) {
 }
 
 async function connectAsOfferer() {
-  await joinCall();
+  const view = await joinCall();
   await receive('call:presence', { callId: 'remote-call', userId: REMOTE, state: 'joined' });
   const peer = FakePeer.instances[0];
   await receive('call:signal', { callId: 'remote-call', from: REMOTE, signal: { type: 'answer', sdp: { type: 'answer', sdp: 'a' }, seq: offersSent()[0].signal.seq } });
   expect(peer.setRemoteDescription).toHaveBeenCalledTimes(1);
   await act(async () => { peer.setConnectionState('connected'); });
   expect(screen.getByText('Call connected')).toBeInTheDocument();
+  peer.view = view;
   return peer;
 }
 
@@ -161,6 +165,9 @@ async function connectAsAnswerer() {
 beforeEach(() => {
   vi.useFakeTimers();
   socket.reset();
+  auth.user = { id: 'alice', organizationId: 'org-1' };
+  URL.createObjectURL = vi.fn(() => 'blob:recording');
+  URL.revokeObjectURL = vi.fn();
   FakePeer.instances = [];
   FakePeer.holdNext = {};
   devices = [
@@ -627,5 +634,392 @@ describe('overlapping device switches', () => {
     await flush();
     expect(orphan.stop).toHaveBeenCalled();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+
+// Use a real Blob/File and the shared capped recorder so retry coverage proves
+// that the stopped bytes survive, rather than mocking the capture callback.
+function installRecording(bytes = 'known recording bytes', { holdStop = false } = {}) {
+  class Recorder {
+    static isTypeSupported() { return true; }
+    constructor() { this.state = 'inactive'; }
+    start() { this.state = 'recording'; }
+    stop() {
+      if (this.state === 'inactive') return;
+      this.state = 'inactive';
+      const complete = () => {
+        this.ondataavailable({ data: new Blob([bytes], { type: 'video/webm' }) });
+        this.onstop();
+      };
+      if (holdStop) track.completeStop = complete;
+      else complete();
+    }
+  }
+  vi.stubGlobal('MediaRecorder', Recorder);
+  const track = new FakeTrack('video', 'recording-screen');
+  mediaDevices.getDisplayMedia.mockResolvedValue(new FakeStream([track]));
+  return track;
+}
+
+async function captureRecording() {
+  fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+  await flush();
+  fireEvent.click(screen.getByRole('button', { name: 'Stop and upload screen recording' }));
+  await flush();
+}
+
+const fileText = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = reject;
+  reader.readAsText(file);
+});
+
+describe('stopped recording recovery', () => {
+  it('saves exact captured bytes and deliberately retries the same File without recapture', async () => {
+    installRecording('unique frame bytes 123');
+    const upload = vi.spyOn(apiMock, 'uploadAttachment').mockRejectedValueOnce(new Error('Network interrupted')).mockResolvedValueOnce({});
+    render(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    await captureRecording();
+    const file = upload.mock.calls[0][0];
+    expect(file).toBeInstanceOf(File);
+    const savedFile = URL.createObjectURL.mock.calls[0][0];
+    expect(savedFile).toBe(file);
+    // FileReader is asynchronous independently of the fake recorder timers.
+    vi.useRealTimers();
+    expect(await fileText(savedFile)).toBe('unique frame bytes 123');
+    vi.useFakeTimers();
+    expect(screen.getByRole('link', { name: 'Save recording' })).toHaveAttribute('download', file.name);
+    expect(screen.getByRole('alert')).toHaveTextContent('could not be confirmed');
+    await flush(60_000);
+    expect(upload).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry upload' }));
+    await flush();
+    expect(upload).toHaveBeenCalledTimes(2);
+    expect(upload.mock.calls[1][0]).toBe(file);
+    expect(mediaDevices.getDisplayMedia).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('link', { name: 'Save recording' })).not.toBeInTheDocument();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:recording');
+  });
+
+  it('does not offer another upload after the request succeeds but list refresh fails', async () => {
+    installRecording();
+    const upload = vi.spyOn(apiMock, 'uploadAttachment').mockResolvedValue({});
+    const view = render(<ProjectMedia projectId={PROJECT} />);
+    vi.spyOn(view.client, 'invalidateQueries').mockRejectedValue(new Error('Refresh failed'));
+    await flush();
+    await captureRecording();
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/Recording uploaded. The file list could not refresh/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry upload' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Save recording' })).not.toBeInTheDocument();
+  });
+
+  it('keeps local recovery but blocks retry after changing project within the same identity', async () => {
+    installRecording();
+    const upload = vi.spyOn(apiMock, 'uploadAttachment').mockRejectedValue(new Error('Offline'));
+    const view = render(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    await captureRecording();
+    view.rerender(<ProjectMedia projectId="p2" />);
+    await flush();
+    expect(screen.getByRole('link', { name: 'Save recording' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry upload' })).not.toBeInTheDocument();
+    expect(upload).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Discard recording' }));
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:recording');
+    expect(screen.getByRole('button', { name: 'Record a project screen share' })).toBeEnabled();
+  });
+
+  it.each(['organization', 'actor'])('purges and revokes private recovery after a %s change, even when switching back', async (kind) => {
+    installRecording();
+    const upload = vi.spyOn(apiMock, 'uploadAttachment').mockRejectedValue(new Error('Offline'));
+    const view = render(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    await captureRecording();
+    const original = auth.user;
+    auth.user = { ...original, [kind === 'actor' ? 'id' : 'organizationId']: 'new-identity' };
+    view.rerender(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    expect(screen.queryByRole('link', { name: 'Save recording' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry upload' })).not.toBeInTheDocument();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:recording');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    auth.user = original;
+    view.rerender(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    expect(screen.queryByRole('link', { name: 'Save recording' })).not.toBeInTheDocument();
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Record a project screen share' })).toBeEnabled();
+  });
+
+  it.each(['organization', 'actor'])('ignores late old recording bytes after a %s transition and return', async (kind) => {
+    const track = installRecording('private old bytes', { holdStop: true });
+    const upload = vi.spyOn(apiMock, 'uploadAttachment');
+    const view = render(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+    await flush();
+    const original = auth.user;
+    auth.user = { ...original, [kind === 'actor' ? 'id' : 'organizationId']: 'new-identity' };
+    view.rerender(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    expect(track.stop).toHaveBeenCalled();
+    auth.user = original;
+    view.rerender(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    await act(async () => track.completeStop());
+    await flush();
+    expect(screen.queryByRole('link', { name: 'Save recording' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry upload' })).not.toBeInTheDocument();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('does not let a late old-actor stop clear a new actor recording', async () => {
+    const oldTrack = installRecording('old private bytes', { holdStop: true });
+    const upload = vi.spyOn(apiMock, 'uploadAttachment');
+    const view = render(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+    await flush();
+    auth.user = { ...auth.user, id: 'new-actor' };
+    view.rerender(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    const currentTrack = new FakeTrack('video', 'current-actor-screen');
+    mediaDevices.getDisplayMedia.mockResolvedValueOnce(new FakeStream([currentTrack]));
+    fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+    await flush();
+    await act(async () => oldTrack.completeStop());
+    await flush();
+    expect(screen.getByRole('button', { name: 'Stop and upload screen recording' })).toBeInTheDocument();
+    expect(screen.getByRole('timer')).toBeInTheDocument();
+    expect(currentTrack.stop).not.toHaveBeenCalled();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('stops a recording on context switch and keeps the stopped take without uploading it', async () => {
+    const track = installRecording();
+    const upload = vi.spyOn(apiMock, 'uploadAttachment');
+    const view = render(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+    await flush();
+    view.rerender(<ProjectMedia projectId="p2" />);
+    await flush();
+    expect(track.stop).toHaveBeenCalled();
+    expect(screen.getByRole('link', { name: 'Save recording' })).toBeInTheDocument();
+    expect(upload).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Retry upload' })).not.toBeInTheDocument();
+  });
+
+  it.each(['switch', 'unmount'])('stops a late recording picker after %s without recording or uploading', async (cancel) => {
+    installRecording();
+    const pending = deferred();
+    mediaDevices.getDisplayMedia.mockReturnValueOnce(pending.promise);
+    const upload = vi.spyOn(apiMock, 'uploadAttachment');
+    const view = render(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+    if (cancel === 'switch') view.rerender(<ProjectMedia projectId="p2" />);
+    else view.unmount();
+    const track = new FakeTrack('video', 'late');
+    await act(async () => pending.resolve(new FakeStream([track])));
+    await flush();
+    expect(track.stop).toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('never retargets an in-flight upload or its refresh after the project changes', async () => {
+    installRecording();
+    const pending = deferred();
+    const upload = vi.spyOn(apiMock, 'uploadAttachment').mockReturnValueOnce(pending.promise);
+    const view = render(<ProjectMedia projectId={PROJECT} />);
+    const refresh = vi.spyOn(view.client, 'invalidateQueries');
+    await flush();
+    await captureRecording();
+    expect(upload).toHaveBeenCalledWith(expect.any(File), 'PROJECT', PROJECT);
+    view.rerender(<ProjectMedia projectId="p2" />);
+    await flush();
+    expect(screen.queryByRole('button', { name: 'Retry upload' })).not.toBeInTheDocument();
+    await act(async () => pending.resolve({}));
+    await flush();
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledWith({ queryKey: ['project-files', PROJECT] }, { throwOnError: true });
+    expect(screen.queryByRole('link', { name: 'Save recording' })).not.toBeInTheDocument();
+  });
+
+  it('does not recreate private recovery or refresh files after an in-flight upload crosses an actor transition', async () => {
+    installRecording();
+    const pending = deferred();
+    const upload = vi.spyOn(apiMock, 'uploadAttachment').mockReturnValueOnce(pending.promise);
+    const view = render(<ProjectMedia projectId={PROJECT} />);
+    const refresh = vi.spyOn(view.client, 'invalidateQueries');
+    await flush();
+    await captureRecording();
+    auth.user = { ...auth.user, id: 'other-actor' };
+    view.rerender(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:recording');
+    await act(async () => pending.resolve({}));
+    await flush();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('link', { name: 'Save recording' })).not.toBeInTheDocument();
+  });
+
+  it('ignores a late upload failure after unmount and releases its local recording URL', async () => {
+    installRecording();
+    const pending = deferred();
+    const upload = vi.spyOn(apiMock, 'uploadAttachment').mockReturnValue(pending.promise);
+    const view = render(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    await captureRecording();
+    view.unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:recording');
+    await act(async () => pending.reject(new Error('late failure')));
+    await flush();
+    expect(upload).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('call display stream ownership', () => {
+  it('stops the replaced share and current share on leave, preserving the call across unrelated rerenders', async () => {
+    const peer = await connectAsOfferer();
+    const first = new FakeTrack('video', 'share-1');
+    const second = new FakeTrack('video', 'share-2');
+    mediaDevices.getDisplayMedia.mockResolvedValueOnce(new FakeStream([first])).mockResolvedValueOnce(new FakeStream([second]));
+    fireEvent.click(screen.getByRole('button', { name: 'Share screen in call' }));
+    await flush();
+    peer.view.rerender(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    expect(first.stop).not.toHaveBeenCalled();
+    expect(peer.close).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Share screen in call' }));
+    await flush();
+    expect(first.stop).toHaveBeenCalled();
+    expect(second.stop).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Leave project audio and video call' }));
+    expect(second.stop).toHaveBeenCalled();
+  });
+
+  it('restores the current camera when the current share ends and releases all display tracks', async () => {
+    devices.push({ kind: 'videoinput', deviceId: 'cam-2', label: 'Second camera' });
+    const peer = await connectAsOfferer();
+    const display = new FakeTrack('video', 'screen');
+    const extra = new FakeTrack('audio', 'display-audio');
+    mediaDevices.getDisplayMedia.mockResolvedValueOnce(new FakeStream([display, extra]));
+    fireEvent.click(screen.getByRole('button', { name: 'Share screen in call' }));
+    await flush();
+    const sender = peer.getSenders().find((item) => item.track === display);
+    fireEvent.change(screen.getByLabelText('Camera'), { target: { value: 'cam-2' } });
+    await flush();
+    await act(async () => display.onended());
+    await flush();
+    expect(sender.track.deviceId).toBe('cam-2');
+    expect(display.stop).toHaveBeenCalled();
+    expect(extra.stop).toHaveBeenCalled();
+  });
+
+  it.each(['leave', 'unmount', 'peer replacement'])('stops a late display picker after %s without replacing a track', async (cancel) => {
+    const peer = await connectAsOfferer();
+    const sender = peer.getSenders().find((item) => item.track.kind === 'video');
+    const pending = deferred();
+    mediaDevices.getDisplayMedia.mockReturnValueOnce(pending.promise);
+    fireEvent.click(screen.getByRole('button', { name: 'Share screen in call' }));
+    if (cancel === 'leave') fireEvent.click(screen.getByRole('button', { name: 'Leave project audio and video call' }));
+    else if (cancel === 'unmount') peer.view.unmount();
+    else await receive('call:signal', { callId: 'remote-new', from: REMOTE, signal: { type: 'offer', sdp: { type: 'offer', sdp: 'new' } } });
+    const track = new FakeTrack('video', 'late-screen');
+    await act(async () => pending.resolve(new FakeStream([track])));
+    await flush();
+    expect(track.stop).toHaveBeenCalled();
+    expect(sender.replaceTrack).not.toHaveBeenCalled();
+  });
+
+  it('stops an active share on unmount and does not restore a stale share into another peer', async () => {
+    const peer = await connectAsOfferer();
+    const display = new FakeTrack('video', 'screen');
+    mediaDevices.getDisplayMedia.mockResolvedValueOnce(new FakeStream([display]));
+    fireEvent.click(screen.getByRole('button', { name: 'Share screen in call' }));
+    await flush();
+    const ended = display.onended;
+    const sender = peer.getSenders().find((item) => item.track === display);
+    peer.view.unmount();
+    expect(display.stop).toHaveBeenCalled();
+    await act(async () => ended());
+    expect(sender.replaceTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops an active display when the peer is replaced and ignores the old ended callback', async () => {
+    const peer = await connectAsOfferer();
+    const display = new FakeTrack('video', 'screen');
+    mediaDevices.getDisplayMedia.mockResolvedValueOnce(new FakeStream([display]));
+    fireEvent.click(screen.getByRole('button', { name: 'Share screen in call' }));
+    await flush();
+    const ended = display.onended;
+    const oldSender = peer.getSenders().find((item) => item.track === display);
+    await receive('call:signal', { callId: 'remote-new', from: REMOTE, signal: { type: 'offer', sdp: { type: 'offer', sdp: 'new' } } });
+    expect(display.stop).toHaveBeenCalled();
+    await act(async () => ended());
+    expect(oldSender.replaceTrack).toHaveBeenCalledTimes(1);
+    const nextSender = FakePeer.instances[1].getSenders().find((item) => item.track.kind === 'video');
+    expect(nextSender.track.deviceId).toBe('cam-1');
+    expect(nextSender.replaceTrack).not.toHaveBeenCalled();
+  });
+
+  it('releases a display immediately when leaving during replaceTrack and suppresses its late failure', async () => {
+    const peer = await connectAsOfferer();
+    const sender = peer.getSenders().find((item) => item.track.kind === 'video');
+    const replacement = deferred();
+    sender.replaceTrack.mockReturnValueOnce(replacement.promise);
+    const display = new FakeTrack('video', 'screen');
+    mediaDevices.getDisplayMedia.mockResolvedValueOnce(new FakeStream([display]));
+    fireEvent.click(screen.getByRole('button', { name: 'Share screen in call' }));
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Leave project audio and video call' }));
+    expect(display.stop).toHaveBeenCalled();
+    await act(async () => replacement.reject(new Error('closed')));
+    await flush();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(sender.replaceTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it('serializes overlapping display replacements so the newest share wins', async () => {
+    const peer = await connectAsOfferer();
+    const sender = peer.getSenders().find((item) => item.track.kind === 'video');
+    const replacement = deferred();
+    sender.replaceTrack.mockImplementationOnce(async (track) => { await replacement.promise; sender.track = track; });
+    const first = new FakeTrack('video', 'share-1');
+    const second = new FakeTrack('video', 'share-2');
+    mediaDevices.getDisplayMedia.mockResolvedValueOnce(new FakeStream([first])).mockResolvedValueOnce(new FakeStream([second]));
+    fireEvent.click(screen.getByRole('button', { name: 'Share screen in call' }));
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Share screen in call' }));
+    await flush();
+    expect(first.stop).toHaveBeenCalled();
+    expect(sender.replaceTrack).toHaveBeenCalledTimes(1);
+    await act(async () => replacement.resolve());
+    await flush();
+    expect(sender.replaceTrack).toHaveBeenCalledTimes(2);
+    expect(sender.track).toBe(second);
+    expect(second.stop).not.toHaveBeenCalled();
+  });
+
+  it('stops the display if replaceTrack rejects and reports a visible error', async () => {
+    const peer = await connectAsOfferer();
+    const sender = peer.getSenders().find((item) => item.track.kind === 'video');
+    sender.replaceTrack.mockRejectedValueOnce(new Error('replacement rejected'));
+    const display = new FakeTrack('video', 'screen');
+    mediaDevices.getDisplayMedia.mockResolvedValueOnce(new FakeStream([display]));
+    fireEvent.click(screen.getByRole('button', { name: 'Share screen in call' }));
+    await flush();
+    expect(display.stop).toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Screen share could not start');
   });
 });

@@ -1,6 +1,20 @@
 # Internal pilot launch status
 
-## Dated verification — October 16, 2026, 13:25 UTC
+## Current checkpoint — October 16, 2026, 21:35 UTC
+
+[Issue #565](https://github.com/camster91/ashbi-platform/issues/565) owns the current execution queue. [PR #658](https://github.com/camster91/ashbi-platform/pull/658) is deployed as **073e0ff351e64439facb32327c3c9369d112901e**, with healthy API and worker on **sha256:5c7a48a86614e1ae1acb05c506596280d43250699911185958db5db10ec2b410**. Fresh exact-revision public HTTP 200/core readiness and migration 150 guard/four restrictive foreign-key checks passed. Public **degraded:true** remains the unresolved operational-alert owner/destination gate. Sources remain primary; no company input/cutover, provider activation or real-invoice financial mutation is established.
+
+All three required PR and [exact-main CI jobs](https://github.com/camster91/ashbi-platform/actions/runs/38966908716), [artifact builder](https://github.com/camster91/ashbi-platform/actions/runs/38966976576), artifact integrity, fresh encrypted off-server-verified backup and reviewed SSH deployment passed. Main browser CI recorded 282 passed/143 skipped with no retry markers; the earlier PR automatic-retry pass remains separately investigated in [#659](https://github.com/camster91/ashbi-platform/issues/659). Invoice Undo now uses the original absolute server deadline and preserves still-valid retry; the server window is unchanged. [#657](https://github.com/camster91/ashbi-platform/issues/657) is closed. This is deployed-change evidence, not real financial-workflow acceptance.
+
+Shipped scope and bounded acceptance retain their exact revision attribution:
+
+- [Resource Links #653](https://github.com/camster91/ashbi-platform/pull/653): synthetic live API and Resources-only desktop/mobile visual acceptance passed on **3c2af2c2d89d040e452038f9a7fedbc72e006a76**. Earlier checker/capture failures remain historical. Portal/live MCP/provider/company acceptance remains separate. See [Resources contract](resource-links.md).
+- [Original-file preservation #649](https://github.com/camster91/ashbi-platform/pull/649) and [authenticated Files downloads #650](https://github.com/camster91/ashbi-platform/pull/650): five-format synthetic original-byte API lifecycle passed on **cd6f09f7eea0dd1fcc6097c0c2ec363d629c8e37**, with original failures and separately verified cleanup retained. [Files deletion #656](https://github.com/camster91/ashbi-platform/pull/656) has Files-only desktop/mobile acceptance on **2e9189650f47a91c991f063a331df1b0016bdca0**: initial owned TXT upload, then zero-upload exact-held recovery with two verified native byte/name downloads and cancellations, one exact-ID UI deletion and fresh absence, plus logout/browser cleanup. The initial checker refusal remains FAILED_OR_UNKNOWN; native downloads are not claimed fully intercepted or physical unlink proven. **Files UI QA was not rerun on 073e0ff.**
+- Both preserved company HEIC originals pass local pure upload-policy eligibility under source matching the 073 tree. Generic original storage/download requires no decoder; HEIC review/thumbnail rendering is not provided. This is not an exercised company-original upload/storage/download/editor round trip. Optional thumbnail/every-item integrity and editable-original fidelity remain unverified; corrupt source captures remain held. See [upload contract](upload-security.md).
+
+OpenSEO #644 and the separate default-disabled portal assistant #645 shipped in **2cb2829c89ef62d3b08d3d0d1091cf31061163a9**; configured credentials/mappings, real provider responses and team/client acceptance remain open. Two-context synthetic document conflict/history/restore acceptance passed **56/56 on 6b62966**, after the preserved earlier helper failures; this does not establish realtime convergence. Real ChatGPT consent/revocation, revenue/provider journeys, company originals/input, team use, manual assistive-technology acceptance, operational alerts and final cutover remain open. [Delivery plan](master-app-delivery-plan.md) and [replacement acceptance](replacement-readiness-matrix.md) retain those gates. Earlier records below are historical, with their own pending gates and failure attribution.
+
+## Historical verification — October 16, 2026, 13:25 UTC
 
 [Issue #565](https://github.com/camster91/ashbi-platform/issues/565) owns the current queue. At this checkpoint, [#648](https://github.com/camster91/ashbi-platform/pull/648) is deployed as **1cee30fe085bb3e000d37e05a8bba7ac9430f093**, with exact healthy API/worker engine **sha256:95a4eeda673c4d08ea7ad8a9266ad55f4ef4bbe58edcc12da7db67ae785110e4** and public/core readiness verified. All required PR/main CI, the real queue and eleven portal PostgreSQL fixtures, hosted artifact verification, fresh encrypted off-server-verified backup and reviewed SSH release passed. Changed-feature read-only API QA passed **34/34**, with both normal QA logouts verified. Empty observed queues do not establish populated live boundaries.
 
@@ -10,7 +24,7 @@ Original-file compatibility is being extended in this change to bounded **64 MiB
 
 Earlier checkpoints below retain their own release attribution and pending gates.
 
-## Dated verification — October 16, 2026, 12:04 UTC
+## Historical verification — October 16, 2026, 12:04 UTC
 
 [Issue #565](https://github.com/camster91/ashbi-platform/issues/565) owns the current execution queue. This is a dated evidence record, not a continuously updated serving-revision claim. Earlier checkpoints below retain their original failures, pending gates and release attribution; read them as history.
 

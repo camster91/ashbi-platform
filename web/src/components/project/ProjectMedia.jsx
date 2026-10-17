@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Activity, Mic, MicOff, MonitorUp, Phone, PhoneOff, Radio, Video, VideoOff } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useSocket } from '../../hooks/useSocket';
+import { useAuth } from '../../hooks/useAuth';
 import {
   ANSWERER_RECOVERY_WINDOW_MS,
   DISCONNECT_GRACE_MS,
@@ -44,6 +45,23 @@ function trackDeviceId(track) {
 
 export default function ProjectMedia({ projectId }) {
   const { socket } = useSocket();
+  const { user } = useAuth();
+  const identity = JSON.stringify([user?.organizationId, user?.id]);
+  const identityRef = useRef(identity);
+  const identityEpochRef = useRef(0);
+  if (identityRef.current !== identity) identityEpochRef.current += 1;
+  identityRef.current = identity;
+  const identityEpoch = identityEpochRef.current;
+  const previousIdentityRef = useRef(identity);
+  const recordingScope = JSON.stringify([projectId, user?.organizationId, user?.id]);
+  const scopeRef = useRef(recordingScope);
+  scopeRef.current = recordingScope;
+  const mountedRef = useRef(true);
+  const captureAttemptRef = useRef(0);
+  const capturePickerRef = useRef(null);
+  const pendingRecordingRef = useRef(null);
+  const uploadAttemptRef = useRef(null);
+  const [pendingRecording, setPendingRecording] = useState(null);
   const micSelectId = useId();
   const cameraSelectId = useId();
   const [recording, setRecording] = useState(false);
@@ -74,6 +92,9 @@ export default function ProjectMedia({ projectId }) {
   const remoteUserRef = useRef(null);
   const iceServersRef = useRef(DEFAULT_ICE_SERVERS);
   const localStreamRef = useRef(null);
+  const screenStreamRef = useRef(null);
+  const shareAttemptRef = useRef(0);
+  const screenReplaceQueueRef = useRef(new WeakMap());
   const peerRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -105,6 +126,13 @@ export default function ProjectMedia({ projectId }) {
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
   }, []);
 
+  const stopScreenShare = useCallback(() => {
+    shareAttemptRef.current += 1;
+    const screen = screenStreamRef.current;
+    screenStreamRef.current = null;
+    screen?.getTracks().forEach((track) => { track.onended = null; track.stop(); });
+  }, []);
+
   const resetRecovery = useCallback(() => {
     clearTimeout(disconnectTimerRef.current);
     clearTimeout(restartTimerRef.current);
@@ -126,6 +154,7 @@ export default function ProjectMedia({ projectId }) {
     joinAttemptRef.current += 1;
     joiningRef.current = false;
     resetRecovery();
+    stopScreenShare();
     peerRef.current?.close();
     peerRef.current = null;
     stopLocalTracks();
@@ -138,11 +167,12 @@ export default function ProjectMedia({ projectId }) {
     setCallQuality('unknown');
     setSignallingOffline(false);
     setCallState('idle');
-  }, [projectId, resetRecovery, socket, stopLocalTracks]);
+  }, [projectId, resetRecovery, socket, stopLocalTracks, stopScreenShare]);
 
   // Drop the current peer but stay in the call, waiting for a participant.
   const releasePeer = useCallback((message) => {
     resetRecovery();
+    stopScreenShare();
     const peer = peerRef.current;
     peerRef.current = null;
     peer?.close();
@@ -154,7 +184,7 @@ export default function ProjectMedia({ projectId }) {
     setCallNotice('');
     if (typeof message === 'string' && message) setCallError(message);
     if (callIdRef.current) setCallState('waiting');
-  }, [resetRecovery]);
+  }, [resetRecovery, stopScreenShare]);
 
   // Create, apply and send one offer. Resolves true once sent, false if the
   // peer was replaced or a colliding remote offer won meanwhile.
@@ -440,6 +470,7 @@ export default function ProjectMedia({ projectId }) {
       // A fresh (non-renegotiation) offer on an established peer means the
       // other side rebuilt its connection: start a new peer for it.
       if (signal.type === 'offer' && !signal.renegotiate && peerRef.current?.currentRemoteDescription) {
+        stopScreenShare();
         const stale = peerRef.current;
         peerRef.current = null;
         resetRecovery();
@@ -507,7 +538,7 @@ export default function ProjectMedia({ projectId }) {
       socket.off('disconnect', onDisconnect);
       leaveCall();
     };
-  }, [ensurePeer, leaveCall, performIceRestart, projectId, releasePeer, resetRecovery, sendOffer, socket]);
+  }, [ensurePeer, leaveCall, performIceRestart, projectId, releasePeer, resetRecovery, sendOffer, socket, stopScreenShare, recordingScope]);
 
   // If the active mic or camera is unplugged, fall back to the default device.
   const inCall = callState !== 'idle' && callState !== 'joining';
@@ -555,70 +586,191 @@ export default function ProjectMedia({ projectId }) {
     return () => { cancelled = true; clearInterval(timer); };
   }, [callState, peerGeneration]);
 
+  const replaceShareTrack = (sender, track, current) => {
+    const queues = screenReplaceQueueRef.current;
+    const next = (queues.get(sender) || Promise.resolve()).catch(() => {}).then(() => {
+      if (current()) return sender.replaceTrack(track);
+    });
+    queues.set(sender, next);
+    return next;
+  };
+
   const shareCallScreen = async () => {
+    const peer = peerRef.current;
+    const sender = peer?.getSenders().find((item) => item.track?.kind === 'video');
+    if (!sender || !callIdRef.current) return;
+    stopScreenShare();
+    const attempt = shareAttemptRef.current;
+    const current = () => shareAttemptRef.current === attempt && peerRef.current === peer;
+    let screen;
     try {
-      const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      if (!current()) { screen.getTracks().forEach((track) => track.stop()); return; }
       const track = screen.getVideoTracks()[0];
-      const sender = peerRef.current?.getSenders().find((item) => item.track?.kind === 'video');
-      if (sender && track) await sender.replaceTrack(track);
-      track.onended = () => {
+      if (!track) throw new Error('No display track');
+      screenStreamRef.current = screen;
+      track.onended = async () => {
+        if (!current() || screenStreamRef.current !== screen) return;
+        stopScreenShare();
+        const restoreAttempt = shareAttemptRef.current;
         const camera = localStreamRef.current?.getVideoTracks()[0];
-        if (sender && camera) sender.replaceTrack(camera);
+        try {
+          if (peerRef.current === peer && camera && camera.readyState !== 'ended') await replaceShareTrack(sender, camera, () => peerRef.current === peer && shareAttemptRef.current === restoreAttempt);
+        } catch {
+          if (peerRef.current === peer && shareAttemptRef.current === restoreAttempt) setCallError('Screen sharing ended, but the camera could not be restored.');
+        }
       };
+      await replaceShareTrack(sender, track, current);
+      if (!current()) screen.getTracks().forEach((item) => item.stop());
     } catch (error) {
-      if (error.name !== 'NotAllowedError') setCallError('Screen share could not start.');
+      screen?.getTracks().forEach((track) => { track.onended = null; track.stop(); });
+      if (!current()) return;
+      screenStreamRef.current = null;
+      // A failed replacement can leave the previous display sender ended.
+      const camera = localStreamRef.current?.getVideoTracks()[0];
+      if (camera && camera.readyState !== 'ended') {
+        try { await replaceShareTrack(sender, camera, current); } catch { /* The visible error asks the user to retry. */ }
+      }
+      if (current() && error.name !== 'NotAllowedError') setCallError('Screen share could not start.');
+    }
+  };
+
+  const clearPendingRecording = useCallback(() => {
+    const pending = pendingRecordingRef.current;
+    if (pending?.url) URL.revokeObjectURL(pending.url);
+    pendingRecordingRef.current = null;
+    setPendingRecording(null);
+  }, []);
+
+  const uploadRecording = async (take) => {
+    if (!take || take !== pendingRecordingRef.current || take.scope !== scopeRef.current || take.identityEpoch !== identityEpochRef.current || !take.uploadAllowed || uploadAttemptRef.current || take.overLimit) return;
+    const attempt = {};
+    uploadAttemptRef.current = attempt;
+    setUploading(true);
+    setRecordingError('');
+    try {
+      await api.uploadAttachment(take.file, 'PROJECT', take.projectId);
+    } catch (error) {
+      if (mountedRef.current && pendingRecordingRef.current === take && identityEpochRef.current === take.identityEpoch) {
+        setRecordingError(`${error.message || 'Recording upload failed.'} Upload could not be confirmed. Save your recording locally; check project files before retrying to avoid a duplicate.`);
+      }
+      if (uploadAttemptRef.current === attempt) {
+        uploadAttemptRef.current = null;
+        if (mountedRef.current) setUploading(false);
+      }
+      return;
+    }
+    // A confirmed upload is final, even if refreshing the list subsequently fails.
+    if (mountedRef.current && pendingRecordingRef.current === take) clearPendingRecording();
+    if (uploadAttemptRef.current === attempt) {
+      uploadAttemptRef.current = null;
+      if (mountedRef.current) setUploading(false);
+    }
+    if (identityRef.current !== take.identity || identityEpochRef.current !== take.identityEpoch) return;
+    try {
+      await queryClient.invalidateQueries({ queryKey: ['project-files', take.projectId] }, { throwOnError: true });
+    } catch {
+      if (mountedRef.current && scopeRef.current === take.scope) setRecordingNotice('Recording uploaded. The file list could not refresh; refresh the project to see it.');
     }
   };
 
   const stopRecording = () => recorderRef.current?.stop();
 
-  // Recording uses the shared capped recorder (lib/media-recorder.js), which
-  // stops itself at MAX_RECORDING_DURATION_MS or just before the 64 MiB upload
-  // cap (MAX_RECORDING_BYTES), whichever comes first.
   const startRecording = async () => {
+    if (pendingRecordingRef.current || recorderRef.current || capturePickerRef.current !== null || uploading) return;
     setRecordingError('');
     setRecordingNotice('');
     if (!navigator.mediaDevices?.getDisplayMedia || !canRecord()) {
       return setRecordingError('This browser does not support screen recording.');
     }
+    const scope = recordingScope;
+    const attempt = ++captureAttemptRef.current;
+    capturePickerRef.current = attempt;
+    let stream;
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      if (capturePickerRef.current === attempt) capturePickerRef.current = null;
+      if (!mountedRef.current || scopeRef.current !== scope || captureAttemptRef.current !== attempt || identityEpochRef.current !== identityEpoch) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       recordingStreamRef.current = stream;
       setRecordingRemainingMs(MAX_RECORDING_DURATION_MS);
       recorderRef.current = startCappedRecording(stream, {
         maxBytes: MAX_RECORDING_BYTES,
         maxDurationMs: MAX_RECORDING_DURATION_MS,
-        onProgress: ({ remainingMs }) => setRecordingRemainingMs(remainingMs),
-        onStop: async ({ blob, reason, overLimit, mimeType }) => {
-          stream.getTracks().forEach((track) => track.stop());
-          recordingStreamRef.current = null;
-          recorderRef.current = null;
+        onProgress: ({ remainingMs }) => { if (mountedRef.current && identityRef.current === identity && identityEpochRef.current === identityEpoch) setRecordingRemainingMs(remainingMs); },
+        onStop: ({ blob, reason, overLimit, mimeType }) => {
+          stream.getTracks().forEach((track) => { track.onended = null; track.stop(); });
+          if (recordingStreamRef.current === stream) { recordingStreamRef.current = null; recorderRef.current = null; }
+          if (!mountedRef.current || identityRef.current !== identity || identityEpochRef.current !== identityEpoch) return;
           setRecording(false);
           if (reason === 'duration') setRecordingNotice(`Recording reached the ${MAX_RECORDING_MINUTES}-minute limit, so it stopped and is being uploaded.`);
           if (reason === 'size') setRecordingNotice('Recording reached the 64 MiB upload limit, so it stopped and is being uploaded.');
           if (!blob.size) return setRecordingError('No recording data was captured.');
-          if (overLimit) return setRecordingError('This recording is over the 64 MiB project upload limit. Record a shorter clip.');
-          setUploading(true);
-          try {
-            const file = new File([blob], recordingFileName('screen-recording', mimeType), { type: mimeType });
-            await api.uploadAttachment(file, 'PROJECT', projectId);
-            await queryClient.invalidateQueries({ queryKey: ['project-files', projectId] });
-          } catch (error) { setRecordingError(error.message || 'Recording upload failed.'); }
-          finally { setUploading(false); }
+          const file = new File([blob], recordingFileName('screen-recording', mimeType), { type: mimeType });
+          const take = { file, scope, identity, identityEpoch, projectId, overLimit, uploadAllowed: scopeRef.current === scope && captureAttemptRef.current === attempt, url: URL.createObjectURL(file) };
+          pendingRecordingRef.current = take;
+          setPendingRecording(take);
+          if (overLimit) {
+            setRecordingNotice('Recording stopped at the upload limit. Save it locally before discarding it.');
+            return setRecordingError('This recording is over the 64 MiB project upload limit. Save it locally, then discard it to record a shorter clip.');
+          }
+          if (scopeRef.current !== scope || captureAttemptRef.current !== attempt) {
+            setRecordingNotice('The project or session changed. Save this recording locally or discard it; it will not upload in the new context.');
+            return;
+          }
+          void uploadRecording(take);
         },
       });
       stream.getVideoTracks()[0].onended = () => recorderRef.current?.stop('ended');
       setRecording(true);
     } catch (error) {
-      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+      if (capturePickerRef.current === attempt) capturePickerRef.current = null;
+      stream?.getTracks().forEach((track) => track.stop());
+      if (!mountedRef.current || captureAttemptRef.current !== attempt) return;
       recordingStreamRef.current = null;
       if (error.name !== 'NotAllowedError') setRecordingError('Screen recording could not start.');
     }
   };
 
-  useEffect(() => () => {
+  useEffect(() => {
+    // Navigation may retain a local take for its owner. An actor or organization
+    // transition must release those private bytes and prevent late recreation.
+    const identityChanged = previousIdentityRef.current !== identity;
+    previousIdentityRef.current = identity;
+    captureAttemptRef.current += 1;
+    capturePickerRef.current = null;
+    if (identityChanged) {
+      clearPendingRecording();
+      setRecordingError('');
+      setRecordingNotice('');
+      setRecording(false);
+    } else if (pendingRecordingRef.current) pendingRecordingRef.current.uploadAllowed = false;
+    uploadAttemptRef.current = null;
+    setUploading(false);
     recorderRef.current?.stop();
     recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    if (identityChanged) {
+      recorderRef.current = null;
+      recordingStreamRef.current = null;
+    }
+  }, [recordingScope, identity, clearPendingRecording]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      captureAttemptRef.current += 1;
+      uploadAttemptRef.current = null;
+      recorderRef.current?.stop();
+      recorderRef.current = null;
+      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
+      const pending = pendingRecordingRef.current;
+      if (pending?.url) URL.revokeObjectURL(pending.url);
+      pendingRecordingRef.current = null;
+    };
   }, []);
 
   const callStatusText = callState === 'connected' ? 'Call connected'
@@ -631,13 +783,20 @@ export default function ProjectMedia({ projectId }) {
       <div><h2 className="font-semibold text-foreground flex items-center gap-2"><Radio className="w-5 h-5 text-primary" /> Live calls & recordings</h2><p className="mt-1 text-sm text-muted-foreground">Private to project members. Camera, microphone, and screen access always require your browser’s consent.</p></div>
       <div className="flex flex-wrap items-center gap-2">
         {recording && <p role="timer" aria-label={`Recording time left: ${formatDuration(recordingRemainingMs)}`} className="text-sm tabular-nums text-muted-foreground">{formatDuration(recordingRemainingMs)} left</p>}
-        <button type="button" onClick={recording ? stopRecording : startRecording} disabled={uploading} className="min-h-11 inline-flex items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={recording ? 'Stop and upload screen recording' : 'Record a project screen share'}><MonitorUp className="w-4 h-4" />{recording ? 'Stop recording' : uploading ? 'Uploading…' : 'Record screen'}</button>
+        <button type="button" onClick={recording ? stopRecording : startRecording} disabled={uploading || Boolean(pendingRecording)} className="min-h-11 inline-flex items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={recording ? 'Stop and upload screen recording' : 'Record a project screen share'}><MonitorUp className="w-4 h-4" />{recording ? 'Stop recording' : uploading ? 'Uploading…' : 'Record screen'}</button>
         {!inCall ? <button type="button" onClick={joinCall} disabled={callState === 'joining'} aria-busy={callState === 'joining'} className="min-h-11 inline-flex items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Join project audio and video call"><Phone className="w-4 h-4" /> {callState === 'joining' ? 'Joining…' : 'Join call'}</button> : <button type="button" onClick={leaveCall} className="min-h-11 inline-flex items-center gap-2 rounded-lg bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Leave project audio and video call"><PhoneOff className="w-4 h-4" /> Leave call</button>}
       </div>
     </div>
     <div className="p-5 space-y-4">
       {(recordingError || callError) && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{recordingError || callError}</p>}
       {recordingNotice && <p role="status" className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">{recordingNotice}</p>}
+      {pendingRecording && pendingRecording.identity === identity && pendingRecording.identityEpoch === identityEpoch && <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3" aria-label="Recording recovery">
+        <p className="w-full text-sm">Save this local copy before leaving this page.</p>
+        <a href={pendingRecording.url} download={pendingRecording.file.name} className="min-h-11 inline-flex items-center px-3 text-primary underline">Save recording</a>
+        {pendingRecording.scope === recordingScope && pendingRecording.uploadAllowed && !pendingRecording.overLimit && <button type="button" disabled={uploading} onClick={() => uploadRecording(pendingRecording)} className="min-h-11 rounded-lg border border-border px-3">Retry upload</button>}
+        <button type="button" disabled={uploading} onClick={() => { clearPendingRecording(); setRecordingError(''); setRecordingNotice(''); }} className="min-h-11 rounded-lg border border-border px-3">Discard recording</button>
+        {(!pendingRecording.uploadAllowed || pendingRecording.scope !== recordingScope) && <p className="text-sm">This recording belongs to a previous project or session. Save it locally or discard it.</p>}
+      </div>}
       {inCall && <div className="rounded-lg border border-border bg-muted/30 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
