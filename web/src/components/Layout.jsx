@@ -540,7 +540,7 @@ export default function Layout({ children }) {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setIsSearchFocused(false)}
-                placeholder="Search..."
+                placeholder="Search Hub..."
                 className={cn(
                   'w-full min-h-11 pl-10 pr-4 py-2 text-sm bg-muted border-0 rounded-xl',
                   'placeholder:text-muted-foreground',

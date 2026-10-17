@@ -241,7 +241,7 @@ test.describe('UI quality', () => {
   test('the Cmd/Ctrl+K shortcut is advertised on Create and opens Quick add', async ({ page, isMobile }) => {
     await page.goto('/dashboard');
     await expect(page.getByRole('heading', { name: /Cameron/, level: 1 })).toBeVisible();
-    const search = page.getByPlaceholder('Search...');
+    const search = page.getByPlaceholder('Search Hub...');
     await expect(search.locator('xpath=..').locator('kbd')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Create(?: K)?$/ })).toHaveAccessibleDescription(/Command K or Control K opens Quick add/);
     if (!isMobile) {
