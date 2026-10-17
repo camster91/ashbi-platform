@@ -639,7 +639,8 @@ Ashbi Hub${includeFiles ? ', including the files you uploaded' : ' (files were n
 - \`SHA256SUMS\`: checksums of every other file; verify with
   \`sha256sum -c SHA256SUMS\` (or \`shasum -a 256 -c SHA256SUMS\` on macOS).
 - \`data/<entity>.jsonl\`: one JSON object per line, one file per record type.
-  Every record keeps its original \`id\`; fields ending in \`Id\` refer to
+  Every record keeps its source primary key, usually \`id\`; run review records
+  use \`runId\`, referring to \`client_agent_runs.id\`. Fields ending in \`Id\` refer to
   records in the other files (for example \`tasks.projectId\` to \`projects.id\`).
   Dates are ISO 8601 UTC; very large integers are strings.
 - \`files/attachments/<attachmentId>/<file name>\`: uploaded files, listed in
