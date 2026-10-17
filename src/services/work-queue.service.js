@@ -8,6 +8,7 @@ import { UNPAID_INVOICE_STATUSES } from '../utils/invoice-balance.js';
 import { REVIEW_STAFF_ROLES } from './media-review.service.js';
 import { authorizeHandoffStaff, canonicalHandoffIds } from './portal-handoff.service.js';
 import { listWorkspaceChatAttentionForQueue } from './workspace-chat.service.js';
+import { listClientAgentRunAttentionForQueue } from './client-agent-run.service.js';
 
 export const WORK_QUEUE_VIEWS = Object.freeze(['needs_action', 'awaiting_approval', 'waiting_on_client', 'at_risk']);
 
@@ -301,6 +302,22 @@ export function countByView(rows) {
  * admin-only.
  */
 export const WORK_QUEUE_SOURCES = Object.freeze([
+  {
+    key: 'agent_runs', roles: ['ADMIN', 'TEAM'],
+    async load(prisma, { filters, user, now }) {
+      const { items, actor } = await listClientAgentRunAttentionForQueue(prisma, user, {
+        clientId: filters.clientId, projectId: filters.projectId, limit: WORK_QUEUE_SOURCE_LIMIT + 1,
+      });
+      return items.map(row => ({ type: 'agent_run', id: row.id,
+        title: row.status === 'UNKNOWN' ? 'Account manager outcome needs review' : 'Account manager request failed',
+        sourceUrl: `/client/${encodeURIComponent(row.clientId)}?conversationId=${encodeURIComponent(row.conversationId)}&runId=${encodeURIComponent(row.id)}`,
+        client: { id: row.clientId, name: row.clientName }, project: row.projectId ? { id: row.projectId, name: row.projectName } : null,
+        owner: { id: actor.id, name: actor.name, role: actor.role }, state: row.status,
+        nextAction: row.status === 'UNKNOWN' ? 'Review uncertain outcome and possible provider cost; mark reviewed without retrying'
+          : 'Review failure and AI settings; mark reviewed before choosing whether to send another question',
+        dueAt: null, dueKind: null, ageDays: ageInDays(row.finishedAt ?? row.createdAt, now), view: 'needs_action' }));
+    },
+  },
   {
     key: 'workspace_chat_attention', roles: ['ADMIN', 'TEAM'],
     async load(prisma, { filters, user, now }) {

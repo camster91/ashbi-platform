@@ -10652,6 +10652,7 @@
                 "client_agent_conversation.archived",
                 "client_agent_run.requested",
                 "client_agent_run.cancelled",
+                "client_agent_run.reviewed",
                 "gmail_send.claimed",
                 "gmail_send.accepted",
                 "gmail_send.completed",
@@ -18428,6 +18429,89 @@
           }
         ],
         "summary": "POST /api/clients/:clientId/assistant/conversations/:conversationId/runs/:runId/cancel",
+        "tags": [
+          "clients"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/clients/{clientId}/assistant/conversations/{conversationId}/runs/{runId}/review": {
+      "post": {
+        "operationId": "post_api_clients_clientId_assistant_conversations_conversationId_runs_runId_review",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "pattern": "^[cC][^\\s-]{8,}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversationId",
+            "required": true,
+            "schema": {
+              "pattern": "^[cC][^\\s-]{8,}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "pattern": "^[cC][^\\s-]{8,}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/clients/:clientId/assistant/conversations/:conversationId/runs/:runId/review",
         "tags": [
           "clients"
         ],

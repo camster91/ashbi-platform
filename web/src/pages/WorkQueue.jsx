@@ -47,6 +47,7 @@ const TYPE_LABELS = {
   invoice: 'Invoice',
   workspace_attention: 'Attention request',
   portal_handoff: 'Client question',
+  agent_run: 'Account manager run',
 };
 
 const SOURCE_LABELS = {
@@ -58,6 +59,7 @@ const SOURCE_LABELS = {
   invoices: 'Invoices',
   workspace_chat_attention: 'Workspace attention',
   portal_handoffs: 'Client questions',
+  agent_runs: 'Account manager runs',
 };
 
 const VIEW_BADGE = {
@@ -143,7 +145,7 @@ export default function WorkQueue() {
   };
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ['work-queue', owner, clientId, projectId, dueFrom, dueTo],
+    queryKey: ['work-queue', user?.organizationId, user?.id, user?.role, owner, clientId, projectId, dueFrom, dueTo],
     queryFn: () => api.getWorkQueue({ owner, clientId: clientId || undefined,
       ...(projectId ? { projectId } : {}), ...(dueFrom ? { dueFrom } : {}), ...(dueTo ? { dueTo } : {}) }),
     enabled: !dateError,
@@ -196,7 +198,7 @@ export default function WorkQueue() {
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground">Daily queue</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            What needs attention across client delivery. Open a row to act on it in its own record. Attention requests always show requests sent to you.
+            What needs attention across client delivery. Open a row to act on it in its own record. Attention requests always show requests sent to you. Account manager runs show your failed or uncertain requests until you explicitly mark them reviewed.
           </p>
           {!isAdmin && (
             <p className="mt-1 text-xs text-muted-foreground" data-testid="queue-scope-note">

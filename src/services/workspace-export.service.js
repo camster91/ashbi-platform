@@ -68,6 +68,7 @@ const orgUser = (org) => ({ organizationId: org });
  * @property {string} category
  * @property {(org: string) => object} where
  * @property {string[]} [omit]    columns never exported (see EXCLUDED_FIELDS)
+ * @property {string} [cursorField] unique scalar pagination key (defaults to id)
  * @property {string} description
  */
 
@@ -161,6 +162,7 @@ export const EXPORT_ENTITIES = Object.freeze([
   { name: 'portal_handoff_requests', model: 'PortalHandoffRequest', category: 'communication', where: org => ({ organizationId: org }), omit: ['idempotencyKey', 'inputHash'], description: 'Retained human portal handoffs with principal audience and staff lifecycle; organization-owner export only' },
   { name: 'client_agent_conversations', model: 'ClientAgentConversation', category: 'communication', where: (org) => ({ organizationId: org, client: activeClient(org) }), description: 'Client account-manager conversations, including explicit private sourceChannelId/sourceBindingId audience and archived conversations; organization-owner export only' },
   { name: 'client_agent_runs', model: 'ClientAgentRun', category: 'communication', where: (org) => ({ organizationId: org, conversation: { organizationId: org, client: activeClient(org) } }), omit: ['idempotencyKey', 'inputHash', 'claimToken'], description: 'Stored client account-manager questions, answers and run outcomes; internal intent and worker tokens omitted' },
+  { name: 'client_agent_run_reviews', model: 'ClientAgentRunReview', category: 'communication', cursorField: 'runId', where: (org) => ({ organizationId: org, run: { organizationId: org, conversation: { organizationId: org, client: activeClient(org) } } }), description: 'Persisted run attention review timestamps keyed to exported run IDs, including archived conversations; organization-owner export only, not provider outcome reconciliation' },
   { name: 'threads', model: 'Thread', category: 'communication', where: threadScope, omit: ['inboundDeliveryKey'], description: 'Email conversation threads' },
   { name: 'messages', model: 'Message', category: 'communication', where: (org) => ({ thread: threadScope(org) }), omit: ['rawEmail'], description: 'Email messages (parsed body and headers)' },
   { name: 'internal_notes', model: 'InternalNote', category: 'communication', where: (org) => ({ thread: threadScope(org) }), description: 'Internal notes on threads' },
@@ -415,9 +417,10 @@ export function buildExclusions() {
  * Build a Prisma where clause for the next page after `cursor` (keyset).
  * @param {object} where
  * @param {string | null} cursor
+ * @param {string} [cursorField]
  */
-export function pageWhere(where, cursor) {
-  return cursor ? { AND: [where, { id: { gt: cursor } }] } : where;
+export function pageWhere(where, cursor, cursorField = 'id') {
+  return cursor ? { AND: [where, { [cursorField]: { gt: cursor } }] } : where;
 }
 
 /** Relative export path of a copied file. */
@@ -606,12 +609,13 @@ export async function* paginateEntity(prisma, entity, organizationId, pageSize =
   const delegate = delegateFor(prisma, entity.model);
   const where = entity.where(organizationId);
   const omit = omitArgs(entity);
+  const cursorField = entity.cursorField || 'id';
   let cursor = null;
   for (;;) {
-    const rows = await delegate.findMany({ where: pageWhere(where, cursor), ...(omit ? { omit } : {}), orderBy: { id: 'asc' }, take: pageSize });
+    const rows = await delegate.findMany({ where: pageWhere(where, cursor, cursorField), ...(omit ? { omit } : {}), orderBy: { [cursorField]: 'asc' }, take: pageSize });
     for (const row of rows) yield row;
     if (rows.length < pageSize) return;
-    cursor = rows[rows.length - 1].id;
+    cursor = rows[rows.length - 1][cursorField];
   }
 }
 
@@ -635,7 +639,8 @@ Ashbi Hub${includeFiles ? ', including the files you uploaded' : ' (files were n
 - \`SHA256SUMS\`: checksums of every other file; verify with
   \`sha256sum -c SHA256SUMS\` (or \`shasum -a 256 -c SHA256SUMS\` on macOS).
 - \`data/<entity>.jsonl\`: one JSON object per line, one file per record type.
-  Every record keeps its original \`id\`; fields ending in \`Id\` refer to
+  Every record keeps its source primary key, usually \`id\`; run review records
+  use \`runId\`, referring to \`client_agent_runs.id\`. Fields ending in \`Id\` refer to
   records in the other files (for example \`tasks.projectId\` to \`projects.id\`).
   Dates are ISO 8601 UTC; very large integers are strings.
 - \`files/attachments/<attachmentId>/<file name>\`: uploaded files, listed in

@@ -16,7 +16,8 @@ const conversationSelect = { id: true, organizationId: true, clientId: true, tit
   sourceChannelId: true, sourceBindingId: true, revision: true, archivedAt: true, createdAt: true, updatedAt: true };
 const runSelect = { id: true, organizationId: true, conversationId: true, requestedById: true,
   prompt: true, response: true, status: true, profileRevision: true, startedAt: true, finishedAt: true,
-  errorCode: true, contextObservedAt: true, contextSnapshot: true, memorySnapshot: true, createdAt: true, updatedAt: true };
+  errorCode: true, contextObservedAt: true, contextSnapshot: true, memorySnapshot: true, createdAt: true, updatedAt: true,
+  attentionReview: { select: { reviewedAt: true } } };
 const refuse = (code, message, statusCode) => { throw new ToolError(code, message, { statusCode }); };
 const conflict = () => refuse('CONVERSATION_CONFLICT', 'The conversation changed. Reload before saving.', 409);
 function parse(schema, value) {
@@ -25,7 +26,8 @@ function parse(schema, value) {
   return result.data;
 }
 function project(row, fields) {
-  return Object.fromEntries(Object.keys(fields).filter(key => key !== 'organizationId').map(key => [key, row[key]]));
+  return { ...Object.fromEntries(Object.keys(fields).filter(key => !['organizationId', 'attentionReview'].includes(key)).map(key => [key, row[key]])),
+    ...(fields.attentionReview ? { attentionReviewedAt: row.attentionReview?.reviewedAt ?? null } : {}) };
 }
 async function conversation(db, actor, clientId, conversationId, includeArchived) {
   const row = await db.clientAgentConversation.findFirst({ where: { id: conversationId, clientId,

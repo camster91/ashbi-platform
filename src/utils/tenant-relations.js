@@ -25,6 +25,7 @@ let cache = null;
 // edges bind a globally unique parent id to the same organization column the
 // request proxy stamps and filters. Arbitrary composite keys remain unsupported.
 export const COMPOSITE_TENANT_RELATIONS = Object.freeze({
+  clientagentrunreview: { run: ['runId', 'organizationId'] },
   resourcelink: { organization: ['organizationId'], project: ['projectId','organizationId'], task: ['taskId','projectId'], createdBy: ['createdById','organizationId'] },
   portalassistantconfig: { client: ['clientId', 'organizationId'] },
   portalassistantconversation: { client: ['clientId', 'organizationId'], project: ['projectId', 'organizationId'] },

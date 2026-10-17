@@ -50,14 +50,14 @@ const DIRECT_SCOPED_MODELS = new Set([
   'expense', 'taskcollaborator', 'projectboard', 'workspacepage', 'workspacepagegrant',
   'workspacecollection', 'workspacerecord', 'workspacerecordform',
   'clientagentprofile', 'workspacechatchannel', 'workspacechatmember', 'workspacechatmessage', 'workspacechatattention', 'gmailsendreceipt', 'gmailingestreceipt',
-  'workspaceaccountmanagerbinding', 'workspaceaccountmanagerinvocation', 'clientagentconversation', 'clientagentrun', 'clientserviceproject', 'clientservicereport',
+  'workspaceaccountmanagerbinding', 'workspaceaccountmanagerinvocation', 'clientagentconversation', 'clientagentrun', 'clientagentrunreview', 'clientserviceproject', 'clientservicereport',
   'noterevision', 'workspacepagerevision'
 ]);
 
 // Evidence tables that may only ever be appended to. Request-scoped code gets
 // no update/upsert/delete path for them; the database enforces the same rule
 // with triggers (see prisma/migrations/*_audit_events).
-const APPEND_ONLY_MODELS = new Set(['auditevent', 'reviewdecision', 'portalassistantconversation']);
+const APPEND_ONLY_MODELS = new Set(['auditevent', 'reviewdecision', 'portalassistantconversation', 'clientagentrunreview']);
 const TRIGGER_OWNED_MODELS = new Set(['noterevision', 'workspacepagerevision', 'gmailingestreceipt']);
 const APPEND_ONLY_BLOCKED_METHODS = new Set([
   'update', 'updateMany', 'updateManyAndReturn', 'upsert', 'delete', 'deleteMany',
@@ -144,6 +144,9 @@ const DIRECT_PARENT_RELATIONS = {
   clientagentrun: [
     { relation: 'conversation', field: 'conversationId', model: 'clientagentconversation', delegate: 'clientAgentConversation', required: true },
     { relation: 'requestedBy', field: 'requestedById', model: 'user', delegate: 'user', required: true },
+  ],
+  clientagentrunreview: [
+    { relation: 'run', field: 'runId', model: 'clientagentrun', delegate: 'clientAgentRun', required: true },
   ],
   noterevision: [{ relation: 'note', field: 'noteId', model: 'note', delegate: 'note', required: true }],
   workspacepagerevision: [{ relation: 'page', field: 'pageId', model: 'workspacepage', delegate: 'workspacePage', required: true }],
