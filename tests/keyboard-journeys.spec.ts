@@ -1,3 +1,4 @@
+import { startPortalChooserEvidence, TRACE_POLICY } from './fixtures/portal-chooser-evidence';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockAuthenticatedApi, mockClientPortalApi, unmockedRequests } from './fixtures/authenticated-api';
 
@@ -180,68 +181,89 @@ test('staff user signs in, navigates, uses dialogs and creates a note with the k
   ]);
 });
 
-test('client contact navigates portal tabs, uploads, chats and cancels a delete with the keyboard only', async ({ page }) => {
+const portalChooserTest = test.extend({ trace: [TRACE_POLICY, { scope: 'worker' }] });
+
+portalChooserTest.describe('Portal chooser evidence #659', () => {
+  portalChooserTest.use({ serviceWorkers: 'block' });
+portalChooserTest('client contact navigates portal tabs, uploads, chats and cancels a delete with the keyboard only', async ({ page, baseURL }, testInfo) => {
   test.setTimeout(90_000);
   const portal = await mockClientPortalApi(page);
-  await page.goto('/client-portal/verify?token=portal-keyboard-token');
-  await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+  const evidence = await startPortalChooserEvidence(page, testInfo, baseURL);
+  let outcome: 'completed' | 'failed' = 'failed';
+  try {
+    await page.goto('/client-portal/verify?token=portal-keyboard-token');
+    await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
 
-  // Tabs.
-  const documentsTab = page.getByRole('tab', { name: 'Documents' });
-  await tabTo(page, documentsTab);
-  await expectVisibleFocus(documentsTab);
-  await page.keyboard.press('Enter');
-  await expect(documentsTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByText('brand-guidelines.pdf')).toBeVisible();
+    // Tabs.
+    const documentsTab = page.getByRole('tab', { name: 'Documents' });
+    await tabTo(page, documentsTab);
+    await expectVisibleFocus(documentsTab);
+    await page.keyboard.press('Enter');
+    await expect(documentsTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByText('brand-guidelines.pdf')).toBeVisible();
 
-  // Upload through the keyboard-operable upload button.
-  const upload = page.getByRole('button', { name: /Drop files here or click to upload/ });
-  await tabTo(page, upload);
-  await expectVisibleFocus(upload);
-  const fileChooser = page.waitForEvent('filechooser');
-  await page.keyboard.press('Enter');
-  await (await fileChooser).setFiles({ name: 'uploaded-brief.txt', mimeType: 'text/plain', buffer: Buffer.from('Project brief') });
-  await expect(page.getByText('uploaded-brief.txt')).toBeVisible();
-  expect(portal.uploads).toBe(1);
+    // Upload through the keyboard-operable upload button.
+    const upload = page.getByRole('button', { name: /Drop files here or click to upload/ });
+    evidence.mark('UPLOAD_FOCUS_START');
+    await tabTo(page, upload);
+    await expectVisibleFocus(upload);
+    evidence.mark('UPLOAD_FOCUS_CONFIRMED');
+    const fileChooser = page.waitForEvent('filechooser');
+    evidence.mark('LISTENER_ARMED');
+    evidence.mark('ENTER_START');
+    await page.keyboard.press('Enter');
+    evidence.mark('ENTER_END');
+    const chooser = await fileChooser;
+    evidence.mark('SETFILES_START');
+    await chooser.setFiles({ name: 'uploaded-brief.txt', mimeType: 'text/plain', buffer: Buffer.from('Project brief') });
+    evidence.mark('SETFILES_END');
+    await expect(page.getByText('uploaded-brief.txt')).toBeVisible();
+    expect(portal.uploads).toBe(1);
+    evidence.mark('UPLOAD_ASSERTED');
 
-  // Delete confirmation: focus moves into the dialog, is trapped there, and
-  // Escape cancels and returns focus to the delete button.
-  const deleteButton = page.getByRole('button', { name: 'Delete brand-guidelines.pdf' });
-  await tabTo(page, deleteButton, { backwards: true });
-  await expectVisibleFocus(deleteButton);
-  await page.keyboard.press('Enter');
-  const confirm = page.getByRole('dialog', { name: 'Delete document?' });
-  await expect(confirm).toBeVisible();
-  await expect.poll(() => confirm.evaluate(element => element.contains(document.activeElement))).toBe(true);
-  await expectFocusTrapped(page, confirm);
-  await page.keyboard.press('Escape');
-  await expect(confirm).toBeHidden();
-  await expect(deleteButton).toBeFocused();
-  expect(portal.deleted).toEqual([]);
+    // Delete confirmation: focus moves into the dialog, is trapped there, and
+    // Escape cancels and returns focus to the delete button.
+    const deleteButton = page.getByRole('button', { name: 'Delete brand-guidelines.pdf' });
+    await tabTo(page, deleteButton, { backwards: true });
+    await expectVisibleFocus(deleteButton);
+    await page.keyboard.press('Enter');
+    const confirm = page.getByRole('dialog', { name: 'Delete document?' });
+    await expect(confirm).toBeVisible();
+    await expect.poll(() => confirm.evaluate(element => element.contains(document.activeElement))).toBe(true);
+    await expectFocusTrapped(page, confirm);
+    await page.keyboard.press('Escape');
+    await expect(confirm).toBeHidden();
+    await expect(deleteButton).toBeFocused();
+    expect(portal.deleted).toEqual([]);
 
-  // Confirming with the keyboard deletes the document.
-  await page.keyboard.press('Enter');
-  await expect(confirm).toBeVisible();
-  const permanentlyDelete = confirm.getByRole('button', { name: 'Permanently delete' });
-  await tabTo(page, permanentlyDelete);
-  await expectVisibleFocus(permanentlyDelete);
-  await page.keyboard.press('Enter');
-  await expect(confirm).toBeHidden();
-  await expect(page.getByText('brand-guidelines.pdf')).toHaveCount(0);
-  expect(portal.deleted).toEqual(['document-a']);
+    // Confirming with the keyboard deletes the document.
+    await page.keyboard.press('Enter');
+    await expect(confirm).toBeVisible();
+    const permanentlyDelete = confirm.getByRole('button', { name: 'Permanently delete' });
+    await tabTo(page, permanentlyDelete);
+    await expectVisibleFocus(permanentlyDelete);
+    await page.keyboard.press('Enter');
+    await expect(confirm).toBeHidden();
+    await expect(page.getByText('brand-guidelines.pdf')).toHaveCount(0);
+    expect(portal.deleted).toEqual(['document-a']);
 
-  // Chat.
-  const chatTab = page.getByRole('tab', { name: 'Chat' });
-  await tabTo(page, chatTab, { backwards: true });
-  await expectVisibleFocus(chatTab);
-  await page.keyboard.press('Enter');
-  await expect(chatTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByText('Homepage draft is ready for review.')).toBeVisible();
-  const message = page.getByRole('textbox', { name: 'Message to project team' });
-  await tabTo(page, message);
-  await expectVisibleFocus(message);
-  await page.keyboard.type('Looks great, approved!');
-  await page.keyboard.press('Enter');
-  await expect(page.getByText('Looks great, approved!')).toBeVisible();
-  await expect(message).toHaveValue('');
+    // Chat.
+    const chatTab = page.getByRole('tab', { name: 'Chat' });
+    await tabTo(page, chatTab, { backwards: true });
+    await expectVisibleFocus(chatTab);
+    await page.keyboard.press('Enter');
+    await expect(chatTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByText('Homepage draft is ready for review.')).toBeVisible();
+    const message = page.getByRole('textbox', { name: 'Message to project team' });
+    await tabTo(page, message);
+    await expectVisibleFocus(message);
+    await page.keyboard.type('Looks great, approved!');
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('Looks great, approved!')).toBeVisible();
+    await expect(message).toHaveValue('');
+  outcome = 'completed';
+  } finally {
+    await evidence.finish(outcome);
+  }
+});
 });
