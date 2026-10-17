@@ -77,7 +77,7 @@ export async function ingestGmailMessage(prisma, rawInput) {
       return { replay: false, outcome: 'TRIAGE' };
     }
     if (!thread) thread = await tx.thread.create({ data: {
-      clientId: match.client.id, subject: input.subject || '(no subject)', status: 'OPEN',
+      clientId: match.client.id, subject: input.subject || '(no subject)', status: 'OPEN', lastActivityAt: input.receivedAt,
       priority: input.tags.includes('urgent') ? 'HIGH' : 'NORMAL', matchConfidence: match.confidence,
       matchReason: 'Gmail sync: unique client identity', needsTriage: match.confidence < 0.85 || input.tags.includes('lead'),
     } });
@@ -87,9 +87,12 @@ export async function ingestGmailMessage(prisma, rawInput) {
       aiExtracted: JSON.stringify({ source: 'gmail-sync', mailbox: input.mailbox,
         gmailMessageId: input.providerMessageId, gmailThreadId: input.providerThreadId, tags: input.tags }),
     } });
-    await tx.thread.update({ where: { id: thread.id }, data: {
-      lastActivityAt: new Date(), ...(input.tags.includes('urgent') ? { priority: 'HIGH' } : {}),
-    } });
+    // Native mail can arrive out of order. Compare in the database so an older
+    // delivery cannot replace newer activity, including under concurrent scans.
+    await tx.thread.updateMany({ where: { id: thread.id, lastActivityAt: { lt: input.receivedAt } },
+      data: { lastActivityAt: input.receivedAt } });
+    // Urgency is independent of chronology; an older urgent message still wins.
+    if (input.tags.includes('urgent')) await tx.thread.update({ where: { id: thread.id }, data: { priority: 'HIGH' } });
     await tx.gmailIngestReceipt.create({ data: {
       ...base, outcome: 'MESSAGE', clientId: match.client.id, threadId: thread.id, messageId: message.id,
     } });

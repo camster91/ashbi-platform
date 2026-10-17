@@ -34,6 +34,11 @@ function fixture() {
         create: async ({ data }) => { const row = { id: `m${draft.messages.length}`, ...data }; draft.messages.push(row); return row; } },
       thread: { findFirst: async ({ where }) => draft.threads.find(t => t.id === where.id && t.clientId === where.clientId && draft.clients.some(c => c.id === t.clientId && c.organizationId === where.client.organizationId && !c.deletedAt)) ?? null,
         create: async ({ data }) => { const row = { id: `t${draft.threads.length}`, ...data }; draft.threads.push(row); return row; },
+        updateMany: async ({ where, data }) => {
+          const rows = draft.threads.filter(t => t.id === where.id && t.lastActivityAt < where.lastActivityAt.lt);
+          for (const row of rows) Object.assign(row, data);
+          return { count: rows.length };
+        },
         update: async ({ where, data }) => Object.assign(draft.threads.find(t => t.id === where.id), data) },
       emailTriageItem: { create: async ({ data }) => { const row = { id: `triage${draft.triage.length}`, ...data }; draft.triage.push(row); return row; } },
     };
@@ -58,6 +63,45 @@ test('thread linking uses native identity, never equal subjects or substring IDs
   assert.equal(f.state().threads.length, 2); assert.equal(f.state().messages.length, 3);
   assert.equal(f.state().messages[0].threadId, f.state().messages[1].threadId);
   assert.notEqual(f.state().messages[0].threadId, f.state().messages[2].threadId);
+});
+
+test('new threads and stored messages use native received time, including descending historical deliveries and replay', async () => {
+  const f = fixture();
+  const newest = new Date('2020-06-03T12:34:56.789Z');
+  await ingestGmailMessage(f.db, { ...input, receivedAt: newest });
+  assert.deepEqual(f.state().threads[0].lastActivityAt, newest);
+  assert.deepEqual(f.state().messages[0].receivedAt, newest);
+  for (const [index, receivedAt] of ['2020-06-02', '2020-06-01'].entries()) {
+    await ingestGmailMessage(f.db, { ...input, providerMessageId: `historical${index}`, receivedAt });
+    assert.deepEqual(f.state().threads[0].lastActivityAt, newest);
+    assert.deepEqual(f.state().messages.at(-1).receivedAt, new Date(receivedAt));
+  }
+  const before = structuredClone(f.state());
+  assert.deepEqual(await ingestGmailMessage(f.db, { ...input, receivedAt: new Date('2030-01-01'), tags: ['urgent'] }), { replay: true, outcome: 'MESSAGE' });
+  assert.deepEqual(f.state(), before, 'replay cannot change activity, priority, messages or receipts');
+});
+
+test('older, equal and newer native activity preserve thread workflow; older urgency remains independent', async () => {
+  const f = fixture(); await ingestGmailMessage(f.db, input);
+  const workflow = { status: 'SNOOZED', assignedToId: 'staff', snoozedUntil: new Date('2026-11-01'),
+    slaDeadline: new Date('2026-10-20'), slaBreached: true, lastEscalationLevel: 2,
+    lastEscalatedAt: new Date('2026-10-15'), inboundPipelineStage: 'COMPLETED' };
+  Object.assign(f.state().threads[0], workflow);
+  for (const [id, receivedAt, tags, expected] of [
+    ['older', '2026-10-14', ['urgent'], input.receivedAt],
+    ['equal', '2026-10-16', [], input.receivedAt],
+    ['newer', '2026-10-18', [], new Date('2026-10-18')],
+  ]) {
+    await ingestGmailMessage(f.db, { ...input, providerMessageId: id, receivedAt, tags });
+    const thread = f.state().threads[0];
+    assert.deepEqual(thread.lastActivityAt, expected);
+    assert.equal(thread.priority, 'HIGH', 'ordinary subsequent mail does not downgrade urgent priority');
+    for (const [key, value] of Object.entries(workflow)) assert.deepEqual(thread[key], value, key);
+  }
+  f.state().threads[0].priority = 'LOW'; // A later manual priority choice must also survive rollback.
+  const before = structuredClone(f.state()); f.failReceipt();
+  await assert.rejects(ingestGmailMessage(f.db, { ...input, providerMessageId: 'failed-newer', receivedAt: '2026-10-19', tags: ['urgent'] }), /synthetic/);
+  assert.deepEqual(f.state(), before, 'receipt failure rolls back existing activity, priority and message changes');
 });
 
 test('ineligible exact contacts cannot fall through into another active client domain on new or existing threads', async () => {
