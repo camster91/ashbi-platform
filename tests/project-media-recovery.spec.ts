@@ -159,7 +159,7 @@ test('failed recording can download original bytes then retry the same File once
   await expect.poll(() => fixture.uploads.length).toBe(2);
   await expect(page.getByRole('button', { name: 'Retry upload', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Discard recording', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Record screen for this project', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Uploading… for this project', exact: true })).toBeDisabled();
   // Programmatic repeated DOM activation also cannot bypass the in-flight guard.
   await page.getByRole('button', { name: 'Retry upload', exact: true }).evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
   fixture.release();

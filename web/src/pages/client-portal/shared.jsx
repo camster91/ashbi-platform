@@ -351,7 +351,7 @@ export function PortalChatComposer({ value, onChange, onSubmit, connected, sendi
   const input = (
     <>
       <Input type="text" value={value} onChange={onChange} placeholder={attachments ? 'Type a message, or paste a screenshot...' : 'Type a message...'} aria-label="Message to project team" className={cn(portalFieldClass, 'flex-1')} />
-      <Button type="submit" className={cn('shrink-0', busyLabelButtonClass)} disabled={!canSendPortalMessage(value, attachments) || sending} aria-busy={sending || undefined} aria-label="Send message" slowAfterMs={false}>
+      <Button type="submit" className={cn('shrink-0', busyLabelButtonClass)} disabled={!canSendPortalMessage(value, attachments) || sending} aria-busy={sending || undefined} aria-label={sending ? 'Sending message' : 'Send message'} slowAfterMs={false}>
         {sending ? 'Sending…' : Icons.send}
       </Button>
     </>

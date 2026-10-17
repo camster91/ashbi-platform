@@ -39,7 +39,7 @@ describe('critical portal and shell control semantics', () => {
     // de-duplication cannot quietly drop a surface.
     expect(portal.match(/<PortalChatComposer\b/g)).toHaveLength(2);
     expect(portal.match(/aria-label="Message to project team"/g)).toHaveLength(1);
-    expect(portal.match(/aria-label="Send message"/g)).toHaveLength(1);
+    expect(portal.match(/aria-label=\{sending \? 'Sending message' : 'Send message'\}/g)).toHaveLength(1);
     expect(portal.match(/aria-label={`Delete \${doc\.originalName}`}/g)).toHaveLength(1);
     expect(portal.match(/<PortalDocumentList\b/g)).toHaveLength(2);
     expect(portal.match(/role="status" aria-live="polite"/g).length).toBeGreaterThanOrEqual(2);

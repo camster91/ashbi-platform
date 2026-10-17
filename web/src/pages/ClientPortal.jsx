@@ -179,8 +179,8 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
           live={false}
           title={`${overdueInvoices.length} overdue invoice${overdueInvoices.length > 1 ? 's' : ''}`}
           action={(
-            <Button type="button" aria-label="View overdue invoices" variant="link" onClick={() => setActiveTab('invoices')}>
-              View invoices &rarr;
+            <Button type="button" variant="link" onClick={() => setActiveTab('invoices')}>
+              View invoices &rarr;{' '}<span className="sr-only">that are overdue</span>
             </Button>
           )}
         >
@@ -232,7 +232,8 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
           <h3 className={sectionTitleClass}>Active Projects</h3>
           <div className="space-y-3">
             {activeProjects.slice(0, 4).map(p => (
-              <Card as="button" type="button" isInteractive key={p.id} aria-label={`Open project ${p.name}`} onClick={() => { setSelectedProject(p.id); setActiveTab('projects'); }} className={interactiveCardClass}>
+              <Card as="button" type="button" isInteractive key={p.id} onClick={() => { setSelectedProject(p.id); setActiveTab('projects'); }} className={interactiveCardClass}>
+                <span className="sr-only">Open project</span>{' '}
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="font-semibold text-foreground">{p.name}</span>
                   <StatusBadge color={projectStatusColor(p.status)}>{projectStatusLabel(p.status)}</StatusBadge>
@@ -296,7 +297,8 @@ function ProjectsTab({ projects, setSelectedProject }) {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {projects.map(p => (
-            <Card as="button" type="button" isInteractive key={p.id} aria-label={`Open project ${p.name}`} onClick={() => setSelectedProject(p.id)} className={interactiveCardClass}>
+            <Card as="button" type="button" isInteractive key={p.id} onClick={() => setSelectedProject(p.id)} className={interactiveCardClass}>
+              <span className="sr-only">Open project</span>{' '}
               <div className="mb-3 flex items-start justify-between gap-2">
                 <div>
                   <h3 className="mb-0.5 font-heading font-semibold text-foreground">{p.name}</h3>
@@ -399,8 +401,8 @@ function InvoicesTab({ invoices, token }) {
                         Pay Now
                       </a>
                     )}
-                    <Button type="button" aria-label="Download invoice PDF" variant="outline" size="sm" leftIcon={Icons.download} onClick={() => downloadPdf(inv)}>
-                      Download PDF
+                    <Button type="button" variant="outline" size="sm" leftIcon={Icons.download} onClick={() => downloadPdf(inv)}>
+                      Download PDF{' '}<span className="sr-only">for this invoice</span>
                     </Button>
                   </div>
                 </div>
@@ -456,7 +458,6 @@ function ContractsTab({ contracts, token }) {
                 {contract.canDownload && (
                   <Button
                     type="button"
-                    aria-label={`Download signed contract PDF: ${contract.title}`}
                     onClick={() => downloadPdf(contract)}
                     disabled={downloadingId === contract.id}
                     aria-busy={downloadingId === contract.id || undefined}
@@ -465,7 +466,7 @@ function ContractsTab({ contracts, token }) {
                     leftIcon={Icons.download}
                     className={busyLabelButtonClass}
                   >
-                    {downloadingId === contract.id ? 'Preparing…' : 'Download PDF'}
+                    {downloadingId === contract.id ? 'Preparing…' : 'Download PDF'}{' '}<span className="sr-only">for signed contract {contract.title}</span>
                   </Button>
                 )}
               </div>
@@ -646,8 +647,8 @@ function PortalDashboard({ token }) {
         </div>
         <div className="flex max-w-full items-center gap-3">
           {contactName && <span className="min-w-0 break-words text-sm text-primary-foreground/50">Hi, {contactName}</span>}
-          <Button type="button" aria-label="Log out of client portal" onClick={handleLogout} variant="ghost" size="sm" leftIcon={Icons.logout} className="shrink-0 border border-primary-foreground/20 text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground">
-            Logout
+          <Button type="button" onClick={handleLogout} variant="ghost" size="sm" leftIcon={Icons.logout} className="shrink-0 border border-primary-foreground/20 text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground">
+            Logout{' '}<span className="sr-only">of client portal</span>
           </Button>
         </div>
       </header>

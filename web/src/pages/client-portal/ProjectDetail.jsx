@@ -203,7 +203,7 @@ export default function ProjectDetail({ projectId, token, onBack, handoffIdentit
     return (
       <div className="mx-auto my-8 max-w-[400px] text-center">
         <p className="text-destructive">{error || 'Project not found'}</p>
-        <Button type="button" aria-label="Back to projects" variant="link" onClick={onBack}>Go back</Button>
+        <Button type="button" variant="link" onClick={onBack}>Go back{' '}<span className="sr-only">to projects</span></Button>
       </div>
     );
   }

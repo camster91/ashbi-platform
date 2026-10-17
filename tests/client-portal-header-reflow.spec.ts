@@ -13,7 +13,7 @@ for (const width of [320, 375, 430]) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     });
     await page.goto('/client-portal');
-    const logout = page.getByRole('button', { name: 'Log out of client portal' });
+    const logout = page.getByRole('button', { name: 'Logout of client portal' });
     await expect(logout).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     const bounds = await logout.boundingBox();

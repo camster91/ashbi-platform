@@ -5,15 +5,15 @@ const source = clientPortalSource();
 
 describe('client portal action accessibility contract', () => {
   it('keeps overview and project navigation buttons native, named, and touch-sized', () => {
-    expect(source).toContain('type="button" aria-label="View overdue invoices"');
+    expect(source).toContain('View invoices &rarr;{\' \'}<span className="sr-only">that are overdue</span>');
     expect(source).toContain('type="button" aria-label="View all projects"');
     expect(source).toContain('type="button" aria-label="View all invoices"');
     expect(source).toContain('type="button" aria-label="Back to projects"');
-    expect(source).toContain('type="button" aria-label="Log out of client portal"');
+    expect(source).toContain('Logout{\' \'}<span className="sr-only">of client portal</span>');
   });
 
   it('keeps document actions explicitly named and keyboard-visible', () => {
-    expect(source).toContain('type="button" aria-label="Download invoice PDF"');
+    expect(source).toContain('Download PDF{\' \'}<span className="sr-only">for this invoice</span>');
     expect(source).toContain('dismissLabel="Dismiss upload error"');
     // Portal controls are shared primitives (44px `min-h-11` targets); the
     // portal scope adds a 3px solid ring-token outline to every focusable

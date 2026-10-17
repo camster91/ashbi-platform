@@ -57,7 +57,7 @@ for (const width of [1280, 390]) {
 
     const openProject = async (expandFollowup = true) => {
       await page.getByRole('tab', { name: /Projects/ }).click();
-      await page.getByRole('button', { name: 'Open project Website refresh' }).click();
+      await page.getByRole('button', { name: /^Open project Website refresh\b/ }).click();
       await expect(page.getByText('Request human follow-up', { exact: true })).toBeVisible();
       if (expandFollowup) {
         await expect(page.getByLabel('Your question', { exact: true })).toHaveCount(0);
