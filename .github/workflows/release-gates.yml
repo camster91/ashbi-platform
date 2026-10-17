@@ -170,9 +170,22 @@ jobs:
           NODE_ENV: production
           CI: true
       - name: Run browser smoke
-        run: npm run test:browser
+        run: npm run test:browser -- --reporter=list,html,json
         env:
           CI: true
+          PLAYWRIGHT_JSON_OUTPUT_FILE: portal-chooser-report.json
+      - name: Collect exact portal chooser evidence
+        id: portal_chooser_evidence
+        if: ${{ !cancelled() }}
+        run: node scripts/collect-portal-chooser-evidence.mjs
+      - name: Retain exact portal chooser evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: portal-chooser-659-evidence
+          path: portal-chooser-evidence/
+          if-no-files-found: error
+          retention-days: 7
       - name: Verify public-route splitting
         run: npm run test:public-routes
         env:
@@ -182,7 +195,9 @@ jobs:
         env:
           CI: true
       - name: Upload sanitized failure evidence
-        if: failure()
+        # Raw reports may include the exact case's rejected attachments.
+        # Keep them local when trace safety or provenance is unresolved.
+        if: failure() && steps.portal_chooser_evidence.outputs.broad_evidence_safe == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: required-browser-gate-failure-evidence
