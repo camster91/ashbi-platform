@@ -14,7 +14,7 @@ describe('docs actions accessibility contract', () => {
   });
 
   it('names project and note expansion controls', () => {
-    expect(source).toContain('aria-label={`Toggle project ${project?.name || \'Unlinked\'}`}');
+    expect(source).toContain('aria-label={`Toggle project ${project?.name || \'Unlinked\'}${project?.client ? ` — ${project.client.name}` : \'\'} ${notes.length}`}');
     expect(source).toContain('aria-label={`Toggle note ${note.title}`}');
   });
 });

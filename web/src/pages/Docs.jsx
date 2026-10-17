@@ -522,7 +522,7 @@ function ProjectGroup({
        <button
          type="button"
          onClick={() => setCollapsed(!collapsed)}
-         aria-label={`Toggle project ${project?.name || 'Unlinked'}`}
+         aria-label={`Toggle project ${project?.name || 'Unlinked'}${project?.client ? ` — ${project.client.name}` : ''} ${notes.length}`}
          className="min-h-11 flex items-center gap-2 hover:text-primary transition-colors rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         aria-expanded={!collapsed}
       >

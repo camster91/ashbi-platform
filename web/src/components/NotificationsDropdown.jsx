@@ -151,6 +151,7 @@ export default function NotificationsDropdown() {
   }, [markReadMutation, navigate]);
 
   const count = unreadCount?.count ?? 0;
+  const badgeCount = count > 9 ? '9+' : count;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -158,12 +159,12 @@ export default function NotificationsDropdown() {
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="relative min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label={`Notifications${count > 0 ? ` (${count} unread)` : ''}`}
+        aria-label={`Notifications${count > 0 ? `, ${badgeCount} unread${count > 9 ? `, ${count} in total` : ''}` : ''}`}
       >
         <Bell className="w-4 h-4" />
         {count > 0 && (
           <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[10px] font-bold bg-brand-lime text-brand-indigo rounded-full">
-            {count > 9 ? '9+' : count}
+            {badgeCount}
           </span>
         )}
       </button>
@@ -179,7 +180,7 @@ export default function NotificationsDropdown() {
                 onClick={() => markAllReadMutation.mutate()}
                 disabled={markAllReadMutation.isPending}
                 className="min-h-11 min-w-11 flex items-center justify-center gap-1 text-xs font-medium text-brand-indigo hover:text-brand-lime dark:text-foreground dark:hover:text-brand-lime transition-colors disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Mark all as read"
+                aria-label="Mark all read"
                 title="Mark all as read"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
