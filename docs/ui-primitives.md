@@ -161,6 +161,31 @@ always sit next to text that states the same thing.
 
 ---
 
+## Screen structure
+
+### `PageHeading`
+
+Source: `web/src/components/ui/PageHeading.jsx`
+
+A page title with optional description and actions. The title is an `h1` using
+`font-heading`. Actions stack below the title on phones and wrap as needed;
+from `sm` they sit alongside the title. Props: `title`, `description`, `actions`,
+`children` (additional content below the description), and `className`.
+Callers supply the action buttons and retain their existing permission checks.
+Use one primary action and quieter secondary actions to keep the heading clear.
+
+### `FilterPanel`
+
+Source: `web/src/components/ui/FilterPanel.jsx`
+
+A native `details` disclosure with a keyboard-operable Filters summary and
+44px minimum target. Props: `children` and `activeCount` (default `0`). A
+positive count shows an active-filter badge and initially opens the panel,
+including for filtered deep links. Users can toggle the disclosure normally.
+Children flow through a responsive grid; callers provide labelled controls
+and compute the count from the current filter state. This primitive does not
+change filter values, URL persistence, permissions or query behavior.
+
 ## Actions
 
 ### `Button`
