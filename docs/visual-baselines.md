@@ -58,7 +58,7 @@ enough to review (roughly 40-60 images).
 - Fonts: the app declares its self-hosted fonts with `font-display: optional`,
   which makes a cold page fall back to the system font on some runs. The suite
   serves the stylesheet with `font-display: block` and waits for every face to
-  load, so baselines always show DM Sans and Instrument Serif.
+  load, so baselines always show Plus Jakarta Sans, Geist Mono and Instrument Serif.
 - Realtime: socket.io is blocked (there is no backend), and the
   push-notification prompt is marked as already answered on every screen except
   the dashboard.

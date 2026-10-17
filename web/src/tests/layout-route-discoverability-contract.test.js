@@ -9,11 +9,12 @@ describe('shell route discoverability contract', () => {
   it('exposes registered chat and docs workflows in the primary shell navigation', () => {
     expect(layout).toContain("{ name: 'Chat', href: '/chat'");
     expect(layout).toContain("{ name: 'Docs', href: '/docs'");
-    expect(layout).toContain("key: 'finance', label: 'Finance'");
+    expect(layout).toContain("key: 'money', label: 'Money'");
   });
 
   it('exposes previously orphaned staff and admin workflows from the shell', () => {
-    expect(layout).toContain("key: 'knowledge', label: 'Knowledge'");
+    expect(layout).toContain("key: 'studio', label: 'Studio'");
+    expect(layout).toContain("key: 'sales', label: 'Sales'");
     expect(layout).toContain("{ name: 'Assets', href: '/assets'");
     expect(layout).toContain("{ name: 'Project Planner', href: '/project-planner'");
     expect(layout).toContain("{ name: 'Templates', href: '/project-templates'");

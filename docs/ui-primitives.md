@@ -43,9 +43,17 @@ colours as `hsl(var(--token))`. Light values live in `:root` and dark values in
 | `border` | `--border` | Input, Card, Modal, StatCard, skeletons |
 | `ring` | `--ring` | Input and Alert dismiss focus ring |
 | `rounded-lg` / `-md` / `-sm` | `--radius` | Button, Input, Modal, Skeleton |
-| `font-display` / `font-heading` | Tailwind `fontFamily` (Instrument Serif / DM Sans) | CardTitle / EmptyState, StatCard |
+| `font-display` / `font-heading` / `font-mono` | Tailwind `fontFamily` (Instrument Serif italic accents / Plus Jakarta Sans / Geist Mono) | CardTitle / EmptyState, StatCard, Button labels |
 
-Custom utilities defined in `web/src/index.css`: `animate-fade-in` (Alert,
+Brand (ashbi.ca, #118): paper `--background`, ink `--foreground`, indigo
+`--primary`, powder `--secondary`, lime `--accent`. The primary `Button` is lime
+with ink text and an ink outline, and every Button label is small Geist Mono
+caps. Headings use Plus Jakarta Sans 600; `font-display` (Instrument Serif
+italic) is for a single accent word inside a heading, not whole headings.
+`text-eyebrow` (mono caps label) and `figure` (mono tabular numbers) are the
+label and number utilities used by StatCard and the shell.
+
+Custom utilities defined in `web/src/index.css`: `text-eyebrow`, `figure`, `animate-fade-in` (Alert,
 SlowMessage, page skeletons), `hover-lift` (interactive Card), `glass-card`
 (Card `glass`), `skeleton-shimmer` (Skeleton) and `stagger-children`
 (AnimatedList).
@@ -78,8 +86,8 @@ Deliberate exceptions:
 
 - **Brand surfaces.** The staff sidebar, the top-bar quick-add button and the
   login brand panel are fixed brand colours in both themes. They use the
-  `brand-indigo`, `brand-indigo-soft`, `brand-lime`, `brand-sage` and
-  `brand-cream` colours from `web/tailwind.config.js` (never hex arbitrary
+  `brand-indigo`, `brand-indigo-soft`, `brand-lime`, `brand-sage`,
+  `brand-mint`, `brand-powder` and `brand-cream` colours from `web/tailwind.config.js` (never hex arbitrary
   values) and translucent white tints (`bg-white/10`, `text-white/60`).
   Use `brand-*` only on these fixed surfaces; everywhere else use tokens.
 - **Light-only client pages.** The client portal and the public `Portal*`
