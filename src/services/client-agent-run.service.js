@@ -6,6 +6,7 @@ import { withStageTransaction } from './task-stages.service.js';
 import { recordAuditEvent } from './audit-event.service.js';
 import { recordDomainEvent } from './domain-event.service.js';
 import { readClientAgentProfile, authorizeClientAgentStaff } from './client-agent-profile.service.js';
+import prismaPkg from '@prisma/client';
 
 const id = z.string().trim().min(1).max(100);
 const intentKey = z.string().uuid().transform(value => value.toLowerCase());
@@ -13,7 +14,8 @@ export const clientAgentRunStartSchema = z.object({ question: z.string().trim().
   idempotencyKey: intentKey }).strict();
 const runSelect = { id: true, organizationId: true, conversationId: true, requestedById: true,
   prompt: true, response: true, status: true, profileRevision: true, startedAt: true, finishedAt: true,
-  errorCode: true, contextObservedAt: true, contextSnapshot: true, memorySnapshot: true, createdAt: true, updatedAt: true };
+  errorCode: true, contextObservedAt: true, contextSnapshot: true, memorySnapshot: true, createdAt: true, updatedAt: true,
+  attentionReview: { select: { reviewedAt: true } } };
 const activeStatuses = ['QUEUED', 'RUNNING'];
 const refuse = (code, message, statusCode) => { throw new ToolError(code, message, { statusCode }); };
 const conflict = () => refuse('RUN_CONFLICT', 'The account manager run changed. Reload before trying again.', 409);
@@ -23,7 +25,45 @@ function parse(schema, value) {
   return result.data;
 }
 function project(row, scope = 'SHARED_STAFF') {
-  return { ...Object.fromEntries(Object.keys(runSelect).filter(key => key !== 'organizationId').map(key => [key, row[key]])), scope };
+  return { ...Object.fromEntries(Object.keys(runSelect).filter(key => !['organizationId', 'attentionReview'].includes(key)).map(key => [key, row[key]])),
+    attentionReviewedAt: row.attentionReview?.reviewedAt ?? null, scope };
+}
+
+/** Own attention only; authorize and filter before the sentinel LIMIT, never scan private prompts. */
+export async function listClientAgentRunAttentionForQueue(prisma, user, { clientId, projectId, limit = 101 } = {}) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 101) refuse('INVALID_INPUT', 'Invalid attention limit.', 400);
+  for (const value of [clientId, projectId]) if (value !== undefined) parse(id, value);
+  if (!user?.id || !user.organizationId || !['ADMIN', 'TEAM'].includes(user.role)) refuse('ROLE_DENIED', 'Active staff access required.', 403);
+  const actor = await prisma.user.findFirst({ where: { id: user.id, organizationId: user.organizationId, isActive: true },
+    select: { id: true, organizationId: true, role: true, name: true, isActive: true } });
+  if (!actor || actor.id !== user.id || actor.organizationId !== user.organizationId || !actor.isActive || !['ADMIN', 'TEAM'].includes(actor.role)) {
+    refuse('ROLE_DENIED', 'Active staff access required.', 403);
+  }
+  const args = JSON.stringify({ organizationId: actor.organizationId, actorId: actor.id, clientId, projectId });
+  const items = await prisma.$queryRaw(prismaPkg.Prisma.sql`
+    WITH args AS (SELECT ${args}::jsonb AS x)
+    SELECT r.id, r."conversationId", r."requestedById", r.status, r."createdAt", r."finishedAt",
+      c.id AS "clientId", c.name AS "clientName", p.id AS "projectId", p.name AS "projectName"
+    FROM client_agent_runs r
+    JOIN client_agent_conversations cv ON cv.id=r."conversationId" AND cv."organizationId"=r."organizationId"
+    JOIN clients c ON c.id=cv."clientId" AND c."organizationId"=r."organizationId" AND c."deletedAt" IS NULL
+    JOIN users u ON u.id=r."requestedById" AND u."organizationId"=r."organizationId" AND u."isActive" AND u.role IN ('ADMIN','TEAM')
+    LEFT JOIN client_agent_run_reviews review ON review."runId"=r.id AND review."organizationId"=r."organizationId"
+    LEFT JOIN workspace_chat_channels ch ON ch.id=cv."sourceChannelId" AND ch."organizationId"=r."organizationId"
+    LEFT JOIN workspace_account_manager_bindings b ON b.id=cv."sourceBindingId" AND b."organizationId"=r."organizationId"
+    LEFT JOIN workspace_chat_members cm ON cm."channelId"=ch.id AND cm."organizationId"=r."organizationId" AND cm."userId"=u.id AND cm."leftAt" IS NULL
+    LEFT JOIN projects p ON p.id=ch."projectId" AND p."organizationId"=r."organizationId" AND p."clientId"=c.id AND p."deletedAt" IS NULL
+    CROSS JOIN args
+    WHERE r."organizationId"=args.x->>'organizationId' AND r."requestedById"=args.x->>'actorId'
+      AND r.status IN ('FAILED','UNKNOWN') AND review."runId" IS NULL AND cv."archivedAt" IS NULL
+      AND ((cv."sourceChannelId" IS NULL AND cv."sourceBindingId" IS NULL)
+        OR (ch.id IS NOT NULL AND b.id IS NOT NULL AND cm."userId" IS NOT NULL AND ch."archivedAt" IS NULL
+          AND ch.kind IN ('CLIENT','PROJECT') AND ch."clientId"=c.id AND b."clientId"=c.id AND b."channelId"=ch.id
+          AND b."projectId" IS NOT DISTINCT FROM ch."projectId" AND (ch."projectId" IS NULL OR p.id IS NOT NULL)))
+      AND (args.x->>'clientId' IS NULL OR c.id=args.x->>'clientId')
+      AND (args.x->>'projectId' IS NULL OR p.id=args.x->>'projectId')
+    ORDER BY r.id ASC LIMIT ${limit}`);
+  return { items, actor };
 }
 async function scope(db, user, clientId, conversationId, requireActive, lockSource = false) {
   const actor = await authorizeClientAgentStaff(db, user, clientId);
@@ -75,6 +115,32 @@ export function createClientAgentRunService({ recordAudit = recordAuditEvent, re
     if (!event) refuse('RUN_AUDIT_UNAVAILABLE', 'The run could not be saved with its audit record.', 503);
   }
   return {
+    async review(prisma, user, clientId, conversationId, runId) {
+      clientId = parse(id, clientId); conversationId = parse(id, conversationId); runId = parse(id, runId);
+      return guard(async () => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            return await prisma.$transaction(async db => {
+              const actor = await scope(db, user, clientId, conversationId, false, true);
+              const current = await findRun(db, actor, conversationId, runId);
+              // Admins cannot acknowledge a teammate's personal attention.
+              if (current.requestedById !== actor.id) throw recordNotFound('Run not found');
+              if (!['FAILED', 'UNKNOWN'].includes(current.status)) refuse('RUN_NOT_REVIEWABLE', 'Only failed or uncertain runs can be marked reviewed.', 409);
+              if (current.attentionReview) return project(current, actor.conversationScope);
+              // Terminal run rows are immutable. The separate source record
+              // acknowledges attention without editing outcome, output or cost.
+              const attentionReview = await db.clientAgentRunReview.create({ data: { runId, organizationId: actor.organizationId } });
+              await audit(db, actor, clientId, current, 'client_agent_run.reviewed');
+              return project({ ...current, attentionReview }, actor.conversationScope);
+            }, { isolationLevel: 'Serializable' });
+          } catch (error) {
+            if (['P2002', 'P2034'].includes(error?.code) && attempt < 2) continue;
+            throw error;
+          }
+        }
+        conflict();
+      });
+    },
     async start(prisma, user, clientId, conversationId, input) {
       clientId = parse(id, clientId); conversationId = parse(id, conversationId);
       const { question, idempotencyKey } = parse(clientAgentRunStartSchema, input);
@@ -160,3 +226,4 @@ export const startClientAgentRun = service.start;
 export const readClientAgentRun = service.read;
 export const getClientAgentRunByIntent = service.byIntent;
 export const cancelClientAgentRun = service.cancel;
+export const reviewClientAgentRun = service.review;

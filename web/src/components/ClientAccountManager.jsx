@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import Button from './ui/Button';
 import ClientAssistantPreview from './ClientAssistantPreview';
@@ -12,20 +12,20 @@ const ClientAgentTaskAction = lazy(() => import('./ClientAgentTaskAction'));
 
 const ClientAgentConversations = lazy(() => import('./ClientAgentConversations'));
 
-function SavedConversations({ clientId }) {
+function SavedConversations({ clientId, ...selection }) {
   const { user } = useAuth();
   if (!user?.id || !user.organizationId || !['ADMIN', 'TEAM'].includes(user.role)) return null;
-  return <SavedConversationsProfile key={`${user.organizationId}:${user.id}:${user.role}:${clientId}`} clientId={clientId} />;
+  return <SavedConversationsProfile key={`${user.organizationId}:${user.id}:${user.role}:${clientId}`} clientId={clientId} {...selection} />;
 }
 
-function SavedConversationsProfile({ clientId }) {
+function SavedConversationsProfile({ clientId, ...selection }) {
   // Share the settings cache so saved profile changes immediately update Send.
   const profile = useQuery({ queryKey: ['client-agent-profile', clientId], queryFn: () => api.getClientAgentProfile(clientId), retry: false, staleTime: 0, refetchOnMount: 'always', refetchOnWindowFocus: false });
   const profileEnabled = !profile.isError && !profile.isFetching && Boolean(profile.data?.enabled && profile.data.pluginIds?.includes('client-work'));
   return <div className="space-y-3">
     {profile.isPending && <p role="status">Checking account manager settings…</p>}
     {profile.isError && <div role="alert"><p>Account manager settings could not be checked. Saved conversations remain available; sending is paused.</p><Button type="button" variant="outline" onClick={() => profile.refetch()}>Retry account manager settings</Button></div>}
-    <Suspense fallback={<p role="status">Loading saved conversations…</p>}><ClientAgentConversations clientId={clientId} profileEnabled={profileEnabled} /></Suspense>
+    <Suspense fallback={<p role="status">Loading saved conversations…</p>}><ClientAgentConversations clientId={clientId} profileEnabled={profileEnabled} {...selection} /></Suspense>
   </div>;
 }
 
@@ -58,8 +58,20 @@ function isLocalPath(value) {
 }
 
 export default function ClientAccountManager({ clientId, clientName, role }) {
-  const [open, setOpen] = useState(false);
-  const [conversationsOpen, setConversationsOpen] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const validId = (value) => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(value);
+  const conversationId = validId(params.get('conversationId')) ? params.get('conversationId') : null;
+  const runId = conversationId && validId(params.get('runId')) ? params.get('runId') : null;
+  const [opened, setOpen] = useState(false);
+  const [savedOpened, setConversationsOpen] = useState(false);
+  const open = opened || Boolean(conversationId);
+  const conversationsOpen = savedOpened || Boolean(conversationId);
+  function selectConversation(id) {
+    const next = new URLSearchParams(params);
+    if (id) next.set('conversationId', id); else next.delete('conversationId');
+    next.delete('runId');
+    setParams(next, { replace: true });
+  }
   const { data, isPending, isFetching, isError, refetch } = useQuery({
     queryKey: ['client-account-manager', clientId, role],
     queryFn: () => api.getClientAccountManagerBrief(clientId),
@@ -75,12 +87,12 @@ export default function ClientAccountManager({ clientId, clientName, role }) {
   const validObserved = observed && !Number.isNaN(observed.getTime());
 
   return (
-    <details
+    <details open={open}
       className="rounded-lg border border-border bg-card p-4"
       onToggle={(event) => {
         if (event.target === event.currentTarget) {
           setOpen(event.currentTarget.open);
-          if (!event.currentTarget.open) setConversationsOpen(false);
+          if (!event.currentTarget.open) { setConversationsOpen(false); if (conversationId) selectConversation(null); }
         }
       }}
     >
@@ -147,9 +159,9 @@ export default function ClientAccountManager({ clientId, clientName, role }) {
         {open && clientId && <PortalAssistantSettings clientId={clientId} />}
         {open && clientId && <TaskProposals clientId={clientId} />}
         {open && clientId && <ClientAssistantPreview key={clientId} clientId={clientId} clientName={clientName} />}
-        {open && clientId && <details className="rounded-lg border border-border p-3" onToggle={(event) => { if (event.target === event.currentTarget) setConversationsOpen(event.currentTarget.open); }}>
+        {open && clientId && <details open={conversationsOpen} className="rounded-lg border border-border p-3" onToggle={(event) => { if (event.target === event.currentTarget) { setConversationsOpen(event.currentTarget.open); if (!event.currentTarget.open && conversationId) selectConversation(null); } }}>
           <summary className="min-h-11 cursor-pointer font-medium">Saved conversations</summary>
-          {conversationsOpen && <SavedConversations clientId={clientId} />}
+          {conversationsOpen && <SavedConversations clientId={clientId} selectedConversationId={conversationId} linkedRunId={runId} onSelectConversation={selectConversation} />}
         </details>}
       </div>
     </details>

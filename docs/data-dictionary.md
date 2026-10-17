@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-134 models, 0 enums, 80 tenant-scoped, 13 soft-deletable.
+135 models, 0 enums, 81 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -42,7 +42,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Client](#model-client) | `clients` | yes | yes | 63 |
 | [ClientAgentConversation](#model-clientagentconversation) | `client_agent_conversations` | yes | no | 18 |
 | [ClientAgentProfile](#model-clientagentprofile) | `client_agent_profiles` | yes | no | 18 |
-| [ClientAgentRun](#model-clientagentrun) | `client_agent_runs` | yes | no | 24 |
+| [ClientAgentRun](#model-clientagentrun) | `client_agent_runs` | yes | no | 25 |
+| [ClientAgentRunReview](#model-clientagentrunreview) | `client_agent_run_reviews` | yes | no | 5 |
 | [ClientEmailMapping](#model-clientemailmapping) | `client_email_mappings` | no | no | 8 |
 | [ClientEmbedding](#model-clientembedding) | `client_embeddings` | no | no | 10 |
 | [ClientInvitation](#model-clientinvitation) | `client_invitations` | no | no | 8 |
@@ -86,7 +87,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 89 |
+| [Organization](#model-organization) | `organizations` | no | no | 90 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -834,6 +835,24 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `conversation` | ClientAgentConversation | required |  | → ClientAgentConversation, via (conversationId, organizationId) → (id, organizationId), onDelete Cascade |  |
 | `requestedBy` | User | required |  | → User, via (requestedById, organizationId) → (id, organizationId), onDelete Restrict, "ClientAgentRunRequester" |  |
 | `workspaceInvocation` | WorkspaceAccountManagerInvocation | optional |  | → WorkspaceAccountManagerInvocation |  |
+| `attentionReview` | ClientAgentRunReview | optional |  | → ClientAgentRunReview |  |
+
+### Model ClientAgentRunReview
+
+- Table: `client_agent_run_reviews`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([runId, organizationId])`
+  - `@@index([organizationId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `runId` | String | id, required |  |  |  |
+| `organizationId` | String | required |  |  |  |
+| `reviewedAt` | DateTime | required | `now()` |  |  |
+| `run` | ClientAgentRun | required |  | → ClientAgentRun, via (runId, organizationId) → (id, organizationId), onDelete Cascade |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 
 ### Model ClientEmailMapping
 
@@ -2079,6 +2098,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `clientAgentProfiles` | ClientAgentProfile[] | list, required |  | → ClientAgentProfile |  |
 | `clientAgentConversations` | ClientAgentConversation[] | list, required |  | → ClientAgentConversation |  |
 | `clientAgentRuns` | ClientAgentRun[] | list, required |  | → ClientAgentRun |  |
+| `clientAgentRunReviews` | ClientAgentRunReview[] | list, required |  | → ClientAgentRunReview |  |
 | `noteRevisions` | NoteRevision[] | list, required |  | → NoteRevision |  |
 | `workspacePageRevisions` | WorkspacePageRevision[] | list, required |  | → WorkspacePageRevision |  |
 | `workspaceChatChannels` | WorkspaceChatChannel[] | list, required |  | → WorkspaceChatChannel |  |

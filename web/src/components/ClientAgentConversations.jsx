@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { api } from '../lib/api';
 import Button from './ui/Button';
 import Modal from './Modal';
+import ClientAgentRunAttention from './ClientAgentRunAttention';
 
 const activeStatus = (status) => status === 'QUEUED' || status === 'RUNNING';
 const terminalStatus = (status) => ['SUCCEEDED', 'FAILED', 'CANCELLED', 'UNKNOWN'].includes(status);
@@ -83,7 +84,7 @@ function readIntent(storageKey) {
   return { key: value.key, fingerprint: value.fingerprint, ...(value.runId ? { runId: value.runId } : {}) };
 }
 
-function Conversation({ clientId, conversationId, profileEnabled, user }) {
+function Conversation({ clientId, conversationId, profileEnabled, user, linkedRunId }) {
   const questionId = useId();
   const cache = useQueryClient();
   const key = ['client-agent-conversation', user.organizationId, user.id, clientId, conversationId];
@@ -95,6 +96,8 @@ function Conversation({ clientId, conversationId, profileEnabled, user }) {
   const [accessDenied, setAccessDenied] = useState(false);
   const alive = useRef(true);
   const busy = useRef(false);
+  const linkedNode = useRef(null);
+  const linkedFocused = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const detail = useInfiniteQuery({ queryKey: key, queryFn: ({ pageParam }) => api.getClientAgentConversation(clientId, conversationId, { limit: 50, ...(pageParam ? { after: pageParam } : {}) }), initialPageParam: undefined, getNextPageParam: (page) => page.nextCursor || undefined, retry: false });
   const runs = itemsFrom(detail.data?.pages, 'runs');
@@ -103,8 +106,19 @@ function Conversation({ clientId, conversationId, profileEnabled, user }) {
   const receipt = useQuery({ queryKey: [...key, 'intent', recovery.intent?.key], queryFn: () => api.getClientAgentRunByIntent(clientId, conversationId, recovery.intent.key), enabled: Boolean(recovery.intent && !recovery.intent.runId && !detail.isError && !accessDenied), retry: false });
   const runKey = [...key, 'run', selectedRunId];
   const latest = useQuery({ queryKey: runKey, queryFn: () => api.getClientAgentRun(clientId, conversationId, selectedRunId), enabled: Boolean(selectedRunId && !detail.isError && !accessDenied), retry: false, refetchOnWindowFocus: false, refetchInterval: (query) => query.state.status !== 'error' && activeStatus(query.state.data?.status) ? 3000 : false });
-  const visible = !accessDenied && !detail.isError && !latest.isError && ![401, 403].includes(receipt.error?.status ?? receipt.error?.statusCode) && detail.data?.pages?.[0]?.scope === 'SHARED_STAFF';
-  const displayedRuns = [...new Map([...runs, ...(activeRun ? [activeRun] : []), ...(latest.data ? [latest.data] : [])].map((run) => [run.id, run])).values()];
+  const linked = useQuery({ queryKey: [...key, 'run', linkedRunId], queryFn: async () => { const run = await api.getClientAgentRun(clientId, conversationId, linkedRunId); if (run?.id !== linkedRunId || run.conversationId !== conversationId) throw new Error('Linked run unavailable'); return run; }, enabled: Boolean(linkedRunId && !detail.isError && !accessDenied), retry: false, refetchOnWindowFocus: false });
+  const page = detail.data?.pages?.[0];
+  const sourceBound = page?.scope === 'WORKSPACE_CHANNEL';
+  // Source conversations are only opened by an explicit exact-run link, never
+  // promoted into the shared picker. The server rechecks current membership.
+  const sourceReadable = sourceBound && Boolean(linkedRunId) && page.conversation?.scope === 'WORKSPACE_CHANNEL' &&
+    page.conversation.id === conversationId && page.conversation.clientId === clientId &&
+    sourceId(page.conversation.sourceChannelId) && sourceId(page.conversation.sourceBindingId) &&
+    (!linked.data || linked.data.scope === 'WORKSPACE_CHANNEL');
+  const sharedReadable = page?.scope === 'SHARED_STAFF' && !page.conversation?.sourceChannelId && !page.conversation?.sourceBindingId;
+  const visible = !accessDenied && !detail.isError && !latest.isError && !linked.isError && ![401, 403].includes(receipt.error?.status ?? receipt.error?.statusCode) && (sharedReadable || sourceReadable);
+  const displayedRuns = [...new Map([...runs, ...(activeRun ? [activeRun] : []), ...(latest.data ? [latest.data] : []), ...(linked.data ? [linked.data] : [])].map((run) => [run.id, run])).values()];
+  useEffect(() => { if (visible && linked.data?.id === linkedRunId && linkedNode.current && !linkedFocused.current) { linkedFocused.current = true; linkedNode.current.focus(); linkedNode.current.scrollIntoView?.({ block: 'nearest' }); } }, [visible, linked.data, linkedRunId]);
   const currentActive = displayedRuns.find((run) => activeStatus(run.status));
   const canCancel = Boolean(currentActive && (user.role === 'ADMIN' || currentActive.requestedById === user.id));
   const archived = Boolean(detail.data?.pages?.[0]?.conversation.archivedAt);
@@ -140,7 +154,7 @@ function Conversation({ clientId, conversationId, profileEnabled, user }) {
   async function send(event) {
     event.preventDefault();
     const prompt = question.trim();
-    if (!profileEnabled || !visible || archived || currentActive || busy.current || recovery.blocked || !prompt || prompt.length > 2000) return;
+    if (sourceBound || !profileEnabled || !visible || archived || currentActive || busy.current || recovery.blocked || !prompt || prompt.length > 2000) return;
     busy.current = true; setPending(true); setError('');
     try {
       const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(prompt));
@@ -181,18 +195,21 @@ function Conversation({ clientId, conversationId, profileEnabled, user }) {
 
   return <section className="space-y-4" aria-label="Saved conversation">
     {detail.isPending && <p role="status">Loading saved conversation…</p>}
-    {(!visible && !detail.isPending) && <div role="alert"><p>This conversation is unavailable or you no longer have access.</p><Button type="button" variant="outline" onClick={async () => { const result = await detail.refetch(); if (!result.isError) { setAccessDenied(false); if (selectedRunId) latest.refetch(); else if (recovery.intent) receipt.refetch(); } }}>Refresh conversation</Button></div>}
+    {(!visible && !detail.isPending) && <div role="alert"><p>This conversation is unavailable or you no longer have access.</p><Button type="button" variant="outline" onClick={async () => { const result = await detail.refetch(); if (alive.current && !result.isError) { setAccessDenied(false); if (linkedRunId) linked.refetch(); if (selectedRunId) latest.refetch(); else if (recovery.intent) receipt.refetch(); } }}>Refresh conversation</Button></div>}
     {visible && <>
       <h3 className="font-medium">{detail.data.pages[0].conversation.title || 'Untitled conversation'}</h3>
+      {sourceBound && <p>This conversation belongs to an authorized workspace channel. Review the saved outcome here; send new questions from its source channel.</p>}
       {!displayedRuns.length && <p>No saved questions yet. Sending a question starts an AI request.</p>}
+      {linkedRunId && linked.isPending && <p role="status">Loading the linked run…</p>}
       <ol aria-label="Saved questions and responses" className="space-y-4">
-        {displayedRuns.map((run) => <li key={run.id} className="space-y-2 rounded-lg border border-border p-3">
+        {displayedRuns.map((run) => <li key={run.id} aria-label={run.id === linkedRunId ? "Linked account manager run" : undefined} tabIndex={run.id === linkedRunId ? -1 : undefined} ref={run.id === linkedRunId ? linkedNode : undefined} className="space-y-2 rounded-lg border border-border p-3">
           <p className="whitespace-pre-wrap break-words">{run.prompt}</p>
           <p className="text-sm text-muted-foreground">Status: {run.status}</p>
           {run.response && <p className="whitespace-pre-wrap break-words">{run.response}</p>}
           {run.status === 'FAILED' && <p>The request failed. Review the workspace AI settings before explicitly sending another question.</p>}
           {run.status === 'UNKNOWN' && <p>The provider outcome is unknown and may have incurred a cost. This request will not be retried automatically.</p>}
           {run.status === 'CANCELLED' && <p>This run was cancelled. An in-flight provider request may still complete and incur a cost.</p>}
+          <ClientAgentRunAttention key={`${user.organizationId}:${user.id}:${user.role}:${run.id}`} run={run} user={user} clientId={clientId} conversationId={conversationId} expectedScope={sourceBound ? "WORKSPACE_CHANNEL" : undefined} readPending={detail.isFetching || (run.id === linkedRunId && linked.isFetching) || (run.id === selectedRunId && latest.isFetching)} onAccessDenied={() => setAccessDenied(true)} />
           <RetainedContext run={run} />
           <RetainedMemory run={run} />
         </li>)}
@@ -203,21 +220,23 @@ function Conversation({ clientId, conversationId, profileEnabled, user }) {
       {recovery.blocked && <p role="alert">Browser storage could not retain the attempt safely. Sending is blocked until storage is available. Do not clear a pending attempt.</p>}
       {!profileEnabled && <p>The account manager is paused. Saved conversations remain available.</p>}
       {archived && <p>This conversation is archived. Its saved questions remain available.</p>}
-      <form className="space-y-3" onSubmit={send}>
+      {!sourceBound && <form className="space-y-3" onSubmit={send}>
         <label htmlFor={questionId} className="block text-sm font-medium">Question for the account manager</label>
         <textarea id={questionId} value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={2000} rows={3} className={inputClass} disabled={pending || Boolean(currentActive) || recovery.blocked} />
         <Button type="submit" disabled={!profileEnabled || archived || !question.trim() || pending || Boolean(currentActive) || recovery.blocked}>{pending ? 'Checking attempt…' : recovery.intent ? 'Retry saved attempt' : 'Send question'}</Button>
-      </form>
+      </form>}
     </>}
     {error && <p role="alert">{error}</p>}
   </section>;
 }
 
-function Conversations({ clientId, profileEnabled, user }) {
+function Conversations({ clientId, profileEnabled, user, selectedConversationId, linkedRunId, onSelectConversation }) {
   const cache = useQueryClient();
   const queryKey = ['client-agent-conversations', user.organizationId, user.id, clientId];
   const list = useInfiniteQuery({ queryKey, queryFn: ({ pageParam }) => api.listClientAgentConversations(clientId, { limit: 50, ...(pageParam ? { after: pageParam } : {}) }), initialPageParam: undefined, getNextPageParam: (page) => page.nextCursor || undefined, retry: false });
-  const [selected, setSelected] = useState(null);
+  const [localSelected, setSelected] = useState(null);
+  const selected = selectedConversationId || localSelected;
+  function select(id) { if (onSelectConversation) onSelectConversation(id); else setSelected(id); }
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState('');
   const [pending, setPending] = useState(false);
@@ -227,7 +246,7 @@ function Conversations({ clientId, profileEnabled, user }) {
   const busy = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const readable = !list.isError && list.data?.pages?.[0]?.scope === 'SHARED_STAFF';
-  const conversations = itemsFrom(list.data?.pages, 'items');
+  const conversations = itemsFrom(list.data?.pages, 'items').filter((conversation) => !conversation.sourceChannelId && !conversation.sourceBindingId);
 
   async function create(event) {
     event.preventDefault();
@@ -236,7 +255,7 @@ function Conversations({ clientId, profileEnabled, user }) {
     try {
       const conversation = await api.createClientAgentConversation(clientId, { title: title.trim() });
       if (!alive.current) return;
-      setCreating(false); setTitle(''); setSelected(conversation.id);
+      setCreating(false); setTitle(''); select(conversation.id);
       await cache.invalidateQueries({ queryKey });
     } catch { if (alive.current) setError('The conversation could not be created. Refresh the list before trying again.'); }
     finally { busy.current = false; if (alive.current) setPending(false); }
@@ -244,15 +263,15 @@ function Conversations({ clientId, profileEnabled, user }) {
 
   return <section className="space-y-4 rounded-lg border border-border bg-card p-4" aria-label="Account manager conversations">
     <h2 className="font-medium">Account manager conversations</h2>
-    <p className="text-sm text-muted-foreground">Shared with the Ashbi team. These conversations are not private. New requests can include up to four completed prior questions and answers from this conversation, within a size limit, alongside current client data. Each run shows the history actually retained for it. The account manager answers questions; it does not send messages or make changes to client work.</p>
+    <p className="text-sm text-muted-foreground">Shared with the Ashbi team: conversations listed here are not private. A linked workspace-channel conversation keeps its current source audience. New requests can include up to four completed prior questions and answers from this conversation, within a size limit, alongside current client data. Each run shows the history actually retained for it. The account manager answers questions; it does not send messages or make changes to client work.</p>
     {list.isPending && <p role="status">Loading conversations…</p>}
     {list.isError && <div role="alert"><p>Conversations are unavailable or you no longer have access.</p><Button type="button" variant="outline" onClick={() => list.refetch()}>Refresh conversations</Button></div>}
     {readable && <>
       {!conversations.length && <p>No saved conversations yet.</p>}
-      <ul aria-label="Conversations" className="flex flex-wrap gap-2">{conversations.map((conversation) => <li key={conversation.id}><Button type="button" variant="outline" aria-pressed={selected === conversation.id} onClick={() => setSelected(conversation.id)}>{conversation.title || 'Untitled conversation'}</Button></li>)}</ul>
+      <ul aria-label="Conversations" className="flex flex-wrap gap-2">{conversations.map((conversation) => <li key={conversation.id}><Button type="button" variant="outline" aria-pressed={selected === conversation.id} onClick={() => select(conversation.id)}>{conversation.title || 'Untitled conversation'}</Button></li>)}</ul>
       {list.hasNextPage && <Button type="button" variant="outline" disabled={list.isFetchingNextPage} onClick={() => list.fetchNextPage()}>Load more conversations</Button>}
       <Button type="button" variant="outline" onClick={() => setCreating(true)}>New conversation</Button>
-      {selected && <Conversation key={`${user.id}:${clientId}:${selected}`} clientId={clientId} conversationId={selected} profileEnabled={profileEnabled} user={user} />}
+      {selected && <Conversation key={`${user.id}:${clientId}:${selected}:${linkedRunId || ""}`} clientId={clientId} conversationId={selected} linkedRunId={linkedRunId} profileEnabled={profileEnabled} user={user} />}
     </>}
     <Modal isOpen={creating && readable} onClose={() => { if (!pending) setCreating(false); }} title="New shared conversation">
       <form onSubmit={create} className="space-y-3"><label htmlFor={titleId} className="block text-sm font-medium">Conversation title</label><input id={titleId} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} required className={inputClass} disabled={pending} /><p className="text-sm text-muted-foreground">Creating a conversation does not start an AI request.</p>{error && <p role="alert">{error}</p>}<Button type="submit" disabled={pending || !title.trim()}>Create conversation</Button></form>

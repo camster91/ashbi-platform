@@ -378,6 +378,7 @@ export const api = {
   startClientAgentRun: (clientId, id, data) => request(`/clients/${encodeURIComponent(clientId)}/assistant/conversations/${encodeURIComponent(id)}/runs`, { method: 'POST', body: data, silent: true, notifyUnauthorized: true }),
   getClientAgentRun: (clientId, id, runId) => request(`/clients/${encodeURIComponent(clientId)}/assistant/conversations/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}`, { silent: true, notifyUnauthorized: true }),
   getClientAgentRunByIntent: (clientId, id, idempotencyKey) => request(`/clients/${encodeURIComponent(clientId)}/assistant/conversations/${encodeURIComponent(id)}/runs/by-intent/${encodeURIComponent(idempotencyKey)}`, { silent: true, notifyUnauthorized: true }),
+  reviewClientAgentRun: (clientId, id, runId) => request(`/clients/${encodeURIComponent(clientId)}/assistant/conversations/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/review`, { method: 'POST', body: {}, silent: true, notifyUnauthorized: true }),
   cancelClientAgentRun: (clientId, id, runId) => request(`/clients/${encodeURIComponent(clientId)}/assistant/conversations/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST', body: {}, silent: true, notifyUnauthorized: true }),
   getWorkspaceAccountManager: (id) => request(`/workspace-chat/channels/${encodeURIComponent(id)}/account-manager`),
   installWorkspaceAccountManager: (id, data) => request(`/workspace-chat/channels/${encodeURIComponent(id)}/account-manager`, { method: 'POST', body: data }),

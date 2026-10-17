@@ -22,10 +22,12 @@ describe('client agent conversation API', () => {
     await api.createClientAgentConversation('c', { title: 'Planning' });
     await api.startClientAgentRun('c', 'conversation', { question: 'Status?', idempotencyKey: 'same-key' });
     await api.cancelClientAgentRun('c', 'conversation', 'run');
+    await api.reviewClientAgentRun('c/a', 'conversation/b', 'run/c');
     expect(fetch.mock.calls.map(([url, options]) => [url, options.method, JSON.parse(options.body)])).toEqual([
       ['/api/clients/c/assistant/conversations', 'POST', { title: 'Planning' }],
       ['/api/clients/c/assistant/conversations/conversation/runs', 'POST', { question: 'Status?', idempotencyKey: 'same-key' }],
       ['/api/clients/c/assistant/conversations/conversation/runs/run/cancel', 'POST', {}],
+      ['/api/clients/c%2Fa/assistant/conversations/conversation%2Fb/runs/run%2Fc/review', 'POST', {}],
     ]);
   });
 

@@ -104,6 +104,7 @@ model Organization {
   clientAgentProfiles ClientAgentProfile[]
   clientAgentConversations ClientAgentConversation[]
   clientAgentRuns ClientAgentRun[]
+  clientAgentRunReviews ClientAgentRunReview[]
   noteRevisions NoteRevision[]
   workspacePageRevisions WorkspacePageRevision[]
   workspaceChatChannels WorkspaceChatChannel[]
@@ -3259,7 +3260,21 @@ model ClientAgentRun {
   @@index([requestedById, organizationId])
   @@map("client_agent_runs")
   workspaceInvocation WorkspaceAccountManagerInvocation?
+  attentionReview ClientAgentRunReview?
   @@unique([id, organizationId])
+}
+
+// Personal attention belongs to the immutable run's requester. Acknowledging
+// it must never edit a terminal outcome or imply provider reconciliation.
+model ClientAgentRunReview {
+  runId String @id
+  organizationId String
+  reviewedAt DateTime @default(now())
+  run ClientAgentRun @relation(fields: [runId, organizationId], references: [id, organizationId], onDelete: Cascade, map: "client_agent_run_reviews_run_scope_fkey")
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "client_agent_run_reviews_organization_fkey")
+  @@unique([runId, organizationId])
+  @@index([organizationId])
+  @@map("client_agent_run_reviews")
 }
 
 model ClientAgentProfile {
