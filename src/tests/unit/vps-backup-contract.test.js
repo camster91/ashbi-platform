@@ -56,6 +56,7 @@ test('restore drill waits for stable PostgreSQL readiness across the initializat
   assert.match(restore, /stable_ready_count >= 3/);
   assert.match(restore, /stable_ready_count=0/);
   assert.doesNotMatch(restore, /pg_isready[^\n]+&& break/);
+  assert.ok(restore.includes('test "$(head -n 1 "$PGDATA/postmaster.pid")" = 1; exec pg_isready -h 127.0.0.1 -U postgres -d ashbi_restore'));
 });
 
 test('systemd schedule is persistent and the service is root-only and fail-visible', () => {
@@ -67,6 +68,25 @@ test('systemd schedule is persistent and the service is root-only and fail-visib
 });
 
 const bash = process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
+
+test('restore readiness rejects a long-running init child and requires final PID1 TCP acceptance', () => {
+  const gate = restore.match(/docker exec "\$container" sh -ec '([^']+)'/)?.[1];
+  assert.ok(gate);
+  const directory = mkdtempSync(join(tmpdir(), 'ashbi-final-postmaster-unit-'));
+  try {
+    writeFileSync(join(directory, 'pg_isready'), '#!/usr/bin/env bash\nprintf "called" > readiness-called\n[[ "$*" == "-h 127.0.0.1 -U postgres -d ashbi_restore" ]] || exit 9\nexit "$TEST_TCP_STATUS"\n', { mode: 0o755 });
+    for (const [pid, tcpStatus, expected, called] of [['42', '0', 1, false], ['1', '1', 1, true], ['1', '0', 0, true]]) {
+      writeFileSync(join(directory, 'postmaster.pid'), pid + '\n');
+      rmSync(join(directory, 'readiness-called'), { force: true });
+      const result = spawnSync(bash, ['-ec', `export PGDATA=. PATH="$PWD:$PATH"; ${gate}`], {
+        cwd: directory, encoding: 'utf8', env: { ...process.env, TEST_TCP_STATUS: tcpStatus },
+      });
+      assert.equal(result.status, expected, result.stderr);
+      if (called) assert.equal(readFileSync(join(directory, 'readiness-called'), 'utf8'), 'called');
+      else assert.throws(() => readFileSync(join(directory, 'readiness-called')), { code: 'ENOENT' });
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 test('restore target selects versioned storage from the selected binary and rejects unsupported engines', () => {
   const selection = restore.slice(restore.indexOf('restore_version='), restore.indexOf('docker run -d --name'));

@@ -48,12 +48,12 @@ docker run -d --name "$container" --network none --tmpfs "$restore_tmpfs:rw,noex
   -e PGDATA="$restore_pgdata" -e POSTGRES_PASSWORD="$password" -e POSTGRES_DB=ashbi_restore "$RESTORE_IMAGE" >/dev/null
 stable_ready_count=0
 for _ in $(seq 1 90); do
-  if docker exec "$container" pg_isready -U postgres -d ashbi_restore >/dev/null 2>&1; then
+  if docker exec "$container" sh -ec 'test "$(head -n 1 "$PGDATA/postmaster.pid")" = 1; exec pg_isready -h 127.0.0.1 -U postgres -d ashbi_restore' >/dev/null 2>&1; then
     stable_ready_count=$((stable_ready_count + 1))
     ((stable_ready_count >= 3)) && break
   else
-    # The official image briefly starts and stops an initialization server.
-    # Reset the streak so that transient readiness cannot pass the drill.
+    # The socket-only initialization server may stay ready for several seconds.
+    # Require the final PID1 postmaster and TCP readiness, then a stable streak.
     stable_ready_count=0
   fi
   sleep 1
