@@ -720,9 +720,9 @@ function ClientHealthCard({ client, navigate }) {
       onClick={() => navigate(`/clients/${client.id}`)}
       role="button"
       tabIndex={0}
-      aria-label={`View client health for ${client.name}`}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/clients/${client.id}`); } }}
     >
+      <span className="sr-only">View client health for</span>{' '}
       <div className="flex items-start justify-between mb-2">
         <h3 className="font-semibold text-sm text-foreground truncate flex-1">{client.name}</h3>
         <span className="text-lg font-bold ml-2" title="Health Score">

@@ -26,7 +26,8 @@ describe('layout shell accessibility contract', () => {
   });
 
   it('makes quick-create controls named, native, and keyboard-visible', () => {
-    expect(source).toContain('aria-label="Open quick create menu"');
+    expect(source).toContain('<span className="sr-only sm:not-sr-only">Create</span>');
+    expect(source).not.toContain('aria-label="Create: open quick create menu"');
     expect(source).toContain('aria-label={label}');
     expect(source).toContain('role="menuitem"');
     expect(source).toContain('focus-visible:ring-2');

@@ -450,10 +450,11 @@ export default function Clients() {
                       <td className="px-4 py-3">
                         <button
                           type="button"
-                          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} client ${client.name}`}
+                          aria-expanded={isExpanded}
                           onClick={() => setExpandedClient(isExpanded ? null : client.id)}
                           className="min-h-11 flex items-center gap-3 text-left w-full focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded"
                         >
+                          <span className="sr-only">{isExpanded ? 'Collapse client ' : 'Expand client '}</span>
                           <div className={cn(
                             'w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold shrink-0',
                             isAtRisk

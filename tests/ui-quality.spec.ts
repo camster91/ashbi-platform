@@ -243,11 +243,26 @@ test.describe('UI quality', () => {
     await expect(page.getByRole('heading', { name: /Cameron/, level: 1 })).toBeVisible();
     const search = page.getByPlaceholder('Search threads, clients, projects...');
     await expect(search.locator('xpath=..').locator('kbd')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Open quick create menu' })).toHaveAccessibleDescription(/Command K or Control K opens Quick add/);
+    await expect(page.getByRole('button', { name: /^Create(?: K)?$/ })).toHaveAccessibleDescription(/Command K or Control K opens Quick add/);
     if (!isMobile) {
       await page.keyboard.press('Control+k');
       await expect(page.getByRole('dialog', { name: 'Quick add' })).toBeVisible();
     }
+  });
+
+  test('document group names contain their visible project, client and count', async ({ page }) => {
+    await page.route('**/api/notes?**', route => json(route, {
+      notes: [{ id: 'document-name', title: 'Delivery brief', type: 'DOC', content: 'Client brief', updatedAt: YESTERDAY, project: { id: 'project-a', name: 'Docs mvcigesd3e3ccc', client: { name: 'Document QA mvcigesd3e3ccc' } } }],
+      pagination: { page: 1, pages: 1 },
+    }));
+    await page.goto('/docs');
+    const toggle = page.getByRole('button', { name: 'Toggle project Docs mvcigesd3e3ccc — Document QA mvcigesd3e3ccc 1' });
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(await axeViolations(page)).toEqual([]);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByText('Delivery brief', { exact: true })).toHaveCount(0);
   });
 
   test('task title wraps instead of clipping', async ({ page }) => {

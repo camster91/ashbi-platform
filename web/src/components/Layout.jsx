@@ -870,7 +870,6 @@ function QuickCreateMenu({ navigate, isAdmin, onCreateTask }) {
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label="Open quick create menu"
         aria-describedby="quick-add-shortcut-hint"
         className={cn(
           'flex min-h-11 items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-indigo',
@@ -879,8 +878,9 @@ function QuickCreateMenu({ navigate, isAdmin, onCreateTask }) {
         title="Create (press ⌘K or Ctrl+K for Quick add)"
       >
         <Plus className="w-4 h-4" aria-hidden="true" />
-        <span className="hidden sm:inline">Create</span>
-        <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border border-brand-indigo/30 px-1 text-[11px] font-sans font-medium" aria-hidden="true">
+        <span className="sr-only sm:not-sr-only">Create</span>
+        {' '}
+        <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border border-brand-indigo/30 px-1 text-[11px] font-sans font-medium">
           <Command className="w-3 h-3" />K
         </kbd>
       </button>

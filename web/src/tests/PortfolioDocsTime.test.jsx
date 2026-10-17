@@ -16,7 +16,8 @@ beforeEach(() => vi.clearAllMocks());
 it('includes the visible project, client and document count in the expansion name', async () => {
   api.getAllNotes.mockResolvedValue({ notes: [{ id: 'brief', title: 'Delivery brief', type: 'DOC', updatedAt: '2026-10-13', project: { id: 'p', name: 'Spring refresh', client: { name: 'Northwind' } } }], pagination: { page: 1, pages: 1 } });
   setup(<Docs />, '/docs');
-  const toggle = await screen.findByRole('button', { name: 'Toggle project Spring refresh — Northwind 1' });
+  const toggle = (await screen.findByText('Spring refresh')).closest('button');
+  expect(toggle).toHaveAccessibleName('Toggle project Spring refresh — Northwind 1');
   expect(toggle).toHaveTextContent('Spring refresh');
   expect(toggle).toHaveTextContent('Northwind');
   expect(toggle).toHaveAttribute('aria-expanded', 'true');

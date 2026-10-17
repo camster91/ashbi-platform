@@ -522,16 +522,18 @@ function ProjectGroup({
        <button
          type="button"
          onClick={() => setCollapsed(!collapsed)}
-         aria-label={`Toggle project ${project?.name || 'Unlinked'}${project?.client ? ` — ${project.client.name}` : ''} ${notes.length}`}
          className="min-h-11 flex items-center gap-2 hover:text-primary transition-colors rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         aria-expanded={!collapsed}
       >
         {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         <FolderOpen className="w-4 h-4 text-muted-foreground" />
+        <span className="sr-only">Toggle project </span>
+        {' '}
         <span>{project?.name || 'Unlinked'}</span>
         {project?.client && (
-          <span className="text-muted-foreground">— {project.client.name}</span>
+          <>{' '}<span className="text-muted-foreground">— {project.client.name}</span></>
         )}
+        {' '}
         <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{notes.length}</span>
       </button>
         {project && (

@@ -293,7 +293,7 @@ export default function WorkQueue() {
         })}
       </div>
 
-      <div id={panelId} role="tabpanel" aria-labelledby={`${baseId}-tab-${activeView}`} tabIndex={0} className="space-y-4 rounded-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
+      <div id={panelId} role="tabpanel" aria-labelledby={`${baseId}-tab-${activeView}`} tabIndex={0} className="space-y-4 rounded-lg">
         {dateError ? <p id={dateErrorId} role="alert" className="text-sm text-destructive">{dateError}</p> : isLoading ? (
           <LoadingState label="Loading queue…" />
         ) : isError ? (

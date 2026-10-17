@@ -34,6 +34,20 @@ const { default: Dashboard } = await import('../pages/Dashboard');
 const { api } = await import('../lib/api');
 
 describe('Dashboard KPIs', () => {
+  it('derives the client health action name from its visible client and health details', async () => {
+    const base = await api.getDashboardStats();
+    api.getDashboardStats.mockResolvedValueOnce({
+      ...base,
+      clientHealth: [{ id: 'client-a', name: 'Northwind Studio', healthScore: 82, healthStatus: 'ON_TRACK', retainerStatus: 'ACTIVE', activeProjects: 2 }],
+    });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><Dashboard /></MemoryRouter></QueryClientProvider>);
+    const health = await screen.findByRole('button', { name: /View client health for Northwind Studio/ });
+    expect(health).toHaveAccessibleName('View client health for Northwind Studio 82 ACTIVE 2 active projects');
+    expect(health).toHaveTextContent('Northwind Studio');
+    expect(health).toHaveTextContent('82');
+    expect(health).toHaveTextContent('2 active projects');
+  });
+
   it('explains a zero outstanding balance next to unsent drafts, and a zero MRR', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(

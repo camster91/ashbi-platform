@@ -56,7 +56,17 @@ export const VENDOR_CHUNK_GROUPS = [
   { name: 'vendor-query', test: nodeModule(['@tanstack']), priority: 20 },
   { name: 'vendor-utils', test: nodeModule(['date-fns', 'framer-motion']), priority: 20 },
   { name: 'vendor-socket', test: nodeModule(['socket.io-client', 'engine.io-client', 'socket.io-parser', 'engine.io-parser', '@socket.io']), priority: 20 },
-  { name: 'vendor-ui', test: nodeModule(['lucide-react', 'clsx', 'tailwind-merge']), priority: 10 },
+  // Keep entry/Login icons together with class helpers without pulling every
+  // workspace icon onto the sign-in path. A single chunk also avoids adding
+  // mobile network round trips for each tiny icon module. Keep this selection
+  // aligned with entry/Login static imports, using Lucide canonical filenames
+  // when public icons or dependency aliases change.
+  {
+    name: 'vendor-ui',
+    test: (id) => nodeModule(['clsx', 'tailwind-merge']).test(id)
+      || /[\\/]node_modules[\\/]lucide-react[\\/]dist[\\/]esm[\\/]icons[\\/](arrow-down|arrow-right|arrow-right-left|arrow-up|ban|check-circle|circle-check|circle|circle-dot|clock|copy|eye|eye-off|file-text|globe|hammer|hourglass|info|loader-circle|lock|mail|message-square|message-square-warning|minus|pause|circle-pause|pen-line|play|refresh-cw|rocket|rotate-ccw|send|shield-check|sparkles|triangle-alert|users|x|circle-x|zap)\.m?js$/.test(id),
+    priority: 10,
+  },
 ];
 
 export default defineConfig({
