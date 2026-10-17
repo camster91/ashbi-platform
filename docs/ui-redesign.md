@@ -87,3 +87,24 @@ build/bundle budgets pass. Populated read-only synthetic preview checked at
 375, 390, 768 and 1440 pixels with no page overflow. Browser interactions
 verified opening filters, selecting an owner, reload restoration and clearing.
 This checkpoint is local implementation, not a deployed app-wide redesign.
+
+## Finance layout checkpoint
+
+Proposals, contracts, estimates and invoices now use the shared heading.
+Mobile proposal titles and metadata wrap without narrow date columns. New
+actions lead; generation, CSV export and billing tools remain reachable with
+quieter treatment. Invoice and estimate filters collapse until needed; the
+invoice portfolio scope stays available in Collections. Invoice creation opens
+above browsing controls from either view, and cancelling restores the previous
+view and filters. Quantity/rate fields use two readable mobile columns. Shared
+tabs no longer create a vertical scrollbar from their negative bottom margin.
+
+Focused component tests and lint pass, including create-from-Collections and
+portfolio-clear regressions. The production build and bundle budgets pass.
+Populated synthetic production-preview checks verified all four lists at 390px,
+invoice/proposal overflow at 375, 768 and 1440px, invoice menu/filter/Collections
+controls and create/cancel, plus 44px-high estimate pricing fields. Fonts were
+verified loaded. The preview rejects writes, so draft persistence, sending,
+payments and company data acceptance are not claimed. These are presentation
+improvements; editable proposal documents and richer billing workflows remain
+separate implementation work.

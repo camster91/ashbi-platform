@@ -38,11 +38,11 @@ const INVOICES = [
   },
 ];
 
-function renderPage() {
+function renderPage(initialEntry = '/invoices') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <Invoices />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -79,11 +79,56 @@ describe('Invoices list', () => {
   it('labels the search and names the status filters in plain words', async () => {
     renderPage();
     expect(await screen.findByLabelText('Search invoices')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Filters', { exact: true }));
     const filters = screen.getByRole('group', { name: 'Filter by status' });
     expect(filters.className).toContain('flex-wrap');
     for (const name of ['All', 'Draft', 'Sent', 'Paid', 'Overdue', 'Void']) {
       expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed');
     }
+  });
+
+  it('keeps an active portfolio visible and editable in Collections', async () => {
+    renderPage('/invoices?portfolio=FREELANCE');
+    await screen.findByLabelText('Search invoices');
+    fireEvent.click(screen.getByRole('tab', { name: 'Collections', exact: true }));
+    const portfolio = screen.getByLabelText('Work portfolio');
+    expect(portfolio).toHaveValue('FREELANCE');
+    expect(portfolio.closest('[role="tabpanel"]')).toBeNull();
+    expect(portfolio.closest('details')).toHaveAttribute('open');
+    fireEvent.change(portfolio, { target: { value: '' } });
+    await waitFor(() => expect(api.getInvoices).toHaveBeenLastCalledWith(expect.not.objectContaining({ portfolio: expect.anything() })));
+  });
+
+  it('keeps secondary billing and export actions reachable behind More actions', async () => {
+    renderPage();
+    await screen.findByLabelText('Search invoices');
+    const actions = screen.getByText('More actions', { exact: true }).closest('details');
+    expect(actions).not.toHaveAttribute('open');
+    fireEvent.click(screen.getByText('More actions', { exact: true }));
+    await waitFor(() => expect(actions).toHaveAttribute('open'));
+    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bill approved work' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New Invoice' })).toBeInTheDocument();
+  });
+
+  it('opens creation from Collections and returns to its selected scope on cancel', async () => {
+    renderPage('/invoices?portfolio=FREELANCE');
+    await screen.findByLabelText('Search invoices');
+    fireEvent.click(screen.getByRole('tab', { name: 'Collections', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'New Invoice', exact: true }));
+    expect(screen.getByRole('heading', { name: 'New Invoice', exact: true })).toBeInTheDocument();
+    expect(screen.getByLabelText('Client *')).toBeInTheDocument();
+    expect(screen.getByLabelText('Client *').closest('[role="tabpanel"]')).toBeNull();
+    expect(screen.queryByLabelText('Search invoices')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tablist', { name: 'Invoice views' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New Invoice', exact: true })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+    expect(screen.queryByRole('heading', { name: 'New Invoice', exact: true })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Collections', exact: true })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Work portfolio')).toHaveValue('FREELANCE');
+    expect(api.createInvoice).not.toHaveBeenCalled();
+    expect(api.sendInvoice).not.toHaveBeenCalled();
+    expect(api.markInvoicePaid).not.toHaveBeenCalled();
   });
 
   it('renders one set of line-item inputs in the new invoice form', async () => {

@@ -6,10 +6,11 @@ import {
   Save, RefreshCw, Pencil,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { statusLabel } from '../lib/status';
 import useClients from '../hooks/useClients';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { Button, Card, EmptyState, LoadingState, SlowNotice, StatusBadge } from '../components/ui';
+import { Button, Card, EmptyState, LoadingState, SlowNotice, StatusBadge, PageHeading } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -105,30 +106,21 @@ export default function Proposals() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground">Proposals</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Create and manage client proposals
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setShowGenerator(true)}
-            className="min-h-11 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full bg-brand-lime text-brand-indigo hover:brightness-95 transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <Sparkles className="w-4 h-4" />
-            AI Generate
-          </button>
+      <PageHeading
+        title="Proposals"
+        description="Scope and pricing for client approval."
+        actions={<>
           <Button leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowCreate(true)}>
             New Proposal
           </Button>
-        </div>
-      </div>
+          <Button variant="ghost" leftIcon={<Sparkles className="w-4 h-4" />} onClick={() => setShowGenerator(true)}>
+            AI Generate
+          </Button>
+        </>}
+      />
 
       {/* Status Filters */}
-      <div className="flex gap-2 flex-wrap">
+      <div role="group" aria-label="Proposal status" className="grid grid-cols-3 gap-1 rounded-xl bg-muted/50 p-1 sm:flex sm:flex-wrap">
         {['', 'DRAFT', 'SENT', 'VIEWED', 'APPROVED', 'DECLINED'].map((s) => (
           <button
             key={s}
@@ -138,10 +130,10 @@ export default function Proposals() {
             className={`min-h-11 px-3 py-1.5 text-sm rounded-lg transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${
               filterStatus === s
                 ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                : 'text-muted-foreground hover:bg-muted'
             }`}
           >
-            {s || 'All'}
+            {s ? statusLabel('proposal', s) : 'All'}
           </button>
         ))}
       </div>
@@ -239,7 +231,7 @@ export default function Proposals() {
           <EmptyState
             icon={filterStatus ? 'search' : 'document'}
             title={filterStatus ? `No ${filterStatus.toLowerCase()} proposals` : 'No proposals yet'}
-            description={filterStatus ? 'Try another status or clear the current filter.' : 'Create your first proposal to send a professional quote.'}
+            description={filterStatus ? 'Try another status or clear the current filter.' : 'Create a proposal to outline the work and pricing for your client.'}
             actionLabel={filterStatus ? 'Clear Filter' : 'Create Proposal'}
             onAction={filterStatus ? () => setFilterStatus('') : () => setShowCreate(true)}
           />
@@ -248,32 +240,37 @@ export default function Proposals() {
         <div className="space-y-3">
           {proposals.map((proposal) => {
             return (
-              <Card key={proposal.id} className="p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-center gap-4">
+              <Card key={proposal.id} className="p-4 transition-colors hover:border-primary/30">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                   <div className="flex-1 min-w-0">
                     <Link
                       to={`/proposal/${proposal.id}`}
-                      className="text-sm font-medium text-foreground hover:text-primary truncate block"
+                      className="block min-h-11 content-center break-words text-sm font-medium text-foreground hover:text-primary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded"
                     >
                       {proposal.title}
                     </Link>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                      <span>{proposal.client?.name}</span>
-                      <span>${proposal.total?.toFixed(2)}</span>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span className="min-w-0 break-words">{proposal.client?.name}</span>
                       {proposal.validUntil && (
-                        <span className="flex items-center gap-1">
+                        <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap">
                           <Clock className="w-3 h-3" />
                           Valid until {new Date(proposal.validUntil).toLocaleDateString('en-CA')}
                         </span>
                       )}
                     </div>
                   </div>
-                  <StatusBadge domain="proposal" status={proposal.status} className="px-2.5 py-1" />
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2 sm:shrink-0 sm:border-0 sm:pt-0">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-medium tabular-nums">${proposal.total?.toFixed(2)}</span>
+                    <StatusBadge domain="proposal" status={proposal.status} className="px-2.5 py-1" />
+                  </div>
                   <div className="flex items-center gap-1">
                     {proposal.status === 'SENT' && proposal.viewToken && (
                       <button
                         onClick={() => navigator.clipboard.writeText(`${window.location.origin}/portal/proposal/${proposal.viewToken}`)}
-                        className="p-1.5 text-muted-foreground hover:text-foreground rounded"
+                        className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                        type="button"
+                        aria-label="Copy client link"
                         title="Copy client link"
                       >
                         <ExternalLink className="w-4 h-4" />
@@ -281,20 +278,25 @@ export default function Proposals() {
                     )}
                     <button
                       onClick={() => duplicateMutation.mutate(proposal.id)}
-                      className="p-1.5 text-muted-foreground hover:text-foreground rounded"
-                      title="Duplicate"
+                      className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                      type="button"
+                        aria-label="Duplicate"
+                        title="Duplicate"
                     >
                       <Copy className="w-4 h-4" />
                     </button>
                     {proposal.status === 'DRAFT' && (
                       <button
                         onClick={() => { deleteMutation.reset(); setProposalToDelete(proposal); }}
-                        className="p-1.5 text-muted-foreground hover:text-destructive rounded"
+                        className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                        type="button"
+                        aria-label="Delete"
                         title="Delete"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     )}
+                  </div>
                   </div>
                 </div>
               </Card>

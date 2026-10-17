@@ -14,6 +14,7 @@ test('approved work becomes one confirmed draft, survives receipt recovery and r
   const expenseDescription = `Materials ${suffix}`;
   await json(await api.post('/api/expenses', { data: { clientId: client.id, description: expenseDescription, currency: 'CAD', amount: 10, billable: true, category: 'SOFTWARE', date: new Date().toISOString().slice(0, 10) } }));
   await page.goto('/invoices');
+  await page.getByText('More actions', { exact: true }).click();
   await page.getByRole('button', { name: 'Bill approved work' }).click();
   await page.getByLabel('Find client').fill(client.name);
   await expect(page.getByRole('combobox', { name: 'Client', exact: true }).locator('option', { hasText: client.name })).toHaveCount(1);

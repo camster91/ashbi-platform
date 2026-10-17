@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ScrollText, Plus, Send, ExternalLink, CheckCircle, Download, Sparkles, Wand2 } from 'lucide-react';
 import { api } from '../lib/api';
+import { statusLabel } from '../lib/status';
 import useClients from '../hooks/useClients';
 import { AI_CHAT_MESSAGE_MAX_LENGTH, buildContractRefineChatPayload } from '../lib/form-payloads';
 import { useToast } from '../hooks/useToast';
 import { isAiErrorCode } from '../lib/apiErrorToast';
-import { Button, Card, EmptyState, Field, Input, LoadingState, Select, StatusBadge } from '../components/ui';
+import { Button, Card, EmptyState, Field, Input, LoadingState, Select, StatusBadge, PageHeading } from '../components/ui';
 import Modal from '../components/Modal';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -131,27 +132,21 @@ export default function Contracts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground">Contracts</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage client contracts and agreements</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            leftIcon={<Sparkles className="w-4 h-4" />}
-            onClick={() => setShowProposalPicker(true)}
-          >
-            Generate from Proposal
-          </Button>
+      <PageHeading
+        title="Contracts"
+        description="Client agreements, terms and signatures."
+        actions={<>
           <Button leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowCreate(true)}>
             New Contract
           </Button>
-        </div>
-      </div>
+          <Button variant="ghost" leftIcon={<Sparkles className="w-4 h-4" />} onClick={() => setShowProposalPicker(true)}>
+            Generate from Proposal
+          </Button>
+        </>}
+      />
 
       {/* Status Filters */}
-      <div className="flex gap-2 flex-wrap">
+      <div role="group" aria-label="Contract status" className="grid grid-cols-3 gap-1 rounded-xl bg-muted/50 p-1 sm:flex sm:flex-wrap">
         {['', 'DRAFT', 'SENT', 'SIGNED', 'VOID'].map((s) => (
           <button
             key={s}
@@ -161,10 +156,10 @@ export default function Contracts() {
             className={`min-h-11 px-3 py-1.5 text-sm rounded-lg transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${
               filterStatus === s
                 ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                : 'text-muted-foreground hover:bg-muted'
             }`}
           >
-            {s || 'All'}
+            {s ? statusLabel('contract', s) : 'All'}
           </button>
         ))}
       </div>
@@ -349,13 +344,13 @@ export default function Contracts() {
                         onClick={() => setExpandedId(isExpanded ? null : contract.id)}
                         aria-expanded={isExpanded}
                         aria-label={`${isExpanded ? 'Collapse' : 'Expand'} contract ${contract.title}`}
-                        className="min-h-11 max-w-full text-sm font-medium text-foreground hover:text-primary truncate block text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                        className="min-h-11 max-w-full break-words text-sm font-medium text-foreground hover:text-primary block text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {contract.title}
                       </button>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                         <span className="break-words">{contract.client?.name}</span>
-                        <span>{contract.templateType}</span>
+                        <span>{templateTypes.find(type => type.value === contract.templateType)?.label || contract.templateType}</span>
                         {contract.proposal && (
                           <span className="min-w-0 break-words">From: {contract.proposal.title}</span>
                         )}
@@ -363,7 +358,7 @@ export default function Contracts() {
                     </div>
                     <StatusBadge domain="contract" status={contract.status} className="mt-2.5 shrink-0 px-2.5 py-1 sm:mt-0" />
                   </div>
-                  <div className="flex flex-wrap items-center gap-1 sm:shrink-0">
+                  <div className="flex flex-wrap items-center gap-1 border-t border-border/60 pt-2 sm:shrink-0 sm:border-0 sm:pt-0">
                     {contract.status === 'DRAFT' && (
                       <Button
                         size="sm"

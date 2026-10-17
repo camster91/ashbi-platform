@@ -5,7 +5,7 @@ import { Plus, Send, ArrowRightLeft, Trash2, Search, Pencil, CalendarDays, Clock
 import { api } from '../lib/api';
 import useClients from '../hooks/useClients';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, EmptyState, LoadingState, StatusBadge } from '../components/ui';
+import { Button, Card, EmptyState, FilterPanel, LoadingState, PageHeading, StatusBadge } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import useIsSmUp from '../hooks/useIsSmUp';
 import { invoiceTotals, lineTotal, roundMoney } from '../lib/money-totals';
@@ -359,20 +359,15 @@ export default function Estimates() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground">Estimates</h1>
-          <p className="text-sm text-muted-foreground mt-1">Create and manage client estimates</p>
-        </div>
-        <Button leftIcon={<Plus className="w-4 h-4" />} onClick={() => { resetForm(); setShowCreate(true); }}>
-          New Estimate
-        </Button>
-      </div>
+      <PageHeading
+        title="Estimates"
+        description="Price the scope before preparing a proposal."
+        actions={<Button leftIcon={<Plus className="w-4 h-4" />} onClick={() => { resetForm(); setShowCreate(true); }}>New Estimate</Button>}
+      />
 
       {/* Status Filters */}
-      <div className="flex gap-2 flex-wrap items-center">
-        <div className="relative flex-1 min-w-48">
+      <div className="space-y-3">
+        <div className="relative min-w-0">
           <label htmlFor="estimate-search" className="sr-only">Search estimates</label>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
           <input
@@ -381,9 +376,10 @@ export default function Estimates() {
             placeholder="Search estimates..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-background"
+            className="min-h-11 w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-background"
           />
         </div>
+        <FilterPanel activeCount={Number(Boolean(filterStatus))}>
         {/* Chips wrap on narrow screens instead of panning the page. */}
         <div className="flex flex-wrap gap-1 max-w-full" role="group" aria-label="Filter by status">
           {FILTERS.map((s) => (
@@ -402,6 +398,7 @@ export default function Estimates() {
             </button>
           ))}
         </div>
+        </FilterPanel>
       </div>
 
       {/* Create / Edit Form */}
@@ -510,12 +507,12 @@ function EstimateCard({ estimate, onEdit, onSend, onConvert, onCopyLink, onDelet
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold text-foreground truncate">{estimate.title || 'Untitled'}</span>
+              <span className="break-words font-semibold text-foreground">{estimate.title || 'Untitled'}</span>
               <StatusBadge domain="estimate" status={estimate.status} />
             </div>
             <p className="text-sm text-muted-foreground">{estimate.client?.name || 'No client'}</p>
           </div>
-          <span className="text-lg font-semibold">{fmt(estimate.total)}</span>
+          <span className="max-w-[45%] break-words text-right text-base font-semibold tabular-nums">{fmt(estimate.total)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           {estimate.validUntil && (
@@ -780,7 +777,7 @@ function EstimateForm({
                       onChange={(e) => onLineItemUpdate(idx, 'description', e.target.value)}
                       placeholder="Item description"
                       aria-label={`Line item ${idx + 1} description`}
-                      className="flex-1 px-2 py-1.5 rounded border border-border bg-background text-sm"
+                      className="min-h-11 min-w-0 flex-1 px-2 py-1.5 rounded border border-border bg-background text-sm"
                       required
                     />
                     <button type="button" onClick={() => onLineItemRemove(idx)}
@@ -790,7 +787,7 @@ function EstimateForm({
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid min-w-0 grid-cols-2 gap-3">
                     <div>
                       <label htmlFor={`estimate-line-${idx}-qty`} className="block text-xs text-muted-foreground mb-0.5">Qty</label>
                       <input
@@ -800,7 +797,7 @@ function EstimateForm({
                         min="0"
                         step="0.5"
                         onChange={(e) => onLineItemUpdate(idx, 'quantity', e.target.value)}
-                        className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm text-center"
+                        className="min-h-11 w-full min-w-0 px-2 py-1.5 rounded border border-border bg-background text-sm text-center"
                       />
                     </div>
                     <div>
@@ -812,12 +809,12 @@ function EstimateForm({
                         min="0"
                         step="0.01"
                         onChange={(e) => onLineItemUpdate(idx, 'rate', e.target.value)}
-                        className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm"
+                        className="min-h-11 w-full min-w-0 px-2 py-1.5 rounded border border-border bg-background text-sm"
                       />
                     </div>
-                    <div>
-                      <span className="block text-xs text-muted-foreground mb-0.5">Amount</span>
-                      <div className="px-2 py-1.5 text-sm font-medium">
+                    <div className="col-span-2 flex items-center justify-between gap-3 border-t border-border pt-2">
+                      <span className="text-xs text-muted-foreground">Amount</span>
+                      <div className="min-w-0 break-words text-right text-sm font-medium tabular-nums">
                         {fmt(lineAmount(li))}
                       </div>
                     </div>
