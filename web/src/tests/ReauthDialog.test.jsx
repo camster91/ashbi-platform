@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/api', () => ({
@@ -139,4 +139,31 @@ describe('ReauthProvider', () => {
     await waitFor(() => expect(result).toBe(false));
     expect(api.reauth).not.toHaveBeenCalled();
   });
+
+  it('shares one prompt across concurrent handler calls', async () => {
+    render(<ReauthProvider><p>App</p></ReauthProvider>);
+    const handler = setReauthHandler.mock.calls.findLast(([fn]) => typeof fn === 'function')[0];
+    let first;
+    let second;
+    act(() => { first = handler(); second = handler(); });
+    expect(first).toBe(second);
+    await screen.findByLabelText(/^password$/i);
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    await expect(first).resolves.toBe(false);
+    await expect(second).resolves.toBe(false);
+  });
+
+  it('settles an outstanding request false on unmount and unregisters the handler', async () => {
+    const { unmount } = render(<ReauthProvider><p>App</p></ReauthProvider>);
+    const handler = setReauthHandler.mock.calls.findLast(([fn]) => typeof fn === 'function')[0];
+    let result;
+    act(() => { result = handler(); });
+    unmount();
+    await expect(result).resolves.toBe(false);
+    expect(setReauthHandler).toHaveBeenLastCalledWith(null);
+    await expect(handler()).resolves.toBe(false);
+    expect(api.reauth).not.toHaveBeenCalled();
+  });
+
 });

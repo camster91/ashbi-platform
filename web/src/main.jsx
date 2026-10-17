@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
-import { ReauthProvider } from './components/ReauthDialog';
+import { ReauthProvider } from './components/ReauthProvider';
 import { setUnauthorizedCallback, setApiErrorCallback } from './lib/api';
 import { applyTheme, getInitialTheme } from './lib/theme';
 import { preloadInitialRoute } from './lib/initial-route';

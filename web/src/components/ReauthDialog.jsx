@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { api, setReauthHandler } from '../lib/api';
+import { useEffect, useId, useRef, useState } from 'react';
+import { api } from '../lib/api';
 import Button from './ui/Button';
 import Modal, { ModalFooter } from './Modal';
 
@@ -157,40 +157,6 @@ export function ReauthDialog({ isOpen, onSuccess, onCancel }) {
   );
 }
 
-/**
- * Mount once near the app root. Registers the API-layer handler so any
- * request answered with 403 REAUTH_REQUIRED opens the dialog and, after a
- * successful re-authentication, is retried once (web/src/lib/api.js).
- */
-export function ReauthProvider({ children }) {
-  const [open, setOpen] = useState(false);
-  const resolver = useRef(null);
-
-  const settle = useCallback((result) => {
-    setOpen(false);
-    const resolve = resolver.current;
-    resolver.current = null;
-    resolve?.(result);
-  }, []);
-
-  useEffect(() => {
-    setReauthHandler(() => new Promise((resolve) => {
-      resolver.current = resolve;
-      setOpen(true);
-    }));
-    return () => {
-      setReauthHandler(null);
-      resolver.current?.(false);
-      resolver.current = null;
-    };
-  }, []);
-
-  return (
-    <>
-      {children}
-      <ReauthDialog isOpen={open} onSuccess={() => settle(true)} onCancel={() => settle(false)} />
-    </>
-  );
-}
+export { ReauthProvider } from './ReauthProvider';
 
 export default ReauthDialog;
