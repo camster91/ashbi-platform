@@ -60,6 +60,11 @@ test('Gmail ingestion native identity is atomic under real PostgreSQL concurrent
     assert.equal(await db.message.count({ where: { thread: { clientId: clients[0].id } } }), before);
     assert.equal(await db.gmailIngestReceipt.count({ where: { organizationId: orgs[0], providerMessageId: 'rollback' } }), 0);
     assert.equal(await db.thread.count({ where: { clientId: clients[0].id, messages: { none: {} } } }), 0);
+    const activityBeforeFailure = await db.thread.findUniqueOrThrow({ where: { id: receipt.threadId } });
+    await assert.rejects(ingestGmailMessage(broken, { ...input, providerMessageId: 'rollback-existing', receivedAt: new Date('2099-01-01'), tags: ['urgent'] }), /Synthetic/);
+    assert.deepEqual(await db.thread.findUniqueOrThrow({ where: { id: receipt.threadId } }), activityBeforeFailure);
+    assert.equal(await db.message.count({ where: { thread: { clientId: clients[0].id } } }), before);
+    assert.equal(await db.gmailIngestReceipt.count({ where: { organizationId: orgs[0], providerMessageId: 'rollback-existing' } }), 0);
     // Exact legacy overlap is retained without adding another message.
     const legacy = await db.thread.create({ data: { clientId: clients[0].id, subject: 'Old synthetic email' } });
     await db.message.create({ data: { threadId: legacy.id, direction: 'INBOUND', senderEmail: input.senderEmail, bodyText: 'Old synthetic body',
@@ -103,6 +108,78 @@ async function waitUntil(query, description) {
   while (Date.now() < deadline) { if (await query()) return; await new Promise(resolve => setTimeout(resolve, 20)); }
   assert.fail(description);
 }
+
+test('concurrent native activity remains the maximum committed received time, with serialization failures surfaced once', {
+  skip: !url && 'Disposable PostgreSQL is not configured', timeout: 60000,
+}, async () => {
+  assertDisposableDatabase({ NODE_ENV: process.env.NODE_ENV, DATABASE_URL: url });
+  const db = new prismaPkg.PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
+  const organizationId = randomUUID();
+  const holder = new pg.Client({ connectionString: url });
+  let pending;
+  try {
+    await holder.connect();
+    await db.organization.create({ data: { id: organizationId, name: 'Synthetic native activity', slug: organizationId } });
+    const client = await db.client.create({ data: { organizationId, name: 'Activity fixture', domain: `activity-${randomUUID()}.test` } });
+    const input = { organizationId, mailbox: 'mailbox@example.invalid', providerMessageId: 'activity-seed', providerThreadId: 'activity-thread',
+      senderEmail: `person@${client.domain}`, senderName: null, subject: 'Activity fixture', bodyText: 'Synthetic fixture only', receivedAt: new Date('2020-01-01'), tags: [] };
+    await ingestGmailMessage(db, input);
+    const thread = await db.thread.findFirstOrThrow({ where: { clientId: client.id } });
+    assert.deepEqual(thread.lastActivityAt, input.receivedAt, 'creation uses native activity rather than ingestion time');
+    const workflow = { status: 'RESOLVED', slaBreached: true, lastEscalationLevel: 2, lastEscalatedAt: new Date('2019-12-31') };
+    await db.thread.update({ where: { id: thread.id }, data: workflow });
+    const nativeKey = createHash('sha256').update(JSON.stringify([organizationId, input.mailbox, input.providerThreadId])).digest('hex');
+    await holder.query('BEGIN');
+    await holder.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [nativeKey]);
+    let attempts = 0;
+    const counted = new Proxy(db, { get(target, key) {
+      if (key === '$transaction') return (...args) => { attempts++; return target.$transaction(...args); };
+      const value = target[key]; return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const deliveries = ['2020-01-03', '2020-01-02', '2020-01-04'].map((date, index) => ({ ...input, providerMessageId: `activity-race-${index}`, receivedAt: new Date(date) }));
+    pending = Promise.allSettled(deliveries.map(delivery => ingestGmailMessage(counted, delivery)));
+    // All three snapshots wait on this fixture's exact held advisory lock.
+    // Releasing it exercises overlapping Serializable writers, without sleeps
+    // in the ingestion path or automatic transaction retries.
+    await waitUntil(async () => Number((await holder.query(`SELECT count(*) FROM pg_locks waiting JOIN pg_locks held
+      ON waiting.locktype=held.locktype AND waiting.database=held.database AND waiting.classid=held.classid
+      AND waiting.objid=held.objid AND waiting.objsubid=held.objsubid
+      WHERE held.pid=$1 AND held.locktype='advisory' AND held.granted AND NOT waiting.granted`, [holder.processID])).rows[0].count) === 3,
+    'all activity writers must reach the same native advisory lock');
+    await holder.query('COMMIT');
+    const results = await pending;
+    assert.equal(attempts, deliveries.length, 'each ingestion invokes its transaction once');
+    assert.ok(results.some(result => result.status === 'fulfilled'));
+    for (const [index, result] of results.entries()) {
+      if (result.status === 'rejected') assert.equal(result.reason.code, 'P2034');
+      assert.equal(await db.gmailIngestReceipt.count({ where: { organizationId, providerMessageId: deliveries[index].providerMessageId } }), result.status === 'fulfilled' ? 1 : 0);
+      assert.equal(await db.message.count({ where: { threadId: thread.id,
+        aiExtracted: { contains: `"gmailMessageId":"${deliveries[index].providerMessageId}"` } } }), result.status === 'fulfilled' ? 1 : 0);
+    }
+    const committedTimes = [input.receivedAt, ...deliveries.filter((_, index) => results[index].status === 'fulfilled').map(delivery => delivery.receivedAt)];
+    const expected = new Date(Math.max(...committedTimes.map(date => date.getTime())));
+    assert.equal(await db.message.count({ where: { threadId: thread.id } }), committedTimes.length);
+    const racedThread = await db.thread.findUniqueOrThrow({ where: { id: thread.id } });
+    assert.deepEqual(racedThread.lastActivityAt, expected); assert.equal(racedThread.priority, 'NORMAL');
+    await ingestGmailMessage(db, { ...input, providerMessageId: 'activity-older-urgent', receivedAt: new Date('2019-01-01'), tags: ['urgent'] });
+    await ingestGmailMessage(db, { ...input, providerMessageId: 'activity-equal', receivedAt: expected });
+    const after = await db.thread.findUniqueOrThrow({ where: { id: thread.id } });
+    assert.deepEqual(after.lastActivityAt, expected); assert.equal(after.priority, 'HIGH');
+    for (const [key, value] of Object.entries(workflow)) assert.deepEqual(after[key], value, key);
+    assert.deepEqual(await ingestGmailMessage(db, { ...input, receivedAt: new Date('2099-01-01'), tags: ['urgent'] }), { replay: true, outcome: 'MESSAGE' });
+    assert.deepEqual(await db.thread.findUniqueOrThrow({ where: { id: thread.id } }), after);
+  } finally {
+    await holder.query('ROLLBACK').catch(() => {});
+    if (pending) await pending;
+    await holder.end();
+    try {
+      await db.message.deleteMany({ where: { thread: { client: { organizationId } } } });
+      await db.thread.deleteMany({ where: { client: { organizationId } } });
+      await db.client.deleteMany({ where: { organizationId } });
+      await db.organization.deleteMany({ where: { id: organizationId } });
+    } finally { await db.$disconnect(); }
+  }
+});
 
 test('mapping table barriers precede the Serializable snapshot and fence client edits plus new ambiguous contact phantoms', {
   skip: !url && 'Disposable PostgreSQL is not configured', timeout: 60000,
