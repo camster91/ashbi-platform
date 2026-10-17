@@ -7,7 +7,7 @@ import { mockAuthenticatedApi, unmockedRequests } from './fixtures/authenticated
 // it does not claim to test device permissions, codecs or server persistence.
 const recordingBytes = [0x1a, 0x45, 0xdf, 0xa3, 0, 255, 13, 10, 65, 83, 72, 66, 73];
 
-async function mediaFixture(page: Page, baseURL: string | undefined) {
+async function mediaFixture(page: Page, baseURL: string | undefined, browserName: string) {
   expect(baseURL).toBeTruthy();
   const origin = new URL(baseURL!).origin;
   expect(new URL(origin).hostname).toMatch(/^(127\.0\.0\.1|localhost|\[::1\])$/);
@@ -47,13 +47,33 @@ async function mediaFixture(page: Page, baseURL: string | undefined) {
       method: 'POST', headers: { 'content-type': request.headers()['content-type'] }, body: request.postDataBuffer()!,
     }).formData();
     const file = form.get('file') as File;
-    uploads.push({ name: file.name, bytes: [...new Uint8Array(await file.arrayBuffer())], entityType: String(form.get('entityType')), entityId: String(form.get('entityId')) });
+    const intercepted = { name: file.name, bytes: [...new Uint8Array(await file.arrayBuffer())], entityType: String(form.get('entityType')), entityId: String(form.get('entityId')) };
+    // WebKit's interception protocol omits Blob bytes (Playwright #6479).
+    // Observe the actual FormData passed to native fetch on every engine;
+    // additionally verify serialized wire bytes where the protocol exposes them.
+    const submitted = await page.evaluate(async () => {
+      const bodies = (window as any).__mediaRecoveryProbe.submitted as FormData[];
+      const body = bodies[bodies.length - 1];
+      const submittedFile = body.get('file') as File;
+      return { name: submittedFile.name, bytes: [...new Uint8Array(await submittedFile.arrayBuffer())], entityType: String(body.get('entityType')), entityId: String(body.get('entityId')) };
+    });
+    expect(intercepted.name).toBe(submitted.name);
+    expect(intercepted.entityType).toBe(submitted.entityType);
+    expect(intercepted.entityId).toBe(submitted.entityId);
+    if (browserName !== 'webkit') expect(intercepted).toEqual(submitted);
+    uploads.push(submitted);
     if (holdUpload) await holdUpload;
     await route.fulfill({ status: failUpload ? 503 : 201, json: failUpload ? { error: 'Synthetic upload unavailable' } : { id: 'recording-a', originalName: file.name } });
   });
   await page.addInitScript(({ bytes }) => {
-    const probe = { revoked: [] as string[], files: [] as File[], captures: 0, stopped: 0 };
+    const probe = { revoked: [] as string[], files: [] as File[], submitted: [] as FormData[], captures: 0, stopped: 0 };
     (window as any).__mediaRecoveryProbe = probe;
+    const originalFetch = window.fetch;
+    window.fetch = function (input, init) {
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.href);
+      if (url.pathname === '/api/attachments' && init?.method === 'POST' && init.body instanceof FormData) probe.submitted.push(init.body);
+      return originalFetch.call(this, input, init);
+    };
     const originalRevoke = URL.revokeObjectURL.bind(URL);
     URL.revokeObjectURL = url => { probe.revoked.push(url); originalRevoke(url); };
     // Observe the app's original File at the native boundary. Reading it back
@@ -107,8 +127,8 @@ async function recordAndStop(page: Page) {
   await page.getByRole('button', { name: 'Stop and upload screen recording', exact: true }).click();
 }
 
-test('failed recording can download original bytes then retry the same File once and clear recovery', async ({ page, baseURL }, testInfo) => {
-  const fixture = await mediaFixture(page, baseURL);
+test('failed recording can download original bytes then retry the same File once and clear recovery', async ({ page, baseURL, browserName }, testInfo) => {
+  const fixture = await mediaFixture(page, baseURL, browserName);
   await recordAndStop(page);
   await expect(page.getByRole('alert').filter({ hasText: 'Upload could not be confirmed' })).toBeVisible();
   expect(fixture.uploads).toHaveLength(1);
@@ -152,8 +172,8 @@ test('failed recording can download original bytes then retry the same File once
   await fixture.check();
 });
 
-test('confirmed upload with failed list refresh has no retry or retained download', async ({ page, baseURL }) => {
-  const fixture = await mediaFixture(page, baseURL);
+test('confirmed upload with failed list refresh has no retry or retained download', async ({ page, baseURL, browserName }) => {
+  const fixture = await mediaFixture(page, baseURL, browserName);
   fixture.succeedUploads();
   fixture.failRefresh();
   await recordAndStop(page);
@@ -166,8 +186,8 @@ test('confirmed upload with failed list refresh has no retry or retained downloa
   await fixture.check();
 });
 
-test('explicit discard releases the failed take and permits another recording without retrying it', async ({ page, baseURL }) => {
-  const fixture = await mediaFixture(page, baseURL);
+test('explicit discard releases the failed take and permits another recording without retrying it', async ({ page, baseURL, browserName }) => {
+  const fixture = await mediaFixture(page, baseURL, browserName);
   await recordAndStop(page);
   await expect(page.getByRole('button', { name: 'Retry upload', exact: true })).toBeEnabled();
   const save = page.getByRole('link', { name: 'Save recording', exact: true });
