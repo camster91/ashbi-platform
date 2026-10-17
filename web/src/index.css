@@ -12,34 +12,34 @@
   --default-ring-color: hsl(217.21925133689840 91.21951219512198% 59.80392156862745%);
 }
 
-/* Self-hosted so first paint never depends on a third-party origin; optional
-   keeps the fallback font instead of swapping late on slow connections. */
+/* Self-hosted fonts avoid third-party requests. Body text uses swap so
+   sign-in controls stay readable while the branded font downloads. */
 @font-face {
   font-family: 'DM Sans';
   font-style: normal;
   font-weight: 400;
-  font-display: optional;
+  font-display: swap;
   src: url('@fontsource/dm-sans/files/dm-sans-latin-400-normal.woff2') format('woff2');
 }
 @font-face {
   font-family: 'DM Sans';
   font-style: normal;
   font-weight: 500;
-  font-display: optional;
+  font-display: swap;
   src: url('@fontsource/dm-sans/files/dm-sans-latin-500-normal.woff2') format('woff2');
 }
 @font-face {
   font-family: 'DM Sans';
   font-style: normal;
   font-weight: 600;
-  font-display: optional;
+  font-display: swap;
   src: url('@fontsource/dm-sans/files/dm-sans-latin-600-normal.woff2') format('woff2');
 }
 @font-face {
   font-family: 'DM Sans';
   font-style: normal;
   font-weight: 700;
-  font-display: optional;
+  font-display: swap;
   src: url('@fontsource/dm-sans/files/dm-sans-latin-700-normal.woff2') format('woff2');
 }
 @font-face {
