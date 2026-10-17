@@ -69,7 +69,7 @@ export function sanitizeChronology(value,identity){
  const aliases=['upload-button','file-input','portal-tab','textarea','button','link','body','other','none'];
  const nodeEvents=['START','LISTENER_ARMED','ENTER_START','ENTER_END','FILECHOOSER','SETFILES_START','SETFILES_END','UPLOAD_ASSERTED','BODY_COMPLETED','BODY_FAILED','FLUSH','REQUEST','REQUEST_FINISHED','REQUEST_FAILED','PAGE_ERROR','CRASH','CONSOLE_ERROR','BOUNDARY_BLOCK','UPLOAD_FOCUS_START','UPLOAD_FOCUS_CONFIRMED'];
  const browserEvents=['FOCUS_IN','FOCUS_OUT','WINDOW_FOCUS','WINDOW_BLUR','VISIBILITY','KEY_DOWN','KEY_UP','CLICK','UPLOAD_CONNECTED','UPLOAD_DISCONNECTED','UPLOAD_ATTRIBUTES'];
- const requests=['AUTH_ME','VERIFY_TOKEN','PORTAL_ME','PROJECTS','INVOICES','CONTRACTS','RETAINER','UNREAD','PROJECT','TASKS','RESOURCES','DOCUMENTS','UPLOAD','MESSAGES','DELETE_DOCUMENT','DOCUMENT','SCRIPT','STYLE','FONT','IMAGE','VITE','UNAPPROVED'];
+ const requests=['AUTH_ME','VERIFY_TOKEN','PORTAL_ME','PROJECTS','INVOICES','CONTRACTS','RETAINER','UNREAD','PROJECT','TASKS','RESOURCES','DOCUMENTS','UPLOAD','MESSAGES','DELETE_DOCUMENT','DOCUMENT','SCRIPT','STYLE','FONT','IMAGE','VITE','DEV_SOCKET','UNAPPROVED'];
  const bools=['connected','disabled','activeConnected','activeDisabled','hasFocus','userActive','userEverActive','trusted','defaultPrevented'];
  const browserKeys=['phase','target','active','generation','activeGeneration',...bools,'visibility','key','path','targetTag'];
  const last={node:{seq:-1,ms:-1,count:0},browser:{seq:-1,ms:-1,count:0}};

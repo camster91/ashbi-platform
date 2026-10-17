@@ -186,3 +186,10 @@ test('unknown or mixed unsafe gaps and missing or rejected attempts still withho
  }
  assert.equal(broadEvidenceSafe({issue:659,gaps:[{code:'observer-drain-incomplete'}],attempts:[]}),false);
 });
+
+
+test('DEV_SOCKET is a closed metadata alias only; external boundary still quarantines despite benign observer limits',()=>{
+ const v=chronology();v.events.push({seq:2,clock:'node',ms:4,event:'BOUNDARY_BLOCK',kind:'asset',requestAlias:'DEV_SOCKET'});assert.deepEqual(sanitizeChronology(v,{project:'chromium',retry:0}),v);
+ const bad=structuredClone(v);bad.events.at(-1).requestAlias='ws://localhost:3000/socket.io/';assert.throws(()=>sanitizeChronology(bad,{project:'chromium',retry:0}),/chronology-event-field/);
+ run(undefined,f=>{const a=f.report.suites[0].specs[0].tests[0].results[0].attachments[0];v.boundary.externalBlockedCount=1;v.boundary.truncated=true;fs.writeFileSync(a.path,JSON.stringify(v));},m=>{assert.equal(m.attempts[0].coverage,'trace-rejected');assert.ok(m.gaps.some(g=>g.code==='trace-boundary'));assert.equal(broadEvidenceSafe(m),false);});
+});

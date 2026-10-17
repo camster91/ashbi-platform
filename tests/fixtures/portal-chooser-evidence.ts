@@ -31,6 +31,18 @@ export function classifyRequest(url: string, method: string, resourceType: strin
   return { allowed: Boolean(alias) && asset, kind: 'asset', requestAlias: alias ?? 'UNAPPROVED' } as const;
 }
 
+// Classification describes a socket we ALWAYS close; it never authorizes connection.
+export function classifyClosedSocket(value: string, origin: string) {
+  try {
+    const socket = new URL(value), base = new URL(origin);
+    if (!['ws:', 'wss:'].includes(socket.protocol) || socket.username || socket.password) return { kind: 'external', requestAlias: 'UNAPPROVED' } as const;
+    if (value === 'ws://localhost:3000/socket.io/?EIO=4&transport=websocket' || value === 'ws://localhost:3000/socket.io/?transport=websocket&EIO=4') return { kind: 'asset', requestAlias: 'DEV_SOCKET' } as const;
+    // Preserve the existing closed same-origin Vite/asset socket boundary.
+    if (socket.hostname === base.hostname && socket.port === base.port) return { kind: 'asset', requestAlias: 'VITE' } as const;
+  } catch { /* Invalid URLs are still closed and reported as external. */ }
+  return { kind: 'external', requestAlias: 'UNAPPROVED' } as const;
+}
+
 // Rebuild every event from closed scalar fields; never serialize page objects or raw errors.
 export function sanitizeBrowserEvent(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object') return null;
@@ -71,9 +83,9 @@ export async function startPortalChooserEvidence(page: Page, testInfo: TestInfo,
     const classified = classifyRequest(request.url(), request.method(), request.resourceType(), origin);
     return { requestAlias: classified.requestAlias, method: ['GET', 'POST', 'DELETE'].includes(request.method()) ? request.method() : 'OTHER', kind: classified.kind };
   };
-  const block = (kind: string) => {
+  const block = (kind: string, requestAlias?: 'DEV_SOCKET' | 'VITE' | 'UNAPPROVED') => {
     if (kind === 'external') externalBlockedCount++; else if (kind === 'api') unexpectedApiCount++;
-    emit('BOUNDARY_BLOCK', { kind: ['external', 'api'].includes(kind) ? kind : 'asset' });
+    emit('BOUNDARY_BLOCK', { kind: ['external', 'api'].includes(kind) ? kind : 'asset', ...(requestAlias ? { requestAlias } : {}) });
   };
   // Context fence also covers popups. No API may reach the network, even an approved URL.
   await page.context().route('**/*', async route => {
@@ -90,8 +102,8 @@ export async function startPortalChooserEvidence(page: Page, testInfo: TestInfo,
     await route.fallback();
   });
   await page.context().routeWebSocket(/.*/, socket => {
-    const socketUrl = new URL(socket.url());
-    block(socketUrl.hostname === url.hostname && socketUrl.port === url.port ? 'asset' : 'external');
+    const decision = classifyClosedSocket(socket.url(), origin);
+    block(decision.kind, decision.requestAlias);
     socket.close();
   });
   await page.addInitScript(() => {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { classifyRequest, sanitizeBrowserEvent, sanitizeFontChecks, startPortalChooserEvidence, PORTAL_CHOOSER_TITLE, TRACE_POLICY } from './portal-chooser-evidence.ts';
+import { classifyRequest, classifyClosedSocket, sanitizeBrowserEvent, sanitizeFontChecks, startPortalChooserEvidence, PORTAL_CHOOSER_TITLE, TRACE_POLICY } from './portal-chooser-evidence.ts';
 const origin = 'http://127.0.0.1:4188';
 
 test('only exact synthetic API methods and identities are admitted', () => {
@@ -86,4 +86,21 @@ test('font metadata has fixed known checks only and retains loading as a limitat
  assert.deepEqual(sanitizeFontChecks({status:'loading',registeredDmSans:true,dmSans400:true,dmSans500:false,dmSans600:true,family:'secret-sentinel'}),{status:'loading',registeredDmSans:true,dmSans400:true,dmSans500:false,dmSans600:true});
  assert.deepEqual(sanitizeFontChecks({status:42,registeredDmSans:'true',dmSans400:1,dmSans500:{},dmSans600:[]} ),{status:'unavailable',registeredDmSans:false,dmSans400:false,dmSans500:false,dmSans600:false});
  assert.deepEqual(sanitizeFontChecks(undefined),{status:'unavailable',registeredDmSans:false,dmSans400:false,dmSans500:false,dmSans600:false});
+});
+
+
+test('only the exact closed localhost development Socket.IO adapter receives DEV_SOCKET, with no extra query or credentials',()=>{
+ for(const value of ['ws://localhost:3000/socket.io/?EIO=4&transport=websocket','ws://localhost:3000/socket.io/?transport=websocket&EIO=4'])assert.deepEqual(classifyClosedSocket(value,origin),{kind:'asset',requestAlias:'DEV_SOCKET'});
+ for(const value of ['ws://localhost:3000/socket.io/?EIO=4&transport=websocket&token=private','ws://localhost:3000/socket.io/?EIO=4&transport=websocket&EIO=4','ws://localhost:3000/socket.io/?EIO=3&transport=websocket','ws://localhost:3000/socket.io/?EIO=4&transport=polling','wss://localhost:3000/socket.io/?EIO=4&transport=websocket','http://localhost:3000/socket.io/?EIO=4&transport=websocket','ws://localhost:3001/socket.io/?EIO=4&transport=websocket','ws://127.0.0.1:3000/socket.io/?EIO=4&transport=websocket','ws://external.invalid:3000/socket.io/?EIO=4&transport=websocket','ws://user:private@localhost:3000/socket.io/?EIO=4&transport=websocket','ws://localhost:3000/socket.io/?EIO=4&transport=websocket#private','not a URL'])assert.deepEqual(classifyClosedSocket(value,origin),{kind:'external',requestAlias:'UNAPPROVED'},value);
+ assert.deepEqual(classifyClosedSocket('ws://127.0.0.1:4188/?vite=asset',origin),{kind:'asset',requestAlias:'VITE'});
+});
+test('dev same-origin and external sockets ALL close without connecting; only external increments quarantine counter',async()=>{
+ const h=await harness();try{
+  const evidence=await startPortalChooserEvidence(h.page,h.info,origin);let closed=0;
+  for(const value of ['ws://localhost:3000/socket.io/?EIO=4&transport=websocket','ws://127.0.0.1:4188/','wss://external.invalid/socket'])await h.socketRoutes[0]({url:()=>value,close:()=>{closed++;},connectToServer:()=>{throw Error('Must never connect');}});
+  await evidence.finish('completed');const proof=JSON.parse(await readFile(h.attachments[0].path,'utf8'));
+  assert.equal(closed,3);assert.equal(proof.boundary.externalBlockedCount,1);assert.equal(proof.boundary.unexpectedApiCount,0);
+  assert.deepEqual(proof.events.filter(e=>e.event==='BOUNDARY_BLOCK').map(e=>({kind:e.kind,requestAlias:e.requestAlias})),[{kind:'asset',requestAlias:'DEV_SOCKET'},{kind:'asset',requestAlias:'VITE'},{kind:'external',requestAlias:'UNAPPROVED'}]);
+  assert.equal(JSON.stringify(proof).includes('external.invalid'),false);
+ }finally{await rm(h.directory,{recursive:true,force:true})}
 });
