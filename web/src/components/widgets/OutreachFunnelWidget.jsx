@@ -42,7 +42,7 @@ export default function OutreachFunnelWidget({ outreach = {}, coldEmail = {}, li
   return (
     <Card>
       <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-        <Funnel className="w-4 h-4 text-warning" />
+        <Filter className="w-4 h-4 text-warning" />
         <h2 className="font-semibold text-foreground">Outreach Pipeline</h2>
       </div>
       <div className="p-4">

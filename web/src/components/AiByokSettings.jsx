@@ -11,7 +11,7 @@ import ConfirmDialog from './ConfirmDialog';
 
 const QUERY_KEY = ['ai-connection'];
 
-const inputClass = 'w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20';
+const inputClass = 'w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-hidden focus:ring-2 focus:ring-primary/20';
 
 const STATUS_LABELS = { active: 'Active', disabled: 'Disabled', revoked: 'Revoked' };
 

@@ -7,7 +7,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  RefreshCw, Github, Server, Globe, CheckSquare,
+  RefreshCw, CodeXml as Github, Server, Globe, CheckSquare,
   AlertTriangle, CheckCircle, XCircle, Clock, ExternalLink,
   ChevronDown, ChevronUp,
   Activity, Zap, Database, Code2
@@ -40,7 +40,7 @@ function StatusDot({ health = 'unknown', size = 'sm', animate = false }) {
     <span
       role="img"
       aria-label={`${labels[health] || labels.unknown} status`}
-      className={`inline-block rounded-full flex-shrink-0 ${sizes[size] || sizes.sm} ${healthClasses[health] || healthClasses.unknown} ${animate && health === 'red' ? 'animate-pulse motion-reduce:animate-none' : ''}`}
+      className={`inline-block rounded-full shrink-0 ${sizes[size] || sizes.sm} ${healthClasses[health] || healthClasses.unknown} ${animate && health === 'red' ? 'animate-pulse motion-reduce:animate-none' : ''}`}
     />
   );
 }
@@ -117,7 +117,7 @@ function GithubPanel({ data, loading, onRefresh }) {
       loading={loading}
       collapsible
       actions={
-        <button type="button" onClick={onRefresh} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded hover:text-foreground text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Refresh GitHub panel" title="Refresh">
+        <button type="button" onClick={onRefresh} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded hover:text-foreground text-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" aria-label="Refresh GitHub panel" title="Refresh">
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       }
@@ -163,7 +163,7 @@ function VpsPanel({ data, loading, onRefresh }) {
       loading={loading}
       collapsible
       actions={
-        <button type="button" onClick={onRefresh} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded hover:text-foreground text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Refresh VPS panel">
+        <button type="button" onClick={onRefresh} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded hover:text-foreground text-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" aria-label="Refresh VPS panel">
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       }
@@ -228,13 +228,13 @@ function TasksPanel({ data, loading }) {
             type="button"
             aria-label={`Open task ${task.title}`}
             onClick={() => navigate(`/task/${task.id}`)}
-            className="flex min-h-11 w-full items-start justify-between text-left text-sm cursor-pointer hover:bg-muted/50 rounded p-1.5 -mx-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex min-h-11 w-full items-start justify-between text-left text-sm cursor-pointer hover:bg-muted/50 rounded p-1.5 -mx-1.5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <div>
               <p className="font-medium leading-tight">{task.title}</p>
               {task.project && <p className="text-xs text-muted-foreground">{task.project}</p>}
             </div>
-            <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+            <div className="flex items-center gap-1 ml-2 shrink-0">
               <CommandBadge variant={priorityColor[task.priority] || 'default'}>{task.priority}</CommandBadge>
             </div>
           </button>
@@ -309,7 +309,7 @@ export default function CommandCenter() {
             aria-label="Refresh all command center panels"
             onClick={fetchAll}
             disabled={loading}
-            className="flex min-h-11 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex min-h-11 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh All
@@ -432,7 +432,7 @@ function ActionButton({ icon: Icon, label, description, onClick }) {
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="w-full min-h-11 flex items-center gap-3 text-left p-2.5 rounded-lg hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="w-full min-h-11 flex items-center gap-3 text-left p-2.5 rounded-lg hover:bg-muted/50 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="p-1.5 rounded-md bg-primary/10">
         <Icon className="w-4 h-4 text-primary" />

@@ -156,7 +156,7 @@ export default function GlobalSearch() {
             value={query}
             onChange={handleSearch}
             placeholder="Search for projects, tasks, clients, messages..."
-            className="w-full pl-10 pr-4 py-3 border-2 border-border rounded-lg focus:border-primary outline-none text-lg bg-background text-foreground placeholder:text-muted-foreground"
+            className="w-full pl-10 pr-4 py-3 border-2 border-border rounded-lg focus:border-primary outline-hidden text-lg bg-background text-foreground placeholder:text-muted-foreground"
             autoFocus
           />
         </div>
@@ -167,7 +167,7 @@ export default function GlobalSearch() {
               type="button"
               onClick={() => handleFilter(f.value)}
               aria-pressed={filter === f.value}
-              className={`min-h-11 px-3 py-1.5 rounded-lg text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              className={`min-h-11 px-3 py-1.5 rounded-lg text-sm font-medium transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${
                 filter === f.value
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -212,14 +212,14 @@ export default function GlobalSearch() {
                 type="button"
                 onClick={() => goToResult(result)}
                 aria-label={`Open ${result.type} ${result.name || result.title}`}
-                className="w-full min-h-11 bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md transition text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-full min-h-11 bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md transition text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="flex items-start gap-3">
-                  <Icon className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <Icon className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-semibold text-foreground truncate">{result.name || result.title}</h3>
-                      <span className={`flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[result.type] || TYPE_COLORS.message}`}>
+                      <span className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[result.type] || TYPE_COLORS.message}`}>
                         {result.type}
                       </span>
                     </div>
@@ -236,7 +236,7 @@ export default function GlobalSearch() {
                     </div>
                   </div>
                   {result.progress != null && (
-                    <span className="flex-shrink-0 text-xs text-muted-foreground">{result.progress}%</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{result.progress}%</span>
                   )}
                 </div>
               </button>

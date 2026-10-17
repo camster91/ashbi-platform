@@ -75,13 +75,13 @@ function QuickNoteInput({ clientId, onSaved }) {
         value={note}
         onChange={(e) => setNote(e.target.value)}
         placeholder="Quick note..."
-        className="flex-1 px-2 py-1 text-xs bg-muted rounded border-0 focus:outline-none focus:ring-1 focus:ring-primary/30"
+        className="flex-1 px-2 py-1 text-xs bg-muted rounded border-0 focus:outline-hidden focus:ring-1 focus:ring-primary/30"
       />
       <button
         type="submit"
         disabled={saving || !note.trim()}
         aria-label="Save quick client note"
-        className="min-h-11 min-w-11 inline-flex items-center justify-center px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-h-11 min-w-11 inline-flex items-center justify-center px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       >
         {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
       </button>
@@ -198,7 +198,7 @@ export default function Clients() {
             aria-label="Toggle client health"
             onClick={() => { setShowHealth(!showHealth); if (!showHealth) refetchHealth(); }}
             className={cn(
-              'min-h-11 inline-flex items-center px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'min-h-11 inline-flex items-center px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
               showHealth
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -226,7 +226,7 @@ export default function Clients() {
               <Sparkles className="w-5 h-5 text-primary" />
               <h2 className="text-lg font-semibold">Quick Client Onboarding</h2>
             </div>
-            <button type="button" aria-label="Close client onboarding" onClick={() => { setShowOnboarding(false); setOnboardResult(null); }} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" aria-label="Close client onboarding" onClick={() => { setShowOnboarding(false); setOnboardResult(null); }} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
               <X className="w-5 h-5 text-muted-foreground hover:text-foreground" aria-hidden="true" />
             </button>
           </div>
@@ -355,7 +355,7 @@ export default function Clients() {
                     type="button"
                     aria-label={`Open client health for ${client.name}`}
                     onClick={() => navigate(`/client/${client.id}`)}
-                    className={cn('w-full min-h-11 p-3 rounded-lg border text-left transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', classes.border)}
+                    className={cn('w-full min-h-11 p-3 rounded-lg border text-left transition-all hover:shadow-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring', classes.border)}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium text-sm text-foreground truncate">{client.name}</span>
@@ -450,10 +450,11 @@ export default function Clients() {
                       <td className="px-4 py-3">
                         <button
                           type="button"
-                          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} client ${client.name}`}
+                          aria-expanded={isExpanded}
                           onClick={() => setExpandedClient(isExpanded ? null : client.id)}
-                          className="min-h-11 flex items-center gap-3 text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                          className="min-h-11 flex items-center gap-3 text-left w-full focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded"
                         >
+                          <span className="sr-only">{isExpanded ? 'Collapse client ' : 'Expand client '}</span>
                           <div className={cn(
                             'w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold shrink-0',
                             isAtRisk
@@ -527,7 +528,7 @@ export default function Clients() {
                         <Link
                           to={`/client/${client.id}`}
                           aria-label={`Open ${client.name}`}
-                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded text-muted-foreground hover:text-primary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           <ChevronRight className="w-5 h-5" aria-hidden="true" />
                         </Link>
@@ -542,7 +543,7 @@ export default function Clients() {
                             {/* Existing notes */}
                             {client.notes && (
                               <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                                <StickyNote className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                                <StickyNote className="w-4 h-4 mt-0.5 shrink-0" />
                                 <p className="italic">{client.notes}</p>
                               </div>
                             )}
@@ -550,7 +551,7 @@ export default function Clients() {
                             {/* Project list */}
                             {client.projects && client.projects.length > 0 && (
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <FolderOpen className="w-4 h-4 flex-shrink-0" />
+                                <FolderOpen className="w-4 h-4 shrink-0" />
                                 <div className="flex flex-wrap gap-1.5">
                                   {client.projects.map((p) => (
                                     <Link

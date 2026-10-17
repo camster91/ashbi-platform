@@ -72,7 +72,7 @@ export default function MfaResetAction({ member, onReset }) {
         onClick={() => setOpen(true)}
         aria-label={`Reset two-factor authentication for ${member.name}`}
         title="Reset two-factor authentication"
-        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ShieldOff className="w-4 h-4" aria-hidden="true" />
       </button>
@@ -117,7 +117,7 @@ export default function MfaResetAction({ member, onReset }) {
               <button
                 type="button"
                 onClick={() => { setUseRecovery((v) => !v); setCode(''); setError(''); }}
-                className="mt-1 min-h-11 text-sm text-primary hover:text-primary/80 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="mt-1 min-h-11 text-sm text-primary hover:text-primary/80 rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {useRecovery ? 'Use your authenticator app instead' : 'Use a recovery code instead'}
               </button>

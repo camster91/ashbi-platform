@@ -9,7 +9,7 @@ describe('authentication recovery accessibility contract', () => {
   it('keeps password visibility controls touch-sized and visibly focused', () => {
     expect(login).toContain('aria-label={showPassword ?');
     expect(login).toContain('min-h-11 min-w-11');
-    expect(login).toContain('focus-visible:outline-none');
+    expect(login).toContain('focus-visible:outline-hidden');
   });
 
   it('keeps recovery navigation actions explicit and visibly focused', () => {

@@ -182,7 +182,7 @@ export default function Retainers() {
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Add Retainer Plan</h2>
-            <button type="button" onClick={() => setShowCreate(false)} aria-label="Close retainer form" className="min-h-11 min-w-11 inline-flex items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><X className="w-5 h-5 text-muted-foreground" aria-hidden="true" /></button>
+            <button type="button" onClick={() => setShowCreate(false)} aria-label="Close retainer form" className="min-h-11 min-w-11 inline-flex items-center justify-center rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"><X className="w-5 h-5 text-muted-foreground" aria-hidden="true" /></button>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(buildRetainerCreatePayload(createForm)); }} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -350,12 +350,12 @@ export default function Retainers() {
                           generateInvoiceMutation.reset();
                           setInvoiceToGenerate({ plan, currency });
                         }}
-                        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1 text-muted-foreground hover:text-primary rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1 text-muted-foreground hover:text-primary rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                         title="Generate monthly invoice"
                       >
                         <Receipt className="w-4 h-4" />
                       </button>
-                      {canEdit && <button type="button" onClick={() => handleEdit(plan)} aria-label={`Edit retainer ${plan.name || plan.client?.name || ''}`} className="min-h-11 min-w-11 inline-flex items-center justify-center p-1 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      {canEdit && <button type="button" onClick={() => handleEdit(plan)} aria-label={`Edit retainer ${plan.name || plan.client?.name || ''}`} className="min-h-11 min-w-11 inline-flex items-center justify-center p-1 text-muted-foreground hover:text-foreground rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                         <Edit2 className="w-4 h-4" />
                       </button>}
                     </div>

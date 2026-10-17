@@ -94,7 +94,7 @@ function Toast({ id, type = 'info', title, message, action, duration, timer, now
         STYLES[type] || STYLES.info
       )}
     >
-      <Icon className={cn('w-5 h-5 mt-0.5 flex-shrink-0', ICON_STYLES[type])} aria-hidden="true" />
+      <Icon className={cn('w-5 h-5 mt-0.5 shrink-0', ICON_STYLES[type])} aria-hidden="true" />
       <div className="flex-1 min-w-0">
         {title && <p className="font-semibold text-sm">{title}</p>}
         {message && <p className={cn('text-sm', title ? 'mt-0.5' : '')}>{message}</p>}
@@ -105,7 +105,7 @@ function Toast({ id, type = 'info', title, message, action, duration, timer, now
               type="button"
               aria-label={isPaused ? 'Resume notification timer' : 'Pause notification timer'}
               onClick={() => (isPaused ? onResume(id) : onPause(id))}
-              className="min-h-11 min-w-11 rounded p-1 inline-flex items-center justify-center hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current dark:hover:bg-white/10"
+              className="min-h-11 min-w-11 rounded p-1 inline-flex items-center justify-center hover:bg-black/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-current dark:hover:bg-white/10"
             >
               {isPaused ? <Play className="h-3.5 w-3.5" aria-hidden="true" /> : <Pause className="h-3.5 w-3.5" aria-hidden="true" />}
             </button>}
@@ -116,7 +116,7 @@ function Toast({ id, type = 'info', title, message, action, duration, timer, now
             type="button"
             onClick={runAction}
             disabled={isActionPending || actionExpired}
-            className="mt-2 min-h-11 rounded-full border border-current px-3 py-1 text-left text-xs font-semibold whitespace-normal hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 dark:hover:bg-white/10"
+            className="mt-2 min-h-11 rounded-full border border-current px-3 py-1 text-left text-xs font-semibold whitespace-normal hover:bg-black/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 dark:hover:bg-white/10"
           >
             {action.label}
           </button>
@@ -126,7 +126,7 @@ function Toast({ id, type = 'info', title, message, action, duration, timer, now
         type="button"
         onClick={() => onDismiss(id)}
         aria-label="Dismiss notification"
-        className="flex-shrink-0 min-h-11 min-w-11 inline-flex items-center justify-center rounded opacity-60 hover:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+        className="shrink-0 min-h-11 min-w-11 inline-flex items-center justify-center rounded opacity-60 hover:opacity-100 transition-opacity focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-current"
       >
         <X className="w-4 h-4" aria-hidden="true" />
       </button>

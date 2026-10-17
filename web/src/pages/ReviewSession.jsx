@@ -12,8 +12,8 @@ import { LoadingState } from '../components/ui';
 // Staff review page (#417, docs/media-review.md): the media with its
 // annotations and decisions, and the client share links for this session.
 
-const control = 'min-h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
-const buttonBase = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
+const control = 'min-h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring';
+const buttonBase = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
 const LINK_STATE_LABELS = { active: 'Active', expired: 'Expired', revoked: 'Revoked' };
 
 function ShareLinks({ sessionId, shareLinks, canCreate, onChanged }) {
@@ -265,7 +265,7 @@ export default function ReviewSession() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <Link to={`/project/${session.projectId}`} className="inline-flex min-h-11 items-center gap-2 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <Link to={`/project/${session.projectId}`} className="inline-flex min-h-11 items-center gap-2 text-sm text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />Back to project
         </Link>
         <div className="flex flex-wrap items-center gap-3">
@@ -276,7 +276,7 @@ export default function ReviewSession() {
           <a
             href={api.reviewEvidenceExportUrl(session.id)}
             download
-            className="ml-auto inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="ml-auto inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             aria-describedby={`${session.id}-export-help`}
           >
             <Download className="h-4 w-4" aria-hidden="true" />Export evidence
@@ -285,8 +285,8 @@ export default function ReviewSession() {
         </div>
         <VersionSwitcher versions={data.versions} currentId={session.id} onSelect={(versionId) => navigate(`/review/${versionId}`)} />
         <nav aria-label="Versions" className="flex flex-wrap gap-3 text-sm">
-          {session.previousSessionId && <Link to={`/review/${session.previousSessionId}`} className="min-h-11 inline-flex items-center text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Previous version</Link>}
-          {session.nextSessionId && <Link to={`/review/${session.nextSessionId}`} className="min-h-11 inline-flex items-center text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Newer version</Link>}
+          {session.previousSessionId && <Link to={`/review/${session.previousSessionId}`} className="min-h-11 inline-flex items-center text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">Previous version</Link>}
+          {session.nextSessionId && <Link to={`/review/${session.nextSessionId}`} className="min-h-11 inline-flex items-center text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">Newer version</Link>}
         </nav>
       </div>
 

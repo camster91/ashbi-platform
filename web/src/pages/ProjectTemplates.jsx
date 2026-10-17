@@ -244,7 +244,7 @@ export default function ProjectTemplates() {
                 onChange={e => setNewProjectName(e.target.value)}
                 disabled={createFromTemplate.isPending}
                 placeholder="e.g., Acme Corp Website Redesign"
-                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary outline-none"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary outline-hidden"
                 autoFocus
               />
             </div>
@@ -261,7 +261,7 @@ export default function ProjectTemplates() {
                   value={newProjectClientId}
                   onChange={e => setNewProjectClientId(e.target.value)}
                   disabled={createFromTemplate.isPending}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary outline-none"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary outline-hidden"
                 >
                   <option value="">Select a client...</option>
                   {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}

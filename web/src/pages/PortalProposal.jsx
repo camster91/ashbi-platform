@@ -100,7 +100,7 @@ export default function PortalProposal() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-card border-b border-border/40 shadow-sm">
+      <header className="bg-card border-b border-border/40 shadow-xs">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
           <PortalBrand brand={proposal?.brand} />
           <h1 className="text-2xl font-bold text-foreground mt-3">Proposal</h1>
@@ -223,7 +223,7 @@ export default function PortalProposal() {
                   aria-invalid={!!declineError}
                   aria-describedby={declineError ? 'decline-reason-error' : undefined}
                   placeholder="Your feedback helps us improve our proposals..."
-                  className="w-full px-4 py-3 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-warning/20 focus:border-warning resize-none"
+                  className="w-full px-4 py-3 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-warning/20 focus:border-warning resize-none"
                   rows={4}
                 />
                 {declineError && <p id="decline-reason-error" role="alert" className="text-sm text-destructive">{declineError}</p>}
@@ -233,7 +233,7 @@ export default function PortalProposal() {
                     onClick={handleDecline}
                     disabled={respondMutation.isPending}
                     aria-busy={respondMutation.isPending}
-                    className="min-h-11 px-5 py-2.5 bg-destructive text-destructive-foreground text-sm font-medium rounded-lg hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive focus-visible:ring-offset-2"
+                    className="min-h-11 px-5 py-2.5 bg-destructive text-destructive-foreground text-sm font-medium rounded-lg hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-destructive focus-visible:ring-offset-2"
                   >
                     {respondMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                     Submit Decline
@@ -241,7 +241,7 @@ export default function PortalProposal() {
                   <button
                     type="button"
                     onClick={() => { setAction(null); setDeclineReason(''); setDeclineError(''); }}
-                    className="min-h-11 px-5 py-2.5 text-muted-foreground text-sm font-medium rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="min-h-11 px-5 py-2.5 text-muted-foreground text-sm font-medium rounded-lg hover:bg-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     Cancel
                   </button>
@@ -257,7 +257,7 @@ export default function PortalProposal() {
                   onClick={handleApprove}
                   disabled={respondMutation.isPending}
                   aria-busy={respondMutation.isPending}
-                  className="min-h-11 w-full sm:w-auto px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="min-h-11 w-full sm:w-auto px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   {respondMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                   <CheckCircle className="w-4 h-4" />
@@ -267,7 +267,7 @@ export default function PortalProposal() {
                   type="button"
                   onClick={() => setAction('decline')}
                   disabled={respondMutation.isPending}
-                  className="min-h-11 w-full sm:w-auto px-6 py-3 border border-border/40 text-muted-foreground text-sm font-semibold rounded-lg hover:bg-muted/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="min-h-11 w-full sm:w-auto px-6 py-3 border border-border/40 text-muted-foreground text-sm font-semibold rounded-lg hover:bg-muted/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   <XCircle className="w-4 h-4" />
                   Decline

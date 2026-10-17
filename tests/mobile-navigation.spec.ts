@@ -33,7 +33,7 @@ test('embedded AI is absent by default and its opted-in drawer stays on screen',
   await page.goto('/dashboard');
   const button = page.getByRole('button', { name: 'Open AI Chat' });
   if (!embeddedAiEnabled) {
-    await expect(page.getByRole('button', { name: 'Open quick create menu' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Create(?: K)?$/ })).toBeVisible();
     await expect(button).toHaveCount(0);
     await expect(page.getByRole('dialog', { name: 'Ask Ash' })).toHaveCount(0);
     return;

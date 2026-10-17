@@ -12,7 +12,7 @@
 export default function PortalLineItems({ items, formatAmount, label }) {
   const rows = Array.isArray(items) ? items : [];
   return (
-    <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" tabIndex={0} role="region" aria-label={label}>
+    <div className="overflow-x-auto focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" tabIndex={0} role="region" aria-label={label}>
       <table className="w-full">
         <thead>
           <tr className="bg-muted/50 text-left">

@@ -13,6 +13,19 @@ function setup(component, url) {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[url]}>{component}</MemoryRouter></QueryClientProvider>);
 }
 beforeEach(() => vi.clearAllMocks());
+it('includes the visible project, client and document count in the expansion name', async () => {
+  api.getAllNotes.mockResolvedValue({ notes: [{ id: 'brief', title: 'Delivery brief', type: 'DOC', updatedAt: '2026-10-13', project: { id: 'p', name: 'Spring refresh', client: { name: 'Northwind' } } }], pagination: { page: 1, pages: 1 } });
+  setup(<Docs />, '/docs');
+  const toggle = (await screen.findByText('Spring refresh')).closest('button');
+  expect(toggle).toHaveAccessibleName('Toggle project Spring refresh — Northwind 1');
+  expect(toggle).toHaveTextContent('Spring refresh');
+  expect(toggle).toHaveTextContent('Northwind');
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByText('Delivery brief')).toBeInTheDocument();
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByText('Delivery brief')).not.toBeInTheDocument();
+});
 it('loads later documents and resets pagination when switching portfolio', async () => {
   api.getAllNotes.mockImplementation(async ({ page, portfolio }) => ({
     notes: [{ id: `${portfolio}-${page}`, title: `${portfolio} brief ${page}`, type: 'DOC', updatedAt: '2026-10-13', project: { id: 'p', name: 'Project' } }],

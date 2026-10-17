@@ -22,6 +22,18 @@ test('field schemas reject ambiguous types, choices, duplicate keys and unsafe p
   }
   assert.equal(taskFieldValuesSchema.safeParse({ revision: 0, definitionRevision: 0, values: JSON.parse('{"__proto__": true}') }).success, false);
 });
+
+test('raw task field record keys are rejected before Zod can strip them', () => {
+  for (const key of ['__proto__', 'prototype', 'constructor']) {
+    const values = JSON.parse(`{"brief":"Keep existing data","${key}":"unsafe"}`);
+    const parsed = taskFieldValuesSchema.safeParse({ revision: 2, definitionRevision: 1, values });
+    assert.equal(parsed.success, false, key);
+    assert.ok(parsed.error.issues.some(issue => issue.message === 'Unsafe field property name'), key);
+  }
+  assert.deepEqual(taskFieldValuesSchema.parse({ revision: 2, definitionRevision: 1, values: { brief: '', active: false, quantity: 0 } }).values,
+    { brief: '', active: false, quantity: 0 });
+});
+
 test('strict values reject impossible dates, executable URLs, coercions and unknown choices', () => {
   for (const [type, good, bad] of [['TEXT', 'Brief', 1], ['NUMBER', 0, '1'], ['BOOLEAN', false, 'false'], ['DATE', '2028-02-29', '2027-02-29'], ['URL', 'https://example.com', 'javascript:alert(1)'], ['SELECT', 'A', 'B'], ['MULTI_SELECT', ['A'], ['A', 'A']], ['RELATION', 'c1', {}]]) {
     const field = { name: 'Value', type, options: ['A'] };

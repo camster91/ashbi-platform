@@ -81,13 +81,13 @@ export default function OrganizationMfaPolicy() {
           aria-busy={change.isPending || undefined}
           disabled={change.isPending}
           onClick={onToggle}
-          className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
         >
           <span
             aria-hidden="true"
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors motion-reduce:transition-none ${required ? 'bg-primary' : 'bg-border'}`}
           >
-            <span className={`inline-block h-5 w-5 rounded-full bg-background shadow transition-transform motion-reduce:transition-none ${required ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            <span className={`inline-block h-5 w-5 rounded-full bg-background shadow-sm transition-transform motion-reduce:transition-none ${required ? 'translate-x-5' : 'translate-x-0.5'}`} />
           </span>
         </button>
       </div>

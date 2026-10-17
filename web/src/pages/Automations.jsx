@@ -120,9 +120,9 @@ export default function Automations() {
             { icon: AlertTriangle, color: 'text-destructive', trigger: 'Invoice 7+ Days Overdue', action: 'Send escalation email + flag client AT_RISK' },
           ].map(({ icon: Icon, color, trigger, action }) => (
             <div key={trigger} className="flex items-center gap-3 text-sm">
-              <Icon className={`w-4 h-4 ${color} flex-shrink-0`} />
+              <Icon className={`w-4 h-4 ${color} shrink-0`} />
               <span className="text-muted-foreground">{trigger}</span>
-              <ArrowRight className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
+              <ArrowRight className="w-3 h-3 text-muted-foreground/50 shrink-0" />
               <span className="text-foreground">{action}</span>
             </div>
           ))}
@@ -187,7 +187,7 @@ export default function Automations() {
                         )}
                       </p>
                     </div>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
                       {formatTime(event.createdAt)}
                     </span>
                   </div>
@@ -204,7 +204,7 @@ export default function Automations() {
               aria-label="Previous automation page"
               onClick={() => setPage(p => Math.max(0, p - 1))}
               disabled={page === 0}
-              className="min-h-11 min-w-11 px-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 min-w-11 px-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             >
               Previous
             </button>
@@ -214,7 +214,7 @@ export default function Automations() {
               aria-label="Next automation page"
               onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
-              className="min-h-11 min-w-11 px-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 min-w-11 px-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             >
               Next
             </button>

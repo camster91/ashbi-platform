@@ -270,7 +270,7 @@ export default function LiveTimer({ socket }) {
         className={cn(
           // 44px minimum tap target: the header timer is used one-handed on phones.
           'inline-flex min-h-11 min-w-11 items-center justify-center gap-1 px-2 text-xs font-medium rounded-lg transition-all',
-          'hover:shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'hover:shadow-xs active:scale-95 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
           timerState.isRunning
             ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
             : 'bg-success/10 text-success hover:bg-success/20',
@@ -311,7 +311,7 @@ export default function LiveTimer({ socket }) {
               setProjectId(e.target.value);
               setPickerError('');
             }}
-            className="min-h-11 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-h-11 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="">{projectsLoading ? 'Loading projects…' : 'Select a project'}</option>
             {selectableProjects.map((p) => (
@@ -328,7 +328,7 @@ export default function LiveTimer({ socket }) {
             type="button"
             onClick={handleStart}
             disabled={isLoading}
-            className="flex min-h-11 w-full items-center justify-center gap-1 rounded-md bg-success/10 px-2 text-sm font-medium text-success hover:bg-success/20 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex min-h-11 w-full items-center justify-center gap-1 rounded-md bg-success/10 px-2 text-sm font-medium text-success hover:bg-success/20 disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Play className="w-3 h-3 fill-current" />
             Start timer

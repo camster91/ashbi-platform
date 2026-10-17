@@ -123,8 +123,8 @@ async function mediaFixture(page: Page, baseURL: string | undefined, browserName
 }
 
 async function recordAndStop(page: Page) {
-  await page.getByRole('button', { name: 'Record a project screen share', exact: true }).click();
-  await page.getByRole('button', { name: 'Stop and upload screen recording', exact: true }).click();
+  await page.getByRole('button', { name: 'Record screen for this project', exact: true }).click();
+  await page.getByRole('button', { name: 'Stop recording and upload screen share', exact: true }).click();
 }
 
 test('failed recording can download original bytes then retry the same File once and clear recovery', async ({ page, baseURL, browserName }, testInfo) => {
@@ -159,7 +159,7 @@ test('failed recording can download original bytes then retry the same File once
   await expect.poll(() => fixture.uploads.length).toBe(2);
   await expect(page.getByRole('button', { name: 'Retry upload', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Discard recording', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Record a project screen share', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Uploading… for this project', exact: true })).toBeDisabled();
   // Programmatic repeated DOM activation also cannot bypass the in-flight guard.
   await page.getByRole('button', { name: 'Retry upload', exact: true }).evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
   fixture.release();
@@ -168,7 +168,7 @@ test('failed recording can download original bytes then retry the same File once
   expect(await page.evaluate(() => { const probe = (window as any).__mediaRecoveryProbe; return probe.files.length === 2 && probe.files[0] === probe.files[1]; })).toBe(true);
   expect(await page.evaluate(url => (window as any).__mediaRecoveryProbe.revoked.includes(url), blobUrl)).toBe(true);
   await expect(page.getByRole('button', { name: 'Retry upload', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Record a project screen share', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Record screen for this project', exact: true })).toBeEnabled();
   await fixture.check();
 });
 
@@ -182,7 +182,7 @@ test('confirmed upload with failed list refresh has no retry or retained downloa
   await expect(page.getByRole('link', { name: 'Save recording', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Retry upload', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Discard recording', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Record a project screen share', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Record screen for this project', exact: true })).toBeEnabled();
   await fixture.check();
 });
 
@@ -197,8 +197,8 @@ test('explicit discard releases the failed take and permits another recording wi
   await expect(page.getByRole('button', { name: 'Retry upload', exact: true })).toHaveCount(0);
   expect(await page.evaluate(url => (window as any).__mediaRecoveryProbe.revoked.includes(url), blobUrl)).toBe(true);
   expect(fixture.uploads).toHaveLength(1);
-  await page.getByRole('button', { name: 'Record a project screen share', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Stop and upload screen recording', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Record screen for this project', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Stop recording and upload screen share', exact: true })).toBeVisible();
   expect(fixture.uploads).toHaveLength(1);
   expect(await page.evaluate(() => (window as any).__mediaRecoveryProbe.captures)).toBe(2);
   await fixture.check();

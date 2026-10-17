@@ -40,7 +40,7 @@ export default function MessageAttachments({ attachments, resolveUrl = (url) => 
                 type="button"
                 onClick={() => setOpen(file)}
                 aria-label={`Open image ${file.name}`}
-                className="block overflow-hidden rounded-md border border-border bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="block overflow-hidden rounded-md border border-border bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <img src={file.url} alt={file.name} loading="lazy" decoding="async" className="h-28 w-40 object-cover" />
               </button>
@@ -84,7 +84,7 @@ export default function MessageAttachments({ attachments, resolveUrl = (url) => 
             key={file.id}
             href={file.url}
             download={file.name}
-            className={cn('flex min-h-11 max-w-md items-center gap-3 rounded-md border px-3 py-2 text-sm hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', cardClass)}
+            className={cn('flex min-h-11 max-w-md items-center gap-3 rounded-md border px-3 py-2 text-sm hover:opacity-90 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring', cardClass)}
             aria-label={`Download ${file.name}${file.size ? `, ${formatBytes(file.size)}` : ''}`}
           >
             <FileText className="h-5 w-5 shrink-0" aria-hidden="true" />

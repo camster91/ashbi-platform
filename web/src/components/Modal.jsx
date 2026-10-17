@@ -152,7 +152,7 @@ export default function Modal({
                   type="button"
                   onClick={onClose}
                   aria-label="Close modal"
-                  className="-mr-2 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="-mr-2 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="w-5 h-5" />
                 </button>

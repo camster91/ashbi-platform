@@ -173,7 +173,7 @@ export default function AnnotationOverlay({ shapes, selectedId, onSelect, descri
             aria-label={`Comment ${annotation.number} by ${annotation.authorName}, ${describe(annotation)}`}
             aria-pressed={selected}
             className={cn(
-              'pointer-events-auto absolute flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-background text-xs font-bold shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'pointer-events-auto absolute flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-background text-xs font-bold shadow-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
               selected ? 'bg-foreground text-background ring-2 ring-foreground' : 'bg-primary text-primary-foreground',
             )}
             style={{ left: `${point[0] * 100}%`, top: `${point[1] * 100}%` }}

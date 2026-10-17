@@ -391,7 +391,7 @@ export default async function taskRoutes(fastify) {
     const parsedContent = parseTaskContent(task.content);
 
     // Parse properties
-    let parsedProperties = {};
+    let parsedProperties;
     try {
       parsedProperties = JSON.parse(task.properties || '{}');
     } catch (e) {

@@ -30,7 +30,6 @@ import {
   ChevronUp,
   Sparkles,
   Briefcase,
-  Linkedin,
   Key,
   Calculator,
   Calendar,
@@ -271,7 +270,7 @@ export default function Layout({ children }) {
           id={item.id}
           aria-current={isActive ? 'page' : undefined}
           className={cn(
-            'flex min-h-11 items-center text-sm font-medium rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
+            'flex min-h-11 items-center text-sm font-medium rounded-lg transition-all duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white',
             sidebarCollapsed ? 'px-2.5 py-2 justify-center' : 'px-3 py-1.5',
             'group relative',
             isActive
@@ -318,7 +317,7 @@ export default function Layout({ children }) {
           try { localStorage.setItem('sidebar-collapsed', 'false'); } catch { /* optional preference */ }
           setExpandedSections(prev => ({ ...prev, [key]: true }));
         }}
-        className={cn('w-full min-h-11 flex items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white', hasActiveChild ? 'text-brand-lime bg-brand-lime/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
+        className={cn('w-full min-h-11 flex items-center justify-center rounded-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white', hasActiveChild ? 'text-brand-lime bg-brand-lime/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
         <Icon className="w-5 h-5" aria-hidden="true" />
       </button>;
     }
@@ -331,7 +330,7 @@ export default function Layout({ children }) {
           aria-expanded={show}
           aria-controls={`nav-area-${key}`}
           aria-label={`${show ? 'Collapse' : 'Expand'} ${label}`}
-          className="w-full min-h-11 flex items-center px-3 py-1.5 text-xs font-semibold text-white/70 uppercase tracking-wider hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          className="w-full min-h-11 flex items-center px-3 py-1.5 text-xs font-semibold text-white/70 uppercase tracking-wider hover:text-white transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
         >
           <Icon className="w-4 h-4 mr-2" aria-hidden="true" />
           <ChevronRight className={cn('w-3 h-3 mr-1 transition-transform duration-150', show && 'rotate-90')} />
@@ -347,7 +346,7 @@ export default function Layout({ children }) {
       {/* Skip to content link for accessibility */}
       <a
         href="#main-content"
-        className="sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:top-4 focus-visible:left-4 focus-visible:z-[100] focus-visible:min-h-11 focus-visible:px-4 focus-visible:py-2 focus-visible:bg-primary focus-visible:text-primary-foreground focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        className="sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:top-4 focus-visible:left-4 focus-visible:z-[100] focus-visible:min-h-11 focus-visible:px-4 focus-visible:py-2 focus-visible:bg-primary focus-visible:text-primary-foreground focus-visible:rounded-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
       >
         Skip to main content
       </a>
@@ -355,7 +354,7 @@ export default function Layout({ children }) {
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-xs lg:hidden"
           onClick={() => setSidebarOpen(false)}
           aria-hidden="true"
         />
@@ -429,7 +428,7 @@ export default function Layout({ children }) {
                   type="button"
                   onClick={() => navigate('/projects?create=true')}
                   aria-label="Create new project"
-                  className="w-full min-h-11 flex items-center justify-center p-2 text-brand-lime hover:bg-brand-lime/10 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-lime"
+                  className="w-full min-h-11 flex items-center justify-center p-2 text-brand-lime hover:bg-brand-lime/10 rounded-lg transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-lime"
                   title="New Project"
                 >
                   <Plus className="w-4 h-4" />
@@ -457,10 +456,10 @@ export default function Layout({ children }) {
                     {user?.name?.charAt(0)?.toUpperCase()}
                   </span>
                 </div>
-                <Link to="/settings" className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" title="Settings" aria-label="Settings" onClick={() => setSidebarOpen(false)}>
+                <Link to="/settings" className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white" title="Settings" aria-label="Settings" onClick={() => setSidebarOpen(false)}>
                   <Settings className="w-3.5 h-3.5" />
                 </Link>
-                <button type="button" onClick={logout} className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-white/60 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" title="Logout" aria-label="Logout">
+                <button type="button" onClick={logout} className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-white/60 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white" title="Logout" aria-label="Logout">
                   <LogOut className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -482,7 +481,7 @@ export default function Layout({ children }) {
                 <div className="flex items-center gap-1">
                   <Link
                     to="/settings"
-                    className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
                     title="Settings"
                      aria-label="Settings"
                     onClick={() => setSidebarOpen(false)}
@@ -492,7 +491,7 @@ export default function Layout({ children }) {
                   <button
                     type="button"
                     onClick={logout}
-                    className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-white/60 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-white/60 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
                     title="Logout"
                     aria-label="Logout"
                   >
@@ -511,11 +510,11 @@ export default function Layout({ children }) {
         sidebarCollapsed ? 'lg:ml-[60px]' : 'lg:ml-72'
       )}>
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-card/80 backdrop-blur-md border-b border-border/60 lg:px-6 flex-shrink-0">
+        <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-card/80 backdrop-blur-md border-b border-border/60 lg:px-6 shrink-0">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className="-ml-2 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+            className="-ml-2 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
             aria-label="Open navigation menu"
           >
             <Menu className="w-6 h-6" />
@@ -545,7 +544,7 @@ export default function Layout({ children }) {
                 className={cn(
                   'w-full min-h-11 pl-10 pr-4 py-2 text-sm bg-muted border-0 rounded-xl',
                   'placeholder:text-muted-foreground',
-                  'focus:outline-none focus:ring-2 focus:ring-ring/40 focus:bg-card',
+                  'focus:outline-hidden focus:ring-2 focus:ring-ring/40 focus:bg-card',
                   'transition-all duration-200'
                 )}
               />
@@ -562,7 +561,7 @@ export default function Layout({ children }) {
               aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               // Below sm the theme switch lives in the bottom nav's More menu,
               // which leaves the header search room for its text.
-              className="hidden sm:inline-flex min-h-11 min-w-11 items-center justify-center p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="hidden sm:inline-flex min-h-11 min-w-11 items-center justify-center p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -589,7 +588,7 @@ export default function Layout({ children }) {
                 type="button"
                 aria-label="Dismiss install banner"
                 onClick={() => setInstallDismissed(true)}
-                className="min-h-11 px-2 text-muted-foreground hover:text-foreground text-xs rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="min-h-11 px-2 text-muted-foreground hover:text-foreground text-xs rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Dismiss
               </button>
@@ -616,7 +615,7 @@ export default function Layout({ children }) {
                 type="button"
                 onClick={snoozeNotificationPrompt}
                 aria-label="Dismiss notification invitation"
-                className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -657,7 +656,7 @@ export default function Layout({ children }) {
                   type="button"
                   onClick={() => setMoreMenuOpen(!moreMenuOpen)}
                   className={cn(
-                    'w-full min-h-11 flex flex-col items-center justify-center py-2.5 text-xs transition-all active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                    'w-full min-h-11 flex flex-col items-center justify-center py-2.5 text-xs transition-all active:scale-90 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
                     moreMenuOpen || settingsNav.some(isNavItemActive) ? 'text-primary' : 'text-muted-foreground'
                   )}
                   aria-expanded={moreMenuOpen}
@@ -673,7 +672,7 @@ export default function Layout({ children }) {
                   <>
                     <button
           type="button"
-          className="fixed inset-0 z-50 bg-black/5 backdrop-blur-sm cursor-default"
+          className="fixed inset-0 z-50 bg-black/5 backdrop-blur-xs cursor-default"
           onClick={() => setMoreMenuOpen(false)}
           aria-label="Close menu"
          />
@@ -693,7 +692,7 @@ export default function Layout({ children }) {
                             key={action.label}
                             to={action.href}
                             onClick={() => setMoreMenuOpen(false)}
-                            className="min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            className="min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                             role="menuitem"
                           >
                             <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
@@ -712,7 +711,7 @@ export default function Layout({ children }) {
                           <div className="py-2">
                             {section.items.map(item => (
                               <Link key={item.href} to={item.href} onClick={() => setMoreMenuOpen(false)}
-                                className="min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                className="min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                                 role="menuitem">
                                 <item.icon className="w-4 h-4" aria-hidden="true" />
                                 <span className="font-medium">{item.name}</span>
@@ -728,7 +727,7 @@ export default function Layout({ children }) {
                           type="button"
                           aria-label="Change theme"
                           onClick={() => { toggleTheme(); setMoreMenuOpen(false); }}
-                          className="w-full min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="w-full min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                           role="menuitem"
                         >
                           <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
@@ -740,7 +739,7 @@ export default function Layout({ children }) {
                            type="button"
                            aria-label="Log out"
                            onClick={() => { logout(); setMoreMenuOpen(false); }}
-                           className="w-full min-h-11 flex items-center gap-4 px-5 py-3 text-sm text-destructive hover:bg-destructive/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+                           className="w-full min-h-11 flex items-center gap-4 px-5 py-3 text-sm text-destructive hover:bg-destructive/10 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-destructive"
                           role="menuitem"
                         >
                           <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center">
@@ -763,7 +762,7 @@ export default function Layout({ children }) {
               onClick={() => setMoreMenuOpen(false)}
               className={cn(
                 'flex-1 min-h-11 flex flex-col items-center justify-center py-2.5 text-xs transition-all active:scale-90 relative',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
                 isActive ? 'text-primary' : 'text-muted-foreground'
               )}
               aria-current={isActive ? 'page' : undefined}
@@ -771,7 +770,7 @@ export default function Layout({ children }) {
               <div className="relative">
                 <item.icon className={cn('w-5 h-5 mb-0.5', isActive && 'scale-110')} aria-hidden="true" />
                 {item.badge > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 text-[9px] font-bold rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-sm" aria-label={`${item.badge} unread items`}>
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 text-[9px] font-bold rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-xs" aria-label={`${item.badge} unread items`}>
                     {item.badge > 9 ? '9+' : item.badge}
                   </span>
                 )}
@@ -871,17 +870,17 @@ function QuickCreateMenu({ navigate, isAdmin, onCreateTask }) {
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label="Open quick create menu"
         aria-describedby="quick-add-shortcut-hint"
         className={cn(
-          'flex min-h-11 items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-indigo',
+          'flex min-h-11 items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-indigo',
           open ? 'bg-brand-lime text-brand-indigo' : 'bg-brand-lime text-brand-indigo hover:bg-brand-sage'
         )}
         title="Create (press ⌘K or Ctrl+K for Quick add)"
       >
         <Plus className="w-4 h-4" aria-hidden="true" />
-        <span className="hidden sm:inline">Create</span>
-        <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border border-brand-indigo/30 px-1 text-[11px] font-sans font-medium" aria-hidden="true">
+        <span className="sr-only sm:not-sr-only">Create</span>
+        {' '}
+        <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border border-brand-indigo/30 px-1 text-[11px] font-sans font-medium">
           <Command className="w-3 h-3" />K
         </kbd>
       </button>
@@ -898,7 +897,7 @@ function QuickCreateMenu({ navigate, isAdmin, onCreateTask }) {
                type="button"
                aria-label={label}
                onClick={() => { if (onSelect) onSelect(); else navigate(href); setOpen(false); }}
-               className="w-full min-h-11 flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+               className="w-full min-h-11 flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               role="menuitem"
             >
               <Icon className="w-4 h-4 text-muted-foreground" />

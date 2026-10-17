@@ -166,13 +166,13 @@ export default function Trash() {
             placeholder="Search trash..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full pl-9 pr-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
         </div>
         <select aria-label="Filter by type"
           value={typeFilter}
           onChange={e => setTypeFilter(e.target.value)}
-          className="px-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="px-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/30"
         >
           <option value="ALL">All Types</option>
           {types.map(([type, label]) => (
@@ -214,7 +214,7 @@ export default function Trash() {
           {filtered.map(item => (
             <div
               key={`${item.type}-${item.id}`}
-              className="flex items-center gap-4 p-4 bg-card border border-border rounded-lg hover:shadow-sm transition-shadow"
+              className="flex items-center gap-4 p-4 bg-card border border-border rounded-lg hover:shadow-xs transition-shadow"
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">

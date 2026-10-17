@@ -137,7 +137,7 @@ export default function BrandSettings() {
                 <input id="brand-company-name"
                   value={form.companyName || ''}
                   onChange={e => update('companyName', e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                 />
               </div>
               <div>
@@ -147,7 +147,7 @@ export default function BrandSettings() {
                   <input id="brand-website"
                     value={form.website || ''}
                     onChange={e => update('website', e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                     placeholder="https://example.com"
                   />
                 </div>
@@ -160,7 +160,7 @@ export default function BrandSettings() {
                     type="email"
                     value={form.email || ''}
                     onChange={e => update('email', e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                     placeholder="hello@example.com"
                   />
                 </div>
@@ -172,7 +172,7 @@ export default function BrandSettings() {
                   <input id="brand-phone"
                     value={form.phone || ''}
                     onChange={e => update('phone', e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                     placeholder="+1 (416) 555-0123"
                   />
                 </div>
@@ -183,7 +183,7 @@ export default function BrandSettings() {
                   value={form.address || ''}
                   onChange={e => update('address', e.target.value)}
                   rows={2}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                   placeholder="123 Main St, Toronto, ON M5V 1A1"
                 />
               </div>
@@ -192,7 +192,7 @@ export default function BrandSettings() {
                 <input id="brand-hst-tax-id"
                   value={form.taxId || ''}
                   onChange={e => update('taxId', e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                   placeholder="123456789 RT0001"
                 />
               </div>
@@ -248,7 +248,7 @@ export default function BrandSettings() {
                   <input aria-label="Primary color hex value"
                     value={form.primaryColor || ''}
                     onChange={e => update('primaryColor', e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                     placeholder="#c9a84c"
                   />
                 </div>
@@ -265,7 +265,7 @@ export default function BrandSettings() {
                   <input aria-label="Accent color hex value"
                     value={form.accentColor || ''}
                     onChange={e => update('accentColor', e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                     placeholder="#1e293b"
                   />
                 </div>
@@ -287,7 +287,7 @@ export default function BrandSettings() {
                   value={form.invoiceFooter || ''}
                   onChange={e => update('invoiceFooter', e.target.value)}
                   rows={2}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                   placeholder="e.g. Thank you for your business! Payment due within 30 days."
                 />
               </div>
@@ -299,7 +299,7 @@ export default function BrandSettings() {
                   value={form.proposalFooter || ''}
                   onChange={e => update('proposalFooter', e.target.value)}
                   rows={2}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                   placeholder="e.g. This proposal is valid for 30 days from the date of issue."
                 />
               </div>
@@ -311,7 +311,7 @@ export default function BrandSettings() {
                   value={form.contractHeader || ''}
                   onChange={e => update('contractHeader', e.target.value)}
                   rows={2}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                   placeholder="e.g. This agreement is entered into by and between..."
                 />
               </div>

@@ -277,7 +277,7 @@ function EventModal({
             required
             value={form.title}
             onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
             placeholder="Event title"
           />
         </div>
@@ -324,7 +324,7 @@ function EventModal({
               type="datetime-local"
               value={form.startTime}
               onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
-              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
             />
           </div>
           <div>
@@ -335,7 +335,7 @@ function EventModal({
               onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
               disabled={form.allDay}
               className={cn(
-                'w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary',
+                'w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary',
                 form.allDay && 'opacity-50 cursor-not-allowed'
               )}
             />
@@ -351,7 +351,7 @@ function EventModal({
               type="text"
               value={form.location}
               onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
-              className="w-full rounded-lg border border-border bg-card pl-9 pr-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full rounded-lg border border-border bg-card pl-9 pr-3 py-2 text-foreground placeholder-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
               placeholder="Add location or meeting link"
             />
           </div>
@@ -364,7 +364,7 @@ function EventModal({
             <select
               value={form.projectId}
               onChange={e => setForm(f => ({ ...f, projectId: e.target.value }))}
-              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
             >
               <option value="">No project</option>
               {projects.map(p => (
@@ -408,7 +408,7 @@ function EventModal({
             rows={3}
             value={form.description}
             onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-primary resize-none"
             placeholder="Add details..."
           />
         </div>
@@ -616,7 +616,7 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
               {googleSyncMutation.isPending ? 'Syncing…' : googleEvent.googleEventId ? 'Update Google Calendar' : 'Sync to Google Calendar'}
             </Button>
             {googleEvent.googleEventUrl && (
-              <a href={googleEvent.googleEventUrl} target="_blank" rel="noopener noreferrer" className="min-h-11 inline-flex items-center text-sm text-primary underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <a href={googleEvent.googleEventUrl} target="_blank" rel="noopener noreferrer" className="min-h-11 inline-flex items-center text-sm text-primary underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                 Open in Google Calendar
               </a>
             )}
@@ -1059,7 +1059,7 @@ export default function Schedule() {
                             'hover:z-30 hover:shadow-lg hover:brightness-110',
                             'border-l-3',
                             style.bg, style.border,
-                            'focus:outline-none focus:ring-2 focus:ring-primary/50'
+                            'focus:outline-hidden focus:ring-2 focus:ring-primary/50'
                           )}
                           style={{
                             top: `${top}px`,

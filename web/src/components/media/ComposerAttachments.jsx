@@ -11,7 +11,7 @@ const loadCaptureDialog = () => import('./CaptureDialog');
 const CaptureDialog = lazy(loadCaptureDialog);
 const prefetchCaptureDialog = () => { loadCaptureDialog().catch(() => {}); };
 
-const toolButtonClass = 'inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+const toolButtonClass = 'inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
 /**
  * Paste (clipboard screenshots and files) and drag-and-drop for a composer.
@@ -172,16 +172,16 @@ export function AttachmentTray({ draft, capture, className }) {
                 </div>
                 <div className="flex shrink-0 flex-col gap-1">
                   {item.status === 'error' && (
-                    <button type="button" onClick={() => draft.retry(item.localId)} aria-label={`Retry uploading ${item.name}`} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <button type="button" onClick={() => draft.retry(item.localId)} aria-label={`Retry uploading ${item.name}`} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                       <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   )}
                   {item.kind === 'image' && item.mimeType !== 'image/gif' && capture && (
-                    <button type="button" onClick={() => capture.open('markup', { file: item.file, replaceLocalId: item.localId })} aria-label={`Mark up ${item.name}`} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <button type="button" onClick={() => capture.open('markup', { file: item.file, replaceLocalId: item.localId })} aria-label={`Mark up ${item.name}`} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                       <PenLine className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   )}
-                  <button type="button" onClick={() => draft.remove(item.localId)} aria-label={`Remove ${item.name}`} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <button type="button" onClick={() => draft.remove(item.localId)} aria-label={`Remove ${item.name}`} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 </div>

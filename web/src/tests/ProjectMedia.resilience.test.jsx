@@ -128,7 +128,7 @@ async function flush(ms = 0) {
 async function joinCall() {
   const view = render(<ProjectMedia projectId={PROJECT} />);
   await flush();
-  fireEvent.click(screen.getByRole('button', { name: 'Join project audio and video call' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Join call for project audio and video' }));
   await flush();
   expect(screen.getByText('Waiting for another project member to join…')).toBeInTheDocument();
   return view;
@@ -420,9 +420,9 @@ describe('screen recording duration limit', () => {
     const screenTrack = new FakeTrack('video', 'screen');
     mediaDevices.getDisplayMedia.mockResolvedValue(new FakeStream([screenTrack]));
     vi.spyOn(apiMock, 'getAttachments').mockResolvedValue([{ id: 'new-video', mimeType: 'video/webm', originalName: 'New recording.webm', filename: 'new.webm' }]);
-    fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record screen for this project' }));
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop and upload screen recording' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording and upload screen share' }));
     await flush();
     expect(screen.getByRole('link', { name: 'Watch' })).toHaveAttribute('href', '/api/attachments/uploads/new.webm');
     expect(screen.getByText('Call connected')).toBeInTheDocument();
@@ -451,7 +451,7 @@ describe('screen recording duration limit', () => {
 
     render(<ProjectMedia projectId={PROJECT} />);
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record screen for this project' }));
     await flush();
     expect(screen.getByRole('timer')).toHaveTextContent('15:00 left');
 
@@ -526,7 +526,7 @@ describe('negotiation edge cases', () => {
     FakePeer.holdNext.setRemoteDescription = pending.promise;
     const incoming = socket.trigger('call:signal', { projectId: PROJECT, callId: 'remote-call', from: REMOTE, signal: { type: 'offer', sdp: { type: 'offer', sdp: 'o' } } });
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: 'Leave project audio and video call' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Leave call for project audio and video' }));
     await act(async () => { pending.reject(new Error('InvalidStateError: closed')); await incoming; });
     await flush();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -550,13 +550,13 @@ describe('joining', () => {
     socket.joinResult = { joined: false };
     render(<ProjectMedia projectId={PROJECT} />);
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: 'Join project audio and video call' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Join call for project audio and video' }));
     await flush();
     expect(screen.getByRole('alert')).toHaveTextContent('You do not have access to calls in this project.');
     const stream = await mediaDevices.getUserMedia.mock.results[0].value;
     expect(stream.getTracks().every((track) => track.stop.mock.calls.length > 0)).toBe(true);
     expect(socket.emitted.some(({ event }) => event === 'call:presence')).toBe(false);
-    expect(screen.getByRole('button', { name: 'Join project audio and video call' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Join call for project audio and video' })).toBeEnabled();
   });
 
   it('ignores a double click while joining and never opens a second stream', async () => {
@@ -564,7 +564,7 @@ describe('joining', () => {
     mediaDevices.getUserMedia.mockImplementationOnce(() => pending.promise);
     render(<ProjectMedia projectId={PROJECT} />);
     await flush();
-    const join = screen.getByRole('button', { name: 'Join project audio and video call' });
+    const join = screen.getByRole('button', { name: 'Join call for project audio and video' });
     fireEvent.click(join);
     fireEvent.click(join);
     await flush();
@@ -582,7 +582,7 @@ describe('joining', () => {
     mediaDevices.getUserMedia.mockImplementationOnce(() => pending.promise);
     const view = render(<ProjectMedia projectId={PROJECT} />);
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: 'Join project audio and video call' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Join call for project audio and video' }));
     view.unmount();
     const tracks = [new FakeTrack('audio', 'usb-mic'), new FakeTrack('video', 'cam-1')];
     await act(async () => { pending.resolve(new FakeStream(tracks)); });
@@ -628,7 +628,7 @@ describe('overlapping device switches', () => {
     mediaDevices.getUserMedia.mockImplementationOnce(() => pending.promise);
     fireEvent.change(screen.getByLabelText('Microphone'), { target: { value: 'default' } });
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: 'Leave project audio and video call' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Leave call for project audio and video' }));
     const orphan = new FakeTrack('audio', 'default');
     await act(async () => { pending.resolve(new FakeStream([orphan])); });
     await flush();
@@ -663,9 +663,9 @@ function installRecording(bytes = 'known recording bytes', { holdStop = false } 
 }
 
 async function captureRecording() {
-  fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Record screen for this project' }));
   await flush();
-  fireEvent.click(screen.getByRole('button', { name: 'Stop and upload screen recording' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Stop recording and upload screen share' }));
   await flush();
 }
 
@@ -730,7 +730,7 @@ describe('stopped recording recovery', () => {
     expect(upload).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Discard recording' }));
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:recording');
-    expect(screen.getByRole('button', { name: 'Record a project screen share' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Record screen for this project' })).toBeEnabled();
   });
 
   it.each(['organization', 'actor'])('purges and revokes private recovery after a %s change, even when switching back', async (kind) => {
@@ -753,7 +753,7 @@ describe('stopped recording recovery', () => {
     expect(screen.queryByRole('link', { name: 'Save recording' })).not.toBeInTheDocument();
     expect(upload).toHaveBeenCalledTimes(1);
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: 'Record a project screen share' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Record screen for this project' })).toBeEnabled();
   });
 
   it.each(['organization', 'actor'])('ignores late old recording bytes after a %s transition and return', async (kind) => {
@@ -761,7 +761,7 @@ describe('stopped recording recovery', () => {
     const upload = vi.spyOn(apiMock, 'uploadAttachment');
     const view = render(<ProjectMedia projectId={PROJECT} />);
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record screen for this project' }));
     await flush();
     const original = auth.user;
     auth.user = { ...original, [kind === 'actor' ? 'id' : 'organizationId']: 'new-identity' };
@@ -784,18 +784,18 @@ describe('stopped recording recovery', () => {
     const upload = vi.spyOn(apiMock, 'uploadAttachment');
     const view = render(<ProjectMedia projectId={PROJECT} />);
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record screen for this project' }));
     await flush();
     auth.user = { ...auth.user, id: 'new-actor' };
     view.rerender(<ProjectMedia projectId={PROJECT} />);
     await flush();
     const currentTrack = new FakeTrack('video', 'current-actor-screen');
     mediaDevices.getDisplayMedia.mockResolvedValueOnce(new FakeStream([currentTrack]));
-    fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record screen for this project' }));
     await flush();
     await act(async () => oldTrack.completeStop());
     await flush();
-    expect(screen.getByRole('button', { name: 'Stop and upload screen recording' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stop recording and upload screen share' })).toBeInTheDocument();
     expect(screen.getByRole('timer')).toBeInTheDocument();
     expect(currentTrack.stop).not.toHaveBeenCalled();
     expect(URL.createObjectURL).not.toHaveBeenCalled();
@@ -807,7 +807,7 @@ describe('stopped recording recovery', () => {
     const upload = vi.spyOn(apiMock, 'uploadAttachment');
     const view = render(<ProjectMedia projectId={PROJECT} />);
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record screen for this project' }));
     await flush();
     view.rerender(<ProjectMedia projectId="p2" />);
     await flush();
@@ -824,7 +824,7 @@ describe('stopped recording recovery', () => {
     const upload = vi.spyOn(apiMock, 'uploadAttachment');
     const view = render(<ProjectMedia projectId={PROJECT} />);
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: 'Record a project screen share' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record screen for this project' }));
     if (cancel === 'switch') view.rerender(<ProjectMedia projectId="p2" />);
     else view.unmount();
     const track = new FakeTrack('video', 'late');
@@ -904,7 +904,7 @@ describe('call display stream ownership', () => {
     await flush();
     expect(first.stop).toHaveBeenCalled();
     expect(second.stop).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Leave project audio and video call' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Leave call for project audio and video' }));
     expect(second.stop).toHaveBeenCalled();
   });
 
@@ -932,7 +932,7 @@ describe('call display stream ownership', () => {
     const pending = deferred();
     mediaDevices.getDisplayMedia.mockReturnValueOnce(pending.promise);
     fireEvent.click(screen.getByRole('button', { name: 'Share screen in call' }));
-    if (cancel === 'leave') fireEvent.click(screen.getByRole('button', { name: 'Leave project audio and video call' }));
+    if (cancel === 'leave') fireEvent.click(screen.getByRole('button', { name: 'Leave call for project audio and video' }));
     else if (cancel === 'unmount') peer.view.unmount();
     else await receive('call:signal', { callId: 'remote-new', from: REMOTE, signal: { type: 'offer', sdp: { type: 'offer', sdp: 'new' } } });
     const track = new FakeTrack('video', 'late-screen');
@@ -982,7 +982,7 @@ describe('call display stream ownership', () => {
     mediaDevices.getDisplayMedia.mockResolvedValueOnce(new FakeStream([display]));
     fireEvent.click(screen.getByRole('button', { name: 'Share screen in call' }));
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: 'Leave project audio and video call' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Leave call for project audio and video' }));
     expect(display.stop).toHaveBeenCalled();
     await act(async () => replacement.reject(new Error('closed')));
     await flush();

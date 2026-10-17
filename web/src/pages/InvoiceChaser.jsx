@@ -209,7 +209,7 @@ export default function InvoiceChaser() {
       {/* Summary Banner */}
       {overdueInvoices.length > 0 && (
         <div className="rounded-xl border border-warning/30 bg-warning/5 p-4 flex items-center gap-4">
-          <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0" />
+          <AlertTriangle className="w-5 h-5 text-warning shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-medium text-warning">
               {overdueInvoices.length} overdue {overdueInvoices.length === 1 ? 'invoice' : 'invoices'} totaling{' '}
@@ -222,7 +222,7 @@ export default function InvoiceChaser() {
 
       {banner && (
         <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" aria-hidden="true" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-destructive">{banner.title}</p>
             <p className="text-sm text-muted-foreground mt-0.5">{banner.message}</p>
@@ -316,7 +316,7 @@ export default function InvoiceChaser() {
                   </div>
                   {failure && !isGenerating && (
                     <p id={`chase-failure-${invoice.id}`} role="status" className="mt-2 flex items-start gap-1.5 text-sm text-destructive">
-                      <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
                       {failure}
                     </p>
                   )}

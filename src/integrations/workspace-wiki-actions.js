@@ -16,7 +16,7 @@ export const WORKSPACE_WIKI_ACTIONS = [
   {
     name: 'set_workspace_page_access', description: 'Set shared-team or restricted page access. Owner and organization administrators retain access; ancestor restrictions still apply. Requires observed access revision and human review; can change descendant visibility.',
     class: 'execute', roles: ['ADMIN', 'TEAM'], requiresConfirmation: true, idempotency: 'required', timeoutMs: 10_000,
-    inputSchema: workspacePageAccessSchema.innerType().extend({ pageId }).strict().refine(input => input.mode === 'RESTRICTED' || input.members.length === 0),
+    inputSchema: workspacePageAccessSchema.safeExtend({ pageId }).strict().refine(input => input.mode === 'RESTRICTED' || input.members.length === 0),
     resolveScope: ({ prisma, user, input }) => wikiToolCall(async () => { const { pageId: id, ...data } = input; const scope = await validateWorkspacePageAccess(prisma, id, data, user); return { ids: { pageId: id, organizationId: user.organizationId }, records: scope }; }),
     preview: async ({ input, scope }) => ({ kind: 'set_workspace_page_access', pageId: input.pageId, revision: input.revision, before: scope.records.current, after: { mode: input.mode, members: scope.records.proposed }, ownerAndAdminsRetainAccess: true, parentRestrictionsApply: scope.records.current.parentRestrictionsApply, descendantVisibilityCanChange: true }),
     rollback: 'Failure restores grants, page settings, audit and receipt. Reverse a committed change through a fresh preview with the latest access revision.',
@@ -39,7 +39,7 @@ export const WORKSPACE_WIKI_ACTIONS = [
   {
     name: 'update_workspace_page', description: 'Edit, move, archive or restore one shared workspace knowledge page with its observed revision. Preview shows current and proposed content; requires human confirmation.',
     class: 'execute', roles: ['ADMIN', 'TEAM'], requiresConfirmation: true, idempotency: 'required', timeoutMs: 10_000,
-    inputSchema: workspacePageUpdateSchema.innerType().extend({ pageId }).strict().refine(input => ['title', 'content', 'parentId', 'archived'].some(key => input[key] !== undefined)),
+    inputSchema: workspacePageUpdateSchema.safeExtend({ pageId }).strict().refine(input => ['title', 'content', 'parentId', 'archived'].some(key => input[key] !== undefined)),
     resolveScope: ({ prisma, user, input }) => wikiToolCall(async () => {
       const { pageId: id, ...data } = input;
       await validateWorkspacePageChange(prisma, id, data, user);

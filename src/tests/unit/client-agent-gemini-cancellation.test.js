@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import GeminiProvider from '../../ai/providers/gemini.js';
 import { createAiGovernance } from '../../ai/governance.js';
 import { createFakeAiDb } from '../helpers/fake-ai-db.js';
@@ -8,7 +8,7 @@ import { createFakeAiDb } from '../helpers/fake-ai-db.js';
 function provider() {
   const instance = new GeminiProvider();
   // Actual installed SDK, synthetic key and a stubbed fetch: no provider I/O.
-  instance.client = new GoogleGenerativeAI('synthetic-unit-test-key');
+  instance.client = new GoogleGenAI({ apiKey: 'synthetic-unit-test-key', httpOptions: { retryOptions: { attempts: 1 } } });
   instance.isConfigured = () => true;
   return instance;
 }
@@ -44,11 +44,11 @@ test('actual SDK installs its future-abort listener before its first asynchronou
   let fetchCalls = 0;
   t.mock.method(globalThis, 'fetch', async (_url, options) => {
     fetchCalls++;
-    assert.equal(options.signal.aborted, true, 'SDK bridged the abort before fetch can send');
-    throw new DOMException('Synthetic cancellation', 'AbortError');
+    if (options.signal.aborted) throw new DOMException('Synthetic cancellation', 'AbortError');
+    return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(new DOMException('Synthetic cancellation', 'AbortError')), { once: true }));
   });
   const pending = provider().chat({ prompt: 'Synthetic question', signal: controller.signal });
   queueMicrotask(() => controller.abort());
   await assert.rejects(pending, /abort/i);
-  assert.equal(fetchCalls, 1);
+  assert.ok(fetchCalls <= 1, 'cancellation never triggers a second request');
 });

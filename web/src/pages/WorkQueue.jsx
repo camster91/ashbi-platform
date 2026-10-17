@@ -92,7 +92,7 @@ function QueueRow({ row }) {
     <li>
       <Link
         to={row.sourceUrl}
-        className="group flex min-h-11 items-start gap-3 rounded-xl px-4 py-3 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="group flex min-h-11 items-start gap-3 rounded-xl px-4 py-3 hover:bg-muted/60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`${TYPE_LABELS[row.type] || row.type}: ${row.title}. ${row.nextAction}`}
       >
         <div className="min-w-0 flex-1 space-y-1">
@@ -214,7 +214,7 @@ export default function WorkQueue() {
                 id={ownerId}
                 value={owner}
                 onChange={(event) => updateParams({ owner: event.target.value === 'me' ? 'me' : '' })}
-                className="min-h-11 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="min-h-11 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="everyone">Everyone</option>
                 <option value="me">Me</option>
@@ -227,7 +227,7 @@ export default function WorkQueue() {
               id={clientSelectId}
               value={clientId}
               onChange={(event) => updateParams({ clientId: event.target.value, projectId: '' })}
-              className="min-h-11 max-w-[16rem] rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 max-w-[16rem] rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">All clients</option>
               {selectedClientMissing && (
@@ -241,7 +241,7 @@ export default function WorkQueue() {
           <div className="flex min-w-0 flex-col gap-1">
             <label htmlFor={projectSelectId} className="text-xs font-medium text-muted-foreground">Project</label>
             <select id={projectSelectId} value={projectId} onChange={event => updateParams({ projectId: event.target.value })}
-              className="min-h-11 max-w-[16rem] rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              className="min-h-11 max-w-[16rem] rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
               <option value="">All projects</option>
               {selectedProjectMissing && <option value={projectId}>Selected project</option>}
               {projectOptions.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
@@ -254,7 +254,7 @@ export default function WorkQueue() {
             <label htmlFor={`${baseId}-${key}`} className="text-xs font-medium text-muted-foreground">{key === 'dueFrom' ? 'Due from (UTC)' : 'Due to (UTC)'}</label>
             <input id={`${baseId}-${key}`} type="date" value={key === 'dueFrom' ? dueFrom : dueTo} aria-invalid={Boolean(dateError)} aria-describedby={dateError ? dateErrorId : undefined}
               onChange={event => updateParams({ [key]: event.target.value })}
-              className="min-h-11 max-w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              className="min-h-11 max-w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" />
           </div>)}
           {(clientId || projectId || dueFrom || dueTo || owner === 'me') && <button type="button" onClick={() => updateParams({ owner: '', clientId: '', projectId: '', dueFrom: '', dueTo: '' })} className="min-h-11 text-sm text-primary underline">Clear filters</button>}
         </div>
@@ -278,7 +278,7 @@ export default function WorkQueue() {
               onClick={() => updateParams({ view: view.key })}
               onKeyDown={(event) => onTabKeyDown(event, index)}
               className={cn(
-                'flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
                 selected ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
               )}
             >
@@ -293,7 +293,7 @@ export default function WorkQueue() {
         })}
       </div>
 
-      <div id={panelId} role="tabpanel" aria-labelledby={`${baseId}-tab-${activeView}`} tabIndex={0} className="space-y-4 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <div id={panelId} role="tabpanel" aria-labelledby={`${baseId}-tab-${activeView}`} tabIndex={0} className="space-y-4 rounded-lg">
         {dateError ? <p id={dateErrorId} role="alert" className="text-sm text-destructive">{dateError}</p> : isLoading ? (
           <LoadingState label="Loading queue…" />
         ) : isError ? (

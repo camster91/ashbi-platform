@@ -133,7 +133,7 @@ function PageHeader({ task, onUpdate, isEditing }) {
             type="button"
             aria-label="Remove cover image"
             onClick={() => onUpdate({ coverImage: null })}
-            className="absolute top-4 right-4 min-h-11 min-w-11 p-2 bg-black/50 text-white rounded-lg hover:bg-black/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="absolute top-4 right-4 min-h-11 min-w-11 p-2 bg-black/50 text-white rounded-lg hover:bg-black/70 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -144,7 +144,7 @@ function PageHeader({ task, onUpdate, isEditing }) {
             type="button"
             aria-label="Add cover image"
             onClick={() => onUpdate({ coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?w=1200&h=300&fit=crop' })}
-            className="flex min-h-11 items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex min-h-11 items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ImageIcon className="w-4 h-4" />
             Add cover
@@ -158,7 +158,7 @@ function PageHeader({ task, onUpdate, isEditing }) {
           type="button"
           aria-label="Choose task icon"
           onClick={() => setShowIconPicker(!showIconPicker)}
-          className="min-h-11 min-w-11 rounded-lg text-5xl hover:scale-110 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-h-11 min-w-11 rounded-lg text-5xl hover:scale-110 transition-transform focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           {icon}
         </button>
@@ -172,7 +172,7 @@ function PageHeader({ task, onUpdate, isEditing }) {
                 aria-label={`Choose task icon ${emoji}`}
                 onClick={() => handleIconSelect(emoji)}
                 className={cn(
-                  'min-h-11 min-w-11 text-2xl p-2 rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  'min-h-11 min-w-11 text-2xl p-2 rounded-lg hover:bg-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
                   icon === emoji && 'bg-primary/10'
                 )}
               >
@@ -197,7 +197,7 @@ function PageHeader({ task, onUpdate, isEditing }) {
             handleTitleBlur();
           }
         }}
-        className="w-full resize-none overflow-hidden break-words [field-sizing:content] text-2xl sm:text-4xl font-heading font-bold bg-transparent border-0 outline-none rounded focus-visible:ring-2 focus-visible:ring-ring placeholder:text-muted-foreground"
+        className="w-full resize-none overflow-hidden break-words [field-sizing:content] text-2xl sm:text-4xl font-heading font-bold bg-transparent border-0 outline-hidden rounded focus-visible:ring-2 focus-visible:ring-ring placeholder:text-muted-foreground"
         placeholder="Untitled"
       />
     </div>
@@ -265,7 +265,7 @@ function PropertiesPanel({ task, onUpdate, isSaving, saveError }) {
           type="button"
           aria-label="Edit task properties"
           onClick={() => setIsEditing(!isEditing)}
-          className="min-h-11 px-2 text-xs text-primary hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-h-11 px-2 text-xs text-primary hover:underline rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           {isEditing ? 'Done' : 'Edit'}
         </button>
@@ -385,7 +385,7 @@ function SubpagesList({ subpages, taskId, onCreateSubpage }) {
             onClick={() => navigate(`/task/${subpage.id}`)}
             className={cn(
               'flex min-h-11 items-center gap-3 p-3 rounded-lg',
-              'bg-muted/50 hover:bg-muted transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+              'bg-muted/50 hover:bg-muted transition-colors text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring'
             )}
           >
             <span className="text-xl">{subpage.icon || '📄'}</span>
@@ -477,7 +477,7 @@ function CommentsSection({ comments, taskId }) {
       <div className="space-y-4">
         {comments?.map((comment) => (
           <div key={comment.id} className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary flex-shrink-0">
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary shrink-0">
               {comment.author.name.charAt(0)}
             </div>
             <div className="flex-1">
@@ -613,7 +613,7 @@ export default function TaskPage() {
         type="button"
         aria-label="Go back to the previous page"
         onClick={() => navigate(-1)}
-        className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ArrowLeft className="w-4 h-4" />
         Back

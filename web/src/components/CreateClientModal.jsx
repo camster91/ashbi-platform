@@ -61,7 +61,7 @@ export default function CreateClientModal({ isOpen, onClose }) {
               name="name"
               value={formData.name}
               onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
               placeholder="Acme Corporation"
               autoFocus
             />
@@ -76,7 +76,7 @@ export default function CreateClientModal({ isOpen, onClose }) {
               name="domain"
               value={formData.domain}
               onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
               placeholder="acmecorp.com"
             />
             <p className="mt-1 text-xs text-muted-foreground">
@@ -92,7 +92,7 @@ export default function CreateClientModal({ isOpen, onClose }) {
               name="status"
               value={formData.status}
               onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
             >
               <option value="ACTIVE">Active</option>
               <option value="PAUSED">Paused</option>

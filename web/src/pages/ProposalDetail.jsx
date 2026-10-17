@@ -195,7 +195,7 @@ export default function ProposalDetail() {
       )}
       {/* Header */}
       <div className="flex items-center gap-4">
-        <button type="button" aria-label="Back to proposals" onClick={() => navigate('/proposals')} className="p-2 hover:bg-muted rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <button type="button" aria-label="Back to proposals" onClick={() => navigate('/proposals')} className="p-2 hover:bg-muted rounded-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
           <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </button>
         <div className="flex-1">
@@ -204,7 +204,7 @@ export default function ProposalDetail() {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="text-2xl font-heading font-bold bg-transparent border-b border-border focus:border-primary outline-none w-full"
+              className="text-2xl font-heading font-bold bg-transparent border-b border-border focus:border-primary outline-hidden w-full"
             />
           ) : (
             <h1 className="text-2xl font-heading font-bold text-foreground">{proposal.title}</h1>

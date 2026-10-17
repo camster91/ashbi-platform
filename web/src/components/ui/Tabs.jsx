@@ -139,7 +139,7 @@ const Tab = forwardRef(({ value, disabled = false, className, children, onClick,
       className={cn(
         'min-h-11 -mb-px whitespace-nowrap rounded-t-md border-b-2 px-4 py-2 text-sm font-medium',
         'transition-colors motion-reduce:transition-none',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
         'disabled:cursor-not-allowed disabled:opacity-50',
         isSelected
           ? 'border-primary text-primary'
@@ -170,7 +170,7 @@ const TabPanel = forwardRef(({ value, forceMount = false, className, children, .
       aria-labelledby={`${baseId}-tab-${safeId(value)}`}
       tabIndex={0}
       hidden={!isSelected}
-      className={cn('focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md', className)}
+      className={cn('focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded-md', className)}
       {...props}
     >
       {children}

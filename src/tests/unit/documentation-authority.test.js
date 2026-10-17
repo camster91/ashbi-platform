@@ -9,8 +9,8 @@ const read = (path) => readFileSync(join(root, path), 'utf8');
 
 test('README points setup and production operations at authoritative paths', () => {
   const readme = read('README.md');
-  assert.match(readme, /PostgreSQL 16 with pgvector/);
-  assert.match(readme, /Redis 7\+/);
+  assert.match(readme, /PostgreSQL 18 with pgvector/);
+  assert.match(readme, /Redis 8/);
   assert.match(readme, /prisma migrate deploy/);
   assert.match(readme, /dev:worker/);
   assert.match(readme, /docs\/deployment-and-rollback\.md/);

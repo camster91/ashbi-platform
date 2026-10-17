@@ -134,7 +134,7 @@ export default function ApprovalQueue() {
   return (
     <div className="flex flex-col lg:flex-row min-h-[calc(100vh-8rem)] lg:h-[calc(100vh-8rem)] -mx-4 sm:-mx-6">
       {/* List panel */}
-      <div className="w-full lg:w-80 flex-shrink-0 border-b lg:border-b-0 lg:border-r border-border bg-card flex flex-col max-h-[50vh] lg:max-h-none">
+      <div className="w-full lg:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-border bg-card flex flex-col max-h-[50vh] lg:max-h-none">
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-lg font-bold text-foreground">Approvals</h1>
@@ -144,7 +144,7 @@ export default function ApprovalQueue() {
           </div>
           <Link
             to="/approvals/replies"
-            className="mb-3 flex min-h-11 items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="mb-3 flex min-h-11 items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span>Client replies to approve</span>
             <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${pendingReplyCount > 0 ? 'bg-warning text-warning-foreground' : 'bg-muted text-muted-foreground'}`}>
@@ -155,7 +155,7 @@ export default function ApprovalQueue() {
             <select aria-label="Filter by status"
               value={filterStatus}
               onChange={e => { setFilterStatus(e.target.value); setSelectedId(null); }}
-              className="flex-1 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              className="flex-1 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
             >
               <option value="">All statuses</option>
               <option value="PENDING">Pending</option>
@@ -165,7 +165,7 @@ export default function ApprovalQueue() {
             <select aria-label="Filter by type"
               value={filterType}
               onChange={e => { setFilterType(e.target.value); setSelectedId(null); }}
-              className="flex-1 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              className="flex-1 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
             >
               <option value="">All types</option>
               {['EMAIL','POST','PROPOSAL','CONTRACT','INVOICE','DEPLOY','COPY','OTHER'].map(t => (
@@ -200,18 +200,18 @@ export default function ApprovalQueue() {
                   onClick={() => setSelectedId(isSelected ? null : a.id)}
                   aria-label={`${isSelected ? 'Collapse' : 'Open'} approval ${a.title}`}
                   aria-expanded={isSelected}
-                  className={`w-full min-h-11 text-left px-4 py-3 border-b border-border hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
+                  className={`w-full min-h-11 text-left px-4 py-3 border-b border-border hover:bg-muted/50 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
                     isSelected ? 'bg-primary/5 border-l-2 border-l-primary' : ''
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${TYPE_COLORS[a.type] || TYPE_COLORS.OTHER}`}>
+                      <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${TYPE_COLORS[a.type] || TYPE_COLORS.OTHER}`}>
                         {a.type}
                       </span>
-                      {a.status === 'PENDING' && <span className="flex-shrink-0 w-2 h-2 bg-warning rounded-full" />}
+                      {a.status === 'PENDING' && <span className="shrink-0 w-2 h-2 bg-warning rounded-full" />}
                     </div>
-                    <ChevronRight size={14} className="flex-shrink-0 text-muted-foreground mt-0.5" />
+                    <ChevronRight size={14} className="shrink-0 text-muted-foreground mt-0.5" />
                   </div>
                   <p className="mt-1.5 text-sm font-medium text-foreground truncate">{a.title}</p>
                   {a.clientName && <p className="text-xs text-muted-foreground truncate">{a.clientName}</p>}
@@ -256,7 +256,7 @@ export default function ApprovalQueue() {
                   <h2 className="text-xl font-bold text-foreground">{selected.title}</h2>
                   {selected.clientName && <p className="text-sm text-muted-foreground mt-0.5">Client: {selected.clientName}</p>}
                 </div>
-                <div className="text-right text-xs text-muted-foreground flex-shrink-0">
+                <div className="text-right text-xs text-muted-foreground shrink-0">
                   <p>Created by <strong className="text-foreground">{selected.createdBy}</strong></p>
                   <p>{new Date(selected.createdAt).toLocaleString()}</p>
                 </div>
@@ -334,7 +334,7 @@ export default function ApprovalQueue() {
           onChange={e => setRejectNote(e.target.value)}
           placeholder="For example: Make the tone warmer"
           disabled={actionLoading}
-          className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm focus:ring-2 focus:ring-primary outline-none h-24 resize-none disabled:opacity-50"
+          className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm focus:ring-2 focus:ring-primary outline-hidden h-24 resize-none disabled:opacity-50"
         />
         <ModalFooter className="flex-col-reverse sm:flex-row">
           <Button variant="outline" className="w-full sm:w-auto" disabled={actionLoading} onClick={() => { setShowRejectModal(false); setRejectNote(''); }}>

@@ -35,11 +35,11 @@ describe('Clients table', () => {
         <MemoryRouter><Clients /></MemoryRouter>
       </QueryClientProvider>,
     );
-    const row = (await screen.findByRole('button', { name: /Expand client Northwind Coffee Roasters/ })).closest('tr');
+    const row = (await screen.findByRole('button', { name: /Expand client.*Northwind Coffee Roasters/ })).closest('tr');
     const cells = within(row).getAllByRole('cell');
     expect(cells[1]).toHaveTextContent('Olivia Chen');
     expect(cells[1]).toHaveTextContent('olivia@northwindcoffee.com');
-    const emptyRow = screen.getByRole('button', { name: /Expand client No Contact Co/ }).closest('tr');
+    const emptyRow = screen.getByRole('button', { name: /Expand client.*No Contact Co/ }).closest('tr');
     expect(within(emptyRow).getAllByRole('cell')[1]).toHaveTextContent('—');
   });
 });

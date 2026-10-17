@@ -79,7 +79,7 @@ function ProjectActionsMenu({ actions }) {
     >
       <summary
         aria-label="More project actions"
-        className="min-h-11 min-w-11 list-none inline-flex cursor-pointer items-center justify-center gap-1 rounded-lg border border-border px-3 text-sm hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+        className="min-h-11 min-w-11 list-none inline-flex cursor-pointer items-center justify-center gap-1 rounded-lg border border-border px-3 text-sm hover:bg-secondary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
       >
         <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
         <span className="hidden sm:inline" aria-hidden="true">More</span>
@@ -91,7 +91,7 @@ function ProjectActionsMenu({ actions }) {
             type="button"
             disabled={disabled}
             onClick={(event) => { close(event); onSelect(); }}
-            className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none disabled:opacity-60"
+            className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-hidden disabled:opacity-60"
           >
             <Icon className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
             {label}
@@ -245,7 +245,7 @@ export default function Project() {
           <Link
             to="/projects"
             aria-label="Back to projects"
-            className="mt-0.5 shrink-0 p-2 hover:bg-muted rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="mt-0.5 shrink-0 p-2 hover:bg-muted rounded-lg transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ArrowLeft className="w-5 h-5" aria-hidden="true" />
           </Link>
@@ -281,14 +281,14 @@ export default function Project() {
             type="button"
             aria-label="Share project with client"
             onClick={copyPortalLink}
-            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary gap-2 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             {shareCopied ? <Check className="w-4 h-4 text-success" aria-hidden="true" /> : <Share2 className="w-4 h-4" aria-hidden="true" />}
             {shareCopied ? 'Copied!' : 'Share'}
           </button>
           <Link
             to={`/project/${project.id}/kanban`}
-            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary gap-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             Task board
           </Link>
@@ -297,7 +297,7 @@ export default function Project() {
             type="button"
             aria-label="Draft project update"
             onClick={() => setShowDraftModal(true)}
-            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 gap-2 transition-all focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <FileText className="w-4 h-4" aria-hidden="true" />
             Draft Update
@@ -489,7 +489,7 @@ export default function Project() {
                       onChange={(e) => setDraftNotes(e.target.value)}
                       disabled={draftUpdateMutation.isPending}
                       rows={6}
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                       placeholder="Enter your raw notes about project progress, updates, etc..."
                     />
                   </div>
@@ -638,7 +638,7 @@ export default function Project() {
                   onChange={(e) => setPasteContent(e.target.value)}
                   disabled={pasteMutation.isPending}
                   rows={10}
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                   placeholder="Paste message content here..."
                 />
               </div>
@@ -680,7 +680,7 @@ function RevisionRounds({ revisions, isAdmin, onCreateRound, onApprove, isCreati
           aria-label="New revision round"
           onClick={(e) => { e.stopPropagation(); onCreateRound(); }}
           disabled={isCreating}
-          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1 hover:bg-muted rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1 hover:bg-muted rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           title="New revision round"
         >
           <Plus className="w-4 h-4" />
@@ -721,7 +721,7 @@ function RevisionRounds({ revisions, isAdmin, onCreateRound, onApprove, isCreati
                     type="button"
                     aria-label={`Approve revision ${rev.roundNumber}`}
                     onClick={() => onApprove(rev.id)}
-                    className="min-h-11 inline-flex items-center px-2 py-1 text-xs bg-success/10 text-success rounded hover:bg-success/20 flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="min-h-11 inline-flex items-center px-2 py-1 text-xs bg-success/10 text-success rounded hover:bg-success/20 flex items-center gap-1 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <Check className="w-3 h-3" /> Approve
                   </button>
@@ -870,7 +870,7 @@ function ProjectNotes({ projectId }) {
           type="button"
           aria-label="Create new note"
           onClick={() => setShowForm(!showForm)}
-          className="min-h-11 inline-flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+          className="min-h-11 inline-flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded"
         >
           <Plus className="w-4 h-4" />
           New Note
@@ -938,12 +938,12 @@ function ProjectNotes({ projectId }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    {note.isPinned && <Pin className="w-3 h-3 text-primary flex-shrink-0" />}
+                    {note.isPinned && <Pin className="w-3 h-3 text-primary shrink-0" />}
                     <button
                       type="button"
                       aria-label={`Expand note ${note.title}`}
                       onClick={() => setExpandedId(expandedId === note.id ? null : note.id)}
-                      className="min-h-11 text-sm font-medium text-foreground hover:text-primary transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                      className="min-h-11 text-sm font-medium text-foreground hover:text-primary transition-colors text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded"
                     >
                       {note.title}
                     </button>
@@ -958,18 +958,18 @@ function ProjectNotes({ projectId }) {
                     {note.author?.name} · {new Date(note.updatedAt).toLocaleDateString('en-CA')}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <button type="button" onClick={() => pinMutation.mutate(note.id)} disabled={editingId === note.id} aria-label={`${note.isPinned ? 'Unpin' : 'Pin'} ${note.title}`} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title={note.isPinned ? 'Unpin' : 'Pin'}>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button type="button" onClick={() => pinMutation.mutate(note.id)} disabled={editingId === note.id} aria-label={`${note.isPinned ? 'Unpin' : 'Pin'} ${note.title}`} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" title={note.isPinned ? 'Unpin' : 'Pin'}>
                     {note.isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
                   </button>
-                  <button type="button" onClick={() => startEdit(note)} aria-label={`Edit ${note.title}`} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <button type="button" onClick={() => startEdit(note)} aria-label={`Edit ${note.title}`} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => { deleteMutation.reset(); setNoteToDelete(note); }}
                     aria-label={`Delete ${note.title}`}
                     type="button"
-                    className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-destructive rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-destructive rounded transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -1026,7 +1026,7 @@ function ProjectNotes({ projectId }) {
                       tabIndex={0}
                       role="region"
                       aria-label={`${note.title} content`}
-                      className="mt-3 rounded-lg border border-border/50 bg-muted/30 p-3 text-sm leading-relaxed text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="mt-3 rounded-lg border border-border/50 bg-muted/30 p-3 text-sm leading-relaxed text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                       dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content) }}
                     />
                   ) : (
@@ -1071,7 +1071,7 @@ function TaskCategory({ title, icon: Icon, tasks = [], color, collapsed = false 
         tabIndex={0}
         aria-expanded={!isCollapsed}
         aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${title} tasks`}
-        className="px-4 py-3 border-b flex items-center gap-2 cursor-pointer hover:bg-secondary/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="px-4 py-3 border-b flex items-center gap-2 cursor-pointer hover:bg-secondary/30 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setIsCollapsed(!isCollapsed)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {

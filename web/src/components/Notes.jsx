@@ -149,7 +149,7 @@ export default function Notes({ projectId }) {
               onClick={() => { updateMutation.reset(); setSelectedNote(note); }}
               aria-label={`Open note ${note.title}`}
               aria-pressed={selectedNote?.id === note.id}
-              className={`w-full min-h-11 bg-card rounded-lg border p-4 text-left cursor-pointer hover:shadow-md active:bg-muted/50 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-offset-2 ${
+              className={`w-full min-h-11 bg-card rounded-lg border p-4 text-left cursor-pointer hover:shadow-md active:bg-muted/50 transition-shadow focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-offset-2 ${
                 note.isPinned ? 'border-warning border-2' : ''
               }`}
             >

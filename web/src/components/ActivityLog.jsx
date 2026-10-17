@@ -5,7 +5,7 @@ import QueryErrorState from './QueryErrorState';
 import { Button, EmptyState, Input, LoadingState } from './ui';
 
 const EMPTY_FILTERS = { action: '', entityType: '', actorType: '', entityId: '', from: '', to: '' };
-const selectClass = 'w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background';
+const selectClass = 'w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background';
 
 // Date inputs are local calendar days; the API takes inclusive ISO instants.
 export function toAuditQuery(filters) {
@@ -166,7 +166,7 @@ export default function ActivityLog() {
       ) : (
         <>
           <div
-            className="overflow-x-auto rounded-lg border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="overflow-x-auto rounded-lg border border-border focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             role="region"
             aria-label="Activity log table"
             tabIndex={0}

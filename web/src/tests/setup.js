@@ -15,8 +15,13 @@ Object.defineProperty(window, 'matchMedia', {
   }),
 });
 
-// Mock window.location.reload
+// Keep a complete URL for BrowserRouter while making reload replaceable in
+// recovery tests. Newer React Router versions resolve navigation against it.
+const locationFields = Object.fromEntries(
+  ['href', 'origin', 'protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash']
+    .map((field) => [field, window.location[field]]),
+);
 Object.defineProperty(window, 'location', {
   writable: true,
-  value: { reload: () => {} },
+  value: { ...locationFields, reload: () => {} },
 });

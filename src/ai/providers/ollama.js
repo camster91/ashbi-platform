@@ -80,7 +80,8 @@ class OllamaProvider {
         jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
       }
       return JSON.parse(jsonStr);
-    } catch (error) {
+    } catch {
+      // Keep provider content out of the outward error cause.
       console.error('Failed to parse Ollama JSON response:', response.slice(0, 500));
       throw new Error('AI returned invalid JSON');
     }

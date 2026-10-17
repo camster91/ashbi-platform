@@ -64,7 +64,7 @@ describe('client portal Documents tab failures', () => {
 describe('client portal busy buttons', () => {
   it('keeps a busy, disabled send button at full opacity so its label stays legible', () => {
     render(<PortalChatComposer value="Hello" onChange={() => {}} onSubmit={e => e.preventDefault()} connected sending sendError="" />);
-    const send = screen.getByRole('button', { name: 'Send message' });
+    const send = screen.getByRole('button', { name: 'Sending message' });
     expect(send).toBeDisabled();
     expect(send).toHaveAttribute('aria-busy', 'true');
     expect(send).toHaveTextContent('Sending…');

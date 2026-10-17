@@ -284,10 +284,10 @@ export default function Docs() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search notes..."
-            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-border bg-background focus:outline-hidden focus:ring-2 focus:ring-primary/20"
           />
           {search && (
-            <button type="button" onClick={() => setSearch('')} className="min-h-11 min-w-11 inline-flex items-center justify-center absolute right-1 top-1/2 -translate-y-1/2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Clear note search">
+            <button type="button" onClick={() => setSearch('')} className="min-h-11 min-w-11 inline-flex items-center justify-center absolute right-1 top-1/2 -translate-y-1/2 rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" aria-label="Clear note search">
               <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
             </button>
           )}
@@ -300,7 +300,7 @@ export default function Docs() {
               onClick={() => setFilterType(value)}
               aria-pressed={filterType === value}
               className={cn(
-                'min-h-11 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'min-h-11 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
                 filterType === value
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -318,7 +318,7 @@ export default function Docs() {
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">New Note</h2>
-            <button type="button" onClick={() => setShowNewNote(false)} className="min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Close new document form">
+            <button type="button" onClick={() => setShowNewNote(false)} className="min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-foreground rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" aria-label="Close new document form">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -522,16 +522,18 @@ function ProjectGroup({
        <button
          type="button"
          onClick={() => setCollapsed(!collapsed)}
-         aria-label={`Toggle project ${project?.name || 'Unlinked'}`}
-         className="min-h-11 flex items-center gap-2 hover:text-primary transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+         className="min-h-11 flex items-center gap-2 hover:text-primary transition-colors rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         aria-expanded={!collapsed}
       >
         {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         <FolderOpen className="w-4 h-4 text-muted-foreground" />
+        <span className="sr-only">Toggle project </span>
+        {' '}
         <span>{project?.name || 'Unlinked'}</span>
         {project?.client && (
-          <span className="text-muted-foreground">— {project.client.name}</span>
+          <>{' '}<span className="text-muted-foreground">— {project.client.name}</span></>
         )}
+        {' '}
         <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{notes.length}</span>
       </button>
         {project && (
@@ -605,19 +607,19 @@ function NoteCard({
           aria-label={`Toggle note ${note.title}`}
           aria-expanded={expanded}
           aria-controls={expanded ? contentId : undefined}
-          className="min-h-11 text-sm font-medium text-foreground hover:text-primary transition-colors text-left flex-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-h-11 text-sm font-medium text-foreground hover:text-primary transition-colors text-left flex-1 rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           {note.isPinned && <Pin className="w-3 h-3 text-primary inline mr-1" />}
           {note.title}
         </button>
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button type="button" onClick={onPin} disabled={editing || note.permissions?.canEdit === false} aria-label={`${note.isPinned ? 'Unpin' : 'Pin'} ${note.title}`} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title={note.isPinned ? 'Unpin' : 'Pin'}>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button type="button" onClick={onPin} disabled={editing || note.permissions?.canEdit === false} aria-label={`${note.isPinned ? 'Unpin' : 'Pin'} ${note.title}`} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" title={note.isPinned ? 'Unpin' : 'Pin'}>
             {note.isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
           </button>
-          <button type="button" disabled={note.permissions?.canEdit === false} onClick={onEdit} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Edit ${note.title}`}>
+          <button type="button" disabled={note.permissions?.canEdit === false} onClick={onEdit} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Edit ${note.title}`}>
             <Edit2 className="w-3.5 h-3.5" />
           </button>
-          <button type="button" disabled={note.permissions?.canManage === false} onClick={onDelete} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-destructive rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Delete ${note.title}`}>
+          <button type="button" disabled={note.permissions?.canManage === false} onClick={onDelete} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-destructive rounded transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Delete ${note.title}`}>
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -724,7 +726,7 @@ function NoteCard({
               tabIndex={0}
               role="region"
               aria-label={`${note.title} content`}
-              className="mt-3 max-h-64 overflow-y-auto rounded-lg border border-border/50 bg-muted/30 p-3 text-sm leading-relaxed text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="mt-3 max-h-64 overflow-y-auto rounded-lg border border-border/50 bg-muted/30 p-3 text-sm leading-relaxed text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content) }}
             />
           ) : (

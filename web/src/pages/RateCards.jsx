@@ -312,7 +312,7 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Standard Pricing"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/50"
                 required
               />
             </div>
@@ -329,7 +329,7 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
                   onChange={(e) => setClientId(e.target.value)}
                   disabled={isLoading}
                   required
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/50"
                 >
                   <option value="" disabled>Select a client</option>
                   {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -365,13 +365,13 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
                     value={rate.serviceName}
                     onChange={(e) => updateRate(idx, 'serviceName', e.target.value)}
                     placeholder="Service name"
-                    className="sm:col-span-3 min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="sm:col-span-3 min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/50"
                   />
                   <select
                     aria-label={`Service ${idx + 1} unit`}
                     value={rate.unit}
                     onChange={(e) => updateRate(idx, 'unit', e.target.value)}
-                    className="sm:col-span-2 rounded-lg border border-border bg-background px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="sm:col-span-2 rounded-lg border border-border bg-background px-2 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/50"
                   >
                     <option value="hour">Hour</option>
                     <option value="project">Project</option>
@@ -387,7 +387,7 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
                       placeholder="0.00"
                       step="0.01"
                       min="0"
-                      className="w-full rounded-lg border border-border bg-background pl-7 pr-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      className="w-full rounded-lg border border-border bg-background pl-7 pr-2 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/50"
                     />
                   </div>
                   <input
@@ -396,7 +396,7 @@ function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mu
                     value={rate.description}
                     onChange={(e) => updateRate(idx, 'description', e.target.value)}
                     placeholder="Description"
-                    className="sm:col-span-4 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="sm:col-span-4 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/50"
                   />
                   <Button
                     type="button"

@@ -11,7 +11,7 @@ describe('client portal signed contract download contract', () => {
 
   it('only offers the download for contracts the API marks downloadable', () => {
     expect(source).toContain('{contract.canDownload && (');
-    expect(source).toContain('aria-label={`Download signed contract PDF: ${contract.title}`}');
+    expect(source).toContain('<span className="sr-only">for signed contract {contract.title}</span>');
   });
 
   it('announces download failures and pending state', () => {

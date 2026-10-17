@@ -127,7 +127,7 @@ function Enrollment({ onEnabled }) {
       <ol className="list-decimal pl-5 space-y-3 text-sm">
         <li>
           Add Ashbi Hub to your authenticator app.{' '}
-          <a href={enrollment.otpauthUri} className="text-primary underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">
+          <a href={enrollment.otpauthUri} className="text-primary underline underline-offset-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded">
             Open in authenticator app
           </a>{' '}
           on this device, or enter this setup key manually:
@@ -232,7 +232,7 @@ function DisableForm({ onDisabled, requiredByOrganization }) {
         <button
           type="button"
           onClick={() => { setUseRecovery((v) => !v); setCode(''); setError(''); }}
-          className="mt-1 min-h-11 text-sm text-primary hover:text-primary/80 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="mt-1 min-h-11 text-sm text-primary hover:text-primary/80 rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           {useRecovery ? 'Use your authenticator app instead' : 'Use a recovery code instead'}
         </button>

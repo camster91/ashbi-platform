@@ -10,7 +10,7 @@ const activeStatus = (status) => status === 'QUEUED' || status === 'RUNNING';
 const terminalStatus = (status) => ['SUCCEEDED', 'FAILED', 'CANCELLED', 'UNKNOWN'].includes(status);
 const denied = (error) => [401, 403, 404].includes(error?.status ?? error?.statusCode);
 const itemsFrom = (pages, field) => [...new Map((pages || []).flatMap((page) => page[field] || []).map((item) => [item.id, item])).values()];
-const inputClass = 'w-full rounded-lg border border-input bg-background p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const inputClass = 'w-full rounded-lg border border-input bg-background p-3 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring';
 
 const sourceId = (value) => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(value);
 const storedText = (value) => typeof value === 'string' && value.length <= 2000;
@@ -31,15 +31,15 @@ function RetainedContext({ run }) {
   if (!valid) return <p className="text-sm text-muted-foreground">Retained context evidence is unavailable for this run. Current records are not substituted for its historical context.</p>;
 
   return <details className="rounded-lg border border-border p-3 text-sm">
-    <summary tabIndex={0} className="cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Retained context for this run</summary>
+    <summary tabIndex={0} className="cursor-pointer rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">Retained context for this run</summary>
     <div className="mt-3 space-y-3">
       <p>Context observed at <time dateTime={run.contextObservedAt}>{run.contextObservedAt}</time> (UTC).</p>
       <p>{run.status === 'SUCCEEDED' ? 'Stored client and project context used to prepare this answer.' : 'Stored context prepared for this request. This does not confirm that a provider received it or completed an answer.'}</p>
       <p>These are historical values. Source links open current records, which may have changed or become unavailable.</p>
-      <p className="break-words">Client: <a className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/client/${encodeURIComponent(client.id)}`}>{client.name}</a>{client.domain ? ` — ${client.domain}` : ' — No domain recorded'}</p>
+      <p className="break-words">Client: <a className="underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" href={`/client/${encodeURIComponent(client.id)}`}>{client.name}</a>{client.domain ? ` — ${client.domain}` : ' — No domain recorded'}</p>
       {projects.length ? <ul aria-label="Retained project context" className="space-y-2">
         {projects.map((project, index) => <li key={`${project.id}:${index}`} className="break-words">
-          <a className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/project/${encodeURIComponent(project.id)}`}>{project.name}</a>
+          <a className="underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" href={`/project/${encodeURIComponent(project.id)}`}>{project.name}</a>
           <p>Status: {project.status}</p>
           <p>Start: {project.startDate ? <time dateTime={project.startDate}>{project.startDate}</time> : 'Not recorded'}; end: {project.endDate ? <time dateTime={project.endDate}>{project.endDate}</time> : 'Not recorded'}</p>
         </li>)}
@@ -60,7 +60,7 @@ function RetainedMemory({ run }) {
   if (!valid) return <p className="text-sm text-muted-foreground">Retained conversation memory is unavailable for this run. Current conversation history is not substituted.</p>;
 
   return <details className="rounded-lg border border-border p-3 text-sm">
-    <summary tabIndex={0} className="cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Conversation memory for this run ({memory.turns.length} prior {memory.turns.length === 1 ? 'question' : 'questions'})</summary>
+    <summary tabIndex={0} className="cursor-pointer rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">Conversation memory for this run ({memory.turns.length} prior {memory.turns.length === 1 ? 'question' : 'questions'})</summary>
     <div className="mt-3 space-y-3">
       <p>{run.status === 'SUCCEEDED' ? 'Stored prior questions and answers included when preparing this answer.' : 'Conversation memory prepared for this request. This does not confirm that a provider received it or completed an answer.'}</p>
       <p>Shared staff history is untrusted historical data and may be stale. It does not authorize actions or replace current client records.</p>

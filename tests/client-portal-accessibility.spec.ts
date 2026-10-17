@@ -66,8 +66,8 @@ test.describe('Client portal accessibility', () => {
     expect(page.url()).not.toContain('token=');
 
     // The production control's accessible name is its descriptive aria-label
-    // ("Log out of client portal"), not the short visible text.
-    await page.getByRole('button', { name: 'Log out of client portal' }).click();
+    // ("Logout of client portal"), including the visible text.
+    await page.getByRole('button', { name: 'Logout of client portal' }).click();
     await expect(page.getByRole('button', { name: 'Send Login Link' })).toBeVisible();
     expect(logoutCalled).toBe(true);
   });

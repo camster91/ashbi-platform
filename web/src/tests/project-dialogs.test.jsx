@@ -91,7 +91,7 @@ describe('project dialog journeys', () => {
       color: '#3B82F6', completedTasks: 0, totalTasks: 1, progress: 0, tasks: [],
     }]);
     renderWithQuery(<Milestones projectId="project-1" />);
-    const milestoneCard = await screen.findByRole('button', { name: 'Open milestone Launch' });
+    const milestoneCard = await screen.findByRole('button', { name: /^Open milestone Launch/ });
     milestoneCard.focus();
     await user.keyboard(' ');
     expect(screen.getByRole('dialog', { name: 'Edit Milestone' })).toBeVisible();

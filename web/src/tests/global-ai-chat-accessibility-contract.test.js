@@ -16,6 +16,6 @@ describe('global AI chat accessibility contract', () => {
     expect(source).toContain('min-h-11 min-w-11');
     expect(source).toContain('aria-label="Ask Ash about your work"');
     expect(source).toContain('aria-busy={isLoading}');
-    expect(source).toContain('focus-visible:outline-none focus-visible:ring-2');
+    expect(source).toContain('focus-visible:outline-hidden focus-visible:ring-2');
   });
 });

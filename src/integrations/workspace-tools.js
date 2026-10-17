@@ -9,7 +9,7 @@ import { WORKSPACE_SERVICE_PANEL_TOOLS } from './workspace-service-panel-tools.j
 import { WORKSPACE_NOTE_TOOLS } from './workspace-note-tools.js';
 import { visibleNoteIds } from '../services/note-access.service.js';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { toInputJsonSchema as zodToJsonSchema } from '../validators/json-schema.js';
 import { BUILTIN_TOOLS, createToolRegistry, ToolError } from '../ai/tools/registry.js';
 import { createToolExecutor, redactSecrets } from '../ai/tools/executor.js';
 import { portfolioWhere } from '../shared/portfolio.js';
@@ -173,7 +173,7 @@ export function createWorkspaceTools(options = {}) {
         name: tool.name, description: tool.class === 'read' ? tool.description : `${tool.description} Prepares a preview only; requires an explicit confirm_action API call after reviewing the preview. This does not prove a fresh human click.`,
         inputSchema: zodToJsonSchema(tool.class === 'read' ? tool.inputSchema : z.object({
           input: tool.inputSchema, idempotencyKey: z.string().regex(/^[A-Za-z0-9._:-]{8,128}$/),
-        }).strict(), { $refStrategy: 'none' }),
+        }).strict()),
         annotations: { readOnlyHint: tool.class === 'read', destructiveHint: tool.irreversible, idempotentHint: true, openWorldHint: false },
       }));
     if (ctx.oauth ? Object.keys(MCP_OAUTH_ACTION_SCOPES).some(name => registry.get(name) && actionAllowed(ctx, registry.get(name))) : allowed(ctx, 'workspace:actions')) {
@@ -181,7 +181,7 @@ export function createWorkspaceTools(options = {}) {
         name, description: name === 'confirm_action'
           ? 'Execute a reviewed preview by explicit authenticated API confirmation. This does not prove a fresh human click. Never infer approval.'
           : name === 'get_action' ? 'Read your action preview, status and execution receipt. Use after a lost response before retrying.' : 'Reject a pending action without executing it.',
-        inputSchema: zodToJsonSchema(controlSchema, { $refStrategy: 'none' }),
+        inputSchema: zodToJsonSchema(controlSchema),
         annotations: { readOnlyHint: name === 'get_action', destructiveHint: false, idempotentHint: name !== 'reject_action', openWorldHint: false },
       });
     }

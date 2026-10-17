@@ -54,7 +54,7 @@ export default function ImpersonateAction({ member }) {
         onClick={() => setOpen(true)}
         aria-label={`View as ${member.name}`}
         title="View as (read only)"
-        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Eye className="w-4 h-4" aria-hidden="true" />
       </button>

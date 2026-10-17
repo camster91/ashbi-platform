@@ -813,7 +813,7 @@ async function executeCondition(config, triggerData) {
   const { field, operator, value } = config;
 
   const fieldValue = getNestedValue(triggerData, field);
-  let result = false;
+  let result;
 
   switch (operator) {
     case 'equals':

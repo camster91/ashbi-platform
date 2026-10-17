@@ -50,6 +50,8 @@ async function parseRawEmail(rawContent) {
     };
   } catch (error) {
     console.error('Failed to parse raw email:', error);
+    // Keep the parser's potentially sensitive MIME input out of the outward cause.
+    // eslint-disable-next-line preserve-caught-error -- This error is a deliberate sanitization boundary.
     throw new Error('Invalid email format');
   }
 }

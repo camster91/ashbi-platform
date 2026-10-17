@@ -144,7 +144,7 @@ export default function PortalIntakeForm() {
                 required
                 aria-invalid={!!validationErrors.name}
                 aria-describedby={validationErrors.name ? 'respondent-name-error' : undefined}
-                className="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:border-amber-500 placeholder-slate-500"
+                className="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:border-amber-500 placeholder-slate-500"
                 placeholder="Enter your full name"
               />
               {validationErrors.name && <p id="respondent-name-error" className="mt-1 text-sm text-red-400">{validationErrors.name}</p>}
@@ -161,7 +161,7 @@ export default function PortalIntakeForm() {
                 required
                 aria-invalid={!!validationErrors.email}
                 aria-describedby={validationErrors.email ? 'respondent-email-error' : undefined}
-                className="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:border-amber-500 placeholder-slate-500"
+                className="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:border-amber-500 placeholder-slate-500"
                 placeholder="Enter your email"
               />
               {validationErrors.email && <p id="respondent-email-error" className="mt-1 text-sm text-red-400">{validationErrors.email}</p>}
@@ -184,7 +184,7 @@ export default function PortalIntakeForm() {
                   aria-invalid={!!validationErrors[`field-${i}`]}
                   aria-describedby={validationErrors[`field-${i}`] ? `intake-field-${i}-error` : undefined}
                   rows={4}
-                  className="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:border-amber-500 placeholder-slate-500"
+                  className="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:border-amber-500 placeholder-slate-500"
                   placeholder={`Enter ${field.label.toLowerCase()}`}
                 />
               ) : field.type === 'SELECT' ? (
@@ -195,7 +195,7 @@ export default function PortalIntakeForm() {
                   required={field.required}
                   aria-invalid={!!validationErrors[`field-${i}`]}
                   aria-describedby={validationErrors[`field-${i}`] ? `intake-field-${i}-error` : undefined}
-                  className="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:border-amber-500"
+                  className="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:border-amber-500"
                 >
                   <option value="">Select...</option>
                   {field.options?.map(o => (
@@ -212,7 +212,7 @@ export default function PortalIntakeForm() {
                     required={field.required}
                     aria-invalid={!!validationErrors[`field-${i}`]}
                     aria-describedby={validationErrors[`field-${i}`] ? `intake-field-${i}-error` : undefined}
-                    className="min-h-11 min-w-11 rounded border-slate-600 bg-slate-800 text-amber-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50"
+                    className="min-h-11 min-w-11 rounded border-slate-600 bg-slate-800 text-amber-500 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-500/50"
                   />
                   <span className="text-sm text-slate-400">Yes</span>
                 </div>
@@ -229,7 +229,7 @@ export default function PortalIntakeForm() {
                   required={field.required}
                   aria-invalid={!!validationErrors[`field-${i}`]}
                   aria-describedby={validationErrors[`field-${i}`] ? `intake-field-${i}-error` : undefined}
-                  className="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:border-amber-500 placeholder-slate-500"
+                  className="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:border-amber-500 placeholder-slate-500"
                   placeholder={`Enter ${field.label.toLowerCase()}`}
                 />
               )}
@@ -250,7 +250,7 @@ export default function PortalIntakeForm() {
             className={cn(
               'w-full min-h-11 py-3 px-4 rounded-lg font-semibold text-sm transition-all',
               'bg-amber-500 hover:bg-amber-600 text-slate-950',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50',
+              'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-500/50',
               'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
           >

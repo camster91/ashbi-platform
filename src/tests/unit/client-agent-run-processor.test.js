@@ -283,11 +283,13 @@ test('Claude and Gemini pass caller cancellation through their supported SDK req
   await claude.chat({ prompt: 'Question', singleAttempt: true, signal: controller.signal });
   assert.deepEqual(claudeOptions, { maxRetries: 0, timeout: 90_000, signal: controller.signal });
   const gemini = new GeminiProvider(); let geminiOptions;
-  gemini.client = { getGenerativeModel: () => ({ generateContent: async (_prompt, options) => {
-    geminiOptions = options; return { response: { text: () => 'Answer' } };
-  } }) };
+  gemini.client = { models: { generateContent: async ({ config }) => {
+    geminiOptions = config; return { text: 'Answer' };
+  } } };
   await gemini.chat({ prompt: 'Question', signal: controller.signal });
-  assert.equal(geminiOptions.signal, controller.signal);
+  assert.equal(geminiOptions.abortSignal, controller.signal);
+  assert.equal(geminiOptions.automaticContinuation, false);
+  assert.deepEqual(geminiOptions.automaticFunctionCalling, { disable: true });
 });
 
 test('Ollama forwards a combined caller and provider timeout signal without network access', async t => {

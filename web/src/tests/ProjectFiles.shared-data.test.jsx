@@ -94,7 +94,7 @@ describe('shared project attachment data', () => {
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getDisplayMedia: vi.fn(async () => stream) } });
     renderPanels(); await files().findByText(pdf.originalName);
     expect(media().queryByRole('link', { name: 'Watch' })).not.toBeInTheDocument();
-    await userEvent.click(media().getByRole('button', { name: 'Record a project screen share' }));
+    await userEvent.click(media().getByRole('button', { name: 'Record screen for this project' }));
     await act(async () => { await recorderOptions.onStop({ blob: new Blob(['clip'], { type: 'video/webm' }), mimeType: 'video/webm' }); });
     expect(api.uploadAttachment).toHaveBeenCalledWith(expect.any(File), 'PROJECT', 'p1');
     expect(await files().findByText(video.originalName)).toBeInTheDocument();

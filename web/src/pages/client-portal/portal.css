@@ -11,7 +11,7 @@
 
 /* Focus contract (#305/#317): a 3px solid ring-token outline on every
    focusable portal control, stronger than the primitives' soft focus ring.
-   The extra :is() keeps this above Tailwind's `focus:outline-none`. */
+   The extra :is() keeps this above Tailwind's `focus:outline-hidden`. */
 .cp-root :is(a, button, input, select, textarea, [tabindex]):focus-visible {
   outline: 3px solid hsl(var(--ring));
   outline-offset: 2px;

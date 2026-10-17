@@ -18,7 +18,7 @@ const DEFAULT_REDIS_URL = 'redis://localhost:6379';
  */
 export function resolveRedisUrl(rawUrl = process.env.REDIS_URL, { production = env.isDeployed } = {}) {
   const value = typeof rawUrl === 'string' ? rawUrl.trim() : '';
-  let parsed = null;
+  let parsed;
   try {
     parsed = value ? new URL(value) : null;
   } catch {
@@ -38,5 +38,5 @@ export function resolveRedisUrl(rawUrl = process.env.REDIS_URL, { production = e
 /** Constructor arguments for `new IORedis(...)`. */
 export function redisConnectionArgs(rawUrl, overrides = {}, options = {}) {
   const { url, tls } = resolveRedisUrl(rawUrl, options);
-  return [url, { ...(tls ? { tls: {} } : {}), ...overrides }];
+  return [url, { protocol: 2, ...(tls ? { tls: {} } : {}), ...overrides }];
 }

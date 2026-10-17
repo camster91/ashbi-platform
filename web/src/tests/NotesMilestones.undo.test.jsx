@@ -15,7 +15,7 @@ const note = { id: 'note-one', title: 'Project guide', type: 'DOC', content: 'Te
 const milestone = { id: 'milestone-one', name: 'Client approval', status: 'PENDING', dueDate: '2026-11-01T00:00:00Z', color: 'currentColor', completedTasks: 0, totalTasks: 0, progress: 0 };
 const cases = [
   { label: 'note', Component: Notes, record: note, list: 'getNotes', remove: 'deleteNote', opener: 'Open note Project guide', confirm: 'Delete note', name: note.title },
-  { label: 'milestone', Component: Milestones, record: milestone, list: 'getMilestones', remove: 'deleteMilestone', opener: 'Open milestone Client approval', confirm: 'Delete milestone', name: milestone.name },
+  { label: 'milestone', Component: Milestones, record: milestone, list: 'getMilestones', remove: 'deleteMilestone', opener: /^Open milestone Client approval/, confirm: 'Delete milestone', name: milestone.name },
 ];
 const clients = [];
 beforeEach(() => vi.resetAllMocks());

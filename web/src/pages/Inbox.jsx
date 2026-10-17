@@ -102,7 +102,7 @@ export default function Inbox() {
             onClick={() => triageMutation.mutate()}
             disabled={triageMutation.isPending}
             className={cn(
-              'min-h-11 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'min-h-11 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
               triageMutation.isPending
                 ? 'bg-primary/20 text-primary cursor-wait'
                 : 'bg-primary text-primary-foreground hover:bg-primary/90'
@@ -121,7 +121,7 @@ export default function Inbox() {
               aria-expanded={filterOpen}
               aria-controls="inbox-filter-menu"
               onClick={() => setFilterOpen(value => !value)}
-              className="min-h-11 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Filter className="w-4 h-4" />
               {priorityFilter ? `Filter: ${priorityFilter}` : 'Filter'}
@@ -135,7 +135,7 @@ export default function Inbox() {
                     role="menuitemradio"
                     aria-checked={priorityFilter === value}
                     onClick={() => { setPriorityFilter(value); setFilterOpen(false); }}
-                    className="min-h-11 w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="min-h-11 w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {label}
                   </button>
@@ -147,7 +147,7 @@ export default function Inbox() {
             type="button"
             aria-pressed={compactView}
             onClick={() => setCompactView(value => !value)}
-            className="min-h-11 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-h-11 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <MoreHorizontal className="w-4 h-4" />
             {compactView ? 'Comfortable view' : 'Compact view'}
@@ -201,7 +201,7 @@ export default function Inbox() {
               {triageResult.summary.lowPriority > 0 && <span className="text-muted-foreground">{triageResult.summary.lowPriority} low-priority</span>}
             </span>
           </div>
-          <button type="button" onClick={() => setTriageResult(null)} className="min-h-11 px-2 text-muted-foreground hover:text-foreground text-sm rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <button type="button" onClick={() => setTriageResult(null)} className="min-h-11 px-2 text-muted-foreground hover:text-foreground text-sm rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
             Dismiss
           </button>
         </div>
@@ -326,7 +326,7 @@ function ThreadRow({ thread, compact = false }) {
         {/* Priority indicator */}
         <div
           className={cn(
-            'w-1 h-12 rounded-full flex-shrink-0',
+            'w-1 h-12 rounded-full shrink-0',
             priority.color
           )}
         />
@@ -339,7 +339,7 @@ function ThreadRow({ thread, compact = false }) {
             </span>
             
             {thread.sentiment && (
-              <span title={thread.sentiment} className="flex-shrink-0">
+              <span title={thread.sentiment} className="shrink-0">
                 {getSentimentIcon(thread.sentiment)}
               </span>
             )}
@@ -379,7 +379,7 @@ function ThreadRow({ thread, compact = false }) {
         </div>
 
         {/* Meta */}
-        <div className="flex items-center gap-3 ml-4 flex-shrink-0">
+        <div className="flex items-center gap-3 ml-4 shrink-0">
           <Badge
             variant="subtle"
             color={thread.status === 'OPEN' ? 'primary' : 'default'}

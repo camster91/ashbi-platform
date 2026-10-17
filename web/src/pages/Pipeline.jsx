@@ -158,7 +158,7 @@ function MoveToDropdown({ deal, stages, currentStageId, onMove }) {
       <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
         aria-expanded={open}
         aria-label={`Move ${deal.title} to another stage`}
-        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         title="Move to stage">
         <MoveRight className="w-4 h-4 text-muted-foreground" />
       </button>
@@ -167,7 +167,7 @@ function MoveToDropdown({ deal, stages, currentStageId, onMove }) {
           <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Move to</div>
           {otherStages.map(s => (
             <button key={s.id} type="button" role="menuitem"
-              className="min-h-11 w-full text-left px-3 py-1.5 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 w-full text-left px-3 py-1.5 hover:bg-muted/50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               onClick={(e) => { e.stopPropagation(); setOpen(false); onMove(deal.id, s.id); }}>
               {s.name}
             </button>
@@ -213,7 +213,7 @@ function AIScoreButton({ deal, stageLabel }) {
       <button type="button" onClick={fetchScore}
         aria-expanded={show}
         aria-label={`Show AI lead score for ${deal.title}`}
-        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         title="AI Lead Score">
         {loading ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
           : <Sparkles className="w-4 h-4 text-brand-lime" />}
@@ -361,14 +361,14 @@ export default function Pipeline() {
           <button
             type="button"
             onClick={() => setShowManageStages(true)}
-            className="min-h-11 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-border bg-card text-foreground rounded-lg transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            className="min-h-11 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-border bg-card text-foreground rounded-lg transition-colors hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
             <Settings2 className="w-4 h-4" aria-hidden="true" />
             Manage stages
           </button>
           <button
             type="button"
             onClick={() => setShowCreateDeal(true)}
-            className="min-h-11 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg transition-all hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            className="min-h-11 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg transition-all hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
             <Plus className="w-4 h-4" aria-hidden="true" />
             New Deal
           </button>
@@ -488,7 +488,7 @@ function StageSection({ stage, stages, isOpen, onToggle }) {
           onClick={onToggle}
           aria-expanded={isOpen}
           aria-controls={isOpen ? panelId : undefined}
-          className="flex w-full min-h-11 items-center gap-3 rounded-xl p-3 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:p-4"
+          className="flex w-full min-h-11 items-center gap-3 rounded-xl p-3 text-left hover:bg-muted/40 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:p-4"
         >
           <StageIcon stage={stage} />
           <span className="min-w-0 flex-1">
@@ -532,7 +532,7 @@ function StageSection({ stage, stages, isOpen, onToggle }) {
                   </span>
                   <div className="col-span-2 col-start-1 row-start-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground sm:col-span-1">
                     {deal.client?.name && (
-                      <Link to={`/client/${deal.client.id}`} className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">
+                      <Link to={`/client/${deal.client.id}`} className="hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded">
                         {deal.client.name}
                       </Link>
                     )}
@@ -547,7 +547,7 @@ function StageSection({ stage, stages, isOpen, onToggle }) {
                     <AIScoreButton deal={deal} stageLabel={stage.name} />
                     <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(deal); }}
                       aria-label={`Delete ${deal.title}`}
-                      className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-destructive/5 hover:text-destructive transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-destructive/5 hover:text-destructive transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                       title="Delete deal">
                       <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
                     </button>
@@ -837,7 +837,7 @@ function ManageStagesModal({ isOpen, onClose, stages }) {
                     onClick={() => setDeletingId(stage.id)}
                     aria-label={`Delete ${stage.name} stage`}
                     title="Delete stage"
-                    className="min-h-11 min-w-11 inline-flex shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/5 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="min-h-11 min-w-11 inline-flex shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/5 hover:text-destructive focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <Trash2 className="w-4 h-4" aria-hidden="true" />
                   </button>

@@ -11,8 +11,8 @@ import { StatusBadge } from '../review/MediaReview';
 // up for review (optionally as a new version of an earlier review).
 
 const REVIEWABLE = /^(image\/(jpeg|png|gif|webp)|application\/pdf|video\/(mp4|webm)|audio\/(webm|mpeg|wav|x-wav|wave))(;|$)/i;
-const control = 'min-h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
-const submitButton = 'min-h-11 inline-flex items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
+const control = 'min-h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring';
+const submitButton = 'min-h-11 inline-flex items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
 
 /**
  * Web page review (docs/media-review.md "Web page review"): the server
@@ -152,7 +152,7 @@ export default function ProjectReviews({ projectId }) {
               {sessions.map((session) => (
                 <li key={session.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3 text-sm">
                   <div className="min-w-0">
-                    <Link to={`/review/${session.id}`} className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <Link to={`/review/${session.id}`} className="font-medium text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                       {session.title}<span className="text-muted-foreground"> (v{session.version})</span>
                     </Link>
                     <p className="text-xs text-muted-foreground">{session.media?.fileName} · {session.openAnnotationCount} open comment{session.openAnnotationCount === 1 ? '' : 's'} · {formatDate(session.createdAt)}</p>

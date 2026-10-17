@@ -254,7 +254,7 @@ export default async function timeSessionRoutes(fastify) {
 
     return sessions.map(session => {
       const now = new Date();
-      let durationMs = 0;
+      let durationMs;
 
       if (session.endTime) {
         durationMs = session.endTime - session.startTime - (session.totalPausedMs || 0);

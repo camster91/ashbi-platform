@@ -3,7 +3,7 @@ import { AlertTriangle, RefreshCw, RotateCcw, Copy } from 'lucide-react';
 import { createErrorReference, getSupportContact } from '../lib/support';
 
 const buttonBase =
-  'min-h-11 min-w-11 inline-flex items-center justify-center gap-2 px-5 py-3 font-medium rounded-lg transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-offset-2';
+  'min-h-11 min-w-11 inline-flex items-center justify-center gap-2 px-5 py-3 font-medium rounded-lg transition-colors motion-reduce:transition-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-offset-2';
 
 /**
  * "Fatal" workflow state (docs/workflow-state-matrix.md).
@@ -170,7 +170,7 @@ class ErrorBoundary extends Component {
               </div>
             </div>
 
-            <h1 id="fatal-error-title" ref={this.titleRef} tabIndex={-1} className="focus:outline-none text-2xl font-bold text-foreground mb-2">
+            <h1 id="fatal-error-title" ref={this.titleRef} tabIndex={-1} className="focus:outline-hidden text-2xl font-bold text-foreground mb-2">
               Something went wrong
             </h1>
 

@@ -158,7 +158,7 @@ export default function Contracts() {
             type="button"
             aria-pressed={filterStatus === s}
             onClick={() => setFilterStatus(s)}
-            className={`min-h-11 px-3 py-1.5 text-sm rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            className={`min-h-11 px-3 py-1.5 text-sm rounded-lg transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${
               filterStatus === s
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -196,7 +196,7 @@ export default function Contracts() {
                 type="button"
                 onClick={() => fromProposalMutation.mutate(p.id)}
                 disabled={fromProposalMutation.isPending}
-                className="w-full min-h-11 text-left px-4 py-3 rounded-lg border border-border hover:bg-muted/50 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-full min-h-11 text-left px-4 py-3 rounded-lg border border-border hover:bg-muted/50 transition-colors disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="text-sm font-medium">{p.title}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
@@ -251,7 +251,7 @@ export default function Contracts() {
                 type="button"
                 onClick={() => navigator.clipboard.writeText(aiResult)}
                 aria-label="Copy AI result to clipboard"
-                className="min-h-11 inline-flex items-center mt-1 text-xs underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-primary"
+                className="min-h-11 inline-flex items-center mt-1 text-xs underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring text-primary"
               >
                 Copy to clipboard
               </button>
@@ -342,14 +342,14 @@ export default function Contracts() {
                     Send never sits over the title. From sm up: one row. */}
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
                   <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
-                    <ScrollText className="mt-3 w-5 h-5 text-muted-foreground flex-shrink-0 sm:mt-0" aria-hidden="true" />
+                    <ScrollText className="mt-3 w-5 h-5 text-muted-foreground shrink-0 sm:mt-0" aria-hidden="true" />
                     <div className="flex-1 min-w-0">
                       <button
                         type="button"
                         onClick={() => setExpandedId(isExpanded ? null : contract.id)}
                         aria-expanded={isExpanded}
                         aria-label={`${isExpanded ? 'Collapse' : 'Expand'} contract ${contract.title}`}
-                        className="min-h-11 max-w-full text-sm font-medium text-foreground hover:text-primary truncate block text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="min-h-11 max-w-full text-sm font-medium text-foreground hover:text-primary truncate block text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {contract.title}
                       </button>
@@ -379,7 +379,7 @@ export default function Contracts() {
                       type="button"
                       onClick={() => openAiRefine(contract)}
                       aria-label={`Refine contract ${contract.title} with AI`}
-                      className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                       title="AI Refine"
                       style={{ '--tw-text-opacity': 1 }}
                     >
@@ -390,7 +390,7 @@ export default function Contracts() {
                         type="button"
                         onClick={() => navigator.clipboard.writeText(`${window.location.origin}/portal/contract/${contract.signToken}`)}
                         aria-label={`Copy signing link for ${contract.title}`}
-                        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                         title="Copy signing link"
                       >
                         <ExternalLink className="w-4 h-4" />
@@ -399,7 +399,7 @@ export default function Contracts() {
                     <a
                       href={`/api/contracts/${contract.id}/pdf`}
                       aria-label={`Download contract ${contract.title} as PDF`}
-                      className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                       title="Download PDF"
                     >
                       <Download className="w-4 h-4" aria-hidden="true" />

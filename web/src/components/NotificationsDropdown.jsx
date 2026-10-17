@@ -151,19 +151,20 @@ export default function NotificationsDropdown() {
   }, [markReadMutation, navigate]);
 
   const count = unreadCount?.count ?? 0;
+  const badgeCount = count > 9 ? '9+' : count;
 
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="relative min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label={`Notifications${count > 0 ? ` (${count} unread)` : ''}`}
+        className="relative min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={`Notifications${count > 0 ? `, ${badgeCount} unread${count > 9 ? `, ${count} in total` : ''}` : ''}`}
       >
         <Bell className="w-4 h-4" />
         {count > 0 && (
           <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[10px] font-bold bg-brand-lime text-brand-indigo rounded-full">
-            {count > 9 ? '9+' : count}
+            {badgeCount}
           </span>
         )}
       </button>
@@ -178,8 +179,8 @@ export default function NotificationsDropdown() {
                 type="button"
                 onClick={() => markAllReadMutation.mutate()}
                 disabled={markAllReadMutation.isPending}
-                className="min-h-11 min-w-11 flex items-center justify-center gap-1 text-xs font-medium text-brand-indigo hover:text-brand-lime dark:text-foreground dark:hover:text-brand-lime transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Mark all as read"
+                className="min-h-11 min-w-11 flex items-center justify-center gap-1 text-xs font-medium text-brand-indigo hover:text-brand-lime dark:text-foreground dark:hover:text-brand-lime transition-colors disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Mark all read"
                 title="Mark all as read"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
@@ -193,7 +194,7 @@ export default function NotificationsDropdown() {
             {notificationsFailed && !notifications ? (
               <div role="alert" className="p-6 text-center text-sm text-muted-foreground">
                 Notifications could not be loaded.{' '}
-                <button type="button" onClick={() => refetchNotifications()} className="underline text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">
+                <button type="button" onClick={() => refetchNotifications()} className="underline text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded">
                   Try again
                 </button>
               </div>
@@ -220,12 +221,12 @@ export default function NotificationsDropdown() {
                           }
                         }}
                         className={cn(
-                          'w-full min-h-11 text-left flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                          'w-full min-h-11 text-left flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
                           !notification.read && 'bg-brand-lime/5'
                         )}
                       >
                         {/* Unread dot */}
-                        <div className="flex-shrink-0 mt-1.5">
+                        <div className="shrink-0 mt-1.5">
                           {!notification.read ? (
                             <span className="block w-2 h-2 rounded-full bg-brand-lime" />
                           ) : (
@@ -242,7 +243,7 @@ export default function NotificationsDropdown() {
                               {notification.title}
                             </p>
                             {notification.type && (
-                              <span className={cn('flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded', badgeStyle)}>
+                              <span className={cn('shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded', badgeStyle)}>
                                 {formatTypeBadge(notification.type)}
                               </span>
                             )}
@@ -263,7 +264,7 @@ export default function NotificationsDropdown() {
                               e.stopPropagation();
                               markReadMutation.mutate(notification.id);
                             }}
-                            className="flex-shrink-0 min-h-11 min-w-11 p-1 text-muted-foreground hover:text-brand-indigo dark:hover:text-brand-lime rounded transition-colors mt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            className="shrink-0 min-h-11 min-w-11 p-1 text-muted-foreground hover:text-brand-indigo dark:hover:text-brand-lime rounded transition-colors mt-0.5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                             aria-label="Mark as read"
                             title="Mark as read"
                           >
@@ -283,7 +284,7 @@ export default function NotificationsDropdown() {
             <Link
               to="/notifications"
               onClick={() => setIsOpen(false)}
-              className="flex min-h-11 items-center justify-center rounded-lg text-center text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-brand-indigo hover:text-brand-lime dark:text-foreground dark:hover:text-brand-lime transition-colors"
+              className="flex min-h-11 items-center justify-center rounded-lg text-center text-xs font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring text-brand-indigo hover:text-brand-lime dark:text-foreground dark:hover:text-brand-lime transition-colors"
             >
               View all notifications
             </Link>

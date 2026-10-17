@@ -30,7 +30,7 @@ const StatusBadge = forwardRef(({
       className={cn('whitespace-nowrap', className)}
       {...props}
     >
-      {showIcon && Icon && <Icon className="w-3 h-3 flex-shrink-0" aria-hidden="true" />}
+      {showIcon && Icon && <Icon className="w-3 h-3 shrink-0" aria-hidden="true" />}
       {label ?? entry.label}
     </Badge>
   );

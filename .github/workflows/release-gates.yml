@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 25
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_PASSWORD: testpass
           POSTGRES_DB: testdb
@@ -30,7 +30,7 @@ jobs:
       # Realtime integration tests (src/tests/integration/realtime-redis.test.js)
       # run two Socket.IO servers and the worker emitter over a real Redis.
       redis:
-        image: redis:7-alpine
+        image: redis:8.10.2-alpine
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
@@ -50,7 +50,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24.22.0'
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -128,6 +128,7 @@ jobs:
         with:
           name: lighthouse-reports
           path: .lighthouseci/
+          include-hidden-files: true
           retention-days: 7
           if-no-files-found: ignore
 
@@ -151,7 +152,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24.22.0'
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -217,7 +218,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24.22.0'
           cache: npm
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund

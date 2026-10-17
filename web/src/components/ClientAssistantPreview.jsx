@@ -97,7 +97,7 @@ export default function ClientAssistantPreview({ clientId, clientName }) {
           rows={3}
           required
           disabled={pending}
-          className="w-full rounded-lg border border-input bg-background p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="w-full rounded-lg border border-input bg-background p-3 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         />
         <Button type="submit" size="sm" isLoading={pending} disabled={!clientId || !message.trim() || pending}>
           Generate preview

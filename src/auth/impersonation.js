@@ -631,7 +631,7 @@ export function createImpersonationHook({ prisma, isCurrentUserSession, logger =
     if (!normalizedPath(requestPath(request)).startsWith('/api/')) return undefined;
     if (!request.cookies?.[IMPERSONATION_COOKIE]) return undefined;
 
-    let adminOk = false;
+    let adminOk;
     try {
       await request.jwtVerify();
       adminOk = await isCurrentUserSession(prisma, request.user);

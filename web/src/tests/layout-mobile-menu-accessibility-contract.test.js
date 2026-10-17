@@ -14,6 +14,6 @@ describe('layout mobile menu accessibility contract', () => {
 
   it('keeps mobile navigation and menu links at the touch-target minimum', () => {
     expect(source).toContain('min-h-11');
-    expect(source).toContain('focus-visible:outline-none');
+    expect(source).toContain('focus-visible:outline-hidden');
   });
 });

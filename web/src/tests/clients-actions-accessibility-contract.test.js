@@ -14,7 +14,8 @@ describe('clients actions accessibility contract', () => {
 
   it('keeps client health and expansion actions named and touch-sized', () => {
     expect(source).toContain('aria-label={`Open client health for');
-    expect(source).toContain('aria-label={`${isExpanded ?');
+    expect(source).toContain('aria-expanded={isExpanded}');
+    expect(source).toContain("isExpanded ? 'Collapse client ' : 'Expand client '");
     expect(source).toContain('min-h-11 min-w-11');
   });
 });

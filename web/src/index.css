@@ -1,6 +1,16 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" source(none);
+@config "../tailwind.config.js";
+
+/* Explicit sources keep test fixtures and their unused classes out of production. */
+@source "../index.html";
+@source "./";
+@source not "./tests";
+@source not "./**/*.test.{js,ts,jsx,tsx}";
+
+/* Keep the v3 default ring for controls which do not specify a colour. */
+@theme {
+  --default-ring-color: hsl(217.21925133689840 91.21951219512198% 59.80392156862745%);
+}
 
 /* Self-hosted so first paint never depends on a third-party origin; optional
    keeps the fallback font instead of swapping late on slow connections. */
@@ -102,12 +112,12 @@
     --priority-normal: 199 89% 48%;
     --priority-low: 142 76% 36%;
 
-    /* Shadows */
-    --shadow-sm: 0 1px 2px 0 rgb(46 41 88 / 0.05);
-    --shadow-md: 0 4px 6px -1px rgb(46 41 88 / 0.1), 0 2px 4px -2px rgb(46 41 88 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(46 41 88 / 0.1), 0 4px 6px -4px rgb(46 41 88 / 0.1);
-    --shadow-xl: 0 20px 25px -5px rgb(46 41 88 / 0.1), 0 8px 10px -6px rgb(46 41 88 / 0.1);
-    --shadow-2xl: 0 25px 50px -12px rgb(46 41 88 / 0.25);
+    /* App shadow tokens stay separate from Tailwind v4 theme variables. */
+    --ashbi-shadow-sm: 0 1px 2px 0 rgb(46 41 88 / 0.05);
+    --ashbi-shadow-md: 0 4px 6px -1px rgb(46 41 88 / 0.1), 0 2px 4px -2px rgb(46 41 88 / 0.1);
+    --ashbi-shadow-lg: 0 10px 15px -3px rgb(46 41 88 / 0.1), 0 4px 6px -4px rgb(46 41 88 / 0.1);
+    --ashbi-shadow-xl: 0 20px 25px -5px rgb(46 41 88 / 0.1), 0 8px 10px -6px rgb(46 41 88 / 0.1);
+    --ashbi-shadow-2xl: 0 25px 50px -12px rgb(46 41 88 / 0.25);
   }
 
   .dark {
@@ -160,8 +170,24 @@
 }
 
 @layer base {
-  * {
+  *,
+  ::before,
+  ::after,
+  ::backdrop,
+  ::file-selector-button {
     @apply border-border;
+  }
+  /* Preserve v3 preflight affordances during the framework upgrade. */
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  dialog {
+    margin: auto;
   }
   html {
     font-family: 'DM Sans', system-ui, sans-serif;
@@ -204,7 +230,7 @@
 
   /* Transition utilities */
   .transition-transform-opacity {
-    transition-property: transform, opacity;
+    transition-property: transform, translate, scale, rotate, opacity;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     transition-duration: 200ms;
   }
@@ -311,6 +337,9 @@
   [class*='hover:scale-']:hover,
   [class*='group-hover:scale-'] {
     transform: none !important;
+    translate: none !important;
+    scale: none !important;
+    rotate: none !important;
   }
 
   .skeleton-shimmer {

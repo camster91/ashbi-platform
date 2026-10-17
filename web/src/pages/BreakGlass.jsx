@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Button } from '../components/ui';
 
-const fieldClass = 'w-full rounded-xl border border-border bg-background px-4 py-3 text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const fieldClass = 'w-full rounded-xl border border-border bg-background px-4 py-3 text-foreground focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ring';
 
 /** Read the token from the URL fragment (never sent to the server or logged). */
 export function tokenFromHash(hash) {
@@ -67,7 +67,7 @@ export default function BreakGlass() {
             <p className="font-medium">Your password was changed and your other sessions were signed out.</p>
             {done.mfaReset && <p>Two-factor authentication was turned off. Set it up again in Settings right after you sign in.</p>}
             <p>Your organization&apos;s administrators were notified, and the recovery is recorded in the Activity Log.</p>
-            <Link to="/login" className="inline-flex min-h-11 items-center font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Sign in</Link>
+            <Link to="/login" className="inline-flex min-h-11 items-center font-medium text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">Sign in</Link>
           </div>
         ) : !token ? (
           <div role="alert" className="rounded-xl border border-border bg-card p-5 text-sm text-foreground">

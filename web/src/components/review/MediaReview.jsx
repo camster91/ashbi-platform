@@ -35,8 +35,8 @@ export function authorRole(type) {
   return 'Team';
 }
 
-const control = 'min-h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
-const buttonBase = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
+const control = 'min-h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring';
+const buttonBase = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
 const buttonOutline = cn(buttonBase, 'border border-border text-foreground hover:bg-muted');
 const buttonPrimary = cn(buttonBase, 'bg-primary text-primary-foreground hover:bg-primary/90');
 
@@ -101,7 +101,7 @@ function MarkupToolbar({ kind, tool, setTool, color, setColor, disabledReason })
             type="button"
             aria-pressed={tool === entry.id}
             onClick={() => setTool(entry.id)}
-            className={cn('min-h-11 rounded-md px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', tool === entry.id ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-muted')}
+            className={cn('min-h-11 rounded-md px-3 text-sm font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring', tool === entry.id ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-muted')}
           >
             {entry.label}
           </button>
@@ -117,7 +117,7 @@ function MarkupToolbar({ kind, tool, setTool, color, setColor, disabledReason })
             aria-checked={color === entry.id}
             aria-label={entry.label}
             onClick={() => setColor(entry.id)}
-            className={cn('h-8 w-8 rounded-full border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', color === entry.id ? 'border-foreground' : 'border-transparent')}
+            className={cn('h-8 w-8 rounded-full border-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring', color === entry.id ? 'border-foreground' : 'border-transparent')}
             style={{ backgroundColor: entry.hex }}
           />
         ))}
@@ -342,7 +342,7 @@ function AnnotationItem({ annotation, number, replies, selected, onSelect, canCo
       tabIndex={-1}
       aria-labelledby={`annotation-${annotation.id}-heading`}
       data-selected={selected || undefined}
-      className={cn('rounded-lg border p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border', annotation.resolved && 'opacity-80')}
+      className={cn('rounded-lg border p-3 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring', selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border', annotation.resolved && 'opacity-80')}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -354,11 +354,11 @@ function AnnotationItem({ annotation, number, replies, selected, onSelect, canCo
       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
         {hasTime && onSeek ? (
-          <button type="button" onClick={() => onSeek(annotation)} aria-label={`Play from ${formatTimecode(annotation.timecodeMs)} for comment ${number}`} className="min-h-11 rounded px-1 text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <button type="button" onClick={() => onSeek(annotation)} aria-label={`Play from ${formatTimecode(annotation.timecodeMs)} for comment ${number}`} className="min-h-11 rounded px-1 text-primary underline-offset-2 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
             Play from {formatTimecode(annotation.timecodeMs)}
           </button>
         ) : showable && onShow ? (
-          <button type="button" onClick={() => onShow(annotation)} aria-pressed={selected} className="min-h-11 rounded px-1 text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <button type="button" onClick={() => onShow(annotation)} aria-pressed={selected} className="min-h-11 rounded px-1 text-primary underline-offset-2 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
             Show {shapeOf(annotation) ? `markup ${number}` : `page ${annotation.pageNumber}`}: {describeAnchor(annotation)}
           </button>
         ) : (
@@ -370,7 +370,7 @@ function AnnotationItem({ annotation, number, replies, selected, onSelect, canCo
       {replies.length > 0 && (
         <ul className="mt-3 space-y-2 border-l-2 border-border pl-3" aria-label={`Replies to comment ${number}`}>
           {replies.map((reply) => (
-            <li key={reply.id} ref={(node) => { itemRefs.current[reply.id] = node; }} tabIndex={-1} className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <li key={reply.id} ref={(node) => { itemRefs.current[reply.id] = node; }} tabIndex={-1} className="rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
               <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">{reply.authorName}</span> · {authorRole(reply.authorType)} · {formatDateTime(reply.createdAt)}</p>
               <p className="whitespace-pre-wrap break-words text-sm text-foreground">{reply.body}</p>
             </li>
@@ -735,7 +735,7 @@ export default function MediaReview({ media, status, annotations, decisions, can
               // "Show resolved (2)": a filter, named apart from the Resolve/Reopen actions.
               aria-label={`Show ${entry.label.toLowerCase()} (${counts[entry.id]})`}
               onClick={() => setFilter(entry.id)}
-              className={cn('min-h-11 rounded-md border px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', filter === entry.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-muted')}
+              className={cn('min-h-11 rounded-md border px-3 text-sm font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring', filter === entry.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-muted')}
             >
               {`${entry.label} (${counts[entry.id]})`}
             </button>

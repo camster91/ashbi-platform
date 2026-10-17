@@ -102,7 +102,7 @@ async function execute(db, prepared) {
         fail('Resource changed; prepare again', 409);
     const actor = await authorizeResourceLinkStaff(db, prepared.actor);
     const { id, ...input } = fresh.input;
-    let rows = [];
+    let rows;
     if (prepared.kind === 'create') {
         const receipt = await db.resourceLink.findFirst({ where: { organizationId: actor.organizationId, createdById: actor.id, createIntentId: input.createIntentId } });
         if (receipt)

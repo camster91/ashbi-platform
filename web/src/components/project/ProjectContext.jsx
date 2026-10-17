@@ -43,7 +43,7 @@ export default function ProjectContextCard({ projectId }) {
 
   if (isLoading) {
     return (
-      <div role="status" aria-live="polite" aria-label="Loading project context" className="bg-card rounded-lg shadow-sm border border-border p-4">
+      <div role="status" aria-live="polite" aria-label="Loading project context" className="bg-card rounded-lg shadow-xs border border-border p-4">
         <span className="sr-only">Loading project context…</span>
         <div className="space-y-3">
           <Skeleton className="h-4 w-1/3" />
@@ -58,7 +58,7 @@ export default function ProjectContextCard({ projectId }) {
   }
 
   return (
-    <div className="bg-card rounded-lg shadow-sm border border-border">
+    <div className="bg-card rounded-lg shadow-xs border border-border">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <h3 className="font-semibold flex items-center gap-2">
           <StickyNote className="w-4 h-4 text-accent" />
@@ -113,7 +113,7 @@ export default function ProjectContextCard({ projectId }) {
             onBlur={handleBlur}
             rows={4}
             aria-label="Project notes"
-            className="w-full border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
+            className="w-full border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-primary/20 resize-y"
             placeholder="Add notes about this project's communications..."
           />
         </div>

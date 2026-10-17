@@ -86,7 +86,7 @@ export default function PortalInvoice() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-card border-b border-border/40 shadow-sm">
+      <header className="bg-card border-b border-border/40 shadow-xs">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
           <PortalBrand brand={invoice?.brand} />
           <h1 className="text-2xl font-bold text-foreground mt-3">Invoice</h1>
@@ -201,7 +201,7 @@ export default function PortalInvoice() {
           <div className="bg-card rounded-xl border border-border/40 p-6">
             {invoice.status === 'OVERDUE' && (
               <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-destructive/5 border border-destructive/30">
-                <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
+                <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
                 <p className="text-sm text-destructive">This invoice is past due. Please make your payment as soon as possible.</p>
               </div>
             )}
@@ -210,7 +210,7 @@ export default function PortalInvoice() {
               onClick={() => payMutation.mutate()}
               disabled={payMutation.isPending}
               aria-busy={payMutation.isPending}
-              className="min-h-11 w-full px-6 py-3.5 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="min-h-11 w-full px-6 py-3.5 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               {payMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />

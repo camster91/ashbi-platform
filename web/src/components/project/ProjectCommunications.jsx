@@ -131,7 +131,7 @@ export default function ProjectCommunications({ projectId }) {
           <button
             onClick={() => setPage(Math.max(0, page - 1))}
             disabled={page === 0}
-            className="px-3 py-1 text-sm border border-border rounded hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            className="px-3 py-1 text-sm border border-border rounded hover:bg-secondary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
             Previous
           </button>
@@ -141,7 +141,7 @@ export default function ProjectCommunications({ projectId }) {
           <button
             onClick={() => setPage(page + 1)}
             disabled={(page + 1) * limit >= total}
-            className="px-3 py-1 text-sm border border-border rounded hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            className="px-3 py-1 text-sm border border-border rounded hover:bg-secondary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
             Next
           </button>
@@ -160,17 +160,17 @@ function CommunicationEntry({ comm, isExpanded, onToggle, detail, detailLoading,
   } catch { /* ignore */ }
 
   return (
-    <div className="bg-card text-card-foreground rounded-lg shadow-sm border border-border overflow-hidden">
+    <div className="bg-card text-card-foreground rounded-lg shadow-xs border border-border overflow-hidden">
       <button
         type="button"
-        className="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-secondary/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-secondary/30 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         onClick={onToggle}
         aria-expanded={isExpanded}
         aria-controls={`communication-${comm.id}-detail`}
       >
         {/* Direction icon */}
         <div className={cn(
-          'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5',
+          'w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5',
           isInbound ? 'bg-primary/10 text-primary' : 'bg-secondary text-secondary-foreground'
         )}>
           {isInbound ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
@@ -202,7 +202,7 @@ function CommunicationEntry({ comm, isExpanded, onToggle, detail, detailLoading,
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <span className="text-xs text-muted-foreground whitespace-nowrap">
             {formatRelativeTime(comm.receivedAt)}
           </span>

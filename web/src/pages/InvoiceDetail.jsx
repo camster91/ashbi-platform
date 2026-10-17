@@ -325,7 +325,7 @@ export default function InvoiceDetail() {
             type="button"
             onClick={() => navigate('/invoices')}
             aria-label="Back to invoices"
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            className="p-1.5 rounded hover:bg-muted text-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
             <ArrowLeft className="w-5 h-5" aria-hidden="true" />
           </button>
           <div>
@@ -478,7 +478,7 @@ export default function InvoiceDetail() {
       </Card>}
       {invoice.isOverdue && (
         <div className="flex items-center gap-3 p-4 bg-destructive/5 border border-destructive/30 rounded-lg">
-          <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0" />
+          <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
           <div>
             <p className="font-medium text-destructive">Invoice Overdue</p>
             <p className="text-sm text-destructive">
