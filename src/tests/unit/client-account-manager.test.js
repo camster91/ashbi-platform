@@ -73,7 +73,7 @@ for (const clientResult of [null, { ...client, organizationId: 'org-b' }, { ...c
 test('stored TEAM role overrides stale ADMIN claims and omits approval/financial sources', async () => {
   const { prisma, reads } = fixture({ actor: { ...user, role: 'TEAM', isActive: true } });
   const result = await readClientAccountManagerBrief(prisma, user, { clientId: client.id });
-  assert.equal(result.owner, 'me'); assert.deepEqual(result.sources, ['workspace_chat_attention', 'portal_handoffs', 'tasks', 'reviews']);
+  assert.equal(result.owner, 'me'); assert.deepEqual(result.sources, ['agent_runs', 'workspace_chat_attention', 'portal_handoffs', 'tasks', 'reviews']);
   assert.equal(reads.find(([key]) => key === 'tasks')[1].where.AND[0].assigneeId, user.id);
   assert.equal(reads.find(([key]) => key === 'reviews')[1].where.createdById, user.id);
   assert.ok(!reads.some(([key]) => ['approvals', 'invoices', 'contracts', 'proposals'].includes(key)));

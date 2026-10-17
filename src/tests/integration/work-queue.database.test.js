@@ -125,7 +125,7 @@ test('work queue is tenant-scoped, role-filtered, and assigns each source record
     const admin = await queue('adminA');
     assert.equal(admin.partial, false);
     assert.deepEqual(admin.failedSources, []);
-    assert.deepEqual(admin.sources, ['workspace_chat_attention', 'portal_handoffs', 'tasks', 'approvals', 'reviews', 'proposals', 'contracts', 'invoices']);
+    assert.deepEqual(admin.sources, ['agent_runs', 'workspace_chat_attention', 'portal_handoffs', 'tasks', 'approvals', 'reviews', 'proposals', 'contracts', 'invoices']);
     assert.deepEqual(viewOf(admin), {
       [`task:${tAssigned.id}`]: 'needs_action',
       [`task:${tBlocked.id}`]: 'at_risk',
@@ -189,7 +189,7 @@ test('work queue is tenant-scoped, role-filtered, and assigns each source record
     // ── TEAM member: no finance or approval rows, and no counts for them.
     // Like GET /api/tasks, only their own tasks even when asking for everyone.
     const team = await queue('teamA');
-    assert.deepEqual(team.sources, ['workspace_chat_attention', 'portal_handoffs', 'tasks', 'reviews']);
+    assert.deepEqual(team.sources, ['agent_runs', 'workspace_chat_attention', 'portal_handoffs', 'tasks', 'reviews']);
     assert.ok(team.rows.every((row) => row.type === 'task' || row.type === 'review'), 'no finance or approval rows');
     assert.deepEqual(new Set(team.rows.map((row) => row.id)), new Set([
       tAssigned.id, tWaiting.id, tOther.id, rInternal.id, rShared.id, rChanges.id,

@@ -281,6 +281,7 @@ back that transaction.
 | `client_agent_conversation.archived` | `client_agent_conversation` | `clientId`, `revision` |
 | `client_agent_run.requested` | `client_agent_run` | `clientId`, `conversationId`, `runId` |
 | `client_agent_run.cancelled` | `client_agent_run` | `clientId`, `conversationId`, `runId` |
+| `client_agent_run.reviewed` | `client_agent_run` | `clientId`, `conversationId`, `runId` |
 
 Titles, questions, responses, profile instructions, request intent keys and
 worker claim tokens are excluded from these audit events. Transcript storage

@@ -6,7 +6,7 @@ import { clientAgentConversationCreateSchema, clientAgentConversationArchiveSche
   clientAgentConversationQuerySchema, createClientAgentConversation, listClientAgentConversations,
   readClientAgentConversation, archiveClientAgentConversation } from '../services/client-agent-conversation.service.js';
 import { clientAgentRunStartSchema, startClientAgentRun, readClientAgentRun,
-  getClientAgentRunByIntent, cancelClientAgentRun } from '../services/client-agent-run.service.js';
+  getClientAgentRunByIntent, cancelClientAgentRun, reviewClientAgentRun } from '../services/client-agent-run.service.js';
 
 const cuid = z.string().cuid();
 const clientParams = z.object({ clientId: cuid }).strict();
@@ -25,6 +25,7 @@ const failures = {
   RUN_CONFLICT: [409, 'The account manager run changed. Reload before trying again.'],
   RUN_IDEMPOTENCY_CONFLICT: [409, 'This request key was already used for a different question.'],
   RUN_IN_PROGRESS: [409, 'Wait for the current run to finish or cancel it.'],
+  RUN_NOT_REVIEWABLE: [409, 'Only failed or uncertain runs can be marked reviewed.'],
   AGENT_DISABLED: [409, 'Enable the client work account manager before starting a run.'],
 };
 async function respond(reply, work) {
@@ -39,7 +40,7 @@ async function respond(reply, work) {
 export default async function clientAgentConversationRoutes(fastify, options = {}) {
   const services = { createClientAgentConversation, listClientAgentConversations, readClientAgentConversation,
     archiveClientAgentConversation, startClientAgentRun, readClientAgentRun, getClientAgentRunByIntent,
-    cancelClientAgentRun, ...options.services };
+    cancelClientAgentRun, reviewClientAgentRun, ...options.services };
   fastify.get('/clients/:clientId/assistant/conversations', {
     onRequest: [fastify.authenticate, requireStaff],
     preHandler: [validateParams(clientParams), validateQuery(pageQuery)],
@@ -81,6 +82,12 @@ export default async function clientAgentConversationRoutes(fastify, options = {
     onRequest: [fastify.authenticate, requireStaff],
     preHandler: [validateParams(runParams), validateQuery(emptyQuery), validateBody(emptyBody)],
   }, (request, reply) => respond(reply, () => services.cancelClientAgentRun(
+    request.prisma, request.user, request.params.clientId, request.params.conversationId, request.params.runId)));
+
+  fastify.post('/clients/:clientId/assistant/conversations/:conversationId/runs/:runId/review', {
+    onRequest: [fastify.authenticate, requireStaff],
+    preHandler: [validateParams(runParams), validateQuery(emptyQuery), validateBody(emptyBody)],
+  }, (request, reply) => respond(reply, () => services.reviewClientAgentRun(
     request.prisma, request.user, request.params.clientId, request.params.conversationId, request.params.runId)));
 
   fastify.get('/clients/:clientId/assistant/conversations/:conversationId/runs/by-intent/:idempotencyKey', {

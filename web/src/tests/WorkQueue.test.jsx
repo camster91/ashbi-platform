@@ -375,6 +375,14 @@ describe('WorkQueue page', () => {
   });
 });
 
+it('labels failed account-manager source rows and navigates to the exact saved run', async () => {
+  api.getWorkQueue.mockResolvedValue({ ...QUEUE, rows: [row({ type: 'agent_run', id: 'run-1', title: 'Account manager request', sourceUrl: '/client/c1?conversationId=conversation-1&runId=run-1', state: 'UNKNOWN', nextAction: 'Review the uncertain outcome' })], partial: true, failedSources: ['agent_runs'] });
+  api.getClients.mockResolvedValue({ clients: [] }); renderQueue();
+  expect(await screen.findByText('Some queue sources did not load: Account manager runs')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('link', { name: /Account manager run: Account manager request/ }));
+  expect(screen.getByTestId('location')).toHaveTextContent('/client/c1?conversationId=conversation-1&runId=run-1');
+});
+
 describe('WorkQueue navigation', () => {
   it('is routed at /queue and linked next to Dashboard in the shell', () => {
     const app = readFileSync(resolve(process.cwd(), 'src/App.jsx'), 'utf8');

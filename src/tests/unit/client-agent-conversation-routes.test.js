@@ -20,6 +20,7 @@ const endpoints = [
   ['GET', run, undefined, 'readClientAgentRun'],
   ['POST', `${run}/cancel`, undefined, 'cancelClientAgentRun'],
   ['GET', `${conversation}/runs/by-intent/${key}`, undefined, 'getClientAgentRunByIntent'],
+  ['POST', `${run}/review`, {}, 'reviewClientAgentRun'],
 ];
 async function setup(t, { role = 'TEAM', authenticated = true, failure } = {}) {
   const calls = [];
@@ -48,7 +49,7 @@ test('each literal route delegates exact request-scoped Prisma and authenticated
     const { args } = f.calls.at(-1);
     assert.equal(args[0], f.prisma); assert.equal(args[1], f.actor); assert.equal(args[2], clientId);
     if (name !== 'listClientAgentConversations' && name !== 'createClientAgentConversation') assert.equal(args[3], conversationId);
-    if (name === 'readClientAgentRun' || name === 'cancelClientAgentRun') assert.equal(args[4], runId);
+    if (['readClientAgentRun', 'cancelClientAgentRun', 'reviewClientAgentRun'].includes(name)) assert.equal(args[4], runId);
     if (name === 'getClientAgentRunByIntent') assert.equal(args[4], key);
   }
   assert.equal(f.calls.length, endpoints.length);
@@ -80,6 +81,7 @@ test('strict bounded query, bodies, CUID parameters and UUID intent are validate
     ['POST', `${conversation}/runs`, { question: 'Question', idempotencyKey: 'not-uuid' }],
     ['POST', `${conversation}/runs`, { question: 'Question', idempotencyKey: key, context: 'private' }],
     ['POST', `${run}/cancel`, { actorId: 'foreign' }], ['POST', `${run}/cancel?force=true`],
+    ['POST', `${run}/review`, { requestedById: 'foreign' }], ['POST', `${run}/review?force=true`],
   ];
   for (const [method, url, payload] of invalid) {
     const response = await f.app.inject({ method, url, ...(payload ? { payload } : {}) });
@@ -97,7 +99,7 @@ test('valid foreign CUID reaches fresh service authorization and returns a unifo
 
 test('recognized safe service codes use fixed statuses without reflecting raw messages', async t => {
   for (const [code, status] of [['INVALID_INPUT', 400], ['ROLE_DENIED', 403], ['RECORD_NOT_FOUND', 404],
-    ['RUN_IDEMPOTENCY_CONFLICT', 409], ['RUN_IN_PROGRESS', 409], ['CONVERSATION_CONFLICT', 409], ['AGENT_DISABLED', 409]]) {
+    ['RUN_IDEMPOTENCY_CONFLICT', 409], ['RUN_IN_PROGRESS', 409], ['RUN_NOT_REVIEWABLE', 409], ['CONVERSATION_CONFLICT', 409], ['AGENT_DISABLED', 409]]) {
     const f = await setup(t, { failure: new ToolError(code, 'secret prompt and database password', { statusCode: 500 }) });
     const response = await f.app.inject(base);
     assert.equal(response.statusCode, status); assert.equal(response.json().code, code);
