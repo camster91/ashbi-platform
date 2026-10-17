@@ -220,7 +220,7 @@ export default function Credentials() {
       {secretError && (
         <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           <span>{secretError}</span>
-          <button type="button" onClick={() => setSecretError('')} className="min-h-11 px-2 underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Dismiss</button>
+          <button type="button" onClick={() => setSecretError('')} className="min-h-11 px-2 underline rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">Dismiss</button>
         </div>
       )}
 
@@ -233,13 +233,13 @@ export default function Credentials() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search credentials..."
-            className="w-full pl-10 pr-4 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full pl-10 pr-4 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
           />
         </div>
         <select aria-label="Filter by category"
           value={filterCategory}
           onChange={(e) => setFilterCategory(e.target.value)}
-          className="px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
         >
           <option value="">All Categories</option>
           {categories.map((c) => (
@@ -249,7 +249,7 @@ export default function Credentials() {
         <select aria-label="Filter by client"
           value={filterClient}
           onChange={(e) => setFilterClient(e.target.value)}
-          className="px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
         >
           <option value="">All Clients</option>
           {clients.map((c) => (
@@ -274,7 +274,7 @@ export default function Credentials() {
                   onChange={(e) => setForm({ ...form, label: e.target.value })}
                   required
                   placeholder="e.g. Client WP Admin"
-                  className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                 />
               </div>
               <div>
@@ -282,7 +282,7 @@ export default function Credentials() {
                 <select id="credential-category" aria-label="Category"
                   value={form.category}
                   onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                 >
                   {categories.map((c) => (
                     <option key={c.value} value={c.value}>{c.label}</option>
@@ -296,7 +296,7 @@ export default function Credentials() {
                   value={form.username}
                   onChange={(e) => setForm({ ...form, username: e.target.value })}
                   placeholder="admin"
-                  className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                 />
               </div>
               <div>
@@ -308,7 +308,7 @@ export default function Credentials() {
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   required
                   placeholder="Password"
-                  className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                 />
               </div>
               <div>
@@ -318,7 +318,7 @@ export default function Credentials() {
                   value={form.url}
                   onChange={(e) => setForm({ ...form, url: e.target.value })}
                   placeholder="https://example.com/wp-admin"
-                  className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                 />
               </div>
               <div>
@@ -327,7 +327,7 @@ export default function Credentials() {
                   value={form.clientId}
                   onChange={(e) => { setForm({ ...form, clientId: e.target.value }); setFormError(''); }}
                   aria-required={!form.projectId}
-                  className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                 >
                   <option value="">{form.projectId ? 'No client (project credential)' : 'Select a client'}</option>
                   {clients.map((c) => (
@@ -343,7 +343,7 @@ export default function Credentials() {
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 rows={2}
                 placeholder="Additional notes..."
-                className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+                className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20 resize-none"
               />
             </div>
             {formError && (
@@ -419,7 +419,7 @@ export default function Credentials() {
                             type="button"
                             onClick={() => togglePassword(cred.id)}
                             aria-label={`${visiblePasswords[cred.id] ? 'Hide' : 'Show'} password for ${cred.label}`}
-                            className="min-h-8 min-w-8 inline-flex items-center justify-center p-1 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            className="min-h-8 min-w-8 inline-flex items-center justify-center p-1 text-muted-foreground hover:text-foreground rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                             title={visiblePasswords[cred.id] ? 'Hide' : 'Show'}
                           >
                             {visiblePasswords[cred.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -428,7 +428,7 @@ export default function Credentials() {
                             type="button"
                             onClick={() => copyPassword(cred.id)}
                             aria-label={`Copy password for ${cred.label}`}
-                            className="min-h-8 min-w-8 inline-flex items-center justify-center p-1 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            className="min-h-8 min-w-8 inline-flex items-center justify-center p-1 text-muted-foreground hover:text-foreground rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                             title="Copy password"
                           >
                             {copiedId === cred.id ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}

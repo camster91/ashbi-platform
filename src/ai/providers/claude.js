@@ -43,7 +43,8 @@ class ClaudeProvider {
         jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
       }
       return JSON.parse(jsonStr);
-    } catch (error) {
+    } catch {
+      // Keep provider content out of the outward error cause.
       console.error('Failed to parse Claude JSON response:', response);
       throw new Error('AI returned invalid JSON');
     }

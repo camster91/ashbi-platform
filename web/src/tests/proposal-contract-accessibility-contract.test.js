@@ -16,7 +16,7 @@ describe('proposal and contract accessibility contract', () => {
   it('keeps contract filters and proposal picker keyboard-safe', () => {
     expect(contracts).toContain('aria-pressed={filterStatus === s}');
     expect(contracts).toContain('type="button"');
-    expect(contracts).toContain('focus-visible:outline-none');
+    expect(contracts).toContain('focus-visible:outline-hidden');
     expect(contracts).toContain('min-h-11');
   });
 });

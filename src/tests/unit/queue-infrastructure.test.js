@@ -37,7 +37,7 @@ test('REDIS_URL forms are passed to ioredis intact (auth, ACL user, db index, TL
   }
   const [url, options] = redisConnectionArgs('rediss://user:secret@managed.example.com:25061', { maxRetriesPerRequest: null }, { production: true });
   assert.equal(url, 'rediss://user:secret@managed.example.com:25061');
-  assert.deepEqual(options, { tls: {}, maxRetriesPerRequest: null });
+  assert.deepEqual(options, { protocol: 2, tls: {}, maxRetriesPerRequest: null });
   const [, plain] = redisConnectionArgs('redis://redis:6379', PRODUCER_REDIS_OPTIONS, { production: true });
   assert.equal(plain.tls, undefined);
 });

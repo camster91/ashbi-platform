@@ -12,7 +12,7 @@ describe('notifications page accessibility contract', () => {
   });
 
   it('keeps visible focus treatment on notification actions', () => {
-    expect(source).toContain('focus-visible:outline-none');
+    expect(source).toContain('focus-visible:outline-hidden');
     expect(source).toContain('focus-visible:ring-2');
   });
 });

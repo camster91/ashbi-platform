@@ -42,13 +42,13 @@ export default function MfaEnrollmentRequired() {
 
   return (
     <main className="flex min-h-screen items-start justify-center bg-background p-4 sm:items-center">
-      <section className="w-full max-w-xl space-y-6 rounded-2xl border border-border bg-card p-6 shadow-sm" aria-labelledby="mfa-required-title">
+      <section className="w-full max-w-xl space-y-6 rounded-2xl border border-border bg-card p-6 shadow-xs" aria-labelledby="mfa-required-title">
         <div className="space-y-2">
           <h1
             id="mfa-required-title"
             ref={headingRef}
             tabIndex={-1}
-            className="flex items-center gap-2 text-2xl font-semibold text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+            className="flex items-center gap-2 text-2xl font-semibold text-foreground focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded"
           >
             <ShieldAlert className="h-6 w-6 text-primary" aria-hidden="true" />
             Set up two-factor authentication

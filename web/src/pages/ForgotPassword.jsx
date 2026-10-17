@@ -45,7 +45,7 @@ export default function ForgotPassword() {
         <button
           type="button"
           onClick={() => navigate('/login')}
-          className="min-h-11 inline-flex items-center gap-2 text-primary hover:text-primary/80 font-medium mb-8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+          className="min-h-11 inline-flex items-center gap-2 text-primary hover:text-primary/80 font-medium mb-8 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded"
         >
           <ArrowLeft className="w-4 h-4" />
           {t('common.back')}
@@ -78,7 +78,7 @@ export default function ForgotPassword() {
                     className={cn(
                       'w-full pl-11 pr-4 py-3 bg-muted border-0 rounded-xl',
                       'text-foreground placeholder:text-muted-foreground',
-                      'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-card',
+                      'focus:outline-hidden focus:ring-2 focus:ring-primary/20 focus:bg-card',
                       'transition-all duration-200'
                     )}
                     required
@@ -88,7 +88,7 @@ export default function ForgotPassword() {
 
               {error && (
                 <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-3">
-                  <div className="w-5 h-5 rounded-full bg-destructive/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <div className="w-5 h-5 rounded-full bg-destructive/20 flex items-center justify-center shrink-0 mt-0.5">
                     <span className="text-destructive text-xs">!</span>
                   </div>
                   <p className="text-sm text-destructive">{error}</p>
@@ -132,7 +132,7 @@ export default function ForgotPassword() {
                     setSubmitted(false);
                     setEmail('');
                   }}
-                  className="min-h-11 inline-flex items-center text-primary hover:text-primary/80 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                  className="min-h-11 inline-flex items-center text-primary hover:text-primary/80 font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded"
                 >
                   {t('auth.tryAgain')}
                 </button>

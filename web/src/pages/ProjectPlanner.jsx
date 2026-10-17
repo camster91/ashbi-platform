@@ -90,7 +90,7 @@ export default function ProjectPlanner() {
           <select aria-label="Project"
             value={selectedProjectId}
             onChange={e => setSelectedProjectId(e.target.value)}
-            className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+            className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary outline-hidden"
           >
             <option value="">Select a project...</option>
             {projects.map(p => (
@@ -127,7 +127,7 @@ export default function ProjectPlanner() {
             onChange={e => setBrief(e.target.value)}
             placeholder="Describe the project goals, deliverables, and any constraints. The more detail you provide, the better the plan will be..."
             rows={6}
-            className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary focus:border-primary outline-none resize-y"
+            className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary focus:border-primary outline-hidden resize-y"
           />
         </div>
 
@@ -196,7 +196,7 @@ export default function ProjectPlanner() {
                   value={saveTemplateName}
                   onChange={e => setSaveTemplateName(e.target.value)}
                   placeholder="Template name..."
-                  className="flex-1 px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary outline-none"
+                  className="flex-1 px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary outline-hidden"
                 />
                 <button
                   onClick={handleSaveAsTemplate}
@@ -231,7 +231,7 @@ export default function ProjectPlanner() {
               <div className="space-y-4">
                 {(generatedPlan.milestones || []).map((ms, i) => (
                   <div key={ms.id || i} className="relative flex items-start gap-4 pl-10">
-                    <div className="absolute left-2.5 top-1.5 w-3 h-3 rounded-full bg-info border-2 border-card shadow" />
+                    <div className="absolute left-2.5 top-1.5 w-3 h-3 rounded-full bg-info border-2 border-card shadow-sm" />
                     <div className="flex-1 bg-info/5 border border-info/30 rounded-lg p-3">
                       <div className="flex items-center justify-between">
                         <h3 className="font-medium text-foreground">{ms.name}</h3>

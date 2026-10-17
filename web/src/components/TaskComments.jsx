@@ -187,7 +187,7 @@ export default function TaskComments({ taskId }) {
                   onClick={() => requestCommentDeletion(comment)}
                   disabled={deleteMutation.isPending}
                   aria-label={`Delete comment by ${comment.author?.name || 'Unknown author'}`}
-                  className="inline-flex min-h-11 items-center rounded px-2 text-xs text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center rounded px-2 text-xs text-muted-foreground hover:text-destructive focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Delete
                 </button>
@@ -212,7 +212,7 @@ export default function TaskComments({ taskId }) {
               value={content}
               onChange={handleInputChange}
               placeholder="Write a comment... Use @name to mention someone"
-              className="w-full border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-3 py-2 text-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="w-full border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-3 py-2 text-sm resize-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               rows={2}
             />
 
@@ -224,7 +224,7 @@ export default function TaskComments({ taskId }) {
                     key={user.id}
                     type="button"
                     onClick={() => insertMention(user)}
-                    className="w-full text-left px-3 py-2 hover:bg-muted text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    className="w-full text-left px-3 py-2 hover:bg-muted text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   >
                     <span className="font-medium">{user.name}</span>
                     <span className="text-muted-foreground ml-2">{user.email}</span>
@@ -236,7 +236,7 @@ export default function TaskComments({ taskId }) {
           <button
             type="submit"
             disabled={!content.trim() || addMutation.isPending}
-            className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 self-end"
+            className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 self-end"
           >
             {addMutation.isPending ? '...' : 'Post'}
           </button>

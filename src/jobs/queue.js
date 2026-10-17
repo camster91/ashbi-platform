@@ -1,6 +1,7 @@
 // BullMQ Queue Setup
 
 import { Queue } from 'bullmq';
+import { assertSchedulerMigration } from './scheduler-migration.js';
 import IORedis from 'ioredis';
 import { redisConnectionArgs, resolveRedisUrl } from '../config/redis.js';
 import { withCurrentTenantJobData } from './tenant-iteration.js';
@@ -108,7 +109,7 @@ class MockQueue {
   }
   async add() { return { id: 'mock-job-id' }; }
   async upsertJobScheduler() { return { id: 'mock-scheduler-id' }; }
-  async removeRepeatable() { return true; }
+  getBackend() { return { getJobSchedulersRange: async () => [], isJobScheduler: async () => true }; }
   async removeJobScheduler() { return true; }
   async getJobs() { return []; }
   async close() {}
@@ -283,25 +284,10 @@ export async function setupRecurringJobs() {
     removeOnFail: 500,
   };
 
-  // Remove the pre-job-scheduler repeat keys created by older API replicas,
-  // plus one checker that targeted unmodeled legacy bootstrap tables. This is
-  // safe to repeat and prevents an upgrade from retaining duplicate schedules.
+  // The previous v5 release already removed its three legacy repeatables.
+  // Fail before any scheduler mutation if Redis still needs that migration.
+  await assertSchedulerMigration(ALL_QUEUES);
   await Promise.all([
-    healthQueue.removeRepeatable(
-      'update-all-health',
-      { every: 60 * 60 * 1000 },
-      'recurring-health-check',
-    ),
-    escalationQueue.removeRepeatable(
-      'check-all-escalations',
-      { every: 15 * 60 * 1000 },
-      'recurring-escalation-check',
-    ),
-    weeklyDigestQueue.removeRepeatable(
-      'generate-weekly-digest',
-      { pattern: '0 14 * * 1' },
-      'recurring-weekly-digest',
-    ),
     scheduledQueue.removeJobScheduler('scheduled-workflows-minutely'),
     scheduledQueue.removeJobScheduler('fleet-digest-daily-toronto'),
   ]);

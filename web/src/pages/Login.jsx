@@ -20,7 +20,7 @@ import { cn } from '../lib/utils';
 const inputClass = cn(
   'w-full px-4 py-3 bg-card border border-border rounded-xl',
   'text-card-foreground placeholder:text-muted-foreground',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent',
+  'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent',
   'transition-all duration-200'
 );
 
@@ -145,7 +145,7 @@ export function MfaChallengeForm({ challengeToken, returnTo, onCancel, onExpired
         className={cn(
           'w-full min-h-11 flex items-center justify-center gap-2 py-3 px-6',
           'bg-primary text-primary-foreground rounded-full hover:bg-primary/90',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
           'font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed'
         )}
       >
@@ -156,14 +156,14 @@ export function MfaChallengeForm({ challengeToken, returnTo, onCancel, onExpired
         <button
           type="button"
           onClick={toggleMethod}
-          className="min-h-11 text-primary hover:text-primary/80 font-medium rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-h-11 text-primary hover:text-primary/80 font-medium rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           {useRecovery ? 'Use your authenticator app instead' : 'Use a recovery code instead'}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-11 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-h-11 text-muted-foreground hover:text-foreground rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           Back to sign in
         </button>
@@ -319,7 +319,7 @@ export default function Login() {
                     className={cn(
                       'w-full pl-11 pr-4 py-3 bg-card border border-border rounded-xl',
                       'text-card-foreground placeholder:text-muted-foreground',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent',
+                      'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent',
                       'transition-all duration-200'
                     )}
                     required
@@ -345,7 +345,7 @@ export default function Login() {
                     className={cn(
                       'w-full pl-11 pr-12 py-3 bg-card border border-border rounded-xl',
                       'text-card-foreground placeholder:text-muted-foreground',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent',
+                      'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent',
                       'transition-all duration-200'
                     )}
                     required
@@ -357,7 +357,7 @@ export default function Login() {
                     onClick={() => setShowPassword(!showPassword)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                     aria-pressed={showPassword}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 min-h-11 min-w-11 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 min-h-11 min-w-11 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -365,7 +365,7 @@ export default function Login() {
               </div>
 
               <div className="flex items-center justify-end text-sm">
-                <Link to="/forgot-password" className="inline-flex min-h-11 items-center rounded-lg text-primary hover:text-primary/80 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <Link to="/forgot-password" className="inline-flex min-h-11 items-center rounded-lg text-primary hover:text-primary/80 font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                   {t('auth.forgotPassword')}
                 </Link>
               </div>
@@ -374,7 +374,7 @@ export default function Login() {
             {/* Error message */}
             {error && (
               <div id="login-error" role="alert" className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-3 motion-safe:animate-shake">
-                <div className="w-5 h-5 rounded-full bg-destructive/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="w-5 h-5 rounded-full bg-destructive/20 flex items-center justify-center shrink-0 mt-0.5">
                   <span className="text-destructive text-xs">!</span>
                 </div>
                 <p className="text-sm text-destructive">{error}</p>
@@ -393,7 +393,7 @@ export default function Login() {
                 'hover:bg-primary/90',
                 'shadow-md hover:shadow-lg',
                 'motion-safe:hover:scale-[1.02] motion-safe:active:scale-[0.98]',
-                'transition-all duration-200 focus:ring-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'transition-all duration-200 focus:ring-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
                 'font-semibold text-base',
                 'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100'
               )}
@@ -421,7 +421,7 @@ export default function Login() {
               value={currentLang}
               onChange={(e) => setLang(e.target.value)}
               aria-label="Language"
-              className="min-h-11 rounded-lg px-2 text-sm bg-transparent border-none text-muted-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 rounded-lg px-2 text-sm bg-transparent border-none text-muted-foreground cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             >
               {languages.map((lang) => (
                 <option key={lang.code} value={lang.code}>

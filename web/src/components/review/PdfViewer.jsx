@@ -9,7 +9,7 @@ import { cn } from '../../lib/utils';
 // a main-thread chunk. `children(page)` renders the markup overlay for the
 // page on show; the parent owns the page number.
 
-const buttonBase = 'min-h-11 inline-flex items-center justify-center gap-1 rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
+const buttonBase = 'min-h-11 inline-flex items-center justify-center gap-1 rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
 
 export function pdfViewerSupported() {
   return typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap !== 'undefined';
@@ -152,7 +152,7 @@ export default function PdfViewer({ url, fileName, page, onPageChange, onPageCou
             onChange={(event) => setPageInput(event.target.value)}
             onBlur={() => { const number = Number.parseInt(pageInput, 10); if (Number.isInteger(number)) go(number); }}
             disabled={state !== 'ready'}
-            className="min-h-11 w-20 rounded-lg border border-border bg-background px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-h-11 w-20 rounded-lg border border-border bg-background px-2 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           />
           <span className="text-sm text-muted-foreground">of {pageCount || '…'}</span>
         </form>

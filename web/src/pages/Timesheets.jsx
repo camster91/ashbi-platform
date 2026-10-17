@@ -423,7 +423,7 @@ function EntryDetail({ entry, onApprove, onReject, isApproving, isRejecting, can
             <div className="text-muted-foreground truncate">{entry.project.name}</div>
           )}
         </div>
-        <div className="flex flex-col items-end flex-shrink-0">
+        <div className="flex flex-col items-end shrink-0">
           <span className={`font-semibold tabular-nums ${isBillable ? 'text-success' : 'text-muted-foreground'}`}>
             {hours}h
           </span>

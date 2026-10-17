@@ -224,7 +224,7 @@ export default function TaskKanban() {
               aria-labelledby={`kanban-col-${key}`}
               onDragOver={e => e.preventDefault()}
               onDrop={() => handleDrop(key)}
-              className="bg-muted/30 rounded-xl border border-border flex flex-col lg:min-h-[420px] lg:w-72 lg:flex-shrink-0"
+              className="bg-muted/30 rounded-xl border border-border flex flex-col lg:min-h-[420px] lg:w-72 lg:shrink-0"
             >
               {/* Column header */}
               <div className={`px-4 py-3 border-b-2 ${headerColor} flex items-center justify-between`}>
@@ -246,10 +246,10 @@ export default function TaskKanban() {
                     aria-describedby={`kanban-task-${task.id}-status kanban-keyboard-help`}
                     onKeyDown={(e) => handleCardKeyDown(e, task, columnIndex)}
                     onDragStart={() => setDraggedTask({ ...task, fromStatus: key })}
-                    className="relative bg-card border border-border rounded-lg p-3 cursor-grab active:cursor-grabbing hover:shadow-md hover:border-primary/40 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="relative bg-card border border-border rounded-lg p-3 cursor-grab active:cursor-grabbing hover:shadow-md hover:border-primary/40 transition-all focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <span id={`kanban-task-${task.id}-status`} className="sr-only">In column {label}.</span>
-                    <Link to={`/task/${task.id}`} className="block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <Link to={`/task/${task.id}`} className="block rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                       <p className="text-sm font-medium text-foreground leading-snug break-words">{task.title}</p>
                     </Link>
                     <div className="mt-2 flex items-center justify-between flex-wrap gap-1">
@@ -274,7 +274,7 @@ export default function TaskKanban() {
                         value={key}
                         onChange={(e) => moveTaskTo(task, key, e.target.value)}
                         aria-label={`Move "${task.title}" to column`}
-                        className="min-h-8 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="min-h-8 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {columns.map((col) => (
                           <option key={col.key} value={col.key}>{col.label}</option>
@@ -293,7 +293,7 @@ export default function TaskKanban() {
                     value={newTaskTitle}
                     onChange={e => { setNewTaskTitle(e.target.value); setCreateError(null); }}
                     placeholder="Task title..."
-                    className="w-full px-2 py-1.5 border border-border rounded-lg bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full px-2 py-1.5 border border-border rounded-lg bg-background text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
                     onKeyDown={e => e.key === 'Enter' && createMutation.mutate({ title: newTaskTitle, status: key })}
                     autoFocus
                   />

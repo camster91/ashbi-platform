@@ -156,7 +156,7 @@ export default function CreateTeamMemberModal({ isOpen, onClose }) {
                 type="button"
                 aria-pressed={formData.skills.includes(skill)}
                 onClick={() => toggleSkill(skill)}
-                className={`min-h-11 px-3 py-1.5 text-sm rounded-lg border transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                className={`min-h-11 px-3 py-1.5 text-sm rounded-lg border transition-colors motion-reduce:transition-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${
                   formData.skills.includes(skill)
                     ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-card text-foreground border-border/60 hover:border-primary'

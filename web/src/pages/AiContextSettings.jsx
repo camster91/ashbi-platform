@@ -131,7 +131,7 @@ export default function AiContextSettings() {
         <button
           type="button"
           onClick={() => setShowAdd(true)}
-          className="min-h-11 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-h-11 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Plus className="w-4 h-4" />
           Add Context
@@ -147,7 +147,7 @@ export default function AiContextSettings() {
               type="button"
               onClick={() => setShowAdd(false)}
               aria-label="Close new context form"
-              className="min-h-11 min-w-11 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 min-w-11 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             >
               <X className="w-4 h-4" />
             </button>
@@ -157,20 +157,20 @@ export default function AiContextSettings() {
             value={newKey}
             onChange={(e) => setNewKey(e.target.value)}
             placeholder="key (e.g. brand_voice, services, pricing)"
-            className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
           />
           <textarea
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
             placeholder="Value..."
             rows={3}
-            className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
+            className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20 resize-y"
           />
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setShowAdd(false)}
-              className="min-h-11 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             >
               Cancel
             </button>
@@ -178,7 +178,7 @@ export default function AiContextSettings() {
               type="button"
               onClick={handleAdd}
               disabled={!newKey.trim() || !newValue.trim() || addMutation.isPending}
-              className="min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             >
               {addMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Save
@@ -221,14 +221,14 @@ export default function AiContextSettings() {
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
                       rows={4}
-                      className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
+                      className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20 resize-y"
                       autoFocus
                     />
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
                         onClick={cancelEdit}
-                        className="min-h-11 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="min-h-11 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         Cancel
                       </button>
@@ -236,7 +236,7 @@ export default function AiContextSettings() {
                         type="button"
                         onClick={() => handleSave(item.key)}
                         disabled={saveMutation.isPending}
-                        className="min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {saveMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                         Save
@@ -251,12 +251,12 @@ export default function AiContextSettings() {
               </div>
 
               {editingKey !== item.key && (
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex items-center gap-1 shrink-0">
                   <button
                     type="button"
                     onClick={() => startEdit(item)}
                     aria-label={`Edit AI context ${item.key}`}
-                    className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                     title="Edit"
                   >
                     <Pencil className="w-4 h-4" />
@@ -265,7 +265,7 @@ export default function AiContextSettings() {
                     type="button"
                     onClick={() => { deleteMutation.reset(); setContextToDelete(item); }}
                     aria-label={`Delete AI context ${item.key}`}
-                    className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                     title="Delete"
                     disabled={deleteMutation.isPending}
                   >

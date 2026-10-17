@@ -462,7 +462,7 @@ export async function prepareOutputDir(outputDir) {
       // above, refuse instead of writing into it.
       await fsp.mkdir(target, { mode: DIR_MODE });
     } catch (error) {
-      if (/** @type {any} */ (error).code === 'EEXIST') throw new Error(`Refusing to write: ${target} was created by something else during preparation`);
+      if (/** @type {any} */ (error).code === 'EEXIST') throw new Error(`Refusing to write: ${target} was created by something else during preparation`, { cause: error });
       throw error;
     }
   }

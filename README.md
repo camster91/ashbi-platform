@@ -31,19 +31,21 @@ Ashbi Design runs its client work across many separate tools (task boards, wikis
 
 ## Tech stack
 
-- **Frontend**: React 18, Vite, React Router, TanStack Query, Tailwind CSS, Socket.IO client, pdf.js
-- **Backend**: Node.js 22, Fastify 5, Prisma 7, Zod validation, Socket.IO with a Redis adapter
-- **Data**: PostgreSQL 16 with pgvector, Redis 7
+- **Frontend**: React 19, Vite 8, React Router 7, TanStack Query, Tailwind CSS 4, Socket.IO client, pdf.js
+- **Backend**: Node.js 24 LTS, Fastify 5, Prisma 7, Zod 4 validation, Socket.IO with a Redis adapter
+- **Data**: PostgreSQL 18 with pgvector and Redis 8 for new installations; existing production data services require the separately rehearsed upgrade in [the deployment guide](docs/coolify-deployment.md)
 - **Jobs**: BullMQ worker process
 - **AI**: Anthropic Claude SDK, Google Gemini, Ollama, OpenAI-compatible providers (BYOK)
 - **Integrations**: Stripe, Mailgun, Gmail and Google Calendar (googleapis), Slack, web push
 - **Observability**: OpenTelemetry tracing, Sentry, pino logging
-- **Quality**: TypeScript type checking (`tsc --noEmit`), ESLint, Node test runner, Vitest, Testing Library, Playwright (with axe accessibility checks), Lighthouse CI, CodeQL
+- **Quality**: TypeScript 7 native type checking (`tsc --noEmit`), with Microsoft's TypeScript 6 API compatibility package for ESLint, ESLint, Node test runner, Vitest, Testing Library, Playwright (with axe accessibility checks), Lighthouse CI, CodeQL
 - **Packaging**: Docker and Docker Compose
 
 ## Getting started
 
-Prerequisites: Node.js 22 (see `.nvmrc`), PostgreSQL 16 with pgvector, and Redis 7+.
+Prerequisites: Node.js 24.22.0 (see `.nvmrc`), PostgreSQL with pgvector, and Redis. The development and fresh-install Compose files use PostgreSQL 18 and Redis 8. Existing installations must follow the [data upgrade procedure](docs/coolify-deployment.md) before switching database images.
+
+Tailwind CSS 4 requires Safari 16.4+, Chrome 111+, or Firefox 128+.
 
 ```bash
 # Use the pinned Node version (if you use nvm)

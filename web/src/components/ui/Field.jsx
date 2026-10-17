@@ -63,7 +63,7 @@ export default function Field({
       )}
       {error && (
         <p id={errorId} className="flex items-start gap-1 text-xs font-medium text-destructive">
-          <AlertCircle className="mt-px h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+          <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>{error}</span>
         </p>
       )}

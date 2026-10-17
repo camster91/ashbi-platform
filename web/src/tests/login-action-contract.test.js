@@ -11,7 +11,7 @@ describe('authentication action contract', () => {
     expect(login).toContain('autoComplete="current-password"');
     expect(login).toContain('aria-busy={isLoading}');
     expect(login).toContain('w-full min-h-11 flex items-center');
-    expect(login).toContain('focus-visible:outline-none focus-visible:ring-2');
+    expect(login).toContain('focus-visible:outline-hidden focus-visible:ring-2');
   });
 
   it('keeps transient session recovery actionable and keyboard-visible', () => {

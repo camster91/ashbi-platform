@@ -143,7 +143,7 @@ export default function GlobalAIChat({ hideButton = false }) {
         onClick={() => setIsOpen(prev => !prev)}
         aria-expanded={isOpen}
         aria-controls="global-ai-chat-drawer"
-        className={`${hideButton ? 'hidden' : 'flex'} fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom))] right-3 lg:bottom-6 lg:right-6 z-40 min-h-12 min-w-12 w-12 h-12 lg:w-14 lg:h-14 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200 motion-reduce:transition-none items-center justify-center group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
+        className={`${hideButton ? 'hidden' : 'flex'} fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom))] right-3 lg:bottom-6 lg:right-6 z-40 min-h-12 min-w-12 w-12 h-12 lg:w-14 lg:h-14 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200 motion-reduce:transition-none items-center justify-center group focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
         aria-label="Open AI Chat"
       >
         <Bot aria-hidden="true" className="w-5 h-5 lg:w-6 lg:h-6 group-hover:scale-110 transition-transform" />
@@ -173,7 +173,7 @@ export default function GlobalAIChat({ hideButton = false }) {
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted transition-colors motion-reduce:transition-none text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted transition-colors motion-reduce:transition-none text-muted-foreground hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Close chat"
             >
               <X className="w-4 h-4" />
@@ -238,7 +238,7 @@ export default function GlobalAIChat({ hideButton = false }) {
                 onKeyDown={handleKeyDown}
                 placeholder="Ask about your projects..."
                 rows={1}
-                className="flex-1 min-h-11 px-4 py-2.5 border border-input rounded-xl bg-background text-sm text-foreground placeholder:text-muted-foreground resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary transition-colors motion-reduce:transition-none"
+                className="flex-1 min-h-11 px-4 py-2.5 border border-input rounded-xl bg-background text-sm text-foreground placeholder:text-muted-foreground resize-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary transition-colors motion-reduce:transition-none"
                 style={{ maxHeight: '120px' }}
               />
               <button
@@ -247,7 +247,7 @@ export default function GlobalAIChat({ hideButton = false }) {
                 disabled={!input.trim() || isLoading}
                 aria-busy={isLoading}
                 className={cn(
-                  'min-h-11 min-w-11 rounded-xl flex items-center justify-center shrink-0 transition-all motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  'min-h-11 min-w-11 rounded-xl flex items-center justify-center shrink-0 transition-all motion-reduce:transition-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
                   input.trim() && !isLoading
                     ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                     : 'bg-muted text-muted-foreground cursor-not-allowed'

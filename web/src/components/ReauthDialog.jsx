@@ -115,7 +115,7 @@ export function ReauthDialog({ isOpen, onSuccess, onCancel }) {
                 <button
                   type="button"
                   onClick={() => { setUseRecovery((v) => !v); setCode(''); setError(''); }}
-                  className="mt-1 min-h-11 text-sm text-primary hover:text-primary/80 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="mt-1 min-h-11 text-sm text-primary hover:text-primary/80 rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {useRecovery ? 'Use your authenticator app instead' : 'Use a recovery code instead'}
                 </button>

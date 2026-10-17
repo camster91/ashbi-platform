@@ -16,7 +16,8 @@ export const SETTLEABLE_INVOICE_STATUSES = PAYABLE_INVOICE_STATUSES;
 
 function getStripe() {
   if (!stripe && env.stripeSecretKey) {
-    stripe = new Stripe(env.stripeSecretKey);
+    // Keep the existing wire contract while upgrading the SDK.
+    stripe = new Stripe(env.stripeSecretKey, { apiVersion: '2026-08-26.dahlia' });
   }
   return stripe;
 }
@@ -372,7 +373,7 @@ export async function recordCheckoutAuditEvents(prisma, request, event, result) 
   if (!result || result.duplicate) return;
   const session = event?.data?.object || {};
   const transactionId = session.payment_intent || session.id;
-  let payment = null;
+  let payment;
   try {
     payment = await prisma.invoicePayment.findUnique({
       where: { transactionId, method: 'STRIPE' },

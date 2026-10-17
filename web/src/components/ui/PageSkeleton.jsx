@@ -84,7 +84,7 @@ export function KanbanPageSkeleton({
         {Array.from({ length: columns }).map((_, col) => (
           <div
             key={col}
-            className="flex flex-col min-w-[280px] max-w-[320px] flex-shrink-0 space-y-3"
+            className="flex flex-col min-w-[280px] max-w-[320px] shrink-0 space-y-3"
           >
             <Skeleton className="h-6 w-24" />
             <div className="space-y-2">

@@ -368,7 +368,7 @@ async function planAndWrite(db, context) {
       continue;
     }
     const sessionRecord = ledger.recordByKey.get(session.sourceKey);
-    let reviewSessionId = null;
+    let reviewSessionId;
     let acceptsNew = true;
     let isNew = false;
     let existingCount = 0;

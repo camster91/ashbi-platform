@@ -326,7 +326,7 @@ Write a helpful, professional reply that addresses the client's needs. Be concis
     let gmailThreadId = null;
     let lastMessageId = null;
     for (const msg of thread.messages) {
-      let extracted = {};
+      let extracted;
       try { extracted = msg.aiExtracted ? JSON.parse(msg.aiExtracted) : {}; } catch { extracted = {}; }
       if (extracted.gmailThreadId) gmailThreadId = extracted.gmailThreadId;
       if (extracted.gmailMessageId) lastMessageId = extracted.gmailMessageId;

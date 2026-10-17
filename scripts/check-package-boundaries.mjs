@@ -14,7 +14,7 @@ const webPackages = new Set([
 
 const frontendOwned = [
   'react', 'react-dom', 'react-router-dom', '@sentry/react', '@tanstack/react-query',
-  '@vitejs/plugin-react', 'vite', 'tailwindcss', 'postcss', 'autoprefixer',
+  '@vitejs/plugin-react', 'vite', 'tailwindcss', 'postcss', '@tailwindcss/postcss',
   'tailwindcss-animate', 'lucide-react', 'dompurify', 'clsx', 'tailwind-merge',
 ];
 

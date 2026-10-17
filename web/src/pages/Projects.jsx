@@ -77,7 +77,7 @@ function ProjectCard({ project, onPortfolioChange, saving }) {
     <div>
     <Link
       to={`/project/${project.id}`}
-      className="block bg-card rounded-lg border border-border p-3 hover:border-primary/30 hover:shadow-sm transition-all group"
+      className="block bg-card rounded-lg border border-border p-3 hover:border-primary/30 hover:shadow-xs transition-all group"
     >
       {/* Header: name + health */}
       <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -85,7 +85,7 @@ function ProjectCard({ project, onPortfolioChange, saving }) {
           {project.name}
         </h3>
         {project.health && (
-          <span className={cn('px-1.5 py-0.5 text-[10px] font-medium rounded flex-shrink-0', getHealthColor(project.health))}>
+          <span className={cn('px-1.5 py-0.5 text-[10px] font-medium rounded shrink-0', getHealthColor(project.health))}>
             {project.health === 'AT_RISK' ? '⚠' : project.health === 'ON_TRACK' ? '✓' : ''}
           </span>
         )}
@@ -171,7 +171,7 @@ function ProjectCard({ project, onPortfolioChange, saving }) {
 
 function KanbanColumn({ column, projects, count, onPortfolioChange, savingId }) {
   return (
-    <div className="flex flex-col min-w-[280px] max-w-[320px] flex-shrink-0">
+    <div className="flex flex-col min-w-[280px] max-w-[320px] shrink-0">
       {/* Column header */}
       <div className={cn('flex items-center gap-2 pb-2 mb-3 border-b-2', column.headerColor)}>
         <h2 className="text-sm font-semibold uppercase tracking-wider">{column.label}</h2>
@@ -279,7 +279,7 @@ export default function Projects() {
         <button
           type="button"
           onClick={openCreateModal}
-          className="min-h-11 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-h-11 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-2 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Plus className="w-4 h-4" aria-hidden="true" />
           New Project
@@ -310,7 +310,7 @@ export default function Projects() {
 
       {/* Kanban Board */}
       <div
-        className="flex gap-4 overflow-x-auto pb-4 min-w-0 [contain:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        className="flex gap-4 overflow-x-auto pb-4 min-w-0 [contain:inline-size] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
         role="region"
         aria-label="Project status board"
         tabIndex={0}

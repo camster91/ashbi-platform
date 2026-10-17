@@ -62,7 +62,7 @@ export async function postSlackMessage({ botToken, channelId, text, threadTs, fe
       body: { channel: channelId, text, ...(threadTs ? { thread_ts: threadTs } : {}) },
     });
   } catch (error) {
-    if (error.message === 'SLACK_INVALID_RESPONSE') throw new Error('SLACK_POST_INVALID_RESPONSE');
+    if (error.message === 'SLACK_INVALID_RESPONSE') throw new Error('SLACK_POST_INVALID_RESPONSE', { cause: error });
     throw error;
   }
   const { response, payload: body } = result;

@@ -17,7 +17,7 @@ export default function UpcomingEventsWidget({ events = [] }) {
       <ul
         tabIndex={0}
         aria-label="Upcoming events"
-        className="divide-y divide-border max-h-[340px] overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        className="divide-y divide-border max-h-[340px] overflow-y-auto focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       >
         {events.slice(0, 6).map(event => {
           const start = new Date(event.startTime);
@@ -26,7 +26,7 @@ export default function UpcomingEventsWidget({ events = [] }) {
             <li key={event.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
               <div className="flex items-start gap-3">
                 <div
-                  className="w-10 h-10 rounded-lg flex flex-col items-center justify-center flex-shrink-0 text-xs font-bold border-2 text-foreground"
+                  className="w-10 h-10 rounded-lg flex flex-col items-center justify-center shrink-0 text-xs font-bold border-2 text-foreground"
                   style={{ borderColor: event.color || DEFAULT_EVENT_COLOR }}
                 >
                   <span className="text-[10px] uppercase leading-none">{start.toLocaleDateString('en-CA', { month: 'short' })}</span>

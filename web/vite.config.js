@@ -50,7 +50,9 @@ const nodeModule = (names) => new RegExp(`[\\\\/]node_modules[\\\\/](?:${names.j
 // would absorb React core and drag that whole chunk onto every page's
 // critical path, including the login screen that never uses a query client.
 export const VENDOR_CHUNK_GROUPS = [
-  { name: 'vendor-react', test: nodeModule(['react', 'react-dom', 'react-router', 'react-router-dom', 'scheduler']), priority: 30 },
+  { name: 'vendor-react', test: nodeModule(['react', 'scheduler']), priority: 30 },
+  { name: 'vendor-react-dom', test: nodeModule(['react-dom']), priority: 29 },
+  { name: 'vendor-router', test: nodeModule(['react-router', 'react-router-dom']), priority: 25 },
   { name: 'vendor-query', test: nodeModule(['@tanstack']), priority: 20 },
   { name: 'vendor-utils', test: nodeModule(['date-fns', 'framer-motion']), priority: 20 },
   { name: 'vendor-socket', test: nodeModule(['socket.io-client', 'engine.io-client', 'socket.io-parser', 'engine.io-parser', '@socket.io']), priority: 20 },
@@ -61,16 +63,16 @@ export default defineConfig({
   plugins: [react(), routeChunkPreloadPlugin()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
       // Dependency-free modules shared with the API (e.g. task priorities).
-      '@shared': path.resolve(__dirname, '../src/shared'),
+      '@shared': path.resolve(import.meta.dirname, '../src/shared'),
     },
   },
   server: {
     port: 5173,
     fs: {
       // Keep Vite's default (workspace root) and add the shared API modules.
-      allow: [searchForWorkspaceRoot(process.cwd()), path.resolve(__dirname, '../src/shared')],
+      allow: [searchForWorkspaceRoot(process.cwd()), path.resolve(import.meta.dirname, '../src/shared')],
     },
     proxy: {
       '/api': {
@@ -82,6 +84,9 @@ export default defineConfig({
         ws: true,
       },
     },
+  },
+  worker: {
+    format: 'es',
   },
   build: {
     outDir: 'dist',

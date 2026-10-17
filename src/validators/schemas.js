@@ -5,6 +5,7 @@ import { DEFAULT_TASK_PRIORITY, TASK_PRIORITIES } from '../shared/task-priority.
 import { PORTFOLIO_VALUES } from '../shared/portfolio.js';
 import { isCalendarDate as isRecurrenceDate, isTimeZone } from '../shared/task-recurrence.js';
 import { z } from 'zod';
+import { toInputJsonSchema, preprocessInput } from './json-schema.js';
 import {
   ALLOWED_UPLOAD_EXTENSIONS,
   ALLOWED_UPLOAD_MIMETYPES,
@@ -139,13 +140,22 @@ export const taskFieldDefinitionSchema = z.object({
 export const projectTaskFieldsSchema = z.object({ revision: z.number().int().min(0), fields: z.array(taskFieldDefinitionSchema).max(40) }).strict()
   .refine(({ fields }) => ['key', 'name'].every(key => new Set(fields.map(field => field[key].toLowerCase())).size === fields.length), { message: 'Field keys and names must be unique.' });
 export const taskFieldValuesSchema = z.object({ revision: z.number().int().min(0), definitionRevision: z.number().int().min(0),
-  values: z.record(taskStageKeySchema.refine(value => !['__proto__', 'prototype', 'constructor'].includes(value)), z.unknown()).refine(value => Object.keys(value).length <= 40),
+  values: preprocessInput((value, context) => {
+    // Zod 4 deliberately drops __proto__ during record parsing. Reject unsafe
+    // raw keys first so an unsafe request cannot turn into an accepted no-op.
+    if (value && typeof value === 'object' && !Array.isArray(value)
+      && ['__proto__', 'prototype', 'constructor'].some(key => Object.hasOwn(value, key))) {
+      context.addIssue({ code: 'custom', message: 'Unsafe field property name' });
+      return z.NEVER;
+    }
+    return value;
+  }, z.record(taskStageKeySchema.refine(value => !['__proto__', 'prototype', 'constructor'].includes(value)), z.unknown()).refine(value => Object.keys(value).length <= 40)),
 }).strict();
 export const taskCollaboratorsSchema = z.object({ revision: z.number().int().min(0), userIds: z.array(cuidId).max(30).refine(ids => new Set(ids).size === ids.length) }).strict();
 export const taskViewFiltersSchema = z.object({
   search: z.string().trim().max(200).optional(), stageKey: taskStageKeySchema.optional(),
   status: z.enum(TASK_STATUS_VALUES).optional(), priority: z.enum(TASK_PRIORITIES).optional(),
-  fieldFilters: z.preprocess(value => { if (typeof value !== 'string') return value; try { return JSON.parse(value); } catch { return value; } },
+  fieldFilters: preprocessInput(value => { if (typeof value !== 'string') return value; try { return JSON.parse(value); } catch { return value; } },
     z.array(z.object({ key: taskStageKeySchema.refine(key => !['__proto__', 'prototype', 'constructor'].includes(key)), operator: z.enum(['EQ', 'CONTAINS', 'GTE', 'LTE', 'HAS']), value: z.union([z.string().max(2048), z.number().finite(), z.boolean()]) }).strict()).max(10)).optional(),
 }).strict();
 export const projectTaskViewsSchema = z.object({
@@ -313,7 +323,7 @@ function invoiceDateInput({ endOfDay }) {
 const invoiceDueDate = invoiceDateInput({ endOfDay: true });
 const invoiceIssueDate = invoiceDateInput({ endOfDay: false });
 // ISO 4217 allowlist (src/utils/money.js); accepts lower-case codes.
-const invoiceCurrency = z.preprocess(
+const invoiceCurrency = preprocessInput(
   (value) => (typeof value === 'string' ? value.trim().toUpperCase() : value),
   z.enum(/** @type {[string, ...string[]]} */ ([...INVOICE_CURRENCIES])),
 );
@@ -360,7 +370,7 @@ export const createInvoiceSchema = z.object({
 // older expense keeps whatever receipt value it already has.
 export const EXPENSE_CURRENCIES = ['USD', 'CAD', 'EUR', 'GBP'];
 const expenseDate = invoiceDateInput({ endOfDay: false });
-const expenseCurrency = z.preprocess(
+const expenseCurrency = preprocessInput(
   (value) => (typeof value === 'string' ? value.trim().toUpperCase() : value),
   z.enum(EXPENSE_CURRENCIES),
 );
@@ -407,7 +417,7 @@ export const updateInvoiceSchema = z.object({
 // CHEQUE is the canonical stored value. Older web builds sent CHECK from the
 // Record payment dialog (and were rejected), so accept it and normalize.
 export const INVOICE_PAYMENT_METHODS = ['STRIPE', 'BANK', 'TRANSFER', 'CASH', 'CHEQUE', 'OTHER'];
-const invoicePaymentMethodSchema = z.preprocess(
+const invoicePaymentMethodSchema = preprocessInput(
   (value) => (value === 'CHECK' ? 'CHEQUE' : value),
   z.enum(INVOICE_PAYMENT_METHODS),
 );
@@ -548,9 +558,7 @@ export { validateUploadedFile };
 // ── Helper: convert Zod schema to Fastify JSON Schema ──────────────────────
 // This allows using Zod schemas with Fastify's built-in validation
 export function zodToJsonSchema(zodSchema) {
-  return zodSchema._def;
-  // For full conversion, use `zod-to-json-schema` package.
-  // We'll use Zod programmatically instead for Fastify routes.
+  return toInputJsonSchema(zodSchema);
 }
 
 // ── Helper: validate with Zod and return { data, error } ──────────────────
@@ -559,7 +567,7 @@ export function validate(schema, data) {
   if (result.success) {
     return { data: result.data, error: null };
   }
-  const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+  const errors = result.error.issues.map(e => `${e.path.join('.')}: ${e.message}`);
   return { data: null, error: errors.join('; ') };
 }
 
@@ -701,7 +709,7 @@ export function validateBody(schema) {
   return Object.assign(async (request, reply) => {
     const result = schema.safeParse(request.body);
     if (!result.success) {
-      const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+      const errors = result.error.issues.map(e => `${e.path.join('.')}: ${e.message}`);
       return reply.status(400).send({ error: errors.join('; ') });
     }
     // Replace request.body with parsed/trimmed data
@@ -713,7 +721,7 @@ export function validateParams(schema) {
   return Object.assign(async (request, reply) => {
     const result = schema.safeParse(request.params);
     if (!result.success) {
-      const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+      const errors = result.error.issues.map(e => `${e.path.join('.')}: ${e.message}`);
       return reply.status(400).send({ error: errors.join('; ') });
     }
     request.params = result.data;
@@ -724,7 +732,7 @@ export function validateQuery(schema) {
   return Object.assign(async (request, reply) => {
     const result = schema.safeParse(request.query);
     if (!result.success) {
-      const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+      const errors = result.error.issues.map(e => `${e.path.join('.')}: ${e.message}`);
       return reply.status(400).send({ error: errors.join('; ') });
     }
     request.query = result.data;
@@ -1490,7 +1498,8 @@ export const estimateCreateSchema = z.object({
   validUntil: z.string().datetime().optional(),
 });
 
-export const estimateUpdateSchema = estimateCreateSchema.partial();
+// PATCH omissions must not apply create-time defaults under Zod 4.
+export const estimateUpdateSchema = estimateCreateSchema.partial().extend({ tax: estimateCreateSchema.shape.tax.removeDefault().optional() });
 
 export const estimateActionSchema = z.object({
   action: z.enum(['approve', 'decline']),
@@ -1721,7 +1730,7 @@ export const attachmentCreateSchema = z.object({
 // here and are dropped if an older client still sends the whole record.
 // An emptied color field ('' or null) keeps the stored color; other text
 // fields may be cleared with '' or null.
-const brandHexColor = z.preprocess(
+const brandHexColor = preprocessInput(
   (value) => (value === '' || value === null ? undefined : value),
   z.string().trim().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/, 'hex color like #1a2b3c').optional(),
 );
@@ -1917,7 +1926,7 @@ export const assetCreateSchema = z.object({
 });
 
 // An asset keeps its client; PATCH cannot move it to another one.
-export const assetUpdateSchema = z.object(assetFields).partial();
+export const assetUpdateSchema = z.object(assetFields).partial().extend({ type: assetFields.type.removeDefault().optional() });
 
 export const assetGuidelineCreateSchema = z.object({
   title: z.string().min(1).max(200),
@@ -2003,7 +2012,7 @@ const milestoneFields = {
   color: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/, 'hex color like #3B82F6').optional(),
 };
 // A cleared date input ('') counts as "not sent".
-const milestoneDueDateInput = z.preprocess((value) => (value === '' ? undefined : value), milestoneDueDate.optional());
+const milestoneDueDateInput = preprocessInput((value) => (value === '' ? undefined : value), milestoneDueDate.optional());
 
 export const milestoneCreateSchema = z.object({
   ...milestoneFields,
@@ -2118,6 +2127,13 @@ export const rateCardSchema = z.object({
   isDefault: z.boolean().default(false),
 });
 
+// Updating a name must not reactivate a card or erase its saved rates.
+export const rateCardUpdateSchema = rateCardSchema.partial().extend({
+  isActive: rateCardSchema.shape.isActive.removeDefault().optional(),
+  rates: rateCardSchema.shape.rates.removeDefault().optional(),
+  isDefault: rateCardSchema.shape.isDefault.removeDefault().optional(),
+});
+
 // "New revision round" sends {}; notes are optional.
 export const revisionCreateNewSchema = z.object({
   notes: z.string().trim().max(5_000).optional(),
@@ -2209,7 +2225,7 @@ export const webhookEmailTestSchema = z.object({
 // members of the caller's organization. `allDay` is accepted as an alias of
 // isAllDay.
 export const CALENDAR_EVENT_TYPES = ['MEETING', 'CALL', 'DEADLINE', 'REMINDER', 'MILESTONE', 'TASK', 'BLOCKED_TIME', 'OTHER'];
-const calendarOptionalId = z.preprocess((value) => (value === '' ? null : value), cuidId.nullable().optional());
+const calendarOptionalId = preprocessInput((value) => (value === '' ? null : value), cuidId.nullable().optional());
 const calendarEventFields = {
   title: z.string().trim().min(1).max(200),
   description: z.string().max(10_000).nullable().optional(),
@@ -2232,13 +2248,13 @@ const normalizeAllDay = (value) => {
 const endNotBeforeStart = (value) => !value.startTime || !value.endTime || new Date(value.endTime) >= new Date(value.startTime);
 const endNotBeforeStartMessage = { message: 'endTime must not be before startTime', path: ['endTime'] };
 
-export const calendarEventCreateSchema = z.preprocess(normalizeAllDay, z.object({
+export const calendarEventCreateSchema = preprocessInput(normalizeAllDay, z.object({
   ...calendarEventFields,
   type: calendarEventFields.type.default('MEETING'),
   isAllDay: calendarEventFields.isAllDay.default(false),
 }).refine(endNotBeforeStart, endNotBeforeStartMessage));
 
-export const calendarEventUpdateSchema = z.preprocess(
+export const calendarEventUpdateSchema = preprocessInput(
   normalizeAllDay,
   z.object(calendarEventFields).partial().refine(endNotBeforeStart, endNotBeforeStartMessage),
 );

@@ -39,7 +39,7 @@ const RECEIPT_FILTERS = [
   ['EXPIRED', 'Expired'],
 ];
 
-const selectClass = 'px-2 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring';
+const selectClass = 'px-2 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-ring';
 
 export function toolLabel(tool) {
   return TOOL_LABELS[tool] || String(tool || '').replace(/_/g, ' ');
@@ -291,7 +291,7 @@ export function AskAssistant({ onProposed }) {
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
           placeholder="For example: which of my tasks are open on the website project?"
-          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
           readOnly={session.isPending}
         />
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -307,7 +307,7 @@ export function AskAssistant({ onProposed }) {
       </form>
       {session.isPending && <LoadingState compact label="The assistant is working…" />}
       {settled && (
-        <div ref={resultRef} tabIndex={-1} className="space-y-2 focus:outline-none">
+        <div ref={resultRef} tabIndex={-1} className="space-y-2 focus:outline-hidden">
           {session.error && (
             <p role="alert" className="text-sm text-destructive">{session.error.message || 'The assistant could not run.'}</p>
           )}

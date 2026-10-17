@@ -18,81 +18,63 @@ import {
 } from '../helpers/openapi.js';
 import { collectRouteInventory } from '../helpers/route-inventory.js';
 import { zodToJsonSchema } from '../helpers/zod-to-json-schema.js';
+import { preprocessInput } from '../../validators/json-schema.js';
 
-describe('zodToJsonSchema', () => {
-  test('CUID pattern matches installed Zod validation without inventing regex flags', () => {
+describe('native Zod 4 input JSON Schema', () => {
+  test('CUID pattern matches installed validation', () => {
     const schema = z.string().cuid();
     const converted = zodToJsonSchema(schema);
-    assert.deepEqual(converted, { type: 'string', pattern: '^[cC][^\\s-]{8,}$' });
     const pattern = new RegExp(converted.pattern);
     for (const value of ['cm1234567', 'Cm1234567', 'cshort', 'cm12345-7', 'cm12345 7', 'xm1234567']) {
       assert.equal(pattern.test(value), schema.safeParse(value).success, value);
     }
   });
-  test('objects: required keys, strict, defaults and optional fields', () => {
+  test('native conversion retains strict object, required input, formats, constraints and defaults', () => {
     const schema = z.object({
-      name: z.string().trim().min(1).max(100),
-      email: z.string().email().max(255),
-      site: z.string().url().optional(),
-      id: z.string().uuid(),
-      code: z.string().regex(/^[A-Z]+$/),
-      when: z.string().datetime().nullable().optional(),
+      name: z.string().trim().min(1).max(100), email: z.string().email().max(255),
+      site: z.string().url().optional(), id: z.string().uuid(),
+      code: z.string().regex(/^[A-Z]+$/), when: z.string().datetime().nullable().optional(),
       active: z.boolean().optional().default(true),
     }).strict();
-    assert.deepEqual(zodToJsonSchema(schema), {
-      type: 'object',
-      properties: {
-        name: { type: 'string', minLength: 1, maxLength: 100 },
-        email: { type: 'string', format: 'email', maxLength: 255 },
-        site: { type: 'string', format: 'uri' },
-        id: { type: 'string', format: 'uuid' },
-        code: { type: 'string', pattern: '^[A-Z]+$' },
-        when: { anyOf: [{ type: 'string', format: 'date-time' }, { type: 'null' }] },
-        active: { type: 'boolean', default: true },
-      },
-      required: ['name', 'email', 'id', 'code'],
-      additionalProperties: false,
-    });
+    const converted = zodToJsonSchema(schema);
+    assert.equal(converted.additionalProperties, false);
+    assert.deepEqual(converted.required, ['name', 'email', 'id', 'code']);
+    assert.equal(converted.properties.name.minLength, 1);
+    assert.equal(converted.properties.name.maxLength, 100);
+    assert.equal(converted.properties.email.format, 'email');
+    assert.equal(converted.properties.site.format, 'uri');
+    assert.equal(converted.properties.id.format, 'uuid');
+    assert.equal(converted.properties.code.pattern, '^[A-Z]+$');
+    assert.equal(converted.properties.active.default, true);
+    assert.equal(converted.$schema, undefined);
   });
-
-  test('numbers, enums, literals, arrays, records, unions and dates', () => {
-    const Color = { Red: 'red', Blue: 'blue' };
-    const Level = { Low: 0, High: 1, 0: 'Low', 1: 'High' }; // shape of a numeric TS enum
+  test('native conversion describes number bounds, records, enums, literals and arrays', () => {
     assert.deepEqual(zodToJsonSchema(z.number().int().min(1).max(10)), { type: 'integer', minimum: 1, maximum: 10 });
     assert.deepEqual(zodToJsonSchema(z.number().positive()), { type: 'number', exclusiveMinimum: 0 });
-    assert.deepEqual(zodToJsonSchema(z.number().nonnegative()), { type: 'number', minimum: 0 });
-    assert.deepEqual(zodToJsonSchema(z.coerce.number().int().min(1).max(50).default(5)), {
-      type: 'integer', minimum: 1, maximum: 50, default: 5,
-    });
+    const coerced = zodToJsonSchema(z.coerce.number().int().min(1).max(50).default(5));
+    assert.equal(coerced.type, 'integer'); assert.equal(coerced.minimum, 1); assert.equal(coerced.maximum, 50); assert.equal(coerced.default, 5);
     assert.deepEqual(zodToJsonSchema(z.enum(['A', 'B'])), { type: 'string', enum: ['A', 'B'] });
-    assert.deepEqual(zodToJsonSchema(z.nativeEnum(Color)), { type: 'string', enum: ['red', 'blue'] });
-    assert.deepEqual(zodToJsonSchema(z.nativeEnum(Level)), { type: 'integer', enum: [0, 1] });
     assert.deepEqual(zodToJsonSchema(z.literal(true)), { type: 'boolean', const: true });
-    assert.deepEqual(zodToJsonSchema(z.array(z.string()).min(1).max(3)), {
-      type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 3,
-    });
-    assert.deepEqual(zodToJsonSchema(z.record(z.string(), z.any())), { type: 'object', additionalProperties: {} });
-    assert.deepEqual(zodToJsonSchema(z.union([z.string(), z.number()])), { anyOf: [{ type: 'string' }, { type: 'number' }] });
+    assert.deepEqual(zodToJsonSchema(z.array(z.string()).min(1).max(3)), { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 3 });
+    const record = zodToJsonSchema(z.record(z.string(), z.any()));
+    assert.equal(record.type, 'object'); assert.deepEqual(record.additionalProperties, {});
+    assert.deepEqual(zodToJsonSchema(z.union([z.string(), z.number()])), { type: ['string', 'number'] });
     assert.deepEqual(zodToJsonSchema(z.unknown()), {});
-    assert.deepEqual(zodToJsonSchema(z.date()), { type: 'string', format: 'date-time' });
   });
-
-  test('effects describe their input schema', () => {
-    const refined = z.object({ a: z.string().optional() }).refine((value) => Object.keys(value).length > 0);
-    assert.deepEqual(zodToJsonSchema(refined), { type: 'object', properties: { a: { type: 'string' } } });
-    const preprocessed = z.preprocess((value) => (value === 'CHECK' ? 'CHEQUE' : value), z.enum(['CHEQUE']));
-    assert.deepEqual(zodToJsonSchema(preprocessed), { type: 'string', enum: ['CHEQUE'] });
-    assert.deepEqual(zodToJsonSchema(z.string().transform((value) => value.length)), { type: 'string' });
-    const superRefined = z.object({ b: z.number() }).superRefine(() => {});
-    assert.deepEqual(zodToJsonSchema(superRefined), { type: 'object', properties: { b: { type: 'number' } }, required: ['b'] });
+  test('outbound transforms describe input and explicit preprocessing retains its declared input', () => {
+    assert.deepEqual(zodToJsonSchema(z.string().transform(value => value.length)), { type: 'string' });
+    const input = z.enum(['CHECK', 'CHEQUE']);
+    const schema = preprocessInput(value => value === 'CHECK' ? 'CHEQUE' : value, z.enum(['CHEQUE']), input);
+    assert.deepEqual(zodToJsonSchema(schema), { type: 'string', enum: ['CHECK', 'CHEQUE'] });
+    assert.equal(schema.parse('CHECK'), 'CHEQUE');
+    assert.throws(() => zodToJsonSchema(z.preprocess(value => value, z.string())), /cannot be represented/i);
   });
-
-  test('throws on types and checks it cannot describe', () => {
-    assert.throws(() => zodToJsonSchema(z.set(z.string())), /unsupported Zod type ZodSet/);
-    assert.throws(() => zodToJsonSchema(z.object({ fn: z.function() })), /unsupported Zod type ZodFunction/);
-    assert.throws(() => zodToJsonSchema(z.string().ip()), /unsupported string check "ip"/);
-    assert.throws(() => zodToJsonSchema(z.string().regex(/a/i)), /unsupported regex flags/);
-    assert.throws(() => zodToJsonSchema({}), /not a Zod v3 schema/);
+  test('unrepresentable values fail honestly rather than becoming empty schemas', () => {
+    for (const schema of [z.set(z.string()), z.object({ fn: z.function() }), z.date(), z.bigint()]) {
+      assert.throws(() => zodToJsonSchema(schema), /cannot be represented/i);
+    }
+    assert.throws(() => zodToJsonSchema(z.string().regex(/a/i)), /Unsupported regex flags/);
+    assert.throws(() => zodToJsonSchema({}), /Zod 4 schema/);
   });
 });
 

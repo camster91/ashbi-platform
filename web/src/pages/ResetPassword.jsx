@@ -118,7 +118,7 @@ export default function ResetPassword() {
                     className={cn(
                       'w-full pl-11 pr-4 py-3 bg-muted border-0 rounded-xl',
                       'text-foreground placeholder:text-muted-foreground',
-                      'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-card',
+                      'focus:outline-hidden focus:ring-2 focus:ring-primary/20 focus:bg-card',
                       'transition-all duration-200'
                     )}
                     required
@@ -144,7 +144,7 @@ export default function ResetPassword() {
                     className={cn(
                       'w-full pl-11 pr-4 py-3 bg-muted border-0 rounded-xl',
                       'text-foreground placeholder:text-muted-foreground',
-                      'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-card',
+                      'focus:outline-hidden focus:ring-2 focus:ring-primary/20 focus:bg-card',
                       'transition-all duration-200'
                     )}
                     required
@@ -164,7 +164,7 @@ export default function ResetPassword() {
 
               {error && (
                 <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-3">
-                  <div className="w-5 h-5 rounded-full bg-destructive/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <div className="w-5 h-5 rounded-full bg-destructive/20 flex items-center justify-center shrink-0 mt-0.5">
                     <span className="text-destructive text-xs">!</span>
                   </div>
                   <p className="text-sm text-destructive">{error}</p>

@@ -92,7 +92,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
         {(clientsFailed || teamFailed) && (
           <div role="alert" className="mb-4 p-3 text-sm rounded-lg border border-border bg-muted text-foreground">
             {clientsFailed ? 'Clients' : 'Team members'} could not be loaded, so the list below may be empty.{' '}
-            <button type="button" onClick={() => { if (clientsFailed) refetchClients(); if (teamFailed) refetchTeam(); }} className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">
+            <button type="button" onClick={() => { if (clientsFailed) refetchClients(); if (teamFailed) refetchTeam(); }} className="underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded">
               Try again
             </button>
           </div>
@@ -123,7 +123,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
               name="name"
               value={formData.name}
               onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
               placeholder="Website Redesign"
               autoFocus
             />
@@ -139,7 +139,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
               value={formData.clientId}
               onChange={handleChange}
               aria-describedby={error ? 'create-project-error' : undefined}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
             >
               <option value="">Select a client</option>
               {clientOptions.map((client) => (
@@ -160,7 +160,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
               value={formData.description}
               onChange={handleChange}
               rows={3}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20 resize-none"
               placeholder="Brief description of the project..."
             />
           </div>
@@ -174,7 +174,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
               name="defaultOwnerId"
               value={formData.defaultOwnerId}
               onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
             >
               <option value="">No default owner</option>
               {(team?.team || []).map((member) => (

@@ -306,7 +306,7 @@ export default function Invoices() {
             <div className="flex flex-wrap gap-1 max-w-full" role="group" aria-label="Filter by status">
               {STATUS_FILTERS.map((s) => (
                 <button key={s} type="button" aria-pressed={filterStatus === s} onClick={() => setFilterStatus(s)}
-                  className={`min-h-11 px-3 py-1.5 text-xs rounded-lg transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  className={`min-h-11 px-3 py-1.5 text-xs rounded-lg transition-colors font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${
                     filterStatus === s
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -398,7 +398,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
   const repeats = recurrenceSummary(invoice);
 
   return (
-    <Card className={`p-4 hover:shadow-sm transition-shadow cursor-pointer ${invoice.isOverdue ? 'border-destructive/30' : ''}`}>
+    <Card className={`p-4 hover:shadow-xs transition-shadow cursor-pointer ${invoice.isOverdue ? 'border-destructive/30' : ''}`}>
       {/* Mobile Layout */}
       <div className="sm:hidden" onClick={onView}>
         <div className="flex items-start justify-between gap-2 mb-2">
@@ -407,7 +407,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
               <Link
                 to={`/invoices/${invoice.id}`}
                 onClick={(e) => e.stopPropagation()}
-                className="rounded font-mono font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="rounded font-mono font-semibold text-foreground hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {invoice.invoiceNumber}
               </Link>
@@ -461,7 +461,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
             <Link
               to={`/invoices/${invoice.id}`}
               onClick={(e) => e.stopPropagation()}
-              className="rounded text-sm font-mono font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="rounded text-sm font-mono font-semibold text-foreground hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             >
               {invoice.invoiceNumber}
             </Link>
@@ -520,12 +520,12 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
             </a>
           )}
           <button type="button" onClick={(e) => { e.stopPropagation(); onView(); }}
-            className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title="View" aria-label="View invoice">
+            className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" title="View" aria-label="View invoice">
             <Eye className="w-4 h-4" />
           </button>
           {isAdmin && invoice.status !== 'PAID' && !(invoice.amountPaid > 0) && (
             <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-destructive rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title="Void invoice" aria-label="Void invoice">
+              className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-destructive rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring" title="Void invoice" aria-label="Void invoice">
               <Trash2 className="w-4 h-4" />
             </button>
           )}
@@ -647,7 +647,7 @@ function InvoiceCreateForm({
                   <button key={t.id} type="button"
                     onClick={() => onApplyTemplate(t)}
                     aria-label={`Apply invoice template ${t.name}`}
-                    className="min-h-11 px-2 py-1 rounded border border-border bg-muted hover:bg-muted/80 text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    className="min-h-11 px-2 py-1 rounded border border-border bg-muted hover:bg-muted/80 text-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                     + {t.name}
                   </button>
                 ))}
@@ -700,7 +700,7 @@ function InvoiceCreateForm({
                   </span>
                   <button type="button" onClick={() => onLineItemRemove(idx)}
                     aria-label={`Remove line item ${idx + 1}`}
-                    className="col-span-1 min-h-11 min-w-11 text-muted-foreground hover:text-destructive text-center text-lg leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    className="col-span-1 min-h-11 min-w-11 text-muted-foreground hover:text-destructive text-center text-lg leading-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                     ×
                   </button>
                 </div>
@@ -728,7 +728,7 @@ function InvoiceCreateForm({
                     </div>
                     <button type="button" onClick={() => onLineItemRemove(idx)}
                       aria-label={`Remove line item ${idx + 1}`}
-                      className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-muted-foreground hover:text-destructive rounded hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-muted-foreground hover:text-destructive rounded hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -760,7 +760,7 @@ function InvoiceCreateForm({
 
           <button type="button" onClick={onLineItemAdd}
             aria-label="Add invoice line item"
-            className="min-h-11 text-sm text-primary hover:underline mt-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            className="min-h-11 text-sm text-primary hover:underline mt-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
             + Add line item
           </button>
         </div>

@@ -47,7 +47,7 @@ export function buttonStyles({ variant = 'primary', size = 'md', className } = {
   return cn(
     'inline-flex items-center justify-center gap-2 rounded-lg font-medium',
     'transition-colors duration-200 ease-out motion-reduce:transition-none',
-    'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-offset-0',
+    'focus-visible:outline-hidden focus-visible:ring-4 focus-visible:ring-offset-0',
     'disabled:opacity-50 disabled:cursor-not-allowed',
     variants[variant] || variants.primary,
     sizes[size] || sizes.md,

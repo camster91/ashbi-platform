@@ -31,7 +31,7 @@ services:
   postgres:
     # Prisma declares the vector extension, so the disposable test database
     # must provide pgvector rather than plain PostgreSQL.
-    image: pgvector/pgvector:0.8.2-pg16-bookworm
+    image: pgvector/pgvector:pg18
     restart: unless-stopped
     environment:
       POSTGRES_USER: ashbi_test
@@ -47,7 +47,7 @@ services:
       - "54329:5432"
 
   redis:
-    image: redis:7-alpine
+    image: redis:8.10.2-alpine
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]

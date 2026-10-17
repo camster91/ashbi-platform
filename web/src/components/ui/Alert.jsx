@@ -58,7 +58,7 @@ const Alert = forwardRef(({
       )}
       {...props}
     >
-      <Icon className={cn('w-5 h-5 mt-0.5 flex-shrink-0', config.icon)} aria-hidden="true" />
+      <Icon className={cn('w-5 h-5 mt-0.5 shrink-0', config.icon)} aria-hidden="true" />
       <div className="flex-1 min-w-0">
         {title && <p className="font-semibold text-sm">{title}</p>}
         {children && (
@@ -73,7 +73,7 @@ const Alert = forwardRef(({
           type="button"
           onClick={onDismiss}
           aria-label={dismissLabel}
-          className="min-h-11 min-w-11 -m-2 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-h-11 min-w-11 -m-2 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X className="w-4 h-4" aria-hidden="true" />
         </button>

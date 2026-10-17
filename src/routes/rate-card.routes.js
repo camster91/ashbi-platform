@@ -1,5 +1,5 @@
 
-import { validateBody, rateCardSchema } from '../validators/schemas.js';
+import { validateBody, rateCardSchema, rateCardUpdateSchema } from '../validators/schemas.js';
 
 export default async function rateCardRoutes(fastify) {
   // List rate cards
@@ -67,7 +67,7 @@ export default async function rateCardRoutes(fastify) {
   // Update rate card
   fastify.put('/:id', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(rateCardSchema.partial()),
+    preHandler: validateBody(rateCardUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const existing = await request.prisma.rateCard.findUnique({ where: { id } });

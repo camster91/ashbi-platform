@@ -145,7 +145,7 @@ function Block({
 
   const renderBlockContent = () => {
     const baseClassName = cn(
-      'w-full bg-transparent outline-none placeholder:text-muted-foreground',
+      'w-full bg-transparent outline-hidden placeholder:text-muted-foreground',
       block.type === 'heading1' && 'text-3xl font-heading font-bold',
       block.type === 'heading2' && 'text-2xl font-heading font-semibold',
       block.type === 'quote' && 'border-l-4 border-primary pl-4 italic text-muted-foreground',
@@ -183,7 +183,7 @@ function Block({
       case 'bulletList':
         return (
           <div className="flex items-start gap-3">
-            <span className="mt-2 w-1.5 h-1.5 rounded-full bg-foreground flex-shrink-0" />
+            <span className="mt-2 w-1.5 h-1.5 rounded-full bg-foreground shrink-0" />
             <input
               ref={contentRef}
               aria-label={blockLabel}
@@ -243,7 +243,7 @@ function Block({
     >
       {/* Drag handle */}
       <div className={cn(
-        'opacity-0 group-hover:opacity-100 transition-opacity pt-1',
+        '[@media(hover:hover)]:opacity-0 group-hover:opacity-100 transition-opacity pt-1',
         isFocused && 'opacity-100'
       )}>
         <GripVertical className="w-5 h-5 text-muted-foreground cursor-grab" />
@@ -260,8 +260,8 @@ function Block({
         aria-label="Delete block"
         onClick={() => onDelete(index)}
         className={cn(
-          'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded',
-          'text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+          '[@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded',
+          'text-muted-foreground hover:text-destructive focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring'
         )}
       >
         <Trash2 className="w-4 h-4" aria-hidden="true" />
@@ -459,7 +459,7 @@ export default function NotionEditor({
       <button
         type="button"
         onClick={handleAddBlock}
-        className="flex items-center gap-2 px-8 py-2 text-muted-foreground hover:text-foreground transition-colors opacity-0 hover:opacity-100 focus-visible:opacity-100 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex items-center gap-2 px-8 py-2 text-muted-foreground hover:text-foreground transition-colors [@media(hover:hover)]:opacity-0 hover:opacity-100 focus-visible:opacity-100 rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Plus className="w-4 h-4" />
         <span className="text-sm">Add block</span>

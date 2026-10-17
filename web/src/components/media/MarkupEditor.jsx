@@ -4,7 +4,7 @@ import { MARKUP_COLORS, MARKUP_TOOLS, canvasPoint, isMeaningfulShape, renderMark
 
 const MAX_EXPORT_EDGE = 3840;
 const TOOL_ICONS = { arrow: ArrowUpRight, rect: Square, pen: Pencil, text: Type };
-const controlClass = 'inline-flex min-h-10 min-w-10 items-center justify-center gap-1 rounded-lg border px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+const controlClass = 'inline-flex min-h-10 min-w-10 items-center justify-center gap-1 rounded-lg border px-2 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
 /**
  * Lightweight screenshot markup: arrow, rectangle, freehand pen, text, colour

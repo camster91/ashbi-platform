@@ -8,12 +8,34 @@ controller rejects the fresh-database staging file.
 
 `docker-compose.coolify.yml` is a complete Ashbi Hub stack for Coolify's
 **Docker Compose** build pack. It contains the API, the background worker, a
-one-shot migration runner, PostgreSQL 16 with pgvector, and Redis 7.
+one-shot migration runner, PostgreSQL 18 with pgvector, and Redis 8.10.2.
 
 Until the owner records a decision in
 [deployment-and-rollback.md](deployment-and-rollback.md) that production moves
 to Coolify, the direct-VPS script remains the production controller. Use this
 stack for staging or a new environment, and to rehearse that move.
+
+## Database and Redis major upgrades
+
+These template versions do not upgrade the preserved production data services.
+The existing-production compose file continues to use its external database and
+Redis URLs. Do not change a running service's image tag and redeploy it against
+its old data volume.
+
+PostgreSQL 18 mounts `pgdata` at `/var/lib/postgresql`, with
+`PGDATA=/var/lib/postgresql/18/docker` ([official image documentation](https://hub.docker.com/_/postgres)).
+The templates refuse to initialize when an older or differently placed cluster
+exists in that volume. Never bypass that guard or delete the old volume. Take
+and verify an encrypted off-server backup, restore a consistent logical dump to
+an isolated PostgreSQL 18 volume, and compare table counts, data fingerprints,
+extensions, foreign keys and triggers. Rehearse against the upgraded application
+before a maintenance-window cutover; retain the original cluster for rollback.
+Concurrent source writes require a new final dump after writers are stopped.
+
+For Redis 8, restore a consistent RDB snapshot into a separate isolated volume,
+check data and queue compatibility, then pause/drain producers and workers for
+the final snapshot and cutover. Retain the old volume and server image. An
+application image rollback alone does not reverse either data-service upgrade.
 
 ## What the stack does
 

@@ -135,7 +135,7 @@ export default function Dashboard() {
           <button
             type="button"
             onClick={() => navigate('/projects?create=true')}
-            className="flex min-h-11 items-center gap-2 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-all shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="flex min-h-11 items-center gap-2 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-all shadow-md active:scale-95 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <Plus className="w-4 h-4" aria-hidden="true" /> New Project
           </button>
@@ -143,7 +143,7 @@ export default function Dashboard() {
             <button
               type="button"
               onClick={() => navigate('/invoices?create=true')}
-              className="flex min-h-11 items-center gap-2 px-4 py-2 text-sm font-semibold bg-card border border-border text-foreground rounded-full hover:bg-muted transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="flex min-h-11 items-center gap-2 px-4 py-2 text-sm font-semibold bg-card border border-border text-foreground rounded-full hover:bg-muted transition-all active:scale-95 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <Receipt className="w-4 h-4" aria-hidden="true" /> New Invoice
             </button>
@@ -285,11 +285,11 @@ export default function Dashboard() {
                 tracks the "valid destinations" requirement. */}
           </div>
           {stats?.recentActivity?.length > 0 ? (
-            <ul className="divide-y divide-border max-h-[400px] overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" tabIndex={0} aria-label="Recent activity">
+            <ul className="divide-y divide-border max-h-[400px] overflow-y-auto focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" tabIndex={0} aria-label="Recent activity">
               {stats.recentActivity.map(activity => (
                 <li key={activity.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
                   <div className="flex items-start gap-3">
-                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                       <span className="text-xs font-semibold text-primary">
                         {activity.user?.name?.charAt(0)?.toUpperCase() || '?'}
                       </span>
@@ -337,7 +337,7 @@ export default function Dashboard() {
             </div>
           </div>
           {allNotifications.length > 0 ? (
-            <ul className="divide-y divide-border max-h-[400px] overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" tabIndex={0} aria-label="Unread notifications">
+            <ul className="divide-y divide-border max-h-[400px] overflow-y-auto focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" tabIndex={0} aria-label="Unread notifications">
               {allNotifications.map(notif => (
                 <li key={notif.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
                   <div className="flex items-start gap-3">
@@ -350,7 +350,7 @@ export default function Dashboard() {
                       </p>
                     </div>
                     {!notif.read && (
-                      <CircleDot className="w-3 h-3 text-info flex-shrink-0 mt-1" />
+                      <CircleDot className="w-3 h-3 text-info shrink-0 mt-1" />
                     )}
                   </div>
                 </li>
@@ -394,7 +394,7 @@ export default function Dashboard() {
                 <li key={msg.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
                   <div className="flex items-start gap-3">
                     <div className={cn(
-                      'w-2 h-2 rounded-full mt-2 flex-shrink-0',
+                      'w-2 h-2 rounded-full mt-2 shrink-0',
                       needsResponse ? 'bg-destructive animate-pulse motion-reduce:animate-none' : 'bg-success'
                     )} />
                     <div className="flex-1 min-w-0">
@@ -423,7 +423,7 @@ export default function Dashboard() {
                         href={msg.upworkUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-primary hover:underline flex-shrink-0 mt-1"
+                        className="text-xs text-primary hover:underline shrink-0 mt-1"
                         onClick={e => e.stopPropagation()}
                       >
                         View
@@ -446,7 +446,7 @@ export default function Dashboard() {
               <AlertTriangle className="w-4 h-4 text-destructive" />
               <h2 className="font-semibold text-foreground">Blocked &amp; At-Risk</h2>
             </div>
-            <Link to="/projects" className="-my-3 -mr-2 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <Link to="/projects" className="-my-3 -mr-2 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
               View all <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
@@ -518,7 +518,7 @@ export default function Dashboard() {
                 <li key={thread.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
                   <div className="flex items-start gap-3">
                     <div className={cn(
-                      'w-2 h-2 rounded-full mt-1.5 flex-shrink-0',
+                      'w-2 h-2 rounded-full mt-1.5 shrink-0',
                       thread.priority === 'HIGH' || thread.priority === 'CRITICAL' ? 'bg-destructive' : 'bg-info'
                     )} />
                     <div className="flex-1 min-w-0">
@@ -627,7 +627,7 @@ export default function Dashboard() {
               <CheckSquare className="w-4 h-4 text-warning" />
               <h2 className="font-semibold text-foreground">My Tasks</h2>
             </div>
-            <Link to="/inbox" className="-my-3 -mr-2 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <Link to="/inbox" className="-my-3 -mr-2 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
               View all <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
@@ -673,7 +673,7 @@ function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge
       type={onClick ? 'button' : undefined}
       className={cn(
         'p-5 rounded-2xl bg-card border border-border/60 transition-all relative group hover-lift w-full text-left',
-        onClick && 'cursor-pointer hover:border-primary/20 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+        onClick && 'cursor-pointer hover:border-primary/20 shadow-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring'
       )}
       onClick={onClick}
     >
@@ -770,7 +770,7 @@ function NotificationIcon({ type }) {
   };
 
   return (
-    <div className={cn('w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5', bg)}>
+    <div className={cn('w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5', bg)}>
       <Icon className={cn('w-3.5 h-3.5', color)} />
     </div>
   );

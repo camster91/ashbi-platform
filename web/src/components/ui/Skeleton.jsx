@@ -42,7 +42,7 @@ export function SkeletonCard({ className, ...props }) {
       {...props}
     >
       <div className="flex items-start gap-4">
-        <Skeleton className="w-12 h-12 rounded-lg flex-shrink-0" />
+        <Skeleton className="w-12 h-12 rounded-lg shrink-0" />
         <div className="flex-1 space-y-3">
           <Skeleton className="h-5 w-3/4" />
           <SkeletonText lines={2} />

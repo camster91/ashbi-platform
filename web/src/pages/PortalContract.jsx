@@ -114,7 +114,7 @@ function SignatureCanvas({ onSignatureChange }) {
           type="button"
           onClick={clear}
           aria-label="Clear drawn signature"
-          className="min-h-11 inline-flex items-center mt-2 text-xs text-muted-foreground hover:text-foreground gap-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="min-h-11 inline-flex items-center mt-2 text-xs text-muted-foreground hover:text-foreground gap-1 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <Eraser className="w-3 h-3" />
           Clear signature
@@ -190,7 +190,7 @@ export default function PortalContract() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-card border-b border-border/40 shadow-sm">
+      <header className="bg-card border-b border-border/40 shadow-xs">
         <div className="max-w-3xl mx-auto px-6 py-6">
           <PortalBrand brand={contract?.brand} />
           <h1 className="text-2xl font-bold text-foreground mt-3">Contract</h1>
@@ -255,7 +255,7 @@ export default function PortalContract() {
                 aria-invalid={!!validationError && !signerName.trim()}
                 aria-describedby={validationError ? 'signature-validation-error' : undefined}
                 placeholder="Enter your full name"
-                className="w-full px-4 py-2.5 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-warning/20 focus:border-warning"
+                className="w-full px-4 py-2.5 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-warning/20 focus:border-warning"
               />
             </div>
 
@@ -268,7 +268,7 @@ export default function PortalContract() {
                   onClick={() => setSignatureMode('draw')}
                   aria-pressed={signatureMode === 'draw'}
                   className={cn(
-                    'min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                    'min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                     signatureMode === 'draw'
                       ? 'bg-primary text-primary-foreground border-primary'
                       : 'bg-card text-muted-foreground border-border/40 hover:bg-muted/50'
@@ -282,7 +282,7 @@ export default function PortalContract() {
                   onClick={() => setSignatureMode('type')}
                   aria-pressed={signatureMode === 'type'}
                   className={cn(
-                    'min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                    'min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                     signatureMode === 'type'
                       ? 'bg-primary text-primary-foreground border-primary'
                       : 'bg-card text-muted-foreground border-border/40 hover:bg-muted/50'
@@ -316,7 +316,7 @@ export default function PortalContract() {
               onClick={handleSign}
               disabled={signMutation.isPending}
               aria-busy={signMutation.isPending}
-              className="min-h-11 w-full px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="min-h-11 w-full px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               {signMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
               <FileSignature className="w-4 h-4" />

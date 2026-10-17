@@ -89,7 +89,7 @@ export function gmailConnectionLine({ checking, failed, status }) {
   return 'Sends through the connected Gmail mailbox.';
 }
 
-const draftActionClass = 'min-h-11 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const draftActionClass = 'min-h-11 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring';
 
 /** What can happen next to a saved draft, by its status. */
 function SavedDraftActions({ response, threadSubject, isAdmin, resolved, editing, onEdit, onSubmit, submitting, onSend, preparingSend }) {
@@ -385,7 +385,7 @@ function ThreadContent() {
       {/* Stacks on phones: title first, then badges and actions on their own row. */}
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4" data-testid="thread-header">
         <div className="flex min-w-0 flex-1 items-start gap-2 md:gap-4">
-        <Link to="/inbox" aria-label="Back to inbox" className="inline-flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-lg hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <Link to="/inbox" aria-label="Back to inbox" className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg hover:bg-secondary transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex-1 min-w-0 pt-2">
@@ -412,7 +412,7 @@ function ThreadContent() {
           </div>
         </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 md:flex-shrink-0 md:justify-end">
+        <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:justify-end">
           <span className={cn('px-2.5 py-1 text-sm font-medium rounded-lg', getPriorityColor(thread.priority))}>
             {thread.priority}
           </span>
@@ -479,7 +479,7 @@ function ThreadContent() {
                   value={gmailReplyTo}
                   onChange={(e) => setGmailReplyTo(e.target.value)}
                   disabled={gmailSendMutation.isPending}
-                  className="w-full px-3 py-2 border border-border bg-background rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 border border-border bg-background rounded-lg text-base focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                   autoComplete="email"
                   required
                 />
@@ -492,7 +492,7 @@ function ThreadContent() {
                   value={gmailReplySubject}
                   onChange={(e) => setGmailReplySubject(e.target.value)}
                   disabled={gmailSendMutation.isPending}
-                  className="w-full px-3 py-2 border border-border bg-background rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2 border border-border bg-background rounded-lg text-base focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                   required
                 />
               </div>
@@ -511,7 +511,7 @@ function ThreadContent() {
                   readOnly={Boolean(gmailResponseId)}
                   aria-describedby={gmailResponseId ? 'gmail-reply-approved' : undefined}
                   disabled={gmailSendMutation.isPending}
-                  className="w-full px-3 py-2 border border-border bg-background rounded-lg text-base resize-y focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono leading-relaxed"
+                  className="w-full px-3 py-2 border border-border bg-background rounded-lg text-base resize-y focus:outline-hidden focus:ring-2 focus:ring-primary/20 font-mono leading-relaxed"
                   required
                 />
               </div>
@@ -521,7 +521,7 @@ function ThreadContent() {
                 </p>
               )}
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
-            <Shield className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            <Shield className="w-4 h-4 shrink-0" aria-hidden="true" />
             {gmailConnectionLine({
               checking: gmailStatusQuery.isLoading,
               failed: gmailStatusQuery.isError,
@@ -641,7 +641,7 @@ function ThreadContent() {
                           href={upworkUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-success text-success-foreground rounded-lg hover:bg-success/90 transition-colors flex-shrink-0"
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-success text-success-foreground rounded-lg hover:bg-success/90 transition-colors shrink-0"
                         >
                           <ExternalLink className="w-3 h-3" />
                           Reply on Upwork
@@ -708,7 +708,7 @@ function ThreadContent() {
                   type="button"
                   onClick={() => draftMutation.mutate()}
                   disabled={draftMutation.isPending}
-                  className="text-sm text-primary dark:text-accent hover:opacity-80 flex items-center gap-1.5 font-medium transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="text-sm text-primary dark:text-accent hover:opacity-80 flex items-center gap-1.5 font-medium transition-colors rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Sparkles className={cn('w-4 h-4', draftMutation.isPending && 'animate-pulse')} />
                   {draftMutation.isPending ? 'Generating...' : 'AI Draft'}
@@ -725,7 +725,7 @@ function ThreadContent() {
                   onChange={(e) => setResponseText(e.target.value)}
                   rows={6}
                   aria-label="Response"
-                  className="w-full p-3 border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm leading-relaxed"
+                  className="w-full p-3 border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg resize-none focus:outline-hidden focus:ring-2 focus:ring-primary/20 text-sm leading-relaxed"
                   placeholder="Write your response..."
                 />
                 {saveDraftMutation.error && (
@@ -735,7 +735,7 @@ function ThreadContent() {
                 )}
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Shield className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
+                    <Shield className="w-3 h-3 shrink-0" aria-hidden="true" />
                     {DRAFT_HINT}
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -775,7 +775,7 @@ function ThreadContent() {
                 onChange={(e) => setNoteText(e.target.value)}
                 rows={2}
                 aria-label="Internal note"
-                className="w-full p-3 border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
+                className="w-full p-3 border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg resize-none focus:outline-hidden focus:ring-2 focus:ring-primary/20 text-sm"
                 placeholder="Add a note for the team..."
               />
               <div className="flex justify-end mt-2">

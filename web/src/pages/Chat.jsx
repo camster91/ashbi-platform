@@ -146,7 +146,7 @@ export default function Chat() {
   return (
     <div className="flex h-[calc(100vh-4rem)] bg-background">
       {/* Sidebar */}
-      <div className="w-64 flex-shrink-0 border-r border-border flex flex-col bg-card">
+      <div className="w-64 shrink-0 border-r border-border flex flex-col bg-card">
         <div className="p-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
             <MessageSquare className="w-5 h-5 text-primary" />
@@ -195,7 +195,7 @@ export default function Chat() {
                           type="button"
                           onClick={() => loadMessages(c.id)}
                           aria-label={`Open conversation ${c.title}`}
-                          className="flex-1 min-w-0 min-h-11 text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          className="flex-1 min-w-0 min-h-11 text-left rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                         >
                           <span className="block text-xs font-medium truncate">{c.title}</span>
                           <span className="block text-xs text-muted-foreground truncate mt-0.5">{c.lastMessage}</span>
@@ -208,7 +208,7 @@ export default function Chat() {
                           }}
                           aria-label={`Delete ${c.title}`}
                           disabled={deleteConversationMutation.isPending}
-                          className="min-h-11 min-w-11 inline-flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity rounded hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive disabled:opacity-50"
+                          className="min-h-11 min-w-11 inline-flex items-center justify-center [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity rounded hover:text-destructive focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-destructive disabled:opacity-50"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -269,7 +269,7 @@ export default function Chat() {
                      type="button"
                      aria-label={`Use suggestion: ${s}`}
                      onClick={() => { setInput(s); inputRef.current?.focus(); }}
-                     className="min-h-11 text-left text-sm px-3 py-2 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                     className="min-h-11 text-left text-sm px-3 py-2 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     {s}
                   </button>
@@ -284,7 +284,7 @@ export default function Chat() {
               className={cn('flex gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}
             >
               {msg.role === 'assistant' && (
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
                   <Bot className="w-4 h-4 text-primary" />
                 </div>
               )}
@@ -312,7 +312,7 @@ export default function Chat() {
                 </p>
               </div>
               {msg.role === 'user' && (
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-1">
+                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 mt-1">
                   <User className="w-4 h-4 text-muted-foreground" />
                 </div>
               )}
@@ -321,7 +321,7 @@ export default function Chat() {
 
           {isThinking && (
             <div className="flex gap-3 justify-start">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
                 <Bot className="w-4 h-4 text-primary" />
               </div>
               <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
@@ -351,7 +351,7 @@ export default function Chat() {
               className={cn(
                 'flex-1 resize-none px-4 py-3 text-sm bg-background border border-border rounded-xl',
                 'placeholder:text-muted-foreground',
-                'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary',
+                'focus:outline-hidden focus:ring-2 focus:ring-primary/20 focus:border-primary',
                 'transition-all duration-200 max-h-32'
               )}
               disabled={isThinking}

@@ -97,7 +97,7 @@ export default function Client() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Link to="/clients" aria-label="Back to clients" className="p-2 hover:bg-muted rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <Link to="/clients" aria-label="Back to clients" className="p-2 hover:bg-muted rounded-lg transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="min-w-0 flex-1">
@@ -140,7 +140,7 @@ export default function Client() {
         <button
           type="button"
           onClick={() => navigate(`/projects?create=true&clientId=${id}`)}
-          className="flex min-h-11 items-center gap-1.5 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="flex min-h-11 items-center gap-1.5 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <Plus className="w-3.5 h-3.5" /> New Project
         </button>
@@ -148,7 +148,7 @@ export default function Client() {
           <button
             type="button"
             onClick={() => navigate(`/invoices?create=true&clientId=${id}`)}
-            className="flex min-h-11 items-center gap-1.5 px-3 py-2 text-sm bg-card border border-border text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex min-h-11 items-center gap-1.5 px-3 py-2 text-sm bg-card border border-border text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Receipt className="w-3.5 h-3.5" /> Send Invoice
           </button>

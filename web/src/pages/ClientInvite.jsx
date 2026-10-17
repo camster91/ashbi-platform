@@ -8,7 +8,7 @@ import { Button } from '../components/ui';
 // client account and signs a client-portal session, then we hand off to the
 // existing client portal.
 const inputClass =
-  'w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus:bg-card';
+  'w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus:bg-card';
 
 export default function ClientInvite() {
   const [searchParams] = useSearchParams();

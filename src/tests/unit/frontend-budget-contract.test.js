@@ -70,3 +70,25 @@ test('a worker statically imported by the entry fails the initial-graph rule', (
     assert.ok(failures.some((failure) => failure.includes(`worker ${file} is in the initial JavaScript graph`)), failures.join('; '));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('React DOM upgrade allowance stays bounded and does not relax other chunks', () => {
+  const root = fixture();
+  try {
+    const manifestPath = path.join(root, '.vite', 'manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const file = 'assets/vendor-react-dom-AbC123.js';
+    manifest['react-dom'] = { file };
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    fs.writeFileSync(path.join(root, file), Buffer.alloc(BUDGETS.reactDomChunk));
+    assert.deepEqual(validateFrontendBudgets(root), []);
+    fs.writeFileSync(path.join(root, file), Buffer.alloc(BUDGETS.reactDomChunk + 1));
+    assert.ok(validateFrontendBudgets(root).some((failure) => failure.includes(file)));
+    delete manifest['react-dom'];
+    const other = 'assets/vendor-other-AbC123.js';
+    manifest.other = { file: other };
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    fs.writeFileSync(path.join(root, other), Buffer.alloc(BUDGETS.anyJsChunk + 1));
+    assert.ok(validateFrontendBudgets(root).some((failure) => failure.includes(other)));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

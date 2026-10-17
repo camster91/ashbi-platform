@@ -42,7 +42,7 @@ export default function Notifications() {
             type="button"
             onClick={() => markAllReadMutation.mutate()}
             disabled={markAllReadMutation.isPending}
-            className="min-h-11 min-w-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <CheckCheck className="w-4 h-4" />
             Mark all read
@@ -112,7 +112,7 @@ export default function Notifications() {
                     <Link
                       to={link}
                       onClick={() => { if (!notification.read) markReadMutation.mutate(notification.id); }}
-                      className="group flex min-h-11 min-w-0 flex-1 items-start gap-2 rounded-lg p-4 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      className="group flex min-h-11 min-w-0 flex-1 items-start gap-2 rounded-lg p-4 hover:bg-muted/40 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                     >
                       <span className="min-w-0 flex-1">{details}</span>
                       <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground" aria-hidden="true" />
@@ -126,7 +126,7 @@ export default function Notifications() {
                       onClick={() => markReadMutation.mutate(notification.id)}
                       disabled={markReadMutation.isPending}
                       aria-label="Mark notification as read"
-                      className="m-2 min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-foreground rounded transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="m-2 min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-foreground rounded transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                       title="Mark as read"
                     >
                       <Check className="w-4 h-4" />

@@ -206,7 +206,7 @@ export function schemaNamesFromExports(moduleExports) {
   const names = new Map();
   for (const exportName of Object.keys(moduleExports).sort(compare)) {
     const value = moduleExports[exportName];
-    if (!value?._def?.typeName || names.has(value)) continue;
+    if (!value?._zod?.def?.type || names.has(value)) continue;
     const base = exportName.replace(/Schema$/, '');
     names.set(value, base.charAt(0).toUpperCase() + base.slice(1));
   }

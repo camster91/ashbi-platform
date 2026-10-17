@@ -1,7 +1,7 @@
 // Ash AI Chat — persistent conversations with the AI Chief of Staff
 
 import env from '../config/env.js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { aiGovernance } from '../ai/governance.js';
 import { aiErrorBody, isAiControlError, sendAiError } from '../ai/errors.js';
 import { organizationNameFor } from '../utils/organization-name.js';
@@ -43,22 +43,20 @@ async function callAI(messages, systemPrompt) {
 
   // Use Gemini as fallback
   if (env.geminiApiKey) {
-    const genAI = new GoogleGenerativeAI(env.geminiApiKey);
-    const model = genAI.getGenerativeModel({
+    const genAI = new GoogleGenAI({ apiKey: env.geminiApiKey, httpOptions: { retryOptions: { attempts: 1 } } });
+    const result = await genAI.models.generateContent({
       model: 'gemini-2.0-flash',
-      systemInstruction: systemPrompt,
-      generationConfig: { temperature: 0.4, maxOutputTokens: 2048 }
+      contents: messages.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }],
+      })),
+      config: {
+        systemInstruction: systemPrompt, temperature: 0.4, maxOutputTokens: 2048,
+        automaticContinuation: false, automaticFunctionCalling: { disable: true },
+      },
     });
-
-    const history = messages.slice(0, -1).map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }]
-    }));
-
-    const chat = model.startChat({ history });
-    const lastMsg = messages[messages.length - 1];
-    const result = await chat.sendMessage(lastMsg.content);
-    return result.response.text();
+    const text = result.text;
+    if (typeof text !== 'string') throw new Error('Gemini returned no text response');
+    return text;
   }
 
   // Anthropic fallback

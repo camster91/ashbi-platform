@@ -22,6 +22,19 @@ describe('Frontend Utils', () => {
       expect(cn('p-4', 'p-2')).toBe('p-2');
       expect(cn('text-red-500', 'bg-blue-500', 'text-white')).toContain('text-white');
     });
+
+    it('resolves Tailwind 4 utility conflicts using the final class', () => {
+      expect(cn('shadow-xs', 'shadow-sm')).toBe('shadow-sm');
+      expect(cn('outline-hidden', 'outline-none')).toBe('outline-none');
+      expect(cn('bg-linear-to-r', 'bg-linear-to-b')).toBe('bg-linear-to-b');
+      expect(cn('shrink-0', 'shrink')).toBe('shrink');
+      expect(cn('rounded-sm', 'rounded-md')).toBe('rounded-md');
+    });
+
+    it('preserves independent brand tokens while resolving conflicts within each utility', () => {
+      expect(cn('bg-background text-foreground ring-ring', 'bg-primary text-primary-foreground ring-info'))
+        .toBe('bg-primary text-primary-foreground ring-info');
+    });
   });
 
   describe('formatDate', () => {

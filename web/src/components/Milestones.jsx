@@ -159,7 +159,7 @@ export default function Milestones({ projectId }) {
                     onClick={() => setSelectedMilestone(milestone)}
                     aria-label={`Open milestone ${milestone.name}`}
                     aria-pressed={selectedMilestone?.id === milestone.id}
-                    className={`w-full min-h-11 bg-card rounded-lg border p-4 text-left cursor-pointer hover:shadow-md active:bg-muted transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-offset-2 ${
+                    className={`w-full min-h-11 bg-card rounded-lg border p-4 text-left cursor-pointer hover:shadow-md active:bg-muted transition-shadow focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-offset-2 ${
                       milestone.status === 'COMPLETED' ? 'opacity-75' : ''
                     }`}
                     style={{ borderLeftColor: milestone.color, borderLeftWidth: '4px' }}

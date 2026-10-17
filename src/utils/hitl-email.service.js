@@ -201,7 +201,7 @@ export async function sendTaskHITLEmail({ notificationId, prisma, task, project,
  * Send a HITL approval notification email
  */
 export async function sendApprovalHITLEmail({ notificationId, prisma, approval }) {
-  let content = '';
+  let content;
   try {
     content = typeof approval.content === 'string' ? approval.content : JSON.stringify(approval.content, null, 2);
   } catch { content = String(approval.content); }

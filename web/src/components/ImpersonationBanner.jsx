@@ -54,7 +54,7 @@ export default function ImpersonationBanner() {
       role="region"
       aria-label="Support view"
       data-testid="impersonation-banner"
-      className="sticky top-0 z-[70] w-full border-b border-warning bg-warning text-warning-foreground shadow-sm"
+      className="sticky top-0 z-[70] w-full border-b border-warning bg-warning text-warning-foreground shadow-xs"
     >
       <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 text-sm">
         <Eye className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -72,7 +72,7 @@ export default function ImpersonationBanner() {
           onClick={stop}
           disabled={stopping}
           aria-label={`Stop viewing as ${name}`}
-          className="min-h-11 rounded-full border border-current bg-background px-4 py-1.5 font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-70"
+          className="min-h-11 rounded-full border border-current bg-background px-4 py-1.5 font-medium text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-70"
         >
           {stopping ? 'Stopping…' : 'Stop'}
         </button>

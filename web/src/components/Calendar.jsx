@@ -109,7 +109,7 @@ export default function Calendar({ projectId }) {
             type="button"
             aria-label="Go to today"
             onClick={goToToday}
-            className="min-h-11 px-2 text-sm text-info hover:text-info/80 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info"
+            className="min-h-11 px-2 text-sm text-info hover:text-info/80 rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-info"
           >
             Today
           </button>
@@ -119,7 +119,7 @@ export default function Calendar({ projectId }) {
             type="button"
             aria-label="Previous month"
             onClick={prevMonth}
-            className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 hover:bg-muted rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 hover:bg-muted rounded-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-info"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -129,7 +129,7 @@ export default function Calendar({ projectId }) {
             type="button"
             aria-label="Next month"
             onClick={nextMonth}
-            className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 hover:bg-muted rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 hover:bg-muted rounded-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-info"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -142,7 +142,7 @@ export default function Calendar({ projectId }) {
               setSelectedDate(new Date());
               setShowCreateModal(true);
             }}
-            className="ml-4 min-h-11 bg-info text-info-foreground px-4 py-2 rounded-lg hover:bg-info/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info"
+            className="ml-4 min-h-11 bg-info text-info-foreground px-4 py-2 rounded-lg hover:bg-info/90 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-info"
           >
             + New Event
           </button>

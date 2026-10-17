@@ -33,6 +33,7 @@ let healthRedis;
 function getHealthRedis() {
   if (!healthRedis) {
     healthRedis = new IORedis(env.redisUrl, {
+      protocol: 2,
       lazyConnect: true,
       connectTimeout: 1_500,
       maxRetriesPerRequest: 1,

@@ -18,8 +18,8 @@ const SOURCES = [
   { id: 'camera', label: 'Camera only', description: 'Just you, from your camera', needs: 'camera', Icon: Video },
 ];
 
-const buttonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
-const primaryClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+const buttonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+const primaryClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
 function captureErrorMessage(error, fallback) {
   if (error?.name === 'NotAllowedError' || error?.name === 'AbortError') return '';
@@ -240,7 +240,7 @@ function RecordPanel({ support, onAttach, onCancel, controlRef, onActiveChange }
   if (phase === 'preview' && result) {
     return (
       <div className="space-y-3">
-        <p ref={statusRef} tabIndex={-1} role="status" className="text-sm font-medium focus:outline-none">
+        <p ref={statusRef} tabIndex={-1} role="status" className="text-sm font-medium focus:outline-hidden">
           Preview · {formatDuration(result.durationMs)} · {formatBytes(result.blob.size)}
         </p>
         {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
@@ -263,7 +263,7 @@ function RecordPanel({ support, onAttach, onCancel, controlRef, onActiveChange }
             <span className="sr-only">Recording starts in </span>{countdown}
           </p>
         ) : (
-          <div ref={statusRef} tabIndex={-1} className="space-y-2 focus:outline-none">
+          <div ref={statusRef} tabIndex={-1} className="space-y-2 focus:outline-hidden">
             <p className="flex items-center gap-2 text-sm font-medium" role="status">
               <Circle className={`h-3 w-3 ${phase === 'paused' ? 'fill-muted-foreground text-muted-foreground' : 'fill-destructive text-destructive motion-safe:animate-pulse'}`} aria-hidden="true" />
               {phase === 'paused' ? 'Paused' : 'Recording'}

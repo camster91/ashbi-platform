@@ -116,7 +116,7 @@ export default function Proposals() {
           <button
             type="button"
             onClick={() => setShowGenerator(true)}
-            className="min-h-11 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full bg-brand-lime text-brand-indigo hover:brightness-95 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-h-11 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full bg-brand-lime text-brand-indigo hover:brightness-95 transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Sparkles className="w-4 h-4" />
             AI Generate
@@ -135,7 +135,7 @@ export default function Proposals() {
             type="button"
             aria-pressed={filterStatus === s}
             onClick={() => setFilterStatus(s)}
-            className={`min-h-11 px-3 py-1.5 text-sm rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            className={`min-h-11 px-3 py-1.5 text-sm rounded-lg transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${
               filterStatus === s
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -442,7 +442,7 @@ function ProposalGenerator({ clients, onClose, onSaveDraft, saving = false }) {
           <Sparkles className="w-5 h-5 text-brand-indigo" />
           <h2 className="text-lg font-semibold">AI Proposal Generator</h2>
         </div>
-        <button type="button" onClick={onClose} aria-label="Close proposal generator" className="min-h-11 min-w-11 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <button type="button" onClick={onClose} aria-label="Close proposal generator" className="min-h-11 min-w-11 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
           <XCircle className="w-5 h-5" />
         </button>
       </div>

@@ -151,10 +151,10 @@ function MiniCalendar({ selectedDate, onSelect }) {
         data-date={dateStr}
         onClick={() => onSelect(dateStr)}
         className={cn(
-          'min-h-11 min-w-11 w-10 h-10 rounded-lg text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          'min-h-11 min-w-11 w-10 h-10 rounded-lg text-sm font-medium transition-all focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           isPast && 'text-muted-foreground line-through cursor-not-allowed',
           !isPast && !isSelected && 'text-foreground hover:bg-muted',
-          isSelected && 'bg-primary text-primary-foreground shadow-sm',
+          isSelected && 'bg-primary text-primary-foreground shadow-xs',
           isToday && !isSelected && 'ring-1 ring-warning'
         )}
       >
@@ -170,7 +170,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
           type="button"
           onClick={prevMonth}
           aria-label={`Previous month, ${new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`}
-          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
@@ -179,7 +179,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
           type="button"
           onClick={nextMonth}
           aria-label={`Next month, ${new Date(year, month + 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`}
-          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
@@ -265,7 +265,7 @@ export default function PortalBooking() {
   if (booked) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="bg-card border-b border-border/40 shadow-sm">
+        <header className="bg-card border-b border-border/40 shadow-xs">
           <div className="max-w-3xl mx-auto px-6 py-6">
             <PortalBrand brand={brand} />
             <h1 className="text-2xl font-bold text-foreground mt-3">Book a Call</h1>
@@ -307,7 +307,7 @@ export default function PortalBooking() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-card border-b border-border/40 shadow-sm">
+      <header className="bg-card border-b border-border/40 shadow-xs">
         <div className="max-w-3xl mx-auto px-6 py-6">
           <PortalBrand brand={brand} />
           <h1 className="text-2xl font-bold text-foreground mt-3">Book a Call</h1>
@@ -366,10 +366,10 @@ export default function PortalBooking() {
                       disabled={!available}
                       onClick={() => setSelectedSlot(time)}
                       className={cn(
-                        'min-h-11 px-3 py-2.5 rounded-lg text-sm font-medium border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                        'min-h-11 px-3 py-2.5 rounded-lg text-sm font-medium border transition-all focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                         !available && 'cursor-not-allowed bg-muted/50 border-border/25 text-muted-foreground line-through',
                         available && selectedSlot !== time && 'bg-card border-border/40 text-foreground hover:border-border/60 hover:bg-muted/50',
-                        selectedSlot === time && 'bg-primary border-primary text-primary-foreground shadow-sm'
+                        selectedSlot === time && 'bg-primary border-primary text-primary-foreground shadow-xs'
                       )}
                     >
                       {time}
@@ -398,7 +398,7 @@ export default function PortalBooking() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Your full name"
-                  className="w-full px-4 py-2.5 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-warning/20 focus:border-warning"
+                  className="w-full px-4 py-2.5 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-warning/20 focus:border-warning"
                 />
               </div>
               <div>
@@ -412,7 +412,7 @@ export default function PortalBooking() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="w-full px-4 py-2.5 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-warning/20 focus:border-warning"
+                  className="w-full px-4 py-2.5 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-warning/20 focus:border-warning"
                 />
               </div>
             </div>
@@ -428,7 +428,7 @@ export default function PortalBooking() {
                 maxLength={1000}
                 placeholder="Brief description of what you need help with (optional)"
                 rows={3}
-                className="w-full px-4 py-2.5 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-warning/20 focus:border-warning resize-none"
+                className="w-full px-4 py-2.5 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-warning/20 focus:border-warning resize-none"
               />
             </div>
 
@@ -452,7 +452,7 @@ export default function PortalBooking() {
               type="submit"
               disabled={!name.trim() || !email.trim() || bookMutation.isPending}
               aria-busy={bookMutation.isPending}
-              className="min-h-11 w-full px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="min-h-11 w-full px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               {bookMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />

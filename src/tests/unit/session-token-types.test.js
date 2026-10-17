@@ -107,7 +107,7 @@ describe('session token types', () => {
     const app = await signer();
     const prisma = fakePrisma();
     for (const [name, token] of Object.entries(await nonSessionTokens(app))) {
-      let payload = null;
+      let payload;
       try { payload = app.jwt.verify(token); } catch { payload = null; }
       if (payload === null) continue; // not even a valid session-key signature
       assert.equal(isUserSessionPayload(payload), false, name);

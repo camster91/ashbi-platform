@@ -1,6 +1,6 @@
 // Google Gemini AI provider wrapper
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import env from '../../config/env.js';
 
 const GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
@@ -9,7 +9,7 @@ class GeminiProvider {
   constructor(modelOverride) {
     this.name = 'gemini';
     this.modelName = modelOverride || GEMINI_MODEL;
-    this.client = new GoogleGenerativeAI(env.geminiApiKey);
+    this.client = new GoogleGenAI({ apiKey: env.geminiApiKey || 'unconfigured', httpOptions: { retryOptions: { attempts: 1 } } });
   }
 
   /** Whether the deployment gave this provider an API key. */
@@ -18,20 +18,22 @@ class GeminiProvider {
   }
 
   async chat({ system, prompt, temperature = 0.3, maxTokens = 4096, signal }) {
-    const model = this.client.getGenerativeModel({
-      model: this.modelName,
-      systemInstruction: system,
-      generationConfig: {
-        temperature,
-        maxOutputTokens: maxTokens,
-      }
-    });
-
-    // This SDK only listens for future abort events. Reject a deadline that
-    // elapsed during governance routing before it can start a new request.
+    // A cancelled governance deadline must never dispatch a new request.
     signal?.throwIfAborted();
-    const result = await model.generateContent(prompt, signal ? { signal } : undefined);
-    return result.response.text();
+    const result = await this.client.models.generateContent({
+      model: this.modelName,
+      contents: prompt,
+      config: {
+        systemInstruction: system, temperature, maxOutputTokens: maxTokens,
+        abortSignal: signal,
+        // Governance owns retries and cost accounting; the SDK cannot add calls.
+        automaticContinuation: false,
+        automaticFunctionCalling: { disable: true },
+      },
+    });
+    const text = result.text;
+    if (typeof text !== 'string') throw new Error('Gemini returned no text response');
+    return text;
   }
 
   async chatJSON(options) {
@@ -48,7 +50,8 @@ class GeminiProvider {
         jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
       }
       return JSON.parse(jsonStr);
-    } catch (error) {
+    } catch {
+      // Keep provider content out of the outward error cause.
       console.error('Failed to parse Gemini JSON response:', response);
       throw new Error('AI returned invalid JSON');
     }

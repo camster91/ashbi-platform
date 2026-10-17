@@ -175,7 +175,7 @@ describe('ErrorBoundary', () => {
 
     const button = screen.getByRole('button', { name: /reload application/i });
     expect(button).toHaveAttribute('type', 'button');
-    expect(button).toHaveClass('min-h-11', 'min-w-11', 'focus-visible:outline-none', 'focus-visible:ring-2');
+    expect(button).toHaveClass('min-h-11', 'min-w-11', 'focus-visible:outline-hidden', 'focus-visible:ring-2');
   });
 
   describe('unhandled promise rejection', () => {

@@ -65,7 +65,7 @@ export default function Portal() {
   if (portalError && !portalNotFound) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-6">
-        <div role="alert" className="max-w-md rounded-xl border border-destructive/30 bg-card p-8 text-center shadow-sm">
+        <div role="alert" className="max-w-md rounded-xl border border-destructive/30 bg-card p-8 text-center shadow-xs">
           <h1 className="text-2xl font-bold text-foreground mb-2">Portal temporarily unavailable</h1>
           <p className="text-muted-foreground">The project could not be loaded. Check your connection and try again.</p>
           <button
@@ -98,7 +98,7 @@ export default function Portal() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-card border-b border-border/40 shadow-sm">
+      <header className="bg-card border-b border-border/40 shadow-xs">
         <div className="max-w-4xl mx-auto px-6 py-6">
           <PortalBrand brand={project?.brand} iconClassName="w-5 h-5 text-primary-foreground" />
           <h1 className="text-2xl font-bold text-foreground mt-3">{project.name}</h1>
@@ -168,9 +168,9 @@ export default function Portal() {
               {project.milestones.map((m) => (
                 <div key={m.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                   {m.completedAt ? (
-                    <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                    <CheckCircle className="w-5 h-5 text-success shrink-0" />
                   ) : (
-                    <Clock className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    <Clock className="w-5 h-5 text-muted-foreground shrink-0" />
                   )}
                   <span className={cn('flex-1 text-sm', m.completedAt ? 'text-muted-foreground line-through' : 'text-foreground')}>
                     {m.name}

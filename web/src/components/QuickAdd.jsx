@@ -162,7 +162,7 @@ export default function QuickAdd({ open, onClose, initialTab = 'project' }) {
             onChange={(event) => setName(event.target.value)}
             disabled={saving || done}
             placeholder={activeTab === 'project' ? 'New website redesign' : activeTab === 'task' ? 'Design homepage hero' : 'Acme Corporation'}
-            className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-hidden focus:ring-2 focus:ring-primary"
             autoComplete="off"
           />
         </div>
@@ -177,7 +177,7 @@ export default function QuickAdd({ open, onClose, initialTab = 'project' }) {
         {activeTab === 'project' && !clientsError && (
           <div>
             <label htmlFor="quick-add-client" className="mb-1.5 block text-sm font-medium">Client</label>
-            <select id="quick-add-client" value={clientId} onChange={(event) => setClientId(event.target.value)} disabled={saving || clientsFetching} className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary">
+            <select id="quick-add-client" value={clientId} onChange={(event) => setClientId(event.target.value)} disabled={saving || clientsFetching} className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-hidden focus:ring-2 focus:ring-primary">
               <option value="">Select a client</option>
               {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
             </select>
@@ -188,7 +188,7 @@ export default function QuickAdd({ open, onClose, initialTab = 'project' }) {
         {activeTab === 'task' && !projectsError && (
           <div>
             <label htmlFor="quick-add-project" className="mb-1.5 block text-sm font-medium">Project</label>
-            <select id="quick-add-project" value={projectId} onChange={(event) => setProjectId(event.target.value)} disabled={saving || projectsFetching} className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary">
+            <select id="quick-add-project" value={projectId} onChange={(event) => setProjectId(event.target.value)} disabled={saving || projectsFetching} className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-hidden focus:ring-2 focus:ring-primary">
               <option value="">Select a project</option>
               {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
@@ -199,7 +199,7 @@ export default function QuickAdd({ open, onClose, initialTab = 'project' }) {
         {activeTab === 'client' && (
           <div>
             <label htmlFor="quick-add-email" className="mb-1.5 block text-sm font-medium">Primary contact email</label>
-            <input id="quick-add-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving || done} placeholder="hello@acmecorp.com" className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary" autoComplete="email" />
+            <input id="quick-add-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={saving || done} placeholder="hello@acmecorp.com" className="w-full rounded-xl border border-border bg-background px-4 py-3 text-base focus:outline-hidden focus:ring-2 focus:ring-primary" autoComplete="email" />
           </div>
         )}
 

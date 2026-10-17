@@ -42,7 +42,7 @@ export default function ReviewTimeline({ markers, durationMs, currentMs, selecte
                 aria-label={`Comment ${marker.number} at ${clock(marker.timecodeMs)}, by ${marker.authorName}${marker.resolved ? ', resolved' : ''}`}
                 aria-pressed={selectedId === marker.id}
                 className={cn(
-                  'flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-background px-1 text-[11px] font-bold shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  'flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-background px-1 text-[11px] font-bold shadow-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
                   selectedId === marker.id ? 'bg-foreground text-background' : marker.resolved ? 'bg-muted-foreground text-background' : 'bg-primary text-primary-foreground',
                 )}
               >

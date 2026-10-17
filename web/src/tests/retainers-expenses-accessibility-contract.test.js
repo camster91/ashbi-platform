@@ -18,6 +18,6 @@ describe('retainers and expenses accessibility contract', () => {
     expect(expenses).toContain('aria-label="Clear expense filters"');
     expect(expenses).toContain('aria-label="Close expense form"');
     expect(expenses).toContain('type="button"');
-    expect(expenses).toContain('focus-visible:outline-none');
+    expect(expenses).toContain('focus-visible:outline-hidden');
   });
 });

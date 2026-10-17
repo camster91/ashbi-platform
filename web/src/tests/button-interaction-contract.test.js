@@ -7,7 +7,7 @@ const source = readFileSync(resolve(process.cwd(), 'src/components/ui/Button.jsx
 describe('shared button interaction contract', () => {
   it('keeps the default control touch-sized and keyboard-visible', () => {
     expect(source).toContain("md: 'min-h-11 px-4 text-sm'");
-    expect(source).toContain('focus-visible:outline-none focus-visible:ring-4');
+    expect(source).toContain('focus-visible:outline-hidden focus-visible:ring-4');
   });
 
   it('keeps loading state observable and motion-safe', () => {

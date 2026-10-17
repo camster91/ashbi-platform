@@ -148,13 +148,13 @@ export default function Team() {
           <div className="flex bg-muted rounded-lg p-0.5">
             <button
               onClick={() => setView('team')}
-              className={cn('px-3 py-1.5 text-sm rounded-md flex items-center gap-1.5 transition', view === 'team' ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground')}
+              className={cn('px-3 py-1.5 text-sm rounded-md flex items-center gap-1.5 transition', view === 'team' ? 'bg-background shadow-xs font-medium' : 'text-muted-foreground')}
             >
               <LayoutGrid className="w-4 h-4" /> Team
             </button>
             <button
               onClick={() => setView('resources')}
-              className={cn('px-3 py-1.5 text-sm rounded-md flex items-center gap-1.5 transition', view === 'resources' ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground')}
+              className={cn('px-3 py-1.5 text-sm rounded-md flex items-center gap-1.5 transition', view === 'resources' ? 'bg-background shadow-xs font-medium' : 'text-muted-foreground')}
             >
               <BarChart3 className="w-4 h-4" /> Resources
             </button>

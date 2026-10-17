@@ -441,7 +441,7 @@ export function ApiKeysSection() {
           onChange={(e) => setNewKeyName(e.target.value)}
           placeholder="Key name, e.g. OpenClaw Bot"
           aria-label="API key name"
-          className="min-w-0 flex-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="min-w-0 flex-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-hidden focus:ring-2 focus:ring-primary/20"
           onKeyDown={(e) => {
             if (e.key === 'Enter' && newKeyName.trim() && newKeyScopes.length > 0) {
               createMutation.mutate(newKeyName.trim());
@@ -488,7 +488,7 @@ export function ApiKeysSection() {
             id="api-key-expiry"
             value={newKeyExpiryDays}
             onChange={(e) => setNewKeyExpiryDays(Number(e.target.value))}
-            className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-hidden focus:ring-2 focus:ring-primary/20"
           >
             {API_KEY_EXPIRY_OPTIONS.map((days) => (
               <option key={days} value={days}>{days === 365 ? '1 year' : `${days} days`}</option>
@@ -875,7 +875,7 @@ export default function Settings() {
                 onClick={() => setShowPw(!showPw)}
                 aria-label={showPw ? 'Hide passwords' : 'Show passwords'}
                 aria-pressed={showPw}
-                className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {showPw ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
               </button>
@@ -998,7 +998,7 @@ export default function Settings() {
               href ? <a
                 key={href}
                 href={href}
-                className="min-h-11 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="min-h-11 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <p className="text-sm font-medium text-foreground">{label}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>

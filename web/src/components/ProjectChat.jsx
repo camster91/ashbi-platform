@@ -375,7 +375,7 @@ export default function ProjectChat({ projectId }) {
             }}
             placeholder={visibility === 'CLIENT' ? 'Message the client...' : 'Message your team... (use @name to mention)'}
             aria-label={visibility === 'CLIENT' ? 'Message visible to the client' : 'Internal message to your team'}
-            className="min-w-0 flex-1 border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
+            className="min-w-0 flex-1 border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-4 py-2 focus:outline-hidden focus:ring-2 focus:ring-ring"
           />
           <button
             type="submit"

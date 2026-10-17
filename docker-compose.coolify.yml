@@ -126,14 +126,28 @@ services:
 
   # pgvector image: the baseline migration runs CREATE EXTENSION vector.
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg18
+    # PostgreSQL 18 uses a versioned PGDATA below the parent mount. Refuse
+    # legacy data instead of silently creating a new empty database beside it.
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        find /var/lib/postgresql -maxdepth 3 -name PG_VERSION | while IFS= read -r version_file; do
+          if [ "$$version_file" != "$$PGDATA/PG_VERSION" ] || [ "$$(cat "$$version_file")" != "18" ]; then
+            echo "Existing PostgreSQL data requires a reviewed dump/restore upgrade; refusing initialization." >&2
+            exit 1
+          fi
+        done
+        exec /usr/local/bin/docker-entrypoint.sh postgres
     restart: unless-stopped
     environment:
+      PGDATA: /var/lib/postgresql/18/docker
       POSTGRES_DB: '${POSTGRES_DB:-ashbi}'
       POSTGRES_USER: '${POSTGRES_USER:-ashbi}'
       POSTGRES_PASSWORD: '${SERVICE_PASSWORD_POSTGRES}'
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -142,7 +156,7 @@ services:
       start_period: 10s
 
   redis:
-    image: redis:7-alpine
+    image: redis:8.10.2-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:

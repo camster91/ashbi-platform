@@ -93,7 +93,7 @@ export default function PortalEstimate() {
   return (
     <div className="bg-background min-h-screen">
       {/* Header */}
-      <header className="bg-primary shadow-sm">
+      <header className="bg-primary shadow-xs">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -240,7 +240,7 @@ export default function PortalEstimate() {
                   aria-invalid={Boolean(declineError)}
                   aria-describedby={declineError ? 'estimate-decline-reason-error' : undefined}
                   placeholder="Your feedback helps us improve our estimates..."
-                  className="w-full px-4 py-3 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                  className="w-full px-4 py-3 border border-border/40 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
                   rows={4}
                 />
                 {declineError && <p id="estimate-decline-reason-error" role="alert" className="text-sm text-destructive">{declineError}</p>}
@@ -250,7 +250,7 @@ export default function PortalEstimate() {
                     onClick={handleDecline}
                     disabled={!declineReason.trim() || respondMutation.isPending}
                     aria-busy={respondMutation.isPending}
-                    className="min-h-11 px-5 py-2.5 bg-destructive text-destructive-foreground text-sm font-medium rounded-lg hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive focus-visible:ring-offset-2"
+                    className="min-h-11 px-5 py-2.5 bg-destructive text-destructive-foreground text-sm font-medium rounded-lg hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-destructive focus-visible:ring-offset-2"
                   >
                     {respondMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                     Submit Decline
@@ -258,7 +258,7 @@ export default function PortalEstimate() {
                   <button
                     type="button"
                     onClick={() => { setAction(null); setDeclineReason(''); setDeclineError(''); }}
-                    className="min-h-11 px-5 py-2.5 text-muted-foreground text-sm font-medium rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="min-h-11 px-5 py-2.5 text-muted-foreground text-sm font-medium rounded-lg hover:bg-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     Cancel
                   </button>
@@ -274,7 +274,7 @@ export default function PortalEstimate() {
                   onClick={handleApprove}
                   disabled={respondMutation.isPending}
                   aria-busy={respondMutation.isPending}
-                  className="min-h-11 w-full sm:w-auto px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="min-h-11 w-full sm:w-auto px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   {respondMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                   <ShieldCheck className="w-4 h-4" />
@@ -284,7 +284,7 @@ export default function PortalEstimate() {
                   type="button"
                   onClick={() => setAction('decline')}
                   disabled={respondMutation.isPending}
-                  className="min-h-11 w-full sm:w-auto px-6 py-3 border border-border/40 text-muted-foreground text-sm font-semibold rounded-lg hover:bg-muted/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="min-h-11 w-full sm:w-auto px-6 py-3 border border-border/40 text-muted-foreground text-sm font-semibold rounded-lg hover:bg-muted/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   <XCircle className="w-4 h-4" />
                   Decline

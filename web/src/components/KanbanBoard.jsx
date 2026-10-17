@@ -298,7 +298,7 @@ export default function KanbanBoard({ projectId }) {
       {COLUMNS.map((column) => (
         <div
           key={column.id}
-          className={`flex-shrink-0 w-72 ${column.color} rounded-lg p-3`}
+          className={`shrink-0 w-72 ${column.color} rounded-lg p-3`}
           onDragOver={handleDragOver}
           onDrop={(e) => handleDrop(e, column.id)}
           role="list"
@@ -319,7 +319,7 @@ export default function KanbanBoard({ projectId }) {
             {tasksByStatus[column.id].map((task) => (
               <div
                 key={task.id}
-                ref={(el) => taskRefs.current[task.id] = el}
+                ref={(el) => { taskRefs.current[task.id] = el; }}
                 draggable
                 onDragStart={(e) => handleDragStart(e, task)}
                 onDragEnd={handleDragEnd}
@@ -331,7 +331,7 @@ export default function KanbanBoard({ projectId }) {
                 aria-grabbed={draggedTask?.id === task.id}
                 aria-selected={selectedTaskId === task.id}
                 aria-label={`${task.title}. Priority: ${task.priority}. Status: ${column.title}${task.assignee ? `. Assigned to: ${task.assignee.name}` : ''}${task.dueDate ? `. Due: ${new Date(task.dueDate).toLocaleDateString('en-CA')}` : ''}`}
-                className={`bg-card rounded-lg p-3 shadow-sm border-l-4 ${PRIORITY_COLORS[task.priority]} transition-all ${
+                className={`bg-card rounded-lg p-3 shadow-xs border-l-4 ${PRIORITY_COLORS[task.priority]} transition-all ${
                   draggedTask?.id === task.id ? 'opacity-50 scale-95' : ''
                 } ${
                   selectedTaskId === task.id
@@ -342,7 +342,7 @@ export default function KanbanBoard({ projectId }) {
                 {/* Drag Handle - Touch-friendly */}
                 <div className="flex items-start gap-2">
                   <div
-                    className="flex-shrink-0 p-2 -ml-2 -mt-1 cursor-grab active:cursor-grabbing touch-none"
+                    className="shrink-0 p-2 -ml-2 -mt-1 cursor-grab active:cursor-grabbing touch-none"
                     aria-hidden="true"
                   >
                     <svg

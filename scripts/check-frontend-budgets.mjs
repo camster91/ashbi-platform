@@ -6,13 +6,19 @@ const KB = 1024;
 export const BUDGETS = Object.freeze({
   entryJs: 120 * KB,
   initialJs: 480 * KB,
-  entryCss: 95 * KB,
+  // Tailwind 4 includes required color-mix fallbacks and typed properties.
+  // Measured entry CSS: 107.52 KB; retain about 7% headroom.
+  entryCss: 115 * KB,
   anyJsChunk: 200 * KB,
+  // React 19 DOM renderer: 202.17 KB, split from core and router.
+  reactDomChunk: 216 * KB,
   publicRouteChunk: 60 * KB,
   // Web workers (e.g. the pdf.js renderer) are emitted as assets outside the
   // manifest's chunk graph. They load only when their feature is used, but
   // each one still has a ceiling so a dependency bump cannot silently double it.
-  workerJs: 1536 * KB,
+  // pdf.js 6.4.299 emits a measured 1572 KB renderer; allow 5% headroom.
+  // It remains isolated from every main-thread and initial-route bundle.
+  workerJs: 1664 * KB,
 });
 
 // A worker bundle: Vite names `new Worker(new URL('./x.worker.js', ...))`
@@ -58,7 +64,10 @@ export function validateFrontendBudgets(dist) {
   for (const file of entry.css ?? []) check(bytes(dist, file), BUDGETS.entryCss, `entry CSS ${file}`);
 
   for (const value of Object.values(manifest)) {
-    if (value.file?.endsWith('.js')) check(bytes(dist, value.file), BUDGETS.anyJsChunk, `JavaScript chunk ${value.file}`);
+    if (value.file?.endsWith('.js')) {
+      const ceiling = /^assets\/vendor-react-dom-[\w-]+\.js$/.test(value.file) ? BUDGETS.reactDomChunk : BUDGETS.anyJsChunk;
+      check(bytes(dist, value.file), ceiling, `JavaScript chunk ${value.file}`);
+    }
   }
 
   // Workers are not in the manifest's chunk list, so scan the asset folder.
