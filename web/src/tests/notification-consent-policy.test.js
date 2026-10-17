@@ -54,9 +54,16 @@ describe('notification consent policy', () => {
   });
 
   it('clears browser registrations on logout and session expiry', () => {
-    expect(auth).toContain('await api.logout();');
-    expect(auth).toContain('clearBrowserPushSubscription({ signal })');
-    expect(auth).toContain('await clearBrowserPushSubscription();');
+    const logout = auth.match(/  const logout = useCallback\([\s\S]*?\n  \}, \[[^\n]*\]\);/)?.[0];
+    const expiry = auth.match(/  const expireSession = useCallback\([\s\S]*?\n  \}, \[[^\n]*\]\);/)?.[0];
+    // Scope each assertion to its own callback: one cleanup path cannot
+    // satisfy the policy if the other path loses its abortable cleanup.
+    for (const transition of [logout, expiry]) {
+      expect(transition).toBeTruthy();
+      expect(transition).toMatch(/await boundedBrowserCleanup\(signal => Promise\.allSettled\(\[\s*clearBrowserPushSubscription\(\{\s*signal\s*\}\)/);
+    }
+    expect(logout).toContain('await api.logout();');
+    expect(logout.indexOf('await api.logout();')).toBeLessThan(logout.indexOf('await boundedBrowserCleanup('));
   });
 
   it('only auto re-subscribes accounts that explicitly opted in (#321)', () => {
