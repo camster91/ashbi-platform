@@ -101,7 +101,9 @@ export const VENDOR_CHUNK_GROUPS = [
   // when public icons or dependency aliases change.
   {
     name: 'vendor-ui',
-    test: (id) => nodeModule(['clsx', 'tailwind-merge']).test(id)
+    // Tailwind's merge registry is used only by workspace components; do not
+    // pull it into sign-in through the lightweight clsx helper.
+    test: (id) => nodeModule(['clsx']).test(id)
       || /[\\/]node_modules[\\/]lucide-react[\\/]dist[\\/]esm[\\/]icons[\\/](arrow-down|arrow-right|arrow-right-left|arrow-up|ban|check-circle|circle-check|circle|circle-dot|clock|copy|eye|eye-off|file-text|globe|hammer|hourglass|info|loader-circle|lock|mail|message-square|message-square-warning|minus|pause|circle-pause|pen-line|play|refresh-cw|rocket|rotate-ccw|send|shield-check|sparkles|triangle-alert|users|x|circle-x|zap)\.m?js$/.test(id),
     priority: 10,
   },

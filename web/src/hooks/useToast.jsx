@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, Info, Pause, Play, X } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { clsx } from 'clsx';
 
 const ToastContext = createContext(null);
 
@@ -89,15 +89,15 @@ function Toast({ id, type = 'info', title, message, action, duration, timer, now
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) onResume(id);
       }}
-      className={cn(
+      className={clsx(
         'flex items-start gap-3 w-[calc(100vw-2rem)] max-w-80 px-4 py-3 rounded-xl border shadow-lg transition-all duration-300',
         STYLES[type] || STYLES.info
       )}
     >
-      <Icon className={cn('w-5 h-5 mt-0.5 shrink-0', ICON_STYLES[type])} aria-hidden="true" />
+      <Icon className={clsx('w-5 h-5 mt-0.5 shrink-0', ICON_STYLES[type])} aria-hidden="true" />
       <div className="flex-1 min-w-0">
         {title && <p className="font-semibold text-sm">{title}</p>}
-        {message && <p className={cn('text-sm', title ? 'mt-0.5' : '')}>{message}</p>}
+        {message && <p className={clsx('text-sm', title ? 'mt-0.5' : '')}>{message}</p>}
         {(timer || hasDeadline) && action?.label && (
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
             <span>{actionExpired ? 'Undo window expired' : <>Undo available for {remainingSeconds} {remainingSeconds === 1 ? 'second' : 'seconds'}</>}</span>
