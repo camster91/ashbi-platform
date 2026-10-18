@@ -22,8 +22,7 @@ test('five desktop areas reveal workflows and the compact rail stays small', asy
     await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
   }
   await expect(nav.getByRole('button', { name: /^(Expand|Collapse) / })).toHaveCount(5);
-  await expect(nav.getByRole('link', { name: 'Projects', exact: true })).toHaveCount(0);
-  await nav.getByRole('button', { name: 'Expand Work', exact: true }).click();
+  // Work is open by default; the other areas open with their routes.
   await expect(nav.getByRole('link', { name: 'Projects', exact: true })).toBeVisible();
   await nav.getByRole('button', { name: 'Collapse Work', exact: true }).click();
   await expect(nav.getByRole('link', { name: 'Projects', exact: true })).toHaveCount(0);
@@ -49,7 +48,6 @@ test('staff navigation retains daily work and excludes administrator destination
   await page.goto('/dashboard');
   const nav = page.getByRole('navigation', { name: 'Workspace navigation' });
   await expect(nav.getByRole('link', { name: 'Daily Queue', exact: true })).toBeVisible();
-  await nav.getByRole('button', { name: 'Expand Work', exact: true }).click();
   await expect(nav.getByRole('link', { name: 'Timesheets', exact: true })).toBeVisible();
   for (const area of ['Sales', 'Money', 'Studio', 'Settings']) {
     await nav.getByRole('button', { name: `Expand ${area}`, exact: true }).click();

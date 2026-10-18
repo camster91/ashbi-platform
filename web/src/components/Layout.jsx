@@ -310,7 +310,9 @@ export default function Layout({ children }) {
   function renderCollapsibleSection(key, label, items, Icon) {
     const isExpanded = expandedSections[key];
     const hasActiveChild = items.some(isNavItemActive);
-    const show = isExpanded ?? hasActiveChild;
+    // Work (projects, schedule, timesheets) is the everyday area, so it stays
+    // open until someone collapses it; the others open with their routes.
+    const show = isExpanded ?? (hasActiveChild || key === 'work');
 
     if (sidebarCollapsed) {
       // Keep the compact rail to five areas rather than dozens of icons.
