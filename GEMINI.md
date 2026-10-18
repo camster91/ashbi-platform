@@ -23,7 +23,7 @@ Core business logic must be decoupled from side-effects.
 
 ## 4. Testing & Compliance
 - **100% Coverage:** Aim for 100% coverage on all new business logic.
-- **Compliance Workflow:** The quality job of `.github/workflows/release-gates.yml` (run by `Required release gates`; see `docs/release-gates.md`) enforces:
+- **Compliance Workflow:** The `.github/workflows/enterprise-compliance.yml` enforces:
     - Passing unit tests.
     - Linting.
     - **Multi-Tenancy Guard:** Fails the build if direct `prisma` imports are found in routes.

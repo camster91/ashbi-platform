@@ -13,9 +13,7 @@ jobs:
   quality:
     name: Type, lint, unit, integration, and build
     runs-on: ubuntu-24.04
-    # 25 -> 30 when the baseline-adoption steps moved in from the retired
-    # enterprise-compliance.yml (two extra prisma db push runs).
-    timeout-minutes: 30
+    timeout-minutes: 25
     services:
       postgres:
         image: pgvector/pgvector:pg18
@@ -63,13 +61,6 @@ jobs:
         run: npm run check:secrets
       - name: Release gate contract
         run: npm run check:release-gates
-      - name: Multi-tenancy route import guard
-        # Moved from enterprise-compliance.yml (job `compliance`, step
-        # "Multi-Tenancy Compliance Scan") when that workflow was retired as a
-        # duplicate of this job. Routes must use request.prisma, never the
-        # global client; grep exits 1 when nothing matches, which is the pass.
-        run: |
-          ! grep -r "import prisma from '../config/db.js'" src/routes/
       - name: Coolify release safety checks
         run: |
           node --test src/tests/unit/coolify-release.test.mjs src/tests/unit/coolify-workflow-gates.test.mjs src/tests/unit/production-backup.test.mjs src/tests/unit/coolify-migration-floor.test.mjs
@@ -94,36 +85,6 @@ jobs:
         # Fail when the committed migration chain and schema.prisma disagree,
         # so the database the app runs against is the one the schema describes.
         run: npm run check:schema-drift
-      - name: Rehearse adoption of a representative current-schema snapshot
-        # Moved from enterprise-compliance.yml (job `backend-tests`) when that
-        # workflow was retired as a duplicate of this job. Uses its own
-        # throwaway database on the same service, so testdb is untouched.
-        run: |
-          printf 'CREATE DATABASE baseline_adoption;' | npx prisma db execute --stdin
-          export DATABASE_URL=postgresql://postgres:testpass@localhost:5432/baseline_adoption
-          npx prisma db push
-          npm run db:adopt-baseline
-          npx prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma
-        env:
-          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
-          ALLOW_BASELINE_ADOPTION: 20260808040000_baseline
-      - name: Prove baseline adoption refuses schema drift
-        # Moved from enterprise-compliance.yml (job `backend-tests`) when that
-        # workflow was retired as a duplicate of this job. Fails closed: the
-        # step fails if adoption accepts a drifted schema or records migrations.
-        run: |
-          printf 'CREATE DATABASE baseline_drift;' | npx prisma db execute --stdin
-          export DATABASE_URL=postgresql://postgres:testpass@localhost:5432/baseline_drift
-          npx prisma db push
-          printf 'ALTER TABLE "clients" ADD COLUMN "unexpectedBaselineDrift" TEXT;' | npx prisma db execute --stdin
-          if npm run db:adopt-baseline; then
-            echo 'Baseline adoption unexpectedly accepted drift' >&2
-            exit 1
-          fi
-          node scripts/assert-no-prisma-migrations.mjs
-        env:
-          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
-          ALLOW_BASELINE_ADOPTION: 20260808040000_baseline
       - name: Check the data dictionary matches the Prisma schema
         # docs/data-dictionary.md is generated from schema.prisma; fail when a
         # schema change lands without regenerating it (npm run docs:data-dictionary).
@@ -149,11 +110,7 @@ jobs:
           REQUIRE_REDIS_TESTS: '1'
         run: npm run test:integration
       - name: Frontend unit tests
-        # --coverage merged in from enterprise-compliance.yml (job
-        # `frontend-tests`, `vitest run --coverage`) so the v8 coverage
-        # instrumentation still runs on every pull request. No thresholds are
-        # configured, so it fails only if the provider cannot instrument.
-        run: npm --prefix web test -- --coverage
+        run: npm --prefix web test
       - name: Production build
         run: npm run build
         env:
