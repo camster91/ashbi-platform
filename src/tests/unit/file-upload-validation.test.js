@@ -18,7 +18,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const routesDir = path.join(__dirname, '..', '..', 'routes');
 
 // Import schemas for allowlist testing
 const schemasModule = await import('../../validators/schemas.js');
