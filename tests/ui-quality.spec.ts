@@ -69,6 +69,7 @@ async function mockExtraApi(page: Page) {
     if (path === '/tasks/task-a/page') return json(route, taskPage);
     if (path === '/tasks/task-a/breadcrumbs') return json(route, [{ id: 'project-a', title: 'Website Redesign', isProject: true }]);
     if (path === '/clients/client-a') return json(route, clientDetail);
+    if (path === '/retainers') return json(route, [{ id: 'retainer-a', clientId: 'client-a', serviceDescription: 'Monthly care plan', tier: '999', hoursPerMonth: 20, hoursUsed: 6, currency: 'USD', monthlyAmountUsd: 999, billingDay: 1, retainerStatus: 'ACTIVE', percentUsed: 30, scopeCreepRisk: false, client: { id: 'client-a', name: 'Northwind Studio', status: 'ACTIVE' } }]);
     if (path === '/clients/client-a/insights') return json(route, { recentThreadCount: 2, sentimentBreakdown: { positive: 2 }, satisfactionTrend: 'Stable' });
     if (path === '/expenses') return json(route, { expenses: [{ id: 'expense-a', description: 'Stock photos', amount: 49, currency: 'USD', category: 'SOFTWARE', date: YESTERDAY, billable: true, client: { id: 'client-a', name: 'Northwind Studio' } }], total: 1 });
     if (path === '/expenses/summary') return json(route, { totalThisMonth: 49, allTimeTotal: 49, byCategory: { SOFTWARE: 49 }, billableTotal: 49 });
