@@ -58,6 +58,21 @@ export function clientInvoiceSummary(invoices, now = new Date()) {
   };
 }
 
+// Client money (revenue totals, payment status, invoices) is for admins only.
+// Team members, bots and API keys get the client without it; the page hiding
+// it is not enough, because the raw response is readable.
+const CLIENT_MONEY_FIELDS = ['totalRevenueUsd', 'totalRevenueCad', 'lastInvoiceDate', 'lastInvoiceStatus', 'paymentStatus'];
+
+export function withoutClientMoney(client) {
+  if (!client) return client;
+  const copy = { ...client };
+  for (const field of CLIENT_MONEY_FIELDS) delete copy[field];
+  delete copy.invoices;
+  return copy;
+}
+
+const seesClientMoney = (request) => request.user?.role === 'ADMIN';
+
 export default async function clientRoutes(fastify) {
   // List all clients
   fastify.get('/', {
@@ -109,7 +124,7 @@ export default async function clientRoutes(fastify) {
       request.prisma.client.count({ where })
     ]);
 
-    return { clients, total, limit: take, offset: skip };
+    return { clients: seesClientMoney(request) ? clients : clients.map(withoutClientMoney), total, limit: take, offset: skip };
   });
 
   // Create client
@@ -144,7 +159,7 @@ export default async function clientRoutes(fastify) {
       include: contactRows?.length ? { contacts: true } : undefined
     });
 
-    return reply.status(201).send(client);
+    return reply.status(201).send(seesClientMoney(request) ? client : withoutClientMoney(client));
   });
 
   // Get single client with full details
@@ -173,14 +188,17 @@ export default async function clientRoutes(fastify) {
             assignedTo: { select: { id: true, name: true } }
           }
         },
-        invoices: {
-          orderBy: { createdAt: 'desc' },
-          include: {
-            createdBy: { select: { id: true, name: true } },
-            // Partial payments: outstanding money is each invoice's balance.
-            payments: { select: { amount: true } }
+        // Invoices are read for admins only (see withoutClientMoney).
+        ...(seesClientMoney(request) ? {
+          invoices: {
+            orderBy: { createdAt: 'desc' },
+            include: {
+              createdBy: { select: { id: true, name: true } },
+              // Partial payments: outstanding money is each invoice's balance.
+              payments: { select: { amount: true } }
+            }
           }
-        }
+        } : {})
       }
     });
 
@@ -188,12 +206,12 @@ export default async function clientRoutes(fastify) {
       return reply.status(404).send({ error: 'Client not found' });
     }
 
-    // Invoice money: balances after payments, grouped by currency.
-    const summary = clientInvoiceSummary(client.invoices);
+    // Invoice money: balances after payments, grouped by currency (admins only).
+    const summary = seesClientMoney(request) ? clientInvoiceSummary(client.invoices) : {};
 
     // Parse JSON fields
     return {
-      ...client,
+      ...(seesClientMoney(request) ? client : withoutClientMoney(client)),
       ...summary,
       communicationPrefs: safeParse(client.communicationPrefs, {}),
       satisfactionSignals: safeParse(client.satisfactionSignals, {}),
@@ -253,7 +271,7 @@ export default async function clientRoutes(fastify) {
       revokeClientSocketsFrom(fastify, { clientId: client.id }, request.log);
     }
 
-    return client;
+    return seesClientMoney(request) ? client : withoutClientMoney(client);
   });
 
   // Get client contacts
