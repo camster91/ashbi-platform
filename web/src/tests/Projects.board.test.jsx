@@ -12,8 +12,10 @@ const projects = [
 vi.mock('../lib/api', () => ({ api: {
   getProjects: vi.fn(async ({ portfolio } = {}) => ({ projects: portfolio ? projects.filter(p => p.portfolio === portfolio) : projects })),
   updateProject: vi.fn(async () => ({})),
+  getTeam: vi.fn(async () => []),
 } }));
 vi.mock('../components/CreateProjectModal', () => ({ default: () => null }));
+vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', role: 'ADMIN' } }) }));
 
 const { default: Projects } = await import('../pages/Projects');
 const { api } = await import('../lib/api');
@@ -59,7 +61,7 @@ describe('Projects board', () => {
     renderProjects();
     expect(await screen.findByText('Northwind Brand Refresh')).toBeInTheDocument();
     expect(screen.getByText('Maple Website')).toBeInTheDocument();
-    const other = screen.getByRole('heading', { name: 'Other' }).closest('div').parentElement;
+    const other = screen.getByRole('region', { name: 'Other' });
     expect(within(other).getByText('Imported legacy project')).toBeInTheDocument();
   });
 

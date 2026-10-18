@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import clientRoutes from '../../routes/client.routes.js';
 import timeRoutes from '../../routes/time.routes.js';
+import projectRoutes from '../../routes/project.routes.js';
 
 async function handlers(registrar) {
   const routes = {};
@@ -105,4 +106,27 @@ test('admins still get time entry rates', async () => {
   const project = await routes['GET /projects/:projectId/time-entries']({ user: { id: 'a', role: 'ADMIN' }, query: {}, params: { projectId: 'p1' }, prisma: timeDb() }, reply);
   assert.equal(project.entries[0].hourlyRate, 150);
   assert.equal(project.entries[0].invoiceId, 'inv-1');
+});
+
+const storedProject = { id: 'p1', name: 'Harbour Hotel rebuild', status: 'DESIGN_DEV', budget: 12000, hourlyBudget: 80, client: { id: 'c1', name: 'Harbour Hotel' }, _count: { threads: 0, tasks: 4 } };
+const projectDb = () => ({
+  project: { findMany: async () => [structuredClone(storedProject)], count: async () => 1 },
+  task: { groupBy: async () => [{ projectId: 'p1', _count: 3 }] },
+});
+
+for (const role of ['TEAM', 'BOT']) {
+  test(`project list sends ${role} no contract value`, async () => {
+    const routes = await handlers(projectRoutes);
+    const body = await routes['GET /']({ query: {}, user: { id: 'u', role }, prisma: projectDb() }, reply);
+    assert.equal('budget' in body.projects[0], false, `${role} must not receive budget`);
+    assert.equal(body.projects[0].name, 'Harbour Hotel rebuild');
+    assert.equal(body.projects[0].hourlyBudget, 80, 'hour budgets are not money');
+    assert.equal(body.projects[0].completedTaskCount, 3);
+  });
+}
+
+test('admins still get the project contract value in the list', async () => {
+  const routes = await handlers(projectRoutes);
+  const body = await routes['GET /']({ query: {}, user: { id: 'a', role: 'ADMIN' }, prisma: projectDb() }, reply);
+  assert.equal(body.projects[0].budget, 12000);
 });
