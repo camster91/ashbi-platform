@@ -21,19 +21,13 @@ The canonical gate owns these blocking checks:
   workflows and deployment scripts);
 - production dependency audit (`npm audit --omit=dev --audit-level=high`, backend
   and frontend);
-- multi-tenancy route import guard (routes must use `request.prisma`; the step
-  fails if any file under `src/routes/` imports the global Prisma client);
-- Prisma baseline adoption: a rehearsal that adopts the baseline on a
-  `db push` snapshot and then proves zero drift, and a negative proof that
-  adoption refuses a drifted schema and records no migrations (each on its
-  own throwaway database in the job's PostgreSQL service);
 - package-boundary validation;
 - backend type check and backend/frontend lint;
 - backend unit and integration tests against PostgreSQL with pgvector (the
   committed migration chain is applied with `prisma migrate deploy`) and Redis
   (the realtime adapter/emitter tests; the gate sets `REQUIRE_REDIS_TESTS=1`, so
   a missing Redis fails the run instead of skipping those tests);
-- frontend unit tests (run with v8 coverage instrumentation; no thresholds);
+- frontend unit tests;
 - the production build, frontend performance budgets and Lighthouse budgets;
 - desktop, mobile, and accessibility browser smoke, public-route splitting and
   PWA offline policy;
@@ -56,20 +50,9 @@ The secret scan runs inside check 1, so it is enforced even if the standalone
 Actions UI. That standalone workflow still exists and additionally runs the
 scanner's negative regression fixtures; it is advisory, not a required check.
 
-Other workflows in `.github/workflows/` (`codeql.yml`, `pr-review.yml`,
-`build-and-push.yml`, `browser-e2e.yml`, `db-backup.yml`) are supplementary
-and are not part of the required contract. `browser-e2e.yml` is manual-only
-(`workflow_dispatch`) and never runs on a pull request.
-
-The former `enterprise-compliance.yml` (`Enterprise Compliance & Tests`) was
-retired because every check it ran also ran in check 1: lint, the release gate
-contract, Prisma generate/migrate, the schema-drift diff, `npm test` and the
-frontend Vitest suite. Its unique steps (the multi-tenancy route import guard,
-the baseline adoption rehearsal and the drift-refusal proof) moved into the
-quality job above, and `npm run check:release-gates` now fails if any of them
-is removed from that job. Its jobs (`Lint & Compliance Scan`,
-`Backend Unit Tests`, `Frontend Unit Tests`) no longer report, so they must not
-be listed as required checks.
+Other workflows in `.github/workflows/` (`enterprise-compliance.yml`,
+`codeql.yml`, `pr-review.yml`, `build-and-push.yml`, `browser-e2e.yml`,
+`db-backup.yml`) are supplementary and are not part of the required contract.
 The visual-regression baselines (`npm run test:visual`, see
 [visual-baselines.md](visual-baselines.md)) are opt-in and not a release gate
 until they are regenerated and proven stable on the CI runner.

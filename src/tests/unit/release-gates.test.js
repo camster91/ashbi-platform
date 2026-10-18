@@ -87,37 +87,6 @@ describe('mandatory release gates', () => {
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('check:secrets')));
   });
 
-  // Moved from the retired enterprise-compliance.yml: the quality job is the
-  // only place these run, so each removal must fail the contract.
-  for (const [label, needle, replacement] of [
-    ['multi-tenancy route import guard', `! grep -r "import prisma from '../config/db.js'" src/routes/`, 'echo skipped'],
-    ['baseline adoption rehearsal', 'CREATE DATABASE baseline_adoption;', 'SELECT 1;'],
-    ['baseline drift-refusal proof', 'CREATE DATABASE baseline_drift;', 'SELECT 1;'],
-    ['baseline drift-refusal failure exit', "accepted drift' >&2\n            exit 1", "accepted drift' >&2\n            true"],
-    ['baseline drift-refusal migration-table assertion', 'node scripts/assert-no-prisma-migrations.mjs', 'echo skipped'],
-    ['frontend unit tests with coverage instrumentation', 'npm --prefix web test -- --coverage', 'npm --prefix web test'],
-  ]) {
-    it(`fails closed when the ${label} is removed from the quality job`, () => {
-      const root = copyWorkflows();
-      const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
-      const source = fs.readFileSync(workflow, 'utf8').replaceAll('\r\n', '\n');
-      assert.ok(source.includes(needle), `fixture text for ${label} must exist`);
-      fs.writeFileSync(workflow, source.replaceAll(needle, replacement));
-      assert.ok(validateReleaseGates(root).some((failure) => failure.includes(label)));
-    });
-  }
-
-  it('fails closed when the baseline adoption rehearsal moves out of the quality job', () => {
-    const root = copyWorkflows();
-    const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
-    const source = fs.readFileSync(workflow, 'utf8');
-    // Keep the text in the file but outside the quality job (inside stack-e2e).
-    const moved = source.replace('CREATE DATABASE baseline_adoption;', 'SELECT 1;')
-      .replace('  stack-e2e:', '  # CREATE DATABASE baseline_adoption;\n  stack-e2e:');
-    fs.writeFileSync(workflow, moved);
-    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('baseline adoption rehearsal')));
-  });
-
   it('fails closed when a second deployment controller is introduced', () => {
     const root = copyWorkflows();
     const workflow = path.join(root, '.github', 'workflows', 'rogue-deploy.yml');

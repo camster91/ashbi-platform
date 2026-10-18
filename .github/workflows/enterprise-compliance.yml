@@ -1,0 +1,139 @@
+name: Enterprise Compliance & Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# SECURITY (audit 2026-07-09): added concurrency + per-job timeouts.
+# Previously this workflow had neither — a 10-PR flurry would spawn 10
+# parallel pgvector Postgres services, 10 parallel backend test runs,
+# 10 parallel frontend test runs, all hammering shared runner capacity.
+# Default job timeout is 360 minutes (GH hard cap) which is far too
+# generous for what should be a < 5 min scan.
+concurrency:
+  group: compliance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compliance:
+    name: Lint & Compliance Scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Linting
+        run: npm run lint
+
+      - name: Multi-Tenancy Compliance Scan
+        run: |
+          # Ensure no direct prisma imports in routes (must use request.prisma)
+          # Grep returns 1 if no matches found, which is what we want
+          ! grep -r "import prisma from '../config/db.js'" src/routes/
+
+      - name: Release gate contract
+        run: npm run check:release-gates
+
+  backend-tests:
+    name: Backend Unit Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        # Use pgvector/pgvector:pg18 — schema.prisma declares
+        # `extensions = [vector]`, which requires the pgvector extension.
+        # The stock postgres:18-alpine image doesn't ship it. pgvector
+        # publishes pg16 as `pg16` (debian bookworm); there is no
+        # `-alpine` tag for pg16 (only `pg16-trixie` and `pg16-bookworm`).
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Generate Prisma client
+        # Required before any test that touches @prisma/client — the runtime
+        # resolves to .prisma/client/default which only exists after this step.
+        # No postinstall hook in package.json runs it automatically.
+        run: npx prisma generate
+      - name: Setup database
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
+      - name: Verify fresh migration schema has no drift
+        run: npx prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
+      - name: Rehearse adoption of a representative current-schema snapshot
+        run: |
+          printf 'CREATE DATABASE baseline_adoption;' | npx prisma db execute --stdin
+          export DATABASE_URL=postgresql://postgres:testpass@localhost:5432/baseline_adoption
+          npx prisma db push
+          npm run db:adopt-baseline
+          npx prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
+          ALLOW_BASELINE_ADOPTION: 20260808040000_baseline
+      - name: Prove baseline adoption refuses schema drift
+        run: |
+          printf 'CREATE DATABASE baseline_drift;' | npx prisma db execute --stdin
+          export DATABASE_URL=postgresql://postgres:testpass@localhost:5432/baseline_drift
+          npx prisma db push
+          printf 'ALTER TABLE "clients" ADD COLUMN "unexpectedBaselineDrift" TEXT;' | npx prisma db execute --stdin
+          if npm run db:adopt-baseline; then
+            echo 'Baseline adoption unexpectedly accepted drift' >&2
+            exit 1
+          fi
+          node scripts/assert-no-prisma-migrations.mjs
+        env:
+          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
+          ALLOW_BASELINE_ADOPTION: 20260808040000_baseline
+      - name: Run Backend Tests
+        run: npm test
+        env:
+          NODE_ENV: test
+          JWT_SECRET: test-secret
+          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
+
+  frontend-tests:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --prefix web --no-audit --no-fund
+      - name: Run Frontend Tests
+        run: cd web && npx vitest run --coverage
