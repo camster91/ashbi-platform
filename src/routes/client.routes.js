@@ -3,9 +3,19 @@
 import { safeParse } from '../utils/safeParse.js';
 import { clampTake } from '../utils/query-limits.js';
 import { clientStateRevokesPortal, revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
-import { validateBody, createClientSchema, updateClientSchema, clientContactSchema, clientNoteCreateSchema } from '../validators/schemas.js';
+import { validateBody, validateQuery, createClientSchema, updateClientSchema, clientContactSchema, clientNoteCreateSchema } from '../validators/schemas.js';
 import { normalizeClientDomain, normalizeContactEmail } from '../utils/client-identity.js';
 import { invoiceBalance, roundMoney, UNPAID_INVOICE_STATUSES } from '../utils/invoice-balance.js';
+import { z } from 'zod';
+import { requireStaff } from '../middleware/require-staff.js';
+import { buildClientActivity, CLIENT_ACTIVITY_DEFAULT_LIMIT, CLIENT_ACTIVITY_MAX_LIMIT } from '../services/client-activity.service.js';
+
+// GET /api/clients/:id/activity query: a page size and an ISO date to read
+// before (the previous page's `nextBefore`).
+export const clientActivityQuerySchema = z.object({
+  limit: z.string().trim().regex(/^\d{1,3}$/, 'must be a whole number').optional(),
+  before: z.string().trim().max(40).refine((value) => !Number.isNaN(Date.parse(value)), 'must be an ISO date').optional(),
+}).strict();
 
 const DUPLICATE_DOMAIN_ERROR = 'Client with this domain already exists';
 
@@ -254,6 +264,29 @@ export default async function clientRoutes(fastify) {
     }
 
     return client;
+  });
+
+  // One activity timeline for the client page (staff only). Invoices and
+  // payments are added for admins only; team members get work activity.
+  fastify.get('/:id/activity', {
+    onRequest: [fastify.authenticate, requireStaff],
+    preHandler: [validateQuery(clientActivityQuerySchema)],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const client = await request.prisma.client.findUnique({ where: { id }, select: { id: true } });
+    if (!client) {
+      return reply.status(404).send({ error: 'Client not found' });
+    }
+    const limit = clampTake(request.query.limit, {
+      defaultTake: CLIENT_ACTIVITY_DEFAULT_LIMIT,
+      maxTake: CLIENT_ACTIVITY_MAX_LIMIT,
+    });
+    const before = request.query.before ? new Date(request.query.before) : null;
+    return buildClientActivity(request.prisma, client.id, {
+      isAdmin: request.user.role === 'ADMIN',
+      limit,
+      before,
+    });
   });
 
   // Get client contacts
