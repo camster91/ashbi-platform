@@ -331,6 +331,9 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
 
     // Clients.
     if (path === '/clients') return json(route, { clients: [client], total: 1 });
+    // Client page: Activity panel and this month's hours tile.
+    if (path === `/clients/${client.id}/activity`) return json(route, { items: [{ id: 'thread:thread-a', kind: 'conversation', at: YESTERDAY, title: 'Homepage feedback', status: 'OPEN', project: { id: project.id, name: project.name }, href: '/thread/thread-a' }], nextBefore: null });
+    if (path === '/time-entries/summary') return json(route, { byProject: [{ project: { id: project.id, name: project.name }, totalMinutes: 150, billableMinutes: 120, entries: 2 }], byUser: user.role === 'ADMIN' ? [] : null, totalMinutes: 150 });
     if (path === '/ai/client-health') return json(route, { clients: [{ id: client.id, name: client.name, score: 86, status: 'HEALTHY', summary: 'Responsive and engaged.' }] });
 
     // Projects.

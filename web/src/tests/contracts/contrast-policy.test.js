@@ -1,0 +1,140 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { clientPortalSource } from '../helpers/clientPortalSource';
+
+function rgb(hex) {
+  return hex.match(/[0-9a-f]{2}/gi).map((part) => parseInt(part, 16));
+}
+
+function hsl(hue, saturation, lightness) {
+  const s = saturation / 100;
+  const l = lightness / 100;
+  const chroma = (1 - Math.abs(2 * l - 1)) * s;
+  const x = chroma * (1 - Math.abs((hue / 60) % 2 - 1));
+  const m = l - chroma / 2;
+  let channels;
+  if (hue < 60) channels = [chroma, x, 0];
+  else if (hue < 120) channels = [x, chroma, 0];
+  else if (hue < 180) channels = [0, chroma, x];
+  else if (hue < 240) channels = [0, x, chroma];
+  else if (hue < 300) channels = [x, 0, chroma];
+  else channels = [chroma, 0, x];
+  return channels.map((channel) => Math.round((channel + m) * 255));
+}
+
+function luminance(channels) {
+  const linear = channels.map((channel) => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+function ratio(foreground, background) {
+  const a = luminance(foreground);
+  const b = luminance(background);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+const white = rgb('ffffff');
+const cream = rgb('faf9f2');
+
+describe('WCAG contrast policy', () => {
+  it.each([
+    ['portal muted on white', '6b667f', 'ffffff'],
+    ['portal muted on cream', '6b667f', 'faf9f2'],
+    ['success text on white', '15803d', 'ffffff'],
+    ['warning text on white', 'b45309', 'ffffff'],
+    ['danger text on white', 'b91c1c', 'ffffff'],
+    ['green badge', '166534', 'dcfce7'],
+    ['lime badge', '4d7c0f', 'ecfccb'],
+    ['orange badge', '9a3412', 'ffedd5'],
+    ['red badge', 'b91c1c', 'fee2e2'],
+    ['blue badge', '1d4ed8', 'dbeafe'],
+    ['purple badge', '6d28d9', 'ede9fe'],
+  ])('%s meets 4.5:1 for normal text', (_label, foreground, background) => {
+    expect(ratio(rgb(foreground), rgb(background))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('portal primitive colour pairs on the light tokens meet 4.5:1 (#316)', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const light = css.slice(css.indexOf(':root {'), css.indexOf('.dark {'));
+    const token = (name) => {
+      const [, h, s, l] = light.match(new RegExp(`--${name}:\\s*(\\d+)\\s+(\\d+)%\\s+(\\d+)%`)).map(Number);
+      return hsl(h, s, l);
+    };
+    const over = (color, alpha, base = white) => color.map((c, i) => Math.round(c * alpha + base[i] * (1 - alpha)));
+    const pairs = [
+      ['muted text on card', token('muted-foreground'), token('card')],
+      ['muted text on background', token('muted-foreground'), token('background')],
+      ['muted badge', token('muted-foreground'), token('muted')],
+      ['success badge', token('success'), over(token('success'), 0.1)],
+      ['warning badge', token('warning'), over(token('warning'), 0.1)],
+      ['danger badge', token('destructive'), over(token('destructive'), 0.1)],
+      ['info badge', token('info'), over(token('info'), 0.1)],
+      ['primary badge', token('primary'), over(token('primary'), 0.1)],
+      ['accent badge', token('accent-foreground'), over(token('accent'), 0.4)],
+      ['warning stat on tinted card', token('warning'), over(token('warning'), 0.05)],
+      ['success stat on tinted card', token('success'), over(token('success'), 0.05)],
+    ];
+    for (const [label, foreground, background] of pairs) {
+      expect(ratio(foreground, background), label).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('portal and shell control boundaries meet 3:1', () => {
+    // The portal and shell draw control and interactive-card boundaries with
+    // the full `--border` token (#316/#317), read from the light theme.
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const light = css.slice(css.indexOf(':root {'), css.indexOf('.dark {'));
+    const [, h, s, l] = light.match(/--border:\s*(\d+)\s+(\d+)%\s+(\d+)%/).map(Number);
+    const border = hsl(h, s, l);
+    const [, bh, bs, bl] = light.match(/--background:\s*(\d+)\s+(\d+)%\s+(\d+)%/).map(Number);
+    expect(ratio(border, white)).toBeGreaterThanOrEqual(3);
+    expect(ratio(border, cream)).toBeGreaterThanOrEqual(3);
+    expect(ratio(border, hsl(bh, bs, bl))).toBeGreaterThanOrEqual(3);
+    expect(ratio(hsl(250, 15, 45), hsl(250, 39, 10))).toBeGreaterThanOrEqual(3);
+  });
+
+  it('the light destructive token meets 4.5:1 as text and as a solid fill', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const [, h, s, l] = css.match(/--destructive:\s*(\d+)\s+(\d+)%\s+(\d+)%/).map(Number);
+    const destructive = hsl(h, s, l);
+    expect(ratio(destructive, white)).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(destructive, cream)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('the dark destructive token meets 4.5:1 as text on dark surfaces and as a solid fill', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const dark = css.slice(css.indexOf('.dark {'));
+    const token = (name) => {
+      const [, h, s, l] = dark.match(new RegExp(`--${name}:\\s*(\\d+)\\s+(\\d+)%\\s+(\\d+)%`)).map(Number);
+      return hsl(h, s, l);
+    };
+    const destructive = token('destructive');
+    for (const surface of ['background', 'card', 'muted']) {
+      expect(ratio(destructive, token(surface)), `text-destructive on dark ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(ratio(token('destructive-foreground'), destructive), 'dark destructive fill').toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('semantic solid statuses meet 4.5:1 in light and dark themes', () => {
+    expect(ratio(white, hsl(142, 72, 28))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(white, hsl(32, 95, 32))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(white, hsl(199, 85, 30))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(white, hsl(142, 70, 30))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(hsl(250, 39, 10), hsl(38, 92, 58))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(hsl(250, 39, 10), hsl(199, 80, 42))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('keeps inaccessible legacy portal overrides out and defines visible focus', () => {
+    const portal = clientPortalSource();
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    expect(portal).not.toContain('#8a85a0');
+    expect(portal).not.toMatch(/color:\s*connected \? '#16a34a'/);
+    expect(portal).toContain(':focus-visible');
+    expect(css).toContain(':focus-visible');
+    expect(css).toContain('outline: 3px solid hsl(var(--ring))');
+  });
+});

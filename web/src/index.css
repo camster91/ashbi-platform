@@ -13,34 +13,50 @@
 }
 
 /* Self-hosted fonts avoid third-party requests. Swap keeps text readable
-   while the branded body and heading fonts download. */
+   while the brand fonts download. Plus Jakarta Sans carries body and headings,
+   Geist Mono carries labels and figures, and Instrument Serif italic is kept
+   for single editorial accent words, matching ashbi.ca. */
 @font-face {
-  font-family: 'DM Sans';
+  font-family: 'Plus Jakarta Sans';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('@fontsource/dm-sans/files/dm-sans-latin-400-normal.woff2') format('woff2');
+  src: url('@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-400-normal.woff2') format('woff2');
 }
 @font-face {
-  font-family: 'DM Sans';
+  font-family: 'Plus Jakarta Sans';
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('@fontsource/dm-sans/files/dm-sans-latin-500-normal.woff2') format('woff2');
+  src: url('@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-500-normal.woff2') format('woff2');
 }
 @font-face {
-  font-family: 'DM Sans';
+  font-family: 'Plus Jakarta Sans';
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('@fontsource/dm-sans/files/dm-sans-latin-600-normal.woff2') format('woff2');
+  src: url('@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-600-normal.woff2') format('woff2');
 }
 @font-face {
-  font-family: 'DM Sans';
+  font-family: 'Plus Jakarta Sans';
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('@fontsource/dm-sans/files/dm-sans-latin-700-normal.woff2') format('woff2');
+  src: url('@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('@fontsource/geist-mono/files/geist-mono-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('@fontsource/geist-mono/files/geist-mono-latin-500-normal.woff2') format('woff2');
 }
 @font-face {
   font-family: 'Instrument Serif';
@@ -59,29 +75,30 @@
 
 @layer base {
   :root {
-    /* Ashbi Brand Colors - Light Mode */
-    --background: 48 33% 97%;        /* #faf9f2 - cream */
-    --foreground: 250 39% 15%;       /* #2e2958 - deep indigo */
+    /* Ashbi Brand Colors - Light Mode (ashbi.ca: paper, ink, indigo,
+       powder, lime). Integer HSL so contrast tests can read them. */
+    --background: 49 100% 98%;       /* #fffdf4 - paper */
+    --foreground: 235 31% 25%;       /* #2b2e52 - ink */
     --card: 0 0% 100%;
-    --card-foreground: 250 39% 15%;
+    --card-foreground: 235 31% 25%;
     --popover: 0 0% 100%;
-    --popover-foreground: 250 39% 15%;
+    --popover-foreground: 235 31% 25%;
 
-    /* Primary - Deep Indigo */
-    --primary: 250 39% 25%;         /* #2e2958 */
+    /* Primary - Indigo */
+    --primary: 236 31% 37%;          /* #42467d */
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary - Sage */
-    --secondary: 75 52% 84%;         /* #d0dd9a */
-    --secondary-foreground: 250 39% 15%;
+    /* Secondary - Powder */
+    --secondary: 210 36% 87%;        /* #d2deea */
+    --secondary-foreground: 235 31% 25%;
 
-    /* Accent - Lime */
-    --accent: 68 94% 61%;            /* #e6f354 */
-    --accent-foreground: 250 39% 15%;
+    /* Accent - Lime (main action buttons, highlights) */
+    --accent: 65 86% 64%;            /* #e6f254 */
+    --accent-foreground: 235 31% 25%;
 
     /* Muted */
-    --muted: 75 30% 95%;
-    --muted-foreground: 250 25% 32%;
+    --muted: 50 27% 91%;             /* #efede3 */
+    --muted-foreground: 235 16% 43%; /* #5c5f80 */
 
     /* Destructive — used both as text (text-destructive) and as a solid
        fill behind white text, so it must clear 4.5:1 on white and cream.
@@ -90,9 +107,9 @@
     --destructive-foreground: 0 0% 100%;
 
     /* Borders & Inputs */
-    --border: 250 12% 60%;
-    --input: 250 12% 60%;
-    --ring: 250 39% 25%;
+    --border: 236 14% 58%;
+    --input: 236 14% 58%;
+    --ring: 236 31% 37%;
     --radius: 0.625rem;
 
     /* Status Colors */
@@ -122,28 +139,28 @@
 
   .dark {
     /* Ashbi Brand Colors - Dark Mode */
-    --background: 250 39% 10%;      /* Deep indigo dark */
+    --background: 236 31% 10%;      /* Deep ink dark */
     --foreground: 48 33% 97%;        /* Cream */
-    --card: 250 39% 14%;
+    --card: 236 31% 14%;
     --card-foreground: 48 33% 97%;
-    --popover: 250 39% 14%;
+    --popover: 236 31% 14%;
     --popover-foreground: 48 33% 97%;
 
     /* Primary - Lime accent in dark */
     --primary: 68 94% 61%;           /* #e6f354 - lime */
-    --primary-foreground: 250 39% 10%;
+    --primary-foreground: 236 31% 10%;
 
     /* Secondary */
-    --secondary: 250 30% 20%;
+    --secondary: 236 28% 20%;
     --secondary-foreground: 48 33% 97%;
 
     /* Accent - Sage */
     --accent: 75 52% 70%;            /* Sage lighter */
-    --accent-foreground: 250 39% 10%;
+    --accent-foreground: 236 31% 10%;
 
     /* Muted */
-    --muted: 250 30% 18%;
-    --muted-foreground: 250 18% 70%;
+    --muted: 236 28% 18%;
+    --muted-foreground: 236 18% 72%;
 
     /* Destructive — a light red with dark foreground so the one token passes
        AA both as text-destructive on the dark surfaces (~5.2:1 on muted,
@@ -163,8 +180,8 @@
     --info-foreground: 250 39% 10%;
 
     /* Borders & Inputs */
-    --border: 250 15% 45%;
-    --input: 250 15% 45%;
+    --border: 236 15% 45%;
+    --input: 236 15% 45%;
     --ring: 68 94% 61%;
   }
 }
@@ -190,13 +207,13 @@
     margin: auto;
   }
   html {
-    font-family: 'DM Sans', system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Instrument Serif', 'DM Sans', system-ui, sans-serif;
-    font-weight: 400;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-weight: 600;
     letter-spacing: -0.02em;
   }
   body {
@@ -207,13 +224,30 @@
     outline-offset: 2px;
   }
 
-  /* Brand headline style */
+  /* Editorial accent: one italic word inside a heading ("Good afternoon, <em>Cameron</em>"). */
   .font-display {
-    font-family: 'Instrument Serif', serif;
+    font-family: 'Instrument Serif', Georgia, serif;
   }
 }
 
 @layer utilities {
+  /* Brand label: small mono caps used for eyebrows, table headers and
+     button text (ashbi.ca's Geist Mono buttons). */
+  .text-eyebrow {
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  /* Figures (money, hours, counts) line up in columns. */
+  .figure {
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
   /* Animation utilities */
   .animate-fade-in {
     opacity: 0;

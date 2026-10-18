@@ -43,7 +43,7 @@ const StatCard = forwardRef(({
     <div
       ref={ref}
       className={cn(
-        'relative overflow-hidden rounded-xl border p-5',
+        'relative overflow-hidden rounded-lg border p-5',
         'transition-all duration-200 hover:-translate-y-1 hover:shadow-lg',
         variants[variant],
         className
@@ -52,10 +52,10 @@ const StatCard = forwardRef(({
     >
       <div className="flex items-start justify-between">
         <div className="space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">
+          <p className="text-eyebrow text-muted-foreground">
             {label}
           </p>
-          <p className={cn('text-3xl font-heading font-bold tracking-tight', valueColors[variant])}>
+          <p className={cn('figure text-3xl font-medium', valueColors[variant])}>
             {value}
           </p>
           

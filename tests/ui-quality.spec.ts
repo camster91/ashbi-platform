@@ -53,6 +53,7 @@ const clientDetail = {
   invoices: [{ id: 'invoice-a', invoiceNumber: 'INV-2026-001', status: 'SENT', total: 4520, currency: 'USD', dueDate: NEXT_WEEK, createdAt: YESTERDAY }],
   communicationPrefs: {},
   knowledgeBase: {},
+  clientNotes: 'Dana prefers short updates on Fridays.',
   createdAt: YESTERDAY,
   updatedAt: YESTERDAY,
 };
@@ -69,6 +70,12 @@ async function mockExtraApi(page: Page) {
     if (path === '/tasks/task-a/page') return json(route, taskPage);
     if (path === '/tasks/task-a/breadcrumbs') return json(route, [{ id: 'project-a', title: 'Website Redesign', isProject: true }]);
     if (path === '/clients/client-a') return json(route, clientDetail);
+    if (path === '/retainers') return json(route, [{ id: 'retainer-a', clientId: 'client-a', serviceDescription: 'Monthly care plan', tier: '999', hoursPerMonth: 20, hoursUsed: 6, currency: 'USD', monthlyAmountUsd: 999, billingDay: 1, retainerStatus: 'ACTIVE', percentUsed: 30, scopeCreepRisk: false, client: { id: 'client-a', name: 'Northwind Studio', status: 'ACTIVE' } }]);
+    if (path === '/clients/client-a/activity') return json(route, { items: [
+      { id: 'activity:a1', kind: 'file', type: 'FILE_UPLOADED', action: 'uploaded', at: YESTERDAY, title: 'homepage-v2.png', actor: { id: adminUser.id, name: adminUser.name }, project: { id: 'project-a', name: 'Website Redesign' }, href: '/project/project-a' },
+      { id: 'invoice-sent:invoice-a', kind: 'invoice_sent', at: YESTERDAY, title: 'INV-2026-001', amount: 4520, currency: 'USD', href: '/invoices/invoice-a' },
+    ], nextBefore: null });
+    if (path === '/time-entries/summary') return json(route, { byProject: [{ project: { id: 'project-a', name: 'Website Redesign' }, totalMinutes: 870, billableMinutes: 780, entries: 6 }], byUser: [], totalMinutes: 870 });
     if (path === '/clients/client-a/insights') return json(route, { recentThreadCount: 2, sentimentBreakdown: { positive: 2 }, satisfactionTrend: 'Stable' });
     if (path === '/expenses') return json(route, { expenses: [{ id: 'expense-a', description: 'Stock photos', amount: 49, currency: 'USD', category: 'SOFTWARE', date: YESTERDAY, billable: true, client: { id: 'client-a', name: 'Northwind Studio' } }], total: 1 });
     if (path === '/expenses/summary') return json(route, { totalThisMonth: 49, allTimeTotal: 49, byCategory: { SOFTWARE: 49 }, billableTotal: 49 });

@@ -18,7 +18,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const routesDir = path.join(__dirname, '..', '..', 'routes');
 
 // Import schemas for allowlist testing
 const schemasModule = await import('../../validators/schemas.js');
@@ -78,129 +77,7 @@ describe('File Upload Validation', () => {
     });
   });
 
-  describe('Route file upload validation', () => {
-    it('client-portal.routes.js should have file type validation', () => {
-      const filePath = path.join(routesDir, 'client-portal.routes.js');
-      if (!fs.existsSync(filePath)) {
-        console.log('  ⚠ client-portal.routes.js not found');
-        return;
-      }
-
-      const content = fs.readFileSync(filePath, 'utf-8');
-
-      // Check for any form of file type validation
-      const hasMimetypeCheck = content.includes('mimetype') || content.includes('ALLOWED_UPLOAD_MIMETYPES');
-      const hasFileValidation = content.includes('ALLOWED_UPLOAD') || content.includes('allowedTypes') || content.includes('fileType');
-
-      if (!hasMimetypeCheck && !hasFileValidation) {
-        console.warn('  ⚠ client-portal.routes.js: File uploads may not have type validation');
-        console.warn('    Recommend: Check data.mimetype against ALLOWED_UPLOAD_MIMETYPES');
-      }
-
-      // Check for file size limit
-      const hasFileSizeLimit = content.includes('MAX_UPLOAD_SIZE') || content.includes('fileUpload.MAX_SIZE') ||
-        content.includes('maxFileSize') || content.includes('limits');
-
-      if (!hasFileSizeLimit) {
-        console.warn('  ⚠ client-portal.routes.js: No explicit file size limit found');
-      }
-
-      assert.ok(true, 'File upload validation documented');
-    });
-
-    it('brand.routes.js should validate logo uploads', () => {
-      const filePath = path.join(routesDir, 'brand.routes.js');
-      if (!fs.existsSync(filePath)) {
-        console.log('  ⚠ brand.routes.js not found');
-        return;
-      }
-
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const hasUpload = content.includes('request.file') || content.includes('multipart') || content.includes('.file(');
-
-      if (hasUpload) {
-        console.log('  ✓ brand.routes.js has file upload handling');
-
-        const hasTypeCheck = content.includes('mimetype') || content.includes('ALLOWED');
-        if (!hasTypeCheck) {
-          console.warn('  ⚠ Brand logo uploads may lack type validation');
-        }
-      }
-
-      assert.ok(true, 'Brand upload validation documented');
-    });
-
-    it('expense.routes.js should validate receipt uploads', () => {
-      const filePath = path.join(routesDir, 'expense.routes.js');
-      if (!fs.existsSync(filePath)) {
-        console.log('  ⚠ expense.routes.js not found');
-        return;
-      }
-
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const hasUpload = content.includes('request.file') || content.includes('multipart') || content.includes('.file(');
-
-      if (hasUpload) {
-        console.log('  ✓ expense.routes.js has file upload handling');
-
-        const hasTypeCheck = content.includes('mimetype') || content.includes('ALLOWED');
-        if (!hasTypeCheck) {
-          console.warn('  ⚠ Expense receipt uploads may lack type validation');
-        }
-      }
-
-      assert.ok(true, 'Expense upload validation documented');
-    });
-
-    it('attachment.routes.js should validate attachment uploads', () => {
-      const filePath = path.join(routesDir, 'attachment.routes.js');
-      if (!fs.existsSync(filePath)) {
-        console.log('  ⚠ attachment.routes.js not found');
-        return;
-      }
-
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const hasUpload = content.includes('request.file') || content.includes('multipart') || content.includes('.file(');
-
-      if (hasUpload) {
-        const hasTypeCheck = content.includes('mimetype') || content.includes('ALLOWED');
-        if (!hasTypeCheck) {
-          console.warn('  ⚠ Attachment uploads may lack type validation');
-        }
-      }
-
-      assert.ok(true, 'Attachment upload validation documented');
-    });
-  });
-
   describe('Path traversal prevention', () => {
-    it('uploads should use UUID-based filenames (not user-provided names)', () => {
-      // Check that routes use randomUUID or similar for filenames
-      const routesToCheck = ['client-portal', 'attachment', 'expense', 'brand'];
-
-      for (const routeName of routesToCheck) {
-        const filePath = path.join(routesDir, `${routeName}.routes.js`);
-        if (!fs.existsSync(filePath)) continue;
-
-        const content = fs.readFileSync(filePath, 'utf-8');
-
-        // Check for UUID filename generation
-        const usesUUID = content.includes('randomUUID') || content.includes('crypto.randomUUID');
-        const usesOriginalFilename = content.includes('data.filename') && !content.includes('randomUUID');
-
-        if (usesOriginalFilename && !usesUUID) {
-          console.warn(`  ⚠ ${routeName}.routes: May use original filename — path traversal risk`);
-          console.warn('    Recommend: Use randomUUID() for stored filenames');
-        }
-
-        if (usesUUID) {
-          console.log(`  ✓ ${routeName}.routes: Uses UUID for stored filenames`);
-        }
-      }
-
-      assert.ok(true, 'Path traversal prevention check completed');
-    });
-
     it('file extensions should be validated against allowlist before storing', () => {
       // Even with UUID filenames, the extension from the user upload
       // determines how the file might be served later

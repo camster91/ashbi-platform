@@ -76,7 +76,7 @@ describe('Dashboard partial state', () => {
 
     expect(await screen.findByText('Task data is temporarily unavailable')).toBeInTheDocument();
     // Loaded sections stay visible alongside the notice.
-    expect(screen.getByRole('heading', { name: 'Activity Feed' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Activity' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     const statsCalls = api.getDashboardStats.mock.calls.length;
 

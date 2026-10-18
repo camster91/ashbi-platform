@@ -5,8 +5,10 @@ import { Loader2 } from 'lucide-react';
 import useSlowState, { SLOW_THRESHOLD_MS } from '../../hooks/useSlowState';
 import { SlowMessage } from './SlowNotice';
 
+// Ashbi brand (ashbi.ca): the main action is lime with ink text and an ink
+// outline; every button label is small Geist Mono caps (see `base` below).
 const variants = {
-  primary: 'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary/20',
+  primary: 'border border-foreground bg-accent text-accent-foreground hover:bg-accent/80 focus:ring-primary/20',
   secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 focus:ring-secondary/20',
   outline: 'border-2 border-border bg-transparent text-foreground hover:bg-muted focus:ring-border',
   ghost: 'bg-transparent text-foreground hover:bg-muted focus:ring-muted',
@@ -19,15 +21,16 @@ const variants = {
   warning: 'bg-warning text-warning-foreground hover:bg-warning/90 focus:ring-warning/20',
   // Text-only action (the client portal's inline "View all …" links). Keeps
   // the 44px target from the size but drops the horizontal padding.
-  link: 'bg-transparent px-0 font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring',
+  link: 'bg-transparent px-0 font-sans normal-case tracking-normal font-semibold text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring',
 };
 
+// Mono caps read larger than sentence case, so each size steps the text down.
 const sizes = {
-  xs: 'min-h-11 px-2.5 text-xs',
-  sm: 'min-h-11 px-3 text-sm',
-  md: 'min-h-11 px-4 text-sm',
-  lg: 'h-12 px-6 text-base',
-  xl: 'h-14 px-8 text-base',
+  xs: 'min-h-11 px-2.5 text-[0.6875rem]',
+  sm: 'min-h-11 px-3 text-xs',
+  md: 'min-h-11 px-4 text-xs',
+  lg: 'h-12 px-6 text-sm',
+  xl: 'h-14 px-8 text-sm',
 };
 
 const iconSizes = {
@@ -45,13 +48,13 @@ const iconSizes = {
  */
 export function buttonStyles({ variant = 'primary', size = 'md', className } = {}) {
   return cn(
-    'inline-flex items-center justify-center gap-2 rounded-lg font-medium',
+    'inline-flex items-center justify-center gap-2 rounded-md font-mono font-medium uppercase tracking-[0.1em]',
     'transition-colors duration-200 ease-out motion-reduce:transition-none',
     'focus-visible:outline-hidden focus-visible:ring-4 focus-visible:ring-offset-0',
     'disabled:opacity-50 disabled:cursor-not-allowed',
     variants[variant] || variants.primary,
     sizes[size] || sizes.md,
-    variant === 'link' && 'px-0',
+    variant === 'link' && 'px-0 text-sm',
     className
   );
 }
