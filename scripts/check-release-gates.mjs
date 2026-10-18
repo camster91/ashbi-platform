@@ -94,6 +94,22 @@ export function validateReleaseGates(root = process.cwd()) {
     || !/REQUIRE_REDIS_TESTS:\s*'1'/.test(qualityJob)) {
     failures.push('release-gates.yml quality job does not run the Redis realtime integration tests (redis service, REDIS_URL, REQUIRE_REDIS_TESTS)');
   }
+  // These checks moved here from the retired enterprise-compliance.yml; the
+  // quality job is now their only home, so their removal must fail closed.
+  const qualityRequirements = [
+    [`! grep -r "import prisma from '../config/db.js'" src/routes/`, 'multi-tenancy route import guard'],
+    ['CREATE DATABASE baseline_adoption;', 'baseline adoption rehearsal'],
+    ['CREATE DATABASE baseline_drift;', 'baseline drift-refusal proof'],
+    ['ALLOW_BASELINE_ADOPTION: 20260808040000_baseline', 'baseline adoption confirmation'],
+    ['npm run db:adopt-baseline', 'baseline adoption command'],
+    [/if npm run db:adopt-baseline; then\r?\n\s+echo 'Baseline adoption unexpectedly accepted drift' >&2\r?\n\s+exit 1\r?\n/, 'baseline drift-refusal failure exit'],
+    ['node scripts/assert-no-prisma-migrations.mjs', 'baseline drift-refusal migration-table assertion'],
+    ['npm --prefix web test -- --coverage', 'frontend unit tests with coverage instrumentation'],
+  ];
+  for (const [needle, label] of qualityRequirements) {
+    const present = typeof needle === 'string' ? qualityJob.includes(needle) : needle.test(qualityJob);
+    if (!present) failures.push(`release-gates.yml quality job is missing the ${label}`);
+  }
   const browserJob = release.split(/^ {2}browser:/m)[1]?.split(/^ {2}stack-e2e:/m)[0] ?? '';
   if (!browserJob.includes('npm run build')) failures.push('release-gates.yml browser job does not build the production frontend');
 
