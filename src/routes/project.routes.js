@@ -55,6 +55,17 @@ export async function projectReferenceError(db, { clientId, defaultOwnerId }) {
   return null;
 }
 
+// Money (the fixed-price contract value) is for admins only: the project list
+// leaves it out of the response for team members, bots and API keys.
+const PROJECT_MONEY_FIELDS = ['budget'];
+
+export function withoutProjectMoney(project) {
+  if (!project) return project;
+  const copy = { ...project };
+  for (const field of PROJECT_MONEY_FIELDS) delete copy[field];
+  return copy;
+}
+
 export default async function projectRoutes(fastify) {
   fastify.get('/board-templates', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     if (!['ADMIN', 'TEAM'].includes(request.user.role)) return reply.status(403).send({ error: 'Team access required' });
@@ -168,9 +179,10 @@ export default async function projectRoutes(fastify) {
       return acc;
     }, {});
 
+    const seesMoney = request.user?.role === 'ADMIN';
     return {
       projects: projects.map(p => ({
-        ...p,
+        ...(seesMoney ? p : withoutProjectMoney(p)),
         completedTaskCount: completedMap[p.id] || 0
       })),
       total,

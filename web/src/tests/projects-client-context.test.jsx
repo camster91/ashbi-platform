@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Projects from '../pages/Projects';
@@ -13,6 +13,7 @@ vi.mock('../lib/api', () => ({
     createProject: vi.fn(),
   },
 }));
+vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', role: 'ADMIN' } }) }));
 
 function LocationProbe() {
   const location = useLocation();
@@ -61,6 +62,7 @@ describe('Projects client-origin creation', () => {
     renderProjects(['/projects?create=true&clientId=client-two']);
 
     const clientSelect = await screen.findByRole('combobox', { name: /client/i });
+    await screen.findByRole('option', { name: 'Client Two' });
     expect(clientSelect).toHaveValue('client-two');
 
     fireEvent.change(screen.getByRole('textbox', { name: /project name/i }), {
@@ -75,12 +77,28 @@ describe('Projects client-origin creation', () => {
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/projects'));
   });
 
-  it('keeps the horizontally scrollable status board keyboard accessible', async () => {
+  it('wraps the status board instead of scrolling it sideways, with a labelled section per stage', async () => {
+    api.getProjects.mockResolvedValue({ projects: [{ id: 'p1', name: 'Harbour Hotel', status: 'FINALIZING', updatedAt: '2030-08-15T12:00:00.000Z', _count: { tasks: 0 } }] });
     renderProjects(['/projects']);
 
     const board = await screen.findByRole('region', { name: 'Project status board' });
-    expect(board).toHaveAttribute('tabindex', '0');
-    expect(screen.getByRole('heading', { name: 'Review' }).parentElement).toHaveClass('text-warning');
+    expect(board.className).not.toMatch(/overflow-x-auto/);
+    expect(board).not.toHaveAttribute('tabindex');
+    for (const stage of ['Planning', 'In progress', 'Client review', 'Launched']) {
+      expect(screen.getByRole('region', { name: stage })).toBeInTheDocument();
+    }
+  });
+
+  it('lists active team members as default owners from the team API array', async () => {
+    api.getTeam.mockResolvedValue([
+      { id: 'u-bia', name: 'Bianca', role: 'TEAM', isActive: true },
+      { id: 'u-old', name: 'Gone', role: 'TEAM', isActive: false },
+    ]);
+    renderProjects(['/projects?create=true&clientId=client-two']);
+
+    const owner = await screen.findByRole('combobox', { name: /default owner/i });
+    expect(await within(owner).findByRole('option', { name: 'Bianca (TEAM)' })).toBeInTheDocument();
+    expect(within(owner).queryByRole('option', { name: /Gone/ })).not.toBeInTheDocument();
   });
 
   it('fails safely when the URL names an unavailable client', async () => {
