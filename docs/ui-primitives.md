@@ -5,7 +5,7 @@ Everything here is taken from the component source. When you change a
 primitive's props, variants or accessibility behaviour, update this file in the
 same change.
 
-`web/src/tests/ui-primitives-docs.test.js` keeps this file honest. It checks
+`web/src/tests/contracts/ui-primitives-docs.test.js` keeps this file honest. It checks
 that:
 
 - every PascalCase export of a primitive source file has a `###` heading here
@@ -93,7 +93,7 @@ Deliberate exceptions:
 - **Light-only client pages.** The client portal and the public `Portal*`
   token pages call `usePortalLightTheme()` (`web/src/hooks`), so their tokens
   always resolve to the light set.
-- **Allowlisted files.** `web/src/tests/raw-color-guard.test.js` fails on any
+- **Allowlisted files.** `web/src/tests/contracts/raw-color-guard.test.js` fails on any
   raw palette class, opaque `bg-white` or hex colour in `web/src` outside
   `web/src/tests/raw-color-allowlist.json`. Each allowlist entry has a reason
   (categorical colours, colours stored as data, canvas drawing, the dark
@@ -151,7 +151,7 @@ active)`) the browser swaps author colours for the user's system palette and
 drops box-shadows and most background fills. Tailwind's `ring-*` focus
 indicators are box-shadows and many controls are drawn only by their fill, so
 a block at the end of `web/src/index.css` restores each cue with CSS system
-colours (#317). `web/src/tests/forced-colors.test.js` checks it.
+colours (#317). `web/src/tests/contracts/forced-colors.test.js` checks it.
 
 | Cue | Forced-colours rule |
 |---|---|
@@ -893,7 +893,7 @@ system with hardcoded hex colours. It now uses the shared primitives above
 and design tokens (#316). `web/src/pages/client-portal/portal.css` keeps only
 portal-specific layout that has no shared primitive yet.
 
-`web/src/tests/client-portal-primitives-convergence.test.js` guards this. It
+`web/src/tests/contracts/client-portal-primitives-convergence.test.js` guards this. It
 fails if a `.cp-*` class outside the kept list appears in portal JSX or CSS,
 if a retired class comes back, if portal JSX or `portal.css` uses a colour
 literal or inline colour style, or if a native `<button>`/`<input>` appears
