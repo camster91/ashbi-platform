@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { formatMoney } from '../lib/format';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authState = { user: { id: 'u1', name: 'Cameron Ashley', role: 'ADMIN' } };
@@ -106,11 +107,14 @@ describe('Dashboard redesign', () => {
     });
     renderDashboard();
     const paid = await screen.findByRole('button', { name: /Paid this month/ });
-    expect(paid).toHaveTextContent('$1.0K · US$300.0');
-    expect(paid).not.toHaveTextContent('$1.3K');
+    // Built with the app's formatter: compact output differs between ICU builds.
+    const cad = formatMoney(1000, 'CAD', { compact: true });
+    const usd = formatMoney(300, 'USD', { compact: true });
+    expect(paid).toHaveTextContent(`${cad} · ${usd}`);
+    expect(paid).not.toHaveTextContent(formatMoney(1300, 'CAD', { compact: true }));
     const chart = screen.getByRole('img', { name: /Paid per month/ });
-    expect(chart.getAttribute('aria-label')).toContain(`${THIS_MONTH} $1.0K`);
-    expect(screen.getByText(/Shown in CAD\. Also paid: US\$300\.0\./)).toBeInTheDocument();
+    expect(chart.getAttribute('aria-label')).toContain(`${THIS_MONTH} ${cad}`);
+    expect(screen.getByText(`Shown in CAD. Also paid: ${usd}.`)).toBeInTheDocument();
   });
 
   it('lists agent actions and drafted replies waiting for approval', async () => {
