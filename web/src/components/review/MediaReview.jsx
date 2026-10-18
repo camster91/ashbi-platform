@@ -342,7 +342,7 @@ function AnnotationItem({ annotation, number, replies, selected, onSelect, canCo
       tabIndex={-1}
       aria-labelledby={`annotation-${annotation.id}-heading`}
       data-selected={selected || undefined}
-      className={cn('rounded-lg border p-3 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring', selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border', annotation.resolved && 'opacity-80')}
+      className={cn('rounded-lg border p-3 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring', selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border', annotation.resolved && 'bg-muted/40')}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>

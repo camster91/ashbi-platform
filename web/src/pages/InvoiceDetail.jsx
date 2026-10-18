@@ -895,7 +895,8 @@ export default function InvoiceDetail() {
 
             <Panel id="invoice-lines-heading" title="Line items">
               <div className={panelBodyClass}>
-                <div className="overflow-x-auto">
+                {/* Keyboard users can scroll the table sideways on narrow screens. */}
+                <div className="overflow-x-auto focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded-sm" tabIndex={0} role="region" aria-label="Line items table">
                   <table className="w-full min-w-[480px] text-sm">
                     <caption className="sr-only">Line items in {invoice.currency || 'CAD'}</caption>
                     <thead>
@@ -1034,7 +1035,7 @@ export default function InvoiceDetail() {
                     />
                   </div>
                 ) : (
-                  <div className={cn(panelBodyClass, 'overflow-x-auto')}>
+                  <div className={cn(panelBodyClass, 'overflow-x-auto focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded-sm')} tabIndex={0} role="region" aria-label="Payment history table">
                     <table className="w-full min-w-[440px] text-sm">
                       <thead>
                         <tr className="text-left">
