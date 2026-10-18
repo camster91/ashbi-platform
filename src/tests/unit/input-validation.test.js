@@ -250,33 +250,6 @@ describe('Route File Validation Coverage', () => {
     assert.ok(content.includes('ALLOWED_MIMETYPES'), 'Should have file upload MIME type allowlist');
   });
 
-  it('routes with validateBody should properly use it', () => {
-    const filesWithValidation = [
-      'auth', 'project', 'task', 'client', 'invoice', 'expense',
-      'client-portal', 'portal', 'approvals', 'ash-chat'
-    ];
-
-    for (const routeName of filesWithValidation) {
-      const content = readRouteFile(routeName);
-      if (!content) continue;
-
-      // Verify validateBody is imported
-      const hasValidateImport = content.includes('validateBody') || content.includes('schema:');
-      if (hasValidateImport) {
-        // Verify it's actually used in mutation endpoints
-        const mutations = getMutationMethods(content);
-        const validatedMutations = mutations.filter(m => {
-          const block = content.substring(m.index, m.index + 500);
-          return block.includes('validateBody') || block.includes('schema:');
-        });
-
-        console.log(`  ✓ ${routeName}.routes: ${validatedMutations.length}/${mutations.length} mutations have validation`);
-      }
-    }
-
-    assert.ok(true, 'Validation coverage scan completed');
-  });
-
   it('should identify routes lacking validation on mutation endpoints', () => {
     const routeFiles = getRouteFiles();
     const routesWithoutValidation = [];

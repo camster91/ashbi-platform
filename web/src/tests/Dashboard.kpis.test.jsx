@@ -21,6 +21,8 @@ vi.mock('../lib/api', () => ({
       clientHealth: [],
     })),
     getMyTasks: vi.fn(async () => []),
+    getAiToolApprovals: vi.fn(async () => ({ approvals: [] })),
+    getInvoices: vi.fn(async () => ({ invoices: [], total: 0 })),
   },
 }));
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', name: 'Cameron Ashley', role: 'ADMIN' } }) }));
@@ -55,7 +57,7 @@ describe('Dashboard KPIs', () => {
         <MemoryRouter><Dashboard /></MemoryRouter>
       </QueryClientProvider>,
     );
-    const outstanding = await screen.findByRole('button', { name: /Outstanding \(sent\)/ });
+    const outstanding = await screen.findByRole('button', { name: /Owed to you/ });
     expect(outstanding).toHaveTextContent('$0');
     expect(outstanding).toHaveTextContent('Drafts $12.2K · 2 not sent');
     expect(screen.getByRole('button', { name: /MRR/ })).toHaveTextContent('No active retainers');

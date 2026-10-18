@@ -11,8 +11,8 @@ import { Button, EmptyState, LoadingState } from './ui';
 // receipt. Admins see the whole workspace; others see their own actions. The
 // server asks for step-up re-authentication, which ReauthDialog handles.
 
-const PENDING_KEY = ['ai-tool-approvals'];
-const RECEIPTS_KEY = ['ai-tool-receipts'];
+export const PENDING_KEY = ['ai-tool-approvals'];
+export const RECEIPTS_KEY = ['ai-tool-receipts'];
 
 const TOOL_LABELS = {
   list_projects: 'List projects',
@@ -89,7 +89,7 @@ export function PreviewDetails({ preview }) {
 }
 
 /** The current time, refreshed every `intervalMs` so expiry labels stay true. */
-function useNow(intervalMs = 15_000) {
+export function useNow(intervalMs = 15_000) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), intervalMs);
@@ -112,7 +112,8 @@ function receiptStatus(receipt) {
   return receipt.status.charAt(0) + receipt.status.slice(1).toLowerCase();
 }
 
-function PendingItem({ action, onDecided, now }) {
+/** One pending action with Approve / Reject. Shared with the dashboard's "Waiting for your OK" panel. */
+export function PendingItem({ action, onDecided, now }) {
   const reasonId = useId();
   const [reason, setReason] = useState('not_needed');
   const [confirming, setConfirming] = useState(false);

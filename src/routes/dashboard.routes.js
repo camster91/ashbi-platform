@@ -273,6 +273,7 @@ export default async function dashboardRoutes(fastify) {
       request.prisma.$queryRaw`
         SELECT
           date_trunc('month', i."paidAt") AS month,
+          COALESCE(i.currency, 'CAD') AS currency,
           SUM(i.total)::float AS revenue,
           COUNT(*)::int AS invoice_count
         FROM "invoices" i
@@ -280,7 +281,7 @@ export default async function dashboardRoutes(fastify) {
         WHERE i.status = 'PAID'
           AND i."paidAt" >= ${sixMonthsAgo}::timestamptz
           AND c."organizationId" = ${request.organizationId}
-        GROUP BY month
+        GROUP BY month, COALESCE(i.currency, 'CAD')
         ORDER BY month ASC
       `,
       request.prisma.invoice.aggregate({
@@ -449,14 +450,23 @@ export default async function dashboardRoutes(fastify) {
       revenueHistory: (() => {
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const grouped = {};
+        // Rows are per month AND currency: amounts in different currencies
+        // are never added together for display. `byCurrency` carries them;
+        // `total` stays for older callers and is only meaningful when the
+        // month has a single currency.
         (revenueHistory || []).forEach(row => {
           const d = new Date(row.month);
           const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          grouped[key] = (grouped[key] || 0) + (Number(row.revenue) || 0);
+          const entry = grouped[key] || (grouped[key] = { total: 0, byCurrency: {} });
+          const amount = Number(row.revenue) || 0;
+          const currency = row.currency || 'CAD';
+          entry.total += amount;
+          entry.byCurrency[currency] = Math.round(((entry.byCurrency[currency] || 0) + amount) * 100) / 100;
         });
-        return Object.entries(grouped).map(([key, total]) => ({
+        return Object.entries(grouped).map(([key, { total, byCurrency }]) => ({
           month: months[parseInt(key.split('-')[1]) - 1],
           year: key.split('-')[0],
+          byCurrency,
           total: Math.round(total * 100) / 100
         }));
       })()

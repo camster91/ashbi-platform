@@ -59,9 +59,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 39 |
 | public | 51 |
 | recent-auth + staff | 9 |
-| staff | 476 |
+| staff | 477 |
 | staff (inline) | 1 |
-| **total** | 687 |
+| **total** | 688 |
 
 ## Routes by prefix
 
@@ -421,6 +421,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/clients/:clientId/service-panels/:mappingId/snapshots` | staff | scoped |  |
 | GET | `/api/clients/:id` | staff | scoped |  |
 | PUT | `/api/clients/:id` | staff | scoped |  |
+| GET | `/api/clients/:id/activity` | staff | scoped |  |
 | GET | `/api/clients/:id/contacts` | staff | scoped |  |
 | POST | `/api/clients/:id/contacts` | staff | scoped |  |
 | GET | `/api/clients/:id/insights` | staff | scoped |  |

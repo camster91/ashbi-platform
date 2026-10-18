@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../lib/api';
 
 const credential = { id: 'cred-1', label: 'WP Admin', username: 'admin', category: 'WEBSITE', client: { id: 'c1', name: 'Northwind' } };
 // A plain function (not a spy) so a rejected read is only observed by the page.
@@ -23,11 +24,11 @@ vi.mock('../lib/api', () => ({
 
 const { default: Credentials } = await import('../pages/Credentials');
 
-function renderPage() {
+function renderPage(path = '/credentials') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter><Credentials /></MemoryRouter>
+      <MemoryRouter initialEntries={[path]}><Credentials /></MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -60,5 +61,15 @@ describe('Credentials secret reads', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Edit WP Admin' }));
     expect(await screen.findByText('Edit Credential')).toBeInTheDocument();
     expect(calls[0]).toEqual(['cred-1', 'edit credential']);
+  });
+});
+
+describe('Credentials client filter', () => {
+  it('opens filtered to the client named in ?clientId= (the client page Logins link)', async () => {
+    api.getCredentials.mockClear();
+    renderPage('/credentials?clientId=c1');
+    expect(await screen.findByRole('button', { name: 'Edit WP Admin' })).toBeInTheDocument();
+    expect(api.getCredentials).toHaveBeenCalledWith({ clientId: 'c1' });
+    expect(api.getCredentials).not.toHaveBeenCalledWith({});
   });
 });
