@@ -60,7 +60,8 @@
 > there when the audit confirmed it's invoked from no workflow and no
 > package.json script. Use it for manual one-off checks only. The
 > **env placeholder check** in `src/config/env.js` and the
-> **enterprise-compliance.yml** workflow are the actual gates.
+> **release gates** (`.github/workflows/release-gates.yml`, which absorbed
+> the retired enterprise-compliance.yml checks) are the actual gates.
 
 Run the security audit script to verify:
 ```bash
