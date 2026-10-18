@@ -94,7 +94,9 @@ export function projectSummary(projects, now = Date.now()) {
   let overdue = 0;
   let inReview = 0;
   for (const project of projects) {
-    if (!isClosedProject(project)) active += 1;
+    // Same definition as the dashboard's active projects: not launched,
+    // cancelled or completed, and not on hold.
+    if (!isClosedProject(project) && project.status !== 'ON_HOLD') active += 1;
     if (REVIEW_STATUSES.has(project.status)) inReview += 1;
     const due = dueState(project, now);
     if (due === 'soon') dueThisWeek += 1;
