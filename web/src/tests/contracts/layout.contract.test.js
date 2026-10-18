@@ -69,6 +69,13 @@ describe('layout-shell-accessibility-contract.test.js', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/components/Layout.jsx'), 'utf8');
 
   describe('layout shell accessibility contract', () => {
+    it('keeps the wordmark text inside the home link name (axe label-content-name-mismatch)', () => {
+      // Visible "Ashbi" + "Hub" must read "Ashbi Hub" (a real space between
+      // the spans), or it no longer matches aria-label "Ashbi Hub home".
+      expect(source).toContain('aria-label="Ashbi Hub home"');
+      expect(source).toMatch(/>Ashbi<\/span>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?\{' '\}\s*<span[^>]*>Hub<\/span>/);
+    });
+
     it('names and exposes collapsible navigation state', () => {
       expect(source).toContain('aria-expanded={show}');
       expect(source).toContain('aria-label={`${show ? \'Collapse\' : \'Expand\'} ${label}`}');

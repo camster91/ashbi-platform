@@ -104,9 +104,17 @@ export default function ClientActivityFeed({ clientId, role }) {
   const query = useInfiniteQuery({
     // The role is part of the key: admins and team members get different feeds.
     queryKey: ['client-activity', clientId, role],
-    queryFn: ({ pageParam }) => api.getClientActivity(clientId, { limit: CLIENT_ACTIVITY_PAGE_SIZE, before: pageParam || undefined }),
+    // The cursor is the last item's time AND id, so items that share the
+    // boundary time are not skipped.
+    queryFn: ({ pageParam }) => api.getClientActivity(clientId, {
+      limit: CLIENT_ACTIVITY_PAGE_SIZE,
+      before: pageParam?.before,
+      beforeId: pageParam?.beforeId,
+    }),
     initialPageParam: null,
-    getNextPageParam: (lastPage) => lastPage?.nextBefore || undefined,
+    getNextPageParam: (lastPage) => (lastPage?.nextBefore
+      ? { before: lastPage.nextBefore, beforeId: lastPage.nextBeforeId || undefined }
+      : undefined),
     enabled: Boolean(clientId),
   });
   const items = (query.data?.pages || [])

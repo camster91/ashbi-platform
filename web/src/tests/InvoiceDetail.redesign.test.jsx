@@ -253,13 +253,27 @@ describe('editing a draft', () => {
     api.updateInvoice.mockResolvedValue({});
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-    const issue = screen.getByLabelText('Issue date');
+    const issue = screen.getByLabelText(/Issue date/);
     await userEvent.clear(issue);
     await userEvent.type(issue, '2026-10-20');
     await userEvent.click(screen.getByRole('checkbox', { name: 'Repeat this invoice' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
     await waitFor(() => expect(api.updateInvoice).toHaveBeenCalledTimes(1));
     expect(api.updateInvoice.mock.calls[0][1]).toMatchObject({ issueDate: '2026-10-20', isRecurring: true, recurringInterval: 'MONTHLY' });
+  });
+
+  it('does not save a cleared issue date as "no change"', async () => {
+    api.getInvoice.mockResolvedValue(invoice({ status: 'DRAFT', sentAt: null }));
+    api.updateInvoice.mockResolvedValue({});
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    const issue = screen.getByLabelText(/Issue date/);
+    await userEvent.clear(issue);
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    expect(api.updateInvoice).not.toHaveBeenCalled();
+    expect(issue).toBeRequired();
+    // Still editing, so the user can fix it.
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeInTheDocument();
   });
 
   it('cancels back to the read-only view without saving', async () => {

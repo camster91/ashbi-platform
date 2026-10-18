@@ -96,6 +96,23 @@ describe('Dashboard redesign', () => {
     expect(screen.getByRole('button', { name: /Owed to you/ })).toHaveTextContent('2 sent, unpaid invoices');
   });
 
+  it('never adds CAD and USD together in paid this month or the chart', async () => {
+    api.getDashboardStats.mockResolvedValue({
+      ...baseStats,
+      revenueHistory: [
+        { month: LAST_MONTH, year: String(NOW.getMonth() === 0 ? NOW.getFullYear() - 1 : NOW.getFullYear()), total: 5000, byCurrency: { CAD: 5000 } },
+        { month: THIS_MONTH, year: String(NOW.getFullYear()), total: 1300, byCurrency: { CAD: 1000, USD: 300 } },
+      ],
+    });
+    renderDashboard();
+    const paid = await screen.findByRole('button', { name: /Paid this month/ });
+    expect(paid).toHaveTextContent('$1.0K · US$300.0');
+    expect(paid).not.toHaveTextContent('$1.3K');
+    const chart = screen.getByRole('img', { name: /Paid per month/ });
+    expect(chart.getAttribute('aria-label')).toContain(`${THIS_MONTH} $1.0K`);
+    expect(screen.getByText(/Shown in CAD\. Also paid: US\$300\.0\./)).toBeInTheDocument();
+  });
+
   it('lists agent actions and drafted replies waiting for approval', async () => {
     renderDashboard();
     const panel = await screen.findByRole('region', { name: /Waiting for your OK/ });

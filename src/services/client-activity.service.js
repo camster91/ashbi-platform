@@ -39,24 +39,39 @@ function iso(value) {
   return new Date(value).toISOString();
 }
 
-function beforeFilter(before) {
-  return before ? { lt: before } : undefined;
+// Keyset paging: items are ordered by time (newest first), then by their
+// prefixed id ("activity:…", "thread:…"), so a page ends at an exact
+// (time, id) point. Each source reads only what sorts after that point:
+// older rows, plus rows at the same instant that sort after the cursor id.
+// Without the id, rows sharing the boundary timestamp could be skipped.
+function after(field, prefix, cursor) {
+  if (!cursor) return null;
+  const { before, beforeId } = cursor;
+  if (!beforeId) return { [field]: { lt: before } };
+  const split = beforeId.indexOf(':');
+  const cursorPrefix = beforeId.slice(0, split);
+  const cursorRawId = beforeId.slice(split + 1);
+  if (prefix < cursorPrefix) return { [field]: { lt: before } };
+  if (prefix > cursorPrefix) return { [field]: { lte: before } };
+  return { OR: [{ [field]: { lt: before } }, { [field]: before, id: { gt: cursorRawId } }] };
 }
+
+const newestFirst = (field) => [{ [field]: 'desc' }, { id: 'asc' }];
 
 /**
  * @param {any} prisma request-scoped (tenant) Prisma client
  * @param {string} clientId the client, already confirmed to exist for this tenant
- * @param {{ isAdmin: boolean, limit: number, before?: Date | null }} options
- * @returns {Promise<{ items: any[], nextBefore: string | null }>}
+ * @param {{ isAdmin: boolean, limit: number, before?: Date | null, beforeId?: string | null }} options
+ * @returns {Promise<{ items: any[], nextBefore: string | null, nextBeforeId: string | null }>}
  */
-export async function buildClientActivity(prisma, clientId, { isAdmin, limit, before = null }) {
+export async function buildClientActivity(prisma, clientId, { isAdmin, limit, before = null, beforeId = null }) {
   const take = limit + 1;
-  const lt = beforeFilter(before);
+  const cursor = before ? { before, beforeId } : null;
 
   const [threads, projectActivity, sentInvoices, paidInvoices, payments] = await Promise.all([
     prisma.thread.findMany({
-      where: { clientId, ...(lt ? { lastActivityAt: lt } : {}) },
-      orderBy: { lastActivityAt: 'desc' },
+      where: { clientId, ...after('lastActivityAt', 'thread', cursor) },
+      orderBy: newestFirst('lastActivityAt'),
       take,
       select: {
         id: true, subject: true, status: true, lastActivityAt: true,
@@ -67,9 +82,9 @@ export async function buildClientActivity(prisma, clientId, { isAdmin, limit, be
       where: {
         project: { clientId },
         type: { in: Object.keys(CLIENT_ACTIVITY_PROJECT_TYPES) },
-        ...(lt ? { createdAt: lt } : {}),
+        ...after('createdAt', 'activity', cursor),
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: newestFirst('createdAt'),
       take,
       select: {
         id: true, type: true, action: true, entityType: true, entityId: true, entityName: true, createdAt: true,
@@ -79,8 +94,8 @@ export async function buildClientActivity(prisma, clientId, { isAdmin, limit, be
     }),
     isAdmin
       ? prisma.invoice.findMany({
-        where: { clientId, sentAt: lt ?? { not: null } },
-        orderBy: { sentAt: 'desc' },
+        where: { clientId, sentAt: { not: null }, ...after('sentAt', 'invoice-sent', cursor) },
+        orderBy: newestFirst('sentAt'),
         take,
         select: { id: true, invoiceNumber: true, title: true, total: true, currency: true, sentAt: true },
       })
@@ -89,16 +104,16 @@ export async function buildClientActivity(prisma, clientId, { isAdmin, limit, be
     // date is the only trace of the payment.
     isAdmin
       ? prisma.invoice.findMany({
-        where: { clientId, paidAt: lt ?? { not: null }, payments: { none: {} } },
-        orderBy: { paidAt: 'desc' },
+        where: { clientId, paidAt: { not: null }, payments: { none: {} }, ...after('paidAt', 'invoice-paid', cursor) },
+        orderBy: newestFirst('paidAt'),
         take,
         select: { id: true, invoiceNumber: true, title: true, total: true, currency: true, paidAt: true, paymentMethod: true },
       })
       : [],
     isAdmin
       ? prisma.invoicePayment.findMany({
-        where: { invoice: { clientId }, ...(lt ? { paidAt: lt } : {}) },
-        orderBy: { paidAt: 'desc' },
+        where: { invoice: { clientId }, ...after('paidAt', 'payment', cursor) },
+        orderBy: newestFirst('paidAt'),
         take,
         select: {
           id: true, amount: true, method: true, paidAt: true,
@@ -160,11 +175,15 @@ export async function buildClientActivity(prisma, clientId, { isAdmin, limit, be
       method: payment.method,
       href: payment.invoice ? `/invoices/${payment.invoice.id}` : null,
     })),
-  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.id.localeCompare(b.id)));
+  // Plain code-unit comparison (not localeCompare) so ids order the same way
+  // here as in each source's `id: { gt }` filter.
+  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
   const page = items.slice(0, limit);
+  const last = items.length > limit ? page[page.length - 1] : null;
   return {
     items: page,
-    nextBefore: items.length > limit ? page[page.length - 1].at : null,
+    nextBefore: last ? last.at : null,
+    nextBeforeId: last ? last.id : null,
   };
 }

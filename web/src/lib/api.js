@@ -411,7 +411,8 @@ export const api = {
   addClientNote: (clientId, content) =>
     request(`/clients/${clientId}/notes`, { method: 'POST', body: { content } }),
   // Client page Activity panel: newest first; pass the previous page's
-  // `nextBefore` as `before` for older items. Money items are admin-only.
+  // `nextBefore` / `nextBeforeId` as `before` / `beforeId` for older items.
+  // Money items are admin-only.
   getClientActivity: (clientId, params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null)).toString();
     return request(`/clients/${encodeURIComponent(clientId)}/activity${query ? `?${query}` : ''}`, { silent: true });

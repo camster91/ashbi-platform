@@ -22,7 +22,7 @@ import { useSocket } from '../hooks/useSocket';
 import { Card, Skeleton } from '../components/ui';
 import StatusBadge from '../components/ui/StatusBadge';
 import { formatRelativeTime, cn } from '../lib/utils';
-import { formatDate, formatMoney } from '../lib/format';
+import { DEFAULT_CURRENCY, formatDate, formatMoney } from '../lib/format';
 import { mrrLabel } from '../lib/retainer-money';
 import { invoiceDisplayStatus } from '../lib/invoice-status';
 import TimeTrackerWidget from '../components/widgets/TimeTrackerWidget';
@@ -152,7 +152,8 @@ export default function Dashboard() {
   const replyApprovals = stats?.pendingApprovals || 0;
   const waitingCount = agentActions.length + (replyApprovals > 0 ? 1 : 0);
   const paidHistory = (stats?.revenueHistory || []).slice(-6);
-  const paidThisMonth = paidThisMonthTotal(paidHistory);
+  const paidThisMonth = paidThisMonthByCurrency(paidHistory);
+  const chartCurrency = mainCurrency(paidHistory);
   const recentInvoices = invoicesQuery.data?.invoices ?? [];
 
   const onAgentDecided = () => {
@@ -214,7 +215,7 @@ export default function Dashboard() {
             />
             <KpiTile
               label="Paid this month"
-              value={formatMoney(paidThisMonth, undefined, { compact: true })}
+              value={moneyLabel(paidThisMonth)}
               detail="From invoices marked paid"
               onClick={() => navigate('/invoices')}
             />
@@ -410,7 +411,7 @@ export default function Dashboard() {
               <h2 id="paid-heading" className={panelTitleClass}>Paid per month</h2>
             </div>
             {paidHistory.length > 0 ? (
-              <PaidBars months={paidHistory} />
+              <PaidBars months={paidHistory} currency={chartCurrency} />
             ) : (
               <p className={emptyClass}>No paid invoices in the last six months.</p>
             )}
@@ -707,21 +708,32 @@ function KpiTile({ label, value, detail, tone = 'default', onClick }) {
 }
 
 /* ─── Paid per month: one bar per month, the current month highlighted ─── */
-function PaidBars({ months }) {
-  const max = Math.max(...months.map(m => m.total), 1);
+// Bars chart one currency (the one most paid in); other currencies are never
+// added in, and are listed under the chart instead.
+function PaidBars({ months, currency }) {
+  const amountIn = (m) => (m.byCurrency ? m.byCurrency[currency] || 0 : m.total || 0);
+  const max = Math.max(...months.map(amountIn), 1);
   const last = months.length - 1;
-  const description = months.map(m => `${m.month} ${formatMoney(m.total, undefined, { compact: true })}`).join(', ');
+  const description = months.map(m => `${m.month} ${formatMoney(amountIn(m), currency, { compact: true })}`).join(', ');
+  const others = {};
+  for (const m of months) {
+    for (const [code, value] of Object.entries(m.byCurrency || {})) {
+      if (code !== currency && value > 0) others[code] = (others[code] || 0) + value;
+    }
+  }
+  const otherLabel = Object.keys(others).length > 0 ? moneyLabel(others) : null;
   return (
     <div className="px-5 pb-5">
+      {otherLabel && <p className="-mt-1 mb-3 text-sm text-muted-foreground">Shown in {currency}. Also paid: {otherLabel}.</p>}
       <div role="img" aria-label={`Paid per month: ${description}`} className="grid h-36 items-end gap-2" style={{ gridTemplateColumns: `repeat(${months.length}, minmax(0, 1fr))` }}>
         {months.map((m, i) => (
           <div key={`${m.year}-${m.month}`} className="flex h-full flex-col items-center justify-end gap-1.5">
             <span className={cn('figure text-[11px]', i === last ? 'text-foreground font-medium' : 'text-muted-foreground')}>
-              {formatMoney(m.total, undefined, { compact: true })}
+              {formatMoney(amountIn(m), currency, { compact: true })}
             </span>
             <div
               className={cn('w-full rounded-sm', i === last ? 'bg-primary' : 'bg-secondary')}
-              style={{ height: `${Math.max(4, Math.round((m.total / max) * 96))}px` }}
+              style={{ height: `${Math.max(4, Math.round((amountIn(m) / max) * 96))}px` }}
             />
             <span className={cn('text-[11px]', i === last ? 'text-foreground font-semibold' : 'text-muted-foreground')}>{m.month}</span>
           </div>
@@ -826,11 +838,34 @@ function formatToday(date = new Date()) {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** The current month's paid total from revenueHistory ({ month: 'Oct', year: '2026', total }). */
-function paidThisMonthTotal(history, now = new Date()) {
+/**
+ * The current month's paid amounts by currency from revenueHistory
+ * ({ month: 'Oct', year: '2026', byCurrency, total }). Rows without
+ * byCurrency (older API) count as the default currency.
+ */
+function paidThisMonthByCurrency(history, now = new Date()) {
   const month = MONTHS[now.getMonth()];
   const year = String(now.getFullYear());
-  return (history || []).find(row => row.month === month && String(row.year) === year)?.total || 0;
+  const row = (history || []).find(r => r.month === month && String(r.year) === year);
+  if (!row) return {};
+  if (row.byCurrency) return row.byCurrency;
+  return row.total ? { [DEFAULT_CURRENCY]: row.total } : {};
+}
+
+/** The currency with the most paid over the history (default when none). */
+function mainCurrency(history) {
+  const sums = {};
+  for (const row of history || []) {
+    for (const [code, value] of Object.entries(row.byCurrency || {})) sums[code] = (sums[code] || 0) + value;
+  }
+  return Object.entries(sums).sort((a, b) => b[1] - a[1])[0]?.[0] || DEFAULT_CURRENCY;
+}
+
+/** "$1.2K" or "$1.2K · US$300" — currencies are listed apart, never added. */
+function moneyLabel(byCurrency) {
+  const entries = Object.entries(byCurrency || {}).filter(([, value]) => value > 0);
+  if (entries.length === 0) return formatMoney(0, undefined, { compact: true });
+  return entries.map(([code, value]) => formatMoney(value, code, { compact: true })).join(' · ');
 }
 
 function formatActivityAction(action) {

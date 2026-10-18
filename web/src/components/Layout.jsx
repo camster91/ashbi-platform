@@ -383,6 +383,9 @@ export default function Layout({ children }) {
               ) : (
                 <span aria-hidden="true" className="flex items-baseline gap-1.5">
                   <span className="font-heading text-[22px] font-bold tracking-tight text-white">Ashbi</span>
+                  {/* A real space, so the visible text reads "Ashbi Hub" and
+                      matches the link's accessible name (axe label-content-name-mismatch). */}
+                  {' '}
                   <span className="font-display text-2xl italic text-brand-lime">Hub</span>
                 </span>
               )}

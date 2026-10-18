@@ -266,6 +266,7 @@ export default function InvoiceDetail() {
 
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  const [issueDateError, setIssueDateError] = useState(null);
   const [showMarkPaid, setShowMarkPaid] = useState(false);
   const [payForm, setPayForm] = useState(INITIAL_PAYMENT_FORM);
   const [showVoidConfirm, setShowVoidConfirm] = useState(false);
@@ -434,10 +435,16 @@ export default function InvoiceDetail() {
     setEditing(true);
   };
 
-  const cancelEdit = () => { setEditing(false); setEditForm(null); };
+  const cancelEdit = () => { setEditing(false); setEditForm(null); setIssueDateError(null); };
 
   const handleUpdate = (e) => {
     e.preventDefault();
+    // A cleared issue date must not save as "no change": stop and say so.
+    if (!editForm.issueDate) {
+      setIssueDateError('Enter an issue date.');
+      return;
+    }
+    setIssueDateError(null);
     // Shared with the API contract test so the UI payload always validates.
     updateMutation.mutate(buildInvoiceUpdatePayload(editForm, {
       issueDate: toDateInputValue(invoice.issueDate || invoice.createdAt),
@@ -718,8 +725,8 @@ export default function InvoiceDetail() {
                   <Input value={editForm.title} onChange={(e) => setEditForm(f => ({ ...f, title: e.target.value }))} />
                 </Field>
                 <div className="hidden sm:block" aria-hidden="true" />
-                <Field label="Issue date" id="invoice-edit-issue-date">
-                  <Input type="date" value={editForm.issueDate || ''} onChange={(e) => setEditForm(f => ({ ...f, issueDate: e.target.value }))} />
+                <Field label="Issue date" id="invoice-edit-issue-date" required error={issueDateError}>
+                  <Input type="date" value={editForm.issueDate || ''} onChange={(e) => { setIssueDateError(null); setEditForm(f => ({ ...f, issueDate: e.target.value })); }} />
                 </Field>
                 <Field label="Due date" id="invoice-edit-due-date" hint="Leave blank for due upon receipt.">
                   <Input type="date" value={editForm.dueDate} onChange={(e) => setEditForm(f => ({ ...f, dueDate: e.target.value }))} />

@@ -193,7 +193,7 @@ describe('client activity', () => {
     const user = userEvent.setup();
     getClient.mockResolvedValue(client());
     getClientActivity
-      .mockResolvedValueOnce({ items: [...WORK_ITEMS, MONEY_ITEMS[0]], nextBefore: '2026-10-03T09:00:00.000Z' })
+      .mockResolvedValueOnce({ items: [...WORK_ITEMS, MONEY_ITEMS[0]], nextBefore: '2026-10-03T09:00:00.000Z', nextBeforeId: 'payment:pay1' })
       .mockResolvedValueOnce({ items: [MONEY_ITEMS[1]], nextBefore: null });
     renderClient();
     const feed = await screen.findByRole('region', { name: 'Activity' });
@@ -201,11 +201,11 @@ describe('client activity', () => {
     expect(within(feed).getByText('Bianca uploaded banners.zip')).toBeInTheDocument();
     expect(within(feed).getByText('Payment received on INV-1036')).toBeInTheDocument();
     expect(within(feed).getByText(/\$1,356\.00 by card \(Stripe\)/)).toBeInTheDocument();
-    expect(getClientActivity).toHaveBeenCalledWith('c1', { limit: 8, before: undefined });
+    expect(getClientActivity).toHaveBeenCalledWith('c1', { limit: 8, before: undefined, beforeId: undefined });
 
     await user.click(within(feed).getByRole('button', { name: 'Show older activity' }));
     expect(await within(feed).findByText('INV-1042 sent')).toBeInTheDocument();
-    expect(getClientActivity).toHaveBeenLastCalledWith('c1', { limit: 8, before: '2026-10-03T09:00:00.000Z' });
+    expect(getClientActivity).toHaveBeenLastCalledWith('c1', { limit: 8, before: '2026-10-03T09:00:00.000Z', beforeId: 'payment:pay1' });
     expect(within(feed).queryByRole('button', { name: 'Show older activity' })).not.toBeInTheDocument();
   });
 
