@@ -266,6 +266,7 @@ export default function InvoiceDetail() {
 
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  const [issueDateError, setIssueDateError] = useState(null);
   const [showMarkPaid, setShowMarkPaid] = useState(false);
   const [payForm, setPayForm] = useState(INITIAL_PAYMENT_FORM);
   const [showVoidConfirm, setShowVoidConfirm] = useState(false);
@@ -434,10 +435,16 @@ export default function InvoiceDetail() {
     setEditing(true);
   };
 
-  const cancelEdit = () => { setEditing(false); setEditForm(null); };
+  const cancelEdit = () => { setEditing(false); setEditForm(null); setIssueDateError(null); };
 
   const handleUpdate = (e) => {
     e.preventDefault();
+    // A cleared issue date must not save as "no change": stop and say so.
+    if (!editForm.issueDate) {
+      setIssueDateError('Enter an issue date.');
+      return;
+    }
+    setIssueDateError(null);
     // Shared with the API contract test so the UI payload always validates.
     updateMutation.mutate(buildInvoiceUpdatePayload(editForm, {
       issueDate: toDateInputValue(invoice.issueDate || invoice.createdAt),
@@ -718,8 +725,8 @@ export default function InvoiceDetail() {
                   <Input value={editForm.title} onChange={(e) => setEditForm(f => ({ ...f, title: e.target.value }))} />
                 </Field>
                 <div className="hidden sm:block" aria-hidden="true" />
-                <Field label="Issue date" id="invoice-edit-issue-date">
-                  <Input type="date" value={editForm.issueDate || ''} onChange={(e) => setEditForm(f => ({ ...f, issueDate: e.target.value }))} />
+                <Field label="Issue date" id="invoice-edit-issue-date" required error={issueDateError}>
+                  <Input type="date" value={editForm.issueDate || ''} onChange={(e) => { setIssueDateError(null); setEditForm(f => ({ ...f, issueDate: e.target.value })); }} />
                 </Field>
                 <Field label="Due date" id="invoice-edit-due-date" hint="Leave blank for due upon receipt.">
                   <Input type="date" value={editForm.dueDate} onChange={(e) => setEditForm(f => ({ ...f, dueDate: e.target.value }))} />
@@ -888,7 +895,8 @@ export default function InvoiceDetail() {
 
             <Panel id="invoice-lines-heading" title="Line items">
               <div className={panelBodyClass}>
-                <div className="overflow-x-auto">
+                {/* Keyboard users can scroll the table sideways on narrow screens. */}
+                <div className="overflow-x-auto focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded-sm" tabIndex={0} role="region" aria-label="Line items table">
                   <table className="w-full min-w-[480px] text-sm">
                     <caption className="sr-only">Line items in {invoice.currency || 'CAD'}</caption>
                     <thead>
@@ -1027,7 +1035,7 @@ export default function InvoiceDetail() {
                     />
                   </div>
                 ) : (
-                  <div className={cn(panelBodyClass, 'overflow-x-auto')}>
+                  <div className={cn(panelBodyClass, 'overflow-x-auto focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded-sm')} tabIndex={0} role="region" aria-label="Payment history table">
                     <table className="w-full min-w-[440px] text-sm">
                       <thead>
                         <tr className="text-left">

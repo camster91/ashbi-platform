@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { formatMoney } from '../lib/format';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authState = { user: { id: 'u1', name: 'Cameron Ashley', role: 'ADMIN' } };
@@ -94,6 +95,26 @@ describe('Dashboard redesign', () => {
     expect(paid).toHaveTextContent('$12.8K');
     expect(screen.getByRole('button', { name: /Overdue/ })).toHaveTextContent('1 invoice past due');
     expect(screen.getByRole('button', { name: /Owed to you/ })).toHaveTextContent('2 sent, unpaid invoices');
+  });
+
+  it('never adds CAD and USD together in paid this month or the chart', async () => {
+    api.getDashboardStats.mockResolvedValue({
+      ...baseStats,
+      revenueHistory: [
+        { month: LAST_MONTH, year: String(NOW.getMonth() === 0 ? NOW.getFullYear() - 1 : NOW.getFullYear()), total: 5000, byCurrency: { CAD: 5000 } },
+        { month: THIS_MONTH, year: String(NOW.getFullYear()), total: 1300, byCurrency: { CAD: 1000, USD: 300 } },
+      ],
+    });
+    renderDashboard();
+    const paid = await screen.findByRole('button', { name: /Paid this month/ });
+    // Built with the app's formatter: compact output differs between ICU builds.
+    const cad = formatMoney(1000, 'CAD', { compact: true });
+    const usd = formatMoney(300, 'USD', { compact: true });
+    expect(paid).toHaveTextContent(`${cad} · ${usd}`);
+    expect(paid).not.toHaveTextContent(formatMoney(1300, 'CAD', { compact: true }));
+    const chart = screen.getByRole('img', { name: /Paid per month/ });
+    expect(chart.getAttribute('aria-label')).toContain(`${THIS_MONTH} ${cad}`);
+    expect(screen.getByText(`Shown in CAD. Also paid: ${usd}.`)).toBeInTheDocument();
   });
 
   it('lists agent actions and drafted replies waiting for approval', async () => {

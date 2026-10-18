@@ -19914,6 +19914,16 @@
               "maxLength": 40,
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "beforeId",
+            "required": false,
+            "schema": {
+              "maxLength": 120,
+              "pattern": "^(thread|activity|invoice-sent|invoice-paid|payment):[A-Za-z0-9_-]{1,100}$",
+              "type": "string"
+            }
           }
         ],
         "responses": {

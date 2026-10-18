@@ -646,7 +646,7 @@ function PortalDashboard({ token }) {
           <span className="min-w-0 break-words text-sm text-primary-foreground/70">{clientName}</span>
         </div>
         <div className="flex max-w-full items-center gap-3">
-          {contactName && <span className="min-w-0 break-words text-sm text-primary-foreground/50">Hi, {contactName}</span>}
+          {contactName && <span className="min-w-0 break-words text-sm text-primary-foreground/80">Hi, {contactName}</span>}
           <Button type="button" onClick={handleLogout} variant="ghost" size="sm" leftIcon={Icons.logout} className="shrink-0 border border-primary-foreground/20 text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground">
             Logout{' '}<span className="sr-only">of client portal</span>
           </Button>

@@ -310,9 +310,11 @@ export default function Layout({ children }) {
   function renderCollapsibleSection(key, label, items, Icon) {
     const isExpanded = expandedSections[key];
     const hasActiveChild = items.some(isNavItemActive);
-    // Work (projects, schedule, timesheets) is the everyday area, so it stays
-    // open until someone collapses it; the others open with their routes.
-    const show = isExpanded ?? (hasActiveChild || key === 'work');
+    // The section holding the current page opens. On pages outside every
+    // section (Dashboard, Inbox, Clients) Work opens, as the everyday area.
+    // Only one section opens by default, which keeps the Tab path short.
+    const inSomeSection = navSections.some(section => section.items.some(isNavItemActive));
+    const show = isExpanded ?? (hasActiveChild || (key === 'work' && !inSomeSection));
 
     if (sidebarCollapsed) {
       // Keep the compact rail to five areas rather than dozens of icons.
@@ -383,6 +385,9 @@ export default function Layout({ children }) {
               ) : (
                 <span aria-hidden="true" className="flex items-baseline gap-1.5">
                   <span className="font-heading text-[22px] font-bold tracking-tight text-white">Ashbi</span>
+                  {/* A real space, so the visible text reads "Ashbi Hub" and
+                      matches the link's accessible name (axe label-content-name-mismatch). */}
+                  {' '}
                   <span className="font-display text-2xl italic text-brand-lime">Hub</span>
                 </span>
               )}

@@ -17,6 +17,11 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
+// Sign-in uses native fonts so its form is readable without font downloads.
+// Workspace typography continues to use the shared branded font faces.
+const signInTextStyle = { fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' };
+const signInHeadingStyle = { fontFamily: 'Georgia, "Times New Roman", serif' };
+
 const inputClass = clsx(
   'w-full px-4 py-3 bg-card border border-border rounded-xl',
   'text-card-foreground placeholder:text-muted-foreground',
@@ -84,7 +89,7 @@ export function MfaChallengeForm({ challengeToken, returnTo, onCancel, onExpired
           <ShieldCheck className="w-5 h-5 text-primary" aria-hidden="true" />
         </div>
         <div>
-          <h2 id="mfa-heading" className="text-lg font-semibold text-foreground">Two-factor authentication</h2>
+          <h2 id="mfa-heading" style={signInHeadingStyle} className="text-lg font-semibold text-foreground">Two-factor authentication</h2>
           <p id="mfa-help" className="text-sm text-muted-foreground">
             {useRecovery
               ? 'Enter one of the recovery codes you saved when you set up two-factor authentication. Each code works once.'
@@ -224,7 +229,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex" style={signInTextStyle}>
       {/* Left side - Branding */}
       <aside className="hidden lg:flex lg:w-1/2 xl:w-5/12 bg-brand-indigo relative overflow-hidden">
         <div className="absolute inset-0">
@@ -239,13 +244,13 @@ export default function Login() {
               <div className="w-10 h-10 rounded-xl bg-brand-lime flex items-center justify-center">
                 <Sparkles className="w-5 h-5 text-brand-indigo" />
               </div>
-              <span className="text-xl font-display font-bold">{t('brand.name')}</span>
+              <span style={signInHeadingStyle} className="text-xl font-display font-bold">{t('brand.name')}</span>
             </div>
 
-            <h2 className="text-4xl font-display mb-4 leading-tight">
+            <h2 style={signInHeadingStyle} className="text-4xl font-display mb-4 leading-tight">
               {t('brand.tagline').split(', ')[0]},<br />{t('brand.tagline').split(', ')[1]}
             </h2>
-            <p className="text-white/70 text-lg max-w-md font-sans">
+            <p className="text-white/70 text-lg max-w-md">
               {t('brand.description')}
             </p>
           </div>
@@ -275,11 +280,11 @@ export default function Login() {
             <div className="w-10 h-10 rounded-xl bg-brand-indigo flex items-center justify-center">
               <Sparkles className="w-5 h-6 text-brand-lime" />
             </div>
-            <span className="text-xl font-display font-bold text-foreground">{t('brand.name')}</span>
+            <span style={signInHeadingStyle} className="text-xl font-display font-bold text-foreground">{t('brand.name')}</span>
           </div>
 
           <div className="text-center">
-            <h1 className="text-3xl font-display text-foreground mb-2">
+            <h1 style={signInHeadingStyle} className="text-3xl font-display text-foreground mb-2">
               {t('auth.welcomeBack')}
             </h1>
             <p className="text-muted-foreground">

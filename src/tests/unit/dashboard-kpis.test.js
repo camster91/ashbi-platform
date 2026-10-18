@@ -172,3 +172,20 @@ test('outstanding and overdue amounts are balances after partial payments', asyn
   assert.equal(stats.overdueAmount ?? stats.overdueTotal, 200);
   assert.equal(stats.outstandingCount, 2);
 });
+
+test('paid revenue history keeps each currency apart within a month', async () => {
+  const handler = await statsHandler();
+  const prisma = fakePrisma({ invoicesByStatus: {} });
+  let sql = '';
+  prisma.$queryRaw = async (strings) => {
+    sql = strings.join('?');
+    return [
+      { month: new Date('2026-09-01T12:00:00Z'), currency: 'CAD', revenue: 1000, invoice_count: 2 },
+      { month: new Date('2026-09-01T12:00:00Z'), currency: 'USD', revenue: 300, invoice_count: 1 },
+    ];
+  };
+  const stats = await handler({ user: { id: 'u1', role: 'ADMIN' }, organizationId: 'org-1', prisma });
+  assert.match(sql, /GROUP BY month, COALESCE\(i\.currency, 'CAD'\)/);
+  const september = stats.revenueHistory.find((row) => row.month === 'Sep');
+  assert.deepEqual(september.byCurrency, { CAD: 1000, USD: 300 });
+});

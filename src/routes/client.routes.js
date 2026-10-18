@@ -10,11 +10,12 @@ import { z } from 'zod';
 import { requireStaff } from '../middleware/require-staff.js';
 import { buildClientActivity, CLIENT_ACTIVITY_DEFAULT_LIMIT, CLIENT_ACTIVITY_MAX_LIMIT } from '../services/client-activity.service.js';
 
-// GET /api/clients/:id/activity query: a page size and an ISO date to read
-// before (the previous page's `nextBefore`).
+// GET /api/clients/:id/activity query: a page size and the previous page's
+// cursor (`nextBefore` time and `nextBeforeId` item id) to read past.
 export const clientActivityQuerySchema = z.object({
   limit: z.string().trim().regex(/^\d{1,3}$/, 'must be a whole number').optional(),
   before: z.string().trim().max(40).refine((value) => !Number.isNaN(Date.parse(value)), 'must be an ISO date').optional(),
+  beforeId: z.string().trim().max(120).regex(/^(thread|activity|invoice-sent|invoice-paid|payment):[A-Za-z0-9_-]{1,100}$/, 'must be an activity item id').optional(),
 }).strict();
 
 const DUPLICATE_DOMAIN_ERROR = 'Client with this domain already exists';
@@ -304,6 +305,7 @@ export default async function clientRoutes(fastify) {
       isAdmin: request.user.role === 'ADMIN',
       limit,
       before,
+      beforeId: before ? request.query.beforeId || null : null,
     });
   });
 

@@ -58,16 +58,19 @@ function matches(row, where) {
       return !value.some((item) => matches(item, condition.none));
     }
     if (isObject(condition)) {
-      const operators = ['in', 'lt', 'not', 'gte', 'lte', 'none'];
+      const operators = ['in', 'lt', 'not', 'gte', 'lte', 'gt', 'none'];
       if (Object.keys(condition).some((op) => operators.includes(op))) {
         if ('in' in condition && !condition.in.includes(value)) return false;
         if ('lt' in condition && !(value != null && value < condition.lt)) return false;
+        if ('lte' in condition && !(value != null && value <= condition.lte)) return false;
+        if ('gt' in condition && !(value != null && value > condition.gt)) return false;
         if ('not' in condition && (condition.not === null ? value == null : value === condition.not)) return false;
         return true;
       }
       return isObject(value) && matches(value, condition);
     }
     if (condition === null) return value == null;
+    if (condition instanceof Date) return value instanceof Date && value.getTime() === condition.getTime();
     return value === condition;
   });
 }
@@ -86,10 +89,21 @@ function fakeDatabase() {
   const delegate = (name) => {
     const findMany = async (args = {}) => {
       (calls[name] ??= []).push(args);
-      const orderField = args.orderBy ? Object.keys(args.orderBy)[0] : null;
+      // orderBy is { field: 'desc' } or [{ field: 'desc' }, { id: 'asc' }].
+      const order = (Array.isArray(args.orderBy) ? args.orderBy : args.orderBy ? [args.orderBy] : [])
+        .map((part) => Object.entries(part)[0]);
+      const compare = (a, b) => {
+        for (const [field, direction] of order) {
+          const x = a[field] ?? 0;
+          const y = b[field] ?? 0;
+          if (x < y) return direction === 'desc' ? 1 : -1;
+          if (x > y) return direction === 'desc' ? -1 : 1;
+        }
+        return 0;
+      };
       return DB[name]
         .filter((row) => matches(row, args.where))
-        .sort((a, b) => (orderField ? (b[orderField] ?? 0) - (a[orderField] ?? 0) : 0))
+        .sort(compare)
         .slice(0, args.take ?? Infinity)
         .map((row) => pick(row, args.select));
     };
@@ -190,9 +204,29 @@ test('pages with a limit and a before date, capped at the maximum', async (t) =>
   assert.equal(database.calls.thread.at(-1).take, CLIENT_ACTIVITY_MAX_LIMIT + 1);
 });
 
+test('items sharing the page-boundary time are not skipped', async (t) => {
+  const tied = new Date('2026-10-11T09:00:00Z');
+  const extra = ['a5', 'a6', 'a7'].map((id) => ({ id, type: 'FILE_UPLOADED', action: 'uploaded', entityType: 'ATTACHMENT', entityId: `f-${id}`, entityName: `${id}.png`, metadata: '{}', createdAt: tied, user: cam, project: project1 }));
+  DB.activity.push(...extra);
+  t.after(() => { DB.activity.splice(DB.activity.length - extra.length, extra.length); });
+  const { app } = await buildApp(t, admin);
+
+  const first = (await app.inject({ method: 'GET', url: '/c1/activity?limit=5' })).json();
+  assert.deepEqual(first.items.map((item) => item.id), ['thread:t1', 'activity:a1', 'activity:a2', 'activity:a4', 'activity:a5']);
+  assert.equal(first.nextBefore, tied.toISOString());
+  assert.equal(first.nextBeforeId, 'activity:a5');
+
+  const second = (await app.inject({
+    method: 'GET',
+    url: `/c1/activity?limit=5&before=${encodeURIComponent(first.nextBefore)}&beforeId=${encodeURIComponent(first.nextBeforeId)}`,
+  })).json();
+  assert.deepEqual(second.items.map((item) => item.id), ['activity:a6', 'activity:a7', 'payment:pay1', 'invoice-sent:i1', 'invoice-paid:i0']);
+  assert.equal(second.nextBefore, null);
+});
+
 test('rejects a malformed limit, before date or unknown query field', async (t) => {
   const { app } = await buildApp(t, admin);
-  for (const query of ['limit=-1', 'limit=abc', 'before=yesterday', 'clientId=c2']) {
+  for (const query of ['limit=-1', 'limit=abc', 'before=yesterday', 'clientId=c2', 'before=2026-10-01T00:00:00Z&beforeId=bogus', 'before=2026-10-01T00:00:00Z&beforeId=thread:t1;drop']) {
     const response = await app.inject({ method: 'GET', url: `/c1/activity?${query}` });
     assert.equal(response.statusCode, 400, query);
   }

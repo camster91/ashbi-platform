@@ -306,7 +306,7 @@ export default function Chat() {
                 )}
                 <p className={cn(
                   'text-xs mt-1',
-                  msg.role === 'user' ? 'text-primary-foreground/60 text-right' : 'text-muted-foreground'
+                  msg.role === 'user' ? 'text-primary-foreground/80 text-right' : 'text-muted-foreground'
                 )}>
                   {formatTime(msg.createdAt)}
                 </p>

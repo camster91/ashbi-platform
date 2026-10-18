@@ -130,3 +130,24 @@ test('admins still get the project contract value in the list', async () => {
   const body = await routes['GET /']({ query: {}, user: { id: 'a', role: 'ADMIN' }, prisma: projectDb() }, reply);
   assert.equal(body.projects[0].budget, 12000);
 });
+
+test('time entry create and update responses send team members no rate', async () => {
+  const routes = await handlers(timeRoutes);
+  const stored = { ...entry, invoiceId: null, invoiced: false, reviewStatus: 'PENDING' };
+  const db = {
+    timeEntry: {
+      create: async () => structuredClone(stored),
+      findUnique: async () => structuredClone(stored),
+      updateMany: async () => ({ count: 1 }),
+    },
+    activity: { create: async () => ({}) },
+  };
+  const user = { id: 'u', role: 'TEAM' };
+  const created = await routes['POST /time-entries']({ user, body: { projectId: 'p1', duration: 60 }, prisma: db }, reply);
+  assert.equal('hourlyRate' in created, false, 'create response rate');
+  const updated = await routes['PUT /time-entries/:id']({ user, params: { id: 't1' }, body: { description: 'x' }, prisma: db }, reply);
+  assert.equal('hourlyRate' in updated, false, 'update response rate');
+  assert.equal(updated.duration, 60);
+  const adminUpdated = await routes['PUT /time-entries/:id']({ user: { id: 'a', role: 'ADMIN' }, params: { id: 't1' }, body: { description: 'x' }, prisma: db }, reply);
+  assert.equal(adminUpdated.hourlyRate, 150);
+});

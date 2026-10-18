@@ -248,7 +248,7 @@ export default async function timeRoutes(fastify) {
       }
     });
 
-    return reply.status(201).send(entry);
+    return reply.status(201).send(seesTimeMoney(request) ? entry : withoutTimeEntryMoney(entry));
   });
 
   // Update time entry
@@ -283,13 +283,14 @@ export default async function timeRoutes(fastify) {
     const { count } = await request.prisma.timeEntry.updateMany({ where: unlockedTimeEntryWhere(id), data });
     if (count === 0) return lockedWriteReply(request, reply, id);
 
-    return request.prisma.timeEntry.findUnique({
+    const updated = await request.prisma.timeEntry.findUnique({
       where: { id },
       include: {
         user: { select: { id: true, name: true } },
         task: { select: { id: true, title: true } }
       }
     });
+    return seesTimeMoney(request) ? updated : withoutTimeEntryMoney(updated);
   });
 
   // Delete time entry
