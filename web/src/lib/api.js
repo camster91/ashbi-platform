@@ -410,6 +410,16 @@ export const api = {
     request(`/clients/${id}/insights`),
   addClientNote: (clientId, content) =>
     request(`/clients/${clientId}/notes`, { method: 'POST', body: { content } }),
+  // Client page Activity panel: newest first; pass the previous page's
+  // `nextBefore` as `before` for older items. Money items are admin-only.
+  getClientActivity: (clientId, params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null)).toString();
+    return request(`/clients/${encodeURIComponent(clientId)}/activity${query ? `?${query}` : ''}`, { silent: true });
+  },
+  // Admin only: emails a client portal invitation (7-day, single use) and
+  // returns { invitationId, email, expiresAt, inviteLink }.
+  inviteClientToPortal: (clientId, email) =>
+    request(`/auth/admin/clients/${encodeURIComponent(clientId)}/invite`, { method: 'POST', body: { email }, silent: true }),
 
   // Projects
   getProjects: (params = {}) => {
@@ -681,6 +691,12 @@ export const api = {
   // Deletes a TimeEntry. (DELETE /time-tracking/:id deletes a timer session.)
   deleteTimeEntry: (id) =>
     request(`/time-entries/${id}`, { method: 'DELETE' }),
+  // Logged time grouped by project (and by person for admins). Team members
+  // only ever get their own time.
+  getTimeEntrySummary: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/time-entries/summary${query ? `?${query}` : ''}`, { silent: true });
+  },
   getTimeSummary: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return request(`/time-tracking/summary${query ? `?${query}` : ''}`);

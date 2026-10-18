@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Key,
@@ -59,7 +60,10 @@ export default function Credentials() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
-  const [filterClient, setFilterClient] = useState('');
+  // ?clientId= (the client page's Logins tab links here) opens the vault
+  // filtered to that client.
+  const [searchParams] = useSearchParams();
+  const [filterClient, setFilterClient] = useState(() => searchParams.get('clientId') || '');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);

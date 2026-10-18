@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, Mail, Plus } from 'lucide-react';
+import { ArrowRight, KeyRound, Mail, Plus, StickyNote } from 'lucide-react';
 import { api } from '../lib/api';
 import LoadingState from '../components/ui/LoadingState';
 import QueryErrorState from '../components/QueryErrorState';
@@ -12,15 +13,19 @@ import { invoiceBalanceDue, invoiceDisplayStatus } from '../lib/invoice-status';
 import ClientAccountManager from '../components/ClientAccountManager';
 import ClientCommunications from '../components/ClientCommunications';
 import ClientServicePanels from '../components/ClientServicePanels';
+import ClientActivityFeed from '../components/client/ClientActivityFeed';
+import ClientNotePanel from '../components/client/ClientNotePanel';
+import ClientPortalAccess from '../components/client/ClientPortalAccess';
+import ClientTimeTab from '../components/client/ClientTimeTab';
+import ClientFilesTab from '../components/client/ClientFilesTab';
+import ClientLoginsTab from '../components/client/ClientLoginsTab';
+import useClientMonthHours from '../components/client/useClientMonthHours';
+import { emptyClass, panelHeaderClass, panelLinkClass, panelTitleClass } from '../components/client/clientPageStyles';
 
 // Ashbi Hub client page (design: Client mockup). Overview first; the full
-// invoice, project and conversation lists sit in their own tabs, kept in
-// ?tab= so a link or the back button lands on the same view.
-
-const panelHeaderClass = 'px-5 pt-4 pb-3 flex flex-wrap items-baseline justify-between gap-2';
-const panelTitleClass = 'text-lg font-semibold tracking-tight text-foreground';
-const panelLinkClass = '-my-3 -mr-2 inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-sm font-semibold text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring';
-const emptyClass = 'px-5 pb-6 pt-1 text-sm text-muted-foreground';
+// invoice, project, time, file, login and conversation lists sit in their own
+// tabs, kept in ?tab= so a link or the back button lands on the same view.
+// Admins see money and logins; team members see the work.
 
 const CLIENT_STATUS = {
   ACTIVE: { label: 'Active', className: 'bg-success/15 text-success' },
@@ -229,6 +234,13 @@ export default function Client() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
   const isStaff = ['ADMIN', 'TEAM'].includes(user?.role);
+  const [noteEditing, setNoteEditing] = useState(false);
+  const [portalOpen, setPortalOpen] = useState(false);
+  // Moving to another client closes this one's note form and portal dialog.
+  useEffect(() => {
+    setNoteEditing(false);
+    setPortalOpen(false);
+  }, [id]);
 
   const {
     data: client,
@@ -260,6 +272,8 @@ export default function Client() {
     enabled: isAdmin,
     retry: false,
   });
+
+  const monthHours = useClientMonthHours({ projects: client?.projects || [], role: user?.role, enabled: isStaff && Boolean(client) });
 
   if (isLoading) {
     return (
@@ -298,7 +312,7 @@ export default function Client() {
     ? retainers.find((plan) => (plan.clientId || plan.client?.id) === client.id && plan.retainerStatus !== 'CANCELLED')
     : null;
 
-  const tabs = ['overview', ...(isAdmin ? ['invoices'] : []), 'projects', 'conversations'];
+  const tabs = ['overview', ...(isAdmin ? ['invoices'] : []), 'projects', ...(isStaff ? ['time', 'files'] : []), ...(isAdmin ? ['logins'] : []), 'conversations'];
   const requested = params.get('tab');
   const tab = tabs.includes(requested) ? requested : 'overview';
   const selectTab = (next) => {
@@ -306,6 +320,11 @@ export default function Client() {
     if (next === 'overview') nextParams.delete('tab'); else nextParams.set('tab', next);
     setParams(nextParams, { replace: true });
   };
+  const openNote = () => {
+    if (tab !== 'overview') selectTab('overview');
+    setNoteEditing(true);
+  };
+  const hoursValue = monthHours.isError ? '—' : monthHours.isLoading ? '…' : `${monthHours.hours} h`;
 
   return (
     <div className="space-y-6">
@@ -340,6 +359,16 @@ export default function Client() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {isStaff && (
+            <Button variant="outline" type="button" onClick={openNote} aria-expanded={noteEditing}>
+              <StickyNote className="h-3.5 w-3.5" aria-hidden="true" /> {client.clientNotes ? 'Edit note' : 'Add note'}
+            </Button>
+          )}
+          {isAdmin && (
+            <Button variant="outline" type="button" onClick={() => setPortalOpen(true)} aria-haspopup="dialog">
+              <KeyRound className="h-3.5 w-3.5" aria-hidden="true" /> Client portal
+            </Button>
+          )}
           <Button variant="outline" onClick={() => navigate(`/projects?create=true&clientId=${id}`)}>
             <Plus className="h-3.5 w-3.5" aria-hidden="true" /> New project
           </Button>
@@ -356,6 +385,9 @@ export default function Client() {
           <Tab value="overview">Overview</Tab>
           {isAdmin && <Tab value="invoices">Invoices <span className="figure text-xs">{invoices.length}</span></Tab>}
           <Tab value="projects">Projects <span className="figure text-xs">{projects.length}</span></Tab>
+          {isStaff && <Tab value="time">Time</Tab>}
+          {isStaff && <Tab value="files">Files</Tab>}
+          {isAdmin && <Tab value="logins">Logins</Tab>}
           <Tab value="conversations">Conversations <span className="figure text-xs">{threads.length}</span></Tab>
         </TabList>
 
@@ -376,12 +408,13 @@ export default function Client() {
                     : 'Nothing owed'}
                   tone={hasMoney(client.outstandingByCurrency, client.outstandingBalance) ? 'warning' : undefined}
                 />
-                <Tile label="Open projects" value={openProjects.length} detail={`${projects.length} in total`} />
+                <Tile label={`Hours in ${monthHours.month}`} value={hoursValue} detail={monthHours.isError ? 'Hours could not be loaded' : `${monthHours.billableHours} h billable`} />
                 <Tile label="Usually pays in" value={daysToPay === null ? '—' : `${daysToPay} ${daysToPay === 1 ? 'day' : 'days'}`} detail={daysToPay === null ? 'No paid invoices yet' : undefined} />
               </>
             ) : (
               <>
                 <Tile label="Open projects" value={openProjects.length} detail={`${projects.length} in total`} />
+                <Tile label={`Your hours in ${monthHours.month}`} value={hoursValue} detail={monthHours.isError ? 'Hours could not be loaded' : 'On this client\'s projects'} />
                 <Tile label="Conversations" value={threads.length} detail="Most recent 10" />
                 <Tile label="Contacts" value={contacts.length} />
               </>
@@ -458,24 +491,16 @@ export default function Client() {
                 )}
               </Card>
 
-              <Card as="section" padding="none" className="rounded-lg" aria-labelledby="client-activity-heading">
-                <div className={panelHeaderClass}>
-                  <h2 id="client-activity-heading" className={panelTitleClass}>Recent conversations</h2>
-                  {threads.length > 5 && (
-                    <button type="button" className={panelLinkClass} onClick={() => selectTab('conversations')}>
-                      All <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-                {threads.length > 0 ? <ThreadList threads={threads.slice(0, 5)} /> : <p className={emptyClass}>No conversations yet.</p>}
-              </Card>
+              {isStaff && <ClientActivityFeed key={`activity-${id}`} clientId={id} role={user.role} />}
 
-              {client.clientNotes && (
-                <section aria-labelledby="client-note-heading" className="rounded-lg border border-accent bg-accent/25 p-5 text-foreground">
-                  <h2 id="client-note-heading" className="text-eyebrow">Note</h2>
-                  <p className="mt-2 whitespace-pre-wrap break-words">{client.clientNotes}</p>
-                </section>
-              )}
+              <ClientNotePanel
+                key={`note-${id}`}
+                clientId={id}
+                note={client.clientNotes}
+                canEdit={isStaff}
+                editing={noteEditing}
+                onEditingChange={setNoteEditing}
+              />
 
               {insightsError ? (
                 <QueryErrorState
@@ -556,6 +581,24 @@ export default function Client() {
           </Card>
         </TabPanel>
 
+        {isStaff && (
+          <TabPanel value="time" className="pt-5">
+            <ClientTimeTab projects={projects} monthHours={monthHours} isAdmin={isAdmin} />
+          </TabPanel>
+        )}
+
+        {isStaff && (
+          <TabPanel value="files" className="pt-5">
+            <ClientFilesTab projects={projects} />
+          </TabPanel>
+        )}
+
+        {isAdmin && (
+          <TabPanel value="logins" className="pt-5">
+            <ClientLoginsTab clientId={id} />
+          </TabPanel>
+        )}
+
         <TabPanel value="conversations" className="pt-5 space-y-5">
           <Card as="section" padding="none" className="rounded-lg" aria-labelledby="client-all-threads-heading">
             <div className={panelHeaderClass}>
@@ -566,6 +609,17 @@ export default function Client() {
           {isStaff && <ClientCommunications key={`communications-${id}`} clientId={id} />}
         </TabPanel>
       </Tabs>
+
+      {isAdmin && (
+        <ClientPortalAccess
+          key={`portal-${id}`}
+          clientId={id}
+          clientName={client.name}
+          contacts={contacts}
+          isOpen={portalOpen}
+          onClose={() => setPortalOpen(false)}
+        />
+      )}
     </div>
   );
 }
