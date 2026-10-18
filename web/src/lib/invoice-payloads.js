@@ -42,9 +42,32 @@ export function buildInvoiceCreatePayload(form) {
   };
 }
 
+// Recurrence intervals the API accepts on an invoice (updateInvoiceSchema).
+export const INVOICE_RECURRING_INTERVALS = ['MONTHLY', 'QUARTERLY', 'ANNUALLY'];
+
+// The issue date and recurrence are sent only when the form changed them, so
+// saving an untouched draft never moves its issue date or recomputes its
+// next recurring date. `saved` is the stored invoice's values: issueDate as
+// "YYYY-MM-DD", isRecurring and recurringInterval. A form without these
+// fields (a draft autosaved before they existed) sends neither.
+function scheduleChanges(editForm, saved = {}) {
+  const changes = {};
+  if (editForm.issueDate && editForm.issueDate !== saved.issueDate) changes.issueDate = editForm.issueDate;
+  if (editForm.isRecurring !== undefined) {
+    const repeat = Boolean(editForm.isRecurring);
+    const interval = INVOICE_RECURRING_INTERVALS.includes(editForm.recurringInterval) ? editForm.recurringInterval : 'MONTHLY';
+    if (repeat !== Boolean(saved.isRecurring) || (repeat && interval !== saved.recurringInterval)) {
+      changes.isRecurring = repeat;
+      if (repeat) changes.recurringInterval = interval;
+    }
+  }
+  return changes;
+}
+
 /** Payload for PUT /api/invoices/:id from the draft edit form. */
-export function buildInvoiceUpdatePayload(editForm) {
+export function buildInvoiceUpdatePayload(editForm, saved) {
   return {
+    ...scheduleChanges(editForm, saved),
     title: editForm.title || undefined,
     notes: editForm.notes || undefined,
     internalNotes: editForm.internalNotes || undefined,

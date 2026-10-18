@@ -103,7 +103,7 @@ describe('revenue-detail-state-contract.test.js', () => {
       for (const token of ['paymentsError', 'refetchPayments', 'paymentsFetching']) {
         expect(invoice).toContain(token);
       }
-      expect(invoice).toMatch(/Payment History[\s\S]*paymentsError[\s\S]*<QueryErrorState/);
+      expect(invoice).toMatch(/Payment history[\s\S]*paymentsError[\s\S]*<QueryErrorState/);
     });
 
     it('guards proposal-to-contract generation with explicit mutation state', () => {
