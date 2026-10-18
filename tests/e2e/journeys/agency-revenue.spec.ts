@@ -125,8 +125,8 @@ test('agency sells, contracts, invoices and collects payment end to end', async 
   const invoiceLink = await test.step('admin sends the invoice to the client', async () => {
     await page.goto(`/invoices/${invoice.id}`);
     await expect(page.getByRole('heading', { name: invoice.invoiceNumber })).toBeVisible();
-    await page.getByRole('button', { name: 'Send to Client' }).click();
-    await expect(page.getByRole('button', { name: 'Mark as Paid', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Send invoice' }).click();
+    await expect(page.getByRole('button', { name: 'Record payment', exact: true })).toBeVisible();
     const sent = await json(await admin.get(`/api/invoices/${invoice.id}`));
     expect(sent.status).toBe('SENT');
     return `/portal/invoice/${sent.viewToken}`;
@@ -142,7 +142,7 @@ test('agency sells, contracts, invoices and collects payment end to end', async 
   });
 
   await test.step('admin records the manual payment', async () => {
-    await page.getByRole('button', { name: 'Mark as Paid', exact: true }).click();
+    await page.getByRole('button', { name: 'Record payment', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Record payment' });
     await dialog.getByLabel('Payment method').selectOption('BANK');
     await dialog.getByLabel(/Transaction ID/).fill(`E2E-${suffix}`);
@@ -150,7 +150,7 @@ test('agency sells, contracts, invoices and collects payment end to end', async 
     await expect(dialog.getByLabel('Amount received')).toHaveValue(String(INVOICE_TOTAL));
     await dialog.getByRole('button', { name: 'Record payment', exact: true }).click();
     await expect(dialog).toBeHidden();
-    await expect(page.getByRole('button', { name: 'Mark as Paid', exact: true })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Record payment', exact: true })).toBeHidden();
 
     const paid = await json(await admin.get(`/api/invoices/${invoice.id}`));
     expect(paid.status).toBe('PAID');
