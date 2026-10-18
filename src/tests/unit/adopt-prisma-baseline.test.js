@@ -10,6 +10,7 @@ import {
   checkConfiguration,
   stageBaselineMigrations,
 } from '../../../scripts/adopt-prisma-baseline.mjs';
+import { committedMigrations, migrationRecordFailures } from '../../../scripts/assert-baseline-adoption.mjs';
 
 const validEnv = {
   DATABASE_URL: 'postgresql://ci:pw@db.internal:5432/ashbi',
@@ -178,4 +179,37 @@ describe('baseline staging', () => {
     dirs.push(root);
     assert.throws(() => stageBaselineMigrations(root), /Baseline migration not found/);
   });
+});
+
+describe('baseline adoption rehearsal assertion', () => {
+  const expected = [BASELINE, '20260808120000_fail_closed_tenancy', '20260809023000_revenue_flow_integrity'];
+  const row = (migration_name, applied_steps_count = 1, extra = {}) => ({
+    migration_name, applied_steps_count, finished: true, rolled_back: false, ...extra,
+  });
+  const adopted = () => [row(BASELINE, 0), row(expected[1]), row(expected[2])];
+
+  it('accepts a baseline recorded without execution and every later migration deployed', () => {
+    assert.deepEqual(migrationRecordFailures(expected, adopted()), []);
+  });
+
+  it('lists every committed migration directory', () => {
+    const names = committedMigrations();
+    assert.equal(names[0], BASELINE);
+    assert.ok(names.includes('20260808120000_fail_closed_tenancy'));
+    assert.ok(names.every((name) => /^\d{14}_/.test(name)));
+  });
+
+  for (const [label, rows, pattern] of [
+    ['a missing migration', adopted().slice(0, 2), /revenue_flow_integrity is not recorded/],
+    ['an executed baseline', [row(BASELINE, 1), row(expected[1]), row(expected[2])], /was executed instead of recorded/],
+    ['a later migration only marked applied', [row(BASELINE, 0), row(expected[1], 0), row(expected[2])], /recorded without being executed/],
+    ['an unfinished migration', [...adopted().slice(0, 2), row(expected[2], 1, { finished: false })], /did not finish/],
+    ['a rolled-back migration', [...adopted().slice(0, 2), row(expected[2], 1, { rolled_back: true })], /rolled back/],
+    ['an unknown migration', [...adopted(), row('20990101000000_unknown')], /recorded but not committed/],
+    ['a duplicate record', [...adopted(), row(expected[2])], /more than once/],
+  ]) {
+    it(`fails on ${label}`, () => {
+      assert.ok(migrationRecordFailures(expected, rows).some((failure) => pattern.test(failure)));
+    });
+  }
 });

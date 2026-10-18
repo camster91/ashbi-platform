@@ -13,7 +13,9 @@ jobs:
   quality:
     name: Type, lint, unit, integration, and build
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # 25 -> 30 when the baseline-adoption rehearsal and drift-refusal proof
+    # moved in from the retired enterprise-compliance.yml.
+    timeout-minutes: 30
     services:
       postgres:
         image: pgvector/pgvector:pg18
@@ -61,6 +63,13 @@ jobs:
         run: npm run check:secrets
       - name: Release gate contract
         run: npm run check:release-gates
+      - name: Multi-tenancy route import guard
+        # Moved from enterprise-compliance.yml (job `compliance`, step
+        # "Multi-Tenancy Compliance Scan") when that workflow, disabled since
+        # August 2026, was retired. Routes must use request.prisma, never the
+        # global client; grep exits 1 when nothing matches, which is the pass.
+        run: |
+          ! grep -r "import prisma from '../config/db.js'" src/routes/
       - name: Coolify release safety checks
         run: |
           node --test src/tests/unit/coolify-release.test.mjs src/tests/unit/coolify-workflow-gates.test.mjs src/tests/unit/production-backup.test.mjs src/tests/unit/coolify-migration-floor.test.mjs
@@ -85,6 +94,55 @@ jobs:
         # Fail when the committed migration chain and schema.prisma disagree,
         # so the database the app runs against is the one the schema describes.
         run: npm run check:schema-drift
+      - name: Rehearse adoption of a baseline-only pre-migration database
+        # Moved from enterprise-compliance.yml (job `backend-tests`; that
+        # workflow had been disabled since August 2026, so this never ran) and
+        # rewritten to the real scenario: a populated database built from the
+        # baseline SQL alone, with no migration history. Adoption must verify it
+        # against the baseline (built in an empty shadow database), record only
+        # the baseline, and let migrate deploy apply every later migration.
+        # Uses its own throwaway databases on the same service; testdb is untouched.
+        run: |
+          printf 'CREATE DATABASE baseline_adoption;' | npx prisma db execute --stdin
+          printf 'CREATE DATABASE baseline_adoption_shadow;' | npx prisma db execute --stdin
+          export DATABASE_URL=postgresql://postgres:testpass@localhost:5432/baseline_adoption
+          export BASELINE_SHADOW_DATABASE_URL=postgresql://postgres:testpass@localhost:5432/baseline_adoption_shadow
+          npx prisma db execute --file prisma/migrations/20260808040000_baseline/migration.sql
+          # Representative tenant rows, so the later migrations' guards and
+          # backfills run against existing data rather than empty tables.
+          npx prisma db execute --stdin <<'SQL'
+          INSERT INTO "organizations" ("id", "name", "slug", "updatedAt") VALUES ('rehearsal-org', 'Rehearsal Org', 'rehearsal-org', CURRENT_TIMESTAMP);
+          INSERT INTO "users" ("id", "email", "name", "password", "organizationId", "updatedAt") VALUES ('rehearsal-user', 'rehearsal@example.invalid', 'Rehearsal User', 'not-a-password-hash', 'rehearsal-org', CURRENT_TIMESTAMP);
+          INSERT INTO "clients" ("id", "name", "organizationId", "updatedAt") VALUES ('rehearsal-client', 'Rehearsal Client', 'rehearsal-org', CURRENT_TIMESTAMP);
+          INSERT INTO "projects" ("id", "name", "clientId", "organizationId", "updatedAt") VALUES ('rehearsal-project', 'Rehearsal Project', 'rehearsal-client', 'rehearsal-org', CURRENT_TIMESTAMP);
+          SQL
+          npm run db:adopt-baseline
+          npx prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma
+          node scripts/assert-baseline-adoption.mjs applied
+        env:
+          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
+          ALLOW_BASELINE_ADOPTION: 20260808040000_baseline
+      - name: Prove baseline adoption refuses schema drift
+        # Moved from enterprise-compliance.yml (job `backend-tests`; disabled
+        # since August 2026, so this never ran there). Fails closed: the step
+        # fails if adoption accepts a drifted baseline, records migrations, or
+        # refuses before actually comparing schemas (empty shadow afterwards).
+        run: |
+          printf 'CREATE DATABASE baseline_drift;' | npx prisma db execute --stdin
+          printf 'CREATE DATABASE baseline_drift_shadow;' | npx prisma db execute --stdin
+          export DATABASE_URL=postgresql://postgres:testpass@localhost:5432/baseline_drift
+          export BASELINE_SHADOW_DATABASE_URL=postgresql://postgres:testpass@localhost:5432/baseline_drift_shadow
+          npx prisma db execute --file prisma/migrations/20260808040000_baseline/migration.sql
+          printf 'ALTER TABLE "clients" ADD COLUMN "unexpectedBaselineDrift" TEXT;' | npx prisma db execute --stdin
+          if npm run db:adopt-baseline; then
+            echo 'Baseline adoption unexpectedly accepted drift' >&2
+            exit 1
+          fi
+          node scripts/assert-no-prisma-migrations.mjs
+          node scripts/assert-baseline-adoption.mjs shadow-built
+        env:
+          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
+          ALLOW_BASELINE_ADOPTION: 20260808040000_baseline
       - name: Check the data dictionary matches the Prisma schema
         # docs/data-dictionary.md is generated from schema.prisma; fail when a
         # schema change lands without regenerating it (npm run docs:data-dictionary).
@@ -110,7 +168,11 @@ jobs:
           REQUIRE_REDIS_TESTS: '1'
         run: npm run test:integration
       - name: Frontend unit tests
-        run: npm --prefix web test
+        # --coverage merged in from enterprise-compliance.yml (job
+        # `frontend-tests`, `vitest run --coverage`) so the v8 coverage
+        # instrumentation runs on every pull request. No thresholds are
+        # configured, so it fails only if the provider cannot instrument.
+        run: npm --prefix web test -- --coverage
       - name: Production build
         run: npm run build
         env:

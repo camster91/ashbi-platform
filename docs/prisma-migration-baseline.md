@@ -54,6 +54,12 @@ it matches no single point in the migration chain the tool can verify. Marking
 later migrations applied by hand would skip their data backfills; reconcile such
 a database individually with a reviewed plan instead.
 
+The required release gates rehearse this path on every pull request: a database
+built from the baseline SQL alone is adopted and must end with zero drift from
+`prisma/schema.prisma` and every migration recorded, and a drifted database must
+be refused with no `_prisma_migrations` table created (see
+[release-gates.md](release-gates.md)).
+
 ## Recovery and rollback
 
 - The baseline only creates schema objects on an empty database. On an adopted
