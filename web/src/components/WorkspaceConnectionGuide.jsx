@@ -3,11 +3,13 @@ import { Copy, Download } from 'lucide-react';
 import actionsSchema from '../../../docs/workspace-actions.openapi.json';
 import { Button } from './ui';
 
-export default function WorkspaceConnectionGuide({ oauthEnabled = false }) {
+// showMcpEndpoint: Settings shows the MCP address in its own panel, so it
+// hides the duplicate here.
+export default function WorkspaceConnectionGuide({ oauthEnabled = false, showMcpEndpoint = true }) {
   const [feedback, setFeedback] = useState(null);
   const origin = window.location.origin;
   const endpoints = [
-    { label: 'MCP endpoint', url: `${origin}/api/mcp` },
+    ...(showMcpEndpoint ? [{ label: 'MCP endpoint', url: `${origin}/api/mcp` }] : []),
     { label: 'Tool discovery', url: `${origin}/api/agent/tools` },
   ];
 
