@@ -182,6 +182,8 @@ async function portalList(path, token, pick = data => data) {
 
 const LOADING_LIST = { status: 'loading', items: [] };
 
+const INACTIVE_PROJECT_STATUSES = new Set(['LAUNCHED', 'COMPLETED', 'CANCELLED', 'ON_HOLD', 'PAUSED', 'DRAFT']);
+
 // Settles a list request into section state; the returned cleanup ignores a
 // response that arrives after the section unmounted or its inputs changed.
 function settleList(promise, setState) {
@@ -213,7 +215,7 @@ function ProjectStages({ status, needsReview }) {
   );
 }
 
-function WaitingOnYou({ reviews, contracts, invoices, onOpenReview, setActiveTab }) {
+function WaitingOnYou({ reviews, reviewsStatus = 'ready', contracts, invoices, onOpenReview, setActiveTab }) {
   // Reviews still open on their newest version, contracts to sign, then what
   // is still owed (overdue first).
   const openReviews = reviews.filter(review => review.status === 'open' && !review.nextSessionId);
@@ -278,8 +280,17 @@ function WaitingOnYou({ reviews, contracts, invoices, onOpenReview, setActiveTab
           </Badge>
         )}
       </div>
+      {/* Reviews that are still loading or failed to load are not proof that
+          nothing needs the client: say so instead of "Nothing needs you". */}
+      {reviewsStatus === 'loading' && <p role="status" className="mt-2 text-sm text-muted-foreground">Checking for reviews…</p>}
+      {reviewsStatus === 'error' && (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Reviews could not be loaded.{' '}
+          <Button type="button" variant="link" onClick={() => setActiveTab('reviews')}>Open Reviews</Button>
+        </p>
+      )}
       {items.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">Nothing needs you right now. Anything to approve, sign or pay shows up here.</p>
+        reviewsStatus === 'ready' && <p className="mt-2 text-sm text-muted-foreground">Nothing needs you right now. Anything to approve, sign or pay shows up here.</p>
       ) : (
         <ul className="mt-1 divide-y divide-border/40">
           {items.map(item => (
@@ -383,7 +394,9 @@ function RecentMessages({ project, messages, teamName, onOpenChat }) {
 }
 
 function OverviewTab({ token, contactName, teamName, projects, invoices, contracts, retainer, unread, setActiveTab, setSelectedProject, onOpenReview, onOpenChat }) {
-  const activeProjects = projects.filter(p => !['LAUNCHED', 'CANCELLED', 'ON_HOLD'].includes(p.status));
+  // Ongoing work only: finished, cancelled, paused, on-hold and draft
+  // projects are never the "current project" or counted as active.
+  const activeProjects = projects.filter(p => !INACTIVE_PROJECT_STATUSES.has(p.status));
   const overdueInvoices = invoices.filter(i => i.status?.toUpperCase() === 'OVERDUE');
   // Outstanding is what is still owed (each open invoice's balance after
   // payments), summed per currency; different currencies are never added
@@ -452,7 +465,7 @@ function OverviewTab({ token, contactName, teamName, projects, invoices, contrac
       )}
 
       <WaitingOnYou
-        reviews={reviews.items} contracts={contracts} invoices={invoices}
+        reviews={reviews.items} reviewsStatus={reviews.status} contracts={contracts} invoices={invoices}
         onOpenReview={onOpenReview} setActiveTab={setActiveTab}
       />
 

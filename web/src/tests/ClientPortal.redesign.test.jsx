@@ -180,15 +180,44 @@ describe('client portal overview', () => {
     expect(await screen.findByText('Reviews tab open on r1')).toBeInTheDocument();
   });
 
-  it('says so when nothing is waiting, and survives a failed reviews request', async () => {
+  it('says so when nothing is waiting', async () => {
+    overrides = {
+      '/reviews': json({ sessions: [] }),
+      '/contracts': json([]),
+      '/invoices': json([]),
+    };
+    await renderPortal();
+    const waiting = screen.getByRole('region', { name: 'Waiting on you' });
+    await waitFor(() => expect(waiting).toHaveTextContent('Nothing needs you right now.'));
+  });
+
+  it('never says nothing is waiting while reviews are unavailable, and the page survives', async () => {
     overrides = {
       '/reviews': json({ error: 'nope' }, 500),
       '/contracts': json([]),
       '/invoices': json([]),
     };
     await renderPortal();
-    expect(screen.getByRole('region', { name: 'Waiting on you' })).toHaveTextContent('Nothing needs you right now.');
+    const waiting = screen.getByRole('region', { name: 'Waiting on you' });
+    await waitFor(() => expect(waiting).toHaveTextContent('Reviews could not be loaded.'));
+    expect(waiting).not.toHaveTextContent('Nothing needs you right now.');
+    expect(within(waiting).getByRole('button', { name: 'Open Reviews' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Holiday landing page' })).toBeInTheDocument();
+  });
+
+  it('never features a completed, paused or draft project as the current one', async () => {
+    overrides = {
+      '/projects': json([
+        { id: 'done', name: 'Finished rebuild', status: 'COMPLETED', updatedAt: '2026-10-18T12:00:00Z', totalTasks: 3, completedTasks: 3, progressPct: 100 },
+        { id: 'paused', name: 'Paused shop', status: 'PAUSED', updatedAt: '2026-10-17T12:00:00Z', totalTasks: 1, completedTasks: 0, progressPct: 0 },
+        { id: 'draft', name: 'Draft idea', status: 'DRAFT', updatedAt: '2026-10-17T06:00:00Z', totalTasks: 0, completedTasks: 0, progressPct: 0 },
+        ...projects,
+      ]),
+    };
+    await renderPortal();
+    expect(screen.getByRole('region', { name: 'Holiday landing page' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Finished rebuild' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Open project\s+(Finished rebuild|Paused shop|Draft idea)/ })).toBeNull();
   });
 
   it('shows the project in focus with its stages, launch date and task progress', async () => {
