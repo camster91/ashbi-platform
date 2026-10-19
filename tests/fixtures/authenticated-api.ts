@@ -429,6 +429,8 @@ export const portalFixture = {
   contracts: [{ id: 'contract-a', title: 'Project agreement', status: 'SENT', signToken: 'sign-a', canReview: true }],
   documents: [{ id: 'document-a', originalName: 'brand-guidelines.pdf', size: 204800, createdAt: YESTERDAY, uploadedBy: { name: 'Dana Rivera' } }],
   messages: [{ id: 'portal-message-a', content: 'Homepage draft is ready for review.', createdAt: YESTERDAY, author: { name: adminUser.name }, authorId: adminUser.id }],
+  // A review shared with the client and still open (the Overview's "Waiting on you").
+  reviews: [{ id: 'review-a', projectId: project.id, projectName: project.name, title: 'Homepage draft', status: 'open', version: 1, previousSessionId: null, nextSessionId: null, createdAt: YESTERDAY, capture: null, media: null, openAnnotationCount: 1 }],
 };
 
 /** Routes every `/api/client-portal/**` call for a signed-in CLIENT contact. */
@@ -456,6 +458,7 @@ export async function mockClientPortalApi(page: Page) {
     if (path === '/contracts') return json(route, portalFixture.contracts);
     if (path === '/retainer') return json(route, null);
     if (path === '/unread-count') return json(route, { recentMessages: 1, upcomingDeadlines: 1 });
+    if (path === '/reviews' && method === 'GET') return json(route, { sessions: portalFixture.reviews });
     if (path === `/projects/${projectId}`) {
       return json(route, {
         ...portalFixture.projects[0],
