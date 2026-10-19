@@ -9,6 +9,7 @@ const createInvoiceFromProposal = vi.fn();
 vi.mock('../lib/api', () => ({
   api: {
     getProposal: (...args) => getProposal(...args),
+    getProposals: vi.fn(async () => []),
     updateProposal: vi.fn(),
     sendProposal: vi.fn(),
     createContractFromProposal: vi.fn(),
