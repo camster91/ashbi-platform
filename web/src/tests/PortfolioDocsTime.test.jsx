@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 
 vi.mock('../hooks/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'team', role: 'TEAM' } }) }));
-vi.mock('../lib/api', () => ({ api: { getAllNotes: vi.fn(), getWeeklyTimesheet: vi.fn(), getProjects: vi.fn(), getTeam: vi.fn(async () => []), getNoteTemplates: vi.fn(async () => []) } }));
+vi.mock('../lib/api', () => ({ api: { getAllNotes: vi.fn(), getWeeklyTimesheet: vi.fn(), getRunningTimeSession: vi.fn(async () => null), getProjects: vi.fn(), getTeam: vi.fn(async () => []), getNoteTemplates: vi.fn(async () => []) } }));
 function setup(component, url) {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[url]}>{component}</MemoryRouter></QueryClientProvider>);
 }

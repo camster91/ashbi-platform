@@ -57,6 +57,24 @@ describe('LiveTimer project picker', () => {
     expect(localStorage.getItem(PROJECT_KEY)).toBe('p-active');
   });
 
+  it('keeps a just-started timer although the server had nothing running before', async () => {
+    localStorage.setItem(PROJECT_KEY, 'p-active');
+    renderTimer();
+    fireEvent.click(screen.getByRole('button', { name: /timer/i }));
+    await screen.findByRole('option', { name: 'Website refresh' });
+    fireEvent.click(screen.getByRole('button', { name: 'Start timer' }));
+    expect(await screen.findByRole('button', { name: /^Stop timer/ })).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.getByRole('button', { name: /^Stop timer/ })).toBeInTheDocument();
+  });
+
+  it('drops a remembered running timer that the server no longer has (stopped elsewhere)', async () => {
+    localStorage.setItem('ashbi-live-timer', JSON.stringify({ isRunning: true, sessionId: 'gone', startTime: Date.now() - 60000, elapsed: 60, description: '' }));
+    renderTimer();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Timer' })).toBeInTheDocument());
+    expect(JSON.parse(localStorage.getItem('ashbi-live-timer')).isRunning).toBe(false);
+  });
+
   it('pins the picker to the viewport on phones and keeps a 44px header tap target', async () => {
     renderTimer();
     const toggle = screen.getByRole('button', { name: 'Timer' });
