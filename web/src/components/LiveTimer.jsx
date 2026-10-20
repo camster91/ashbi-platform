@@ -100,15 +100,30 @@ export default function LiveTimer({ socket }) {
   }, [timerState.isRunning]);
 
   // Check for running timer on mount (server sync)
-  const { data: runningSession } = useQuery({
+  const { data: runningSession, isSuccess: runningLoaded } = useQuery({
     queryKey: ['running-time-session'],
     queryFn: () => api.getRunningTimeSession(),
     retry: false,
     staleTime: 30000,
   });
 
-  // Sync with server on mount — if server has a running timer but local doesn't
+  // Sync with the server whenever its answer changes: adopt a timer it has
+  // running, and drop a local one it no longer has (stopped on the Time page,
+  // in another tab or on another device). Runs only when the fetched value
+  // changes, so the optimistic state set right after Start is not undone by
+  // the cached "nothing running" from before.
   useEffect(() => {
+    if (runningLoaded && !runningSession?.id) {
+      setTimerState((prev) => {
+        if (!prev.isRunning) return prev;
+        const stopped = { isRunning: false, sessionId: null, startTime: null, elapsed: 0, description: '' };
+        try {
+          localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(stopped));
+        } catch {}
+        return stopped;
+      });
+      return;
+    }
     if (runningSession && runningSession.id) {
       persistTimer({
         isRunning: true,
@@ -118,7 +133,7 @@ export default function LiveTimer({ socket }) {
         description: runningSession.description || '',
       });
     }
-  }, [runningSession, persistTimer]);
+  }, [runningSession, runningLoaded, persistTimer]);
 
   // Shares the ['projects'] cache entry (an array) with the app shell.
   const { data: projects = [], isLoading: projectsLoading, isSuccess: projectsLoaded } = useQuery({

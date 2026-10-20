@@ -299,6 +299,27 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
     if (path === '/time-sessions/running') return json(route, null);
     if (path.startsWith('/draft/')) return json(route, null);
 
+    // Time (/timesheets): the week the page asks for, so entries always land
+    // on its Monday to Wednesday whatever today's date is.
+    if (path === '/timesheets/weekly' && method === 'GET') {
+      const weekStart = new URL(request.url()).searchParams.get('weekStart') || NOW;
+      const day = (offset: number) => new Date(Date.parse(weekStart.slice(0, 10) + 'T12:00:00.000Z') + offset * 86400000).toISOString();
+      const ref = { id: project.id, name: project.name };
+      const entries = [
+        { id: 'time-a', duration: 120, billable: true, reviewStatus: 'APPROVED', invoiced: false, description: 'Homepage wireframe', date: day(0), project: ref },
+        { id: 'time-b', duration: 90, billable: true, reviewStatus: 'PENDING', invoiced: false, description: 'Brand asset review', date: day(1), project: ref },
+        { id: 'time-c', duration: 45, billable: false, reviewStatus: 'PENDING', invoiced: false, description: 'Studio admin', date: day(2), project: { id: 'project-internal', name: 'Ashbi internal' } },
+      ];
+      const days: Record<string, { entries: typeof entries; totalMinutes: number }> = {};
+      for (const entry of entries) {
+        const key = entry.date.slice(0, 10);
+        days[key] ??= { entries: [], totalMinutes: 0 };
+        days[key].entries.push(entry);
+        days[key].totalMinutes += entry.duration;
+      }
+      return json(route, { weekStart, weekEnd: day(7), timesheets: [{ user: { id: user.id, name: user.name }, days, totalMinutes: 255, billableMinutes: 210 }] });
+    }
+
     // Dashboard.
     if (path === '/dashboard/stats') {
       return json(route, {

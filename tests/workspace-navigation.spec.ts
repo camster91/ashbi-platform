@@ -92,6 +92,6 @@ test('staff can open personal timesheets from phone navigation', async ({ page }
   await expect(timesheets).toBeVisible();
   await timesheets.click();
   await expect(page).toHaveURL(/\/timesheets$/);
-  await expect(page.getByRole('heading', { name: 'Timesheets', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Time this week', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('button', { name: /Approve|Reject/ })).toHaveCount(0);
 });
