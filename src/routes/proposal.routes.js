@@ -1,6 +1,8 @@
 // Proposal routes
 
 import Mailgun from 'mailgun.js';
+import { withoutClientMoney } from './client.routes.js';
+import { withoutProjectMoney } from './project.routes.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
 import logger from '../utils/logger.js';
@@ -113,6 +115,13 @@ export function publicProposalView(proposal) {
   };
 }
 
+// Contract fields a proposal response may carry (status timeline only).
+export const PROPOSAL_CONTRACT_SUMMARY = Object.freeze({
+  id: true, title: true, status: true, clientSigName: true, clientSigDate: true,
+  signedAt: true, signatureType: true, deliveryStatus: true, deliveryStatusAt: true,
+  createdAt: true, updatedAt: true,
+});
+
 export default async function proposalRoutes(fastify) {
   // List all proposals
   fastify.get('/', {
@@ -154,7 +163,9 @@ export default async function proposalRoutes(fastify) {
         project: true,
         lineItems: true,
         createdBy: { select: { id: true, name: true } },
-        contract: true
+        // Only what the proposal page shows. Never the signing token (a bearer
+        // link), signer IP / user agent or signature hashes.
+        contract: { select: PROPOSAL_CONTRACT_SUMMARY }
       }
     });
 
@@ -162,8 +173,16 @@ export default async function proposalRoutes(fastify) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
 
+    // Client revenue and the project's contract budget are admin-only, as on
+    // the client and project routes.
+    const forViewer = request.user?.role === 'ADMIN' ? proposal : {
+      ...proposal,
+      client: proposal.client ? withoutClientMoney(proposal.client) : proposal.client,
+      project: proposal.project ? withoutProjectMoney(proposal.project) : proposal.project,
+    };
+
     // taxRate / taxType / tax / totalWithTax: what its invoice will bill.
-    return withDeliveryState({ ...proposal, ...proposalTaxSummary(proposal) });
+    return withDeliveryState({ ...forViewer, ...proposalTaxSummary(proposal) });
   });
 
   // Create proposal

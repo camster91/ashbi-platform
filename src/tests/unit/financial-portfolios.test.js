@@ -66,7 +66,7 @@ test('expense summaries keep currencies separate and search cannot overwrite the
 test('MCP financial reads retain explicit organization scope and omit payable links and receipt URLs', async () => {
   const calls = {};
   const prisma = { project: { findMany: async () => [{ id: 'p1' }] }, invoice: { findMany: async args => { calls.invoice = args; return []; } }, expense: { findMany: async args => { calls.expense = args; return []; } } };
-  const ctx = { user: { id: 'staff', role: 'TEAM', organizationId: 'org-a' }, scopes: ['workspace:read'], prisma };
+  const ctx = { user: { id: 'admin', role: 'ADMIN', organizationId: 'org-a' }, scopes: ['workspace:read'], prisma };
   const tools = createWorkspaceTools();
   await tools.call(ctx, 'list_invoices', { portfolio: 'FREELANCE' });
   await tools.call(ctx, 'list_expenses', { portfolio: 'UNCLASSIFIED' });
@@ -75,6 +75,18 @@ test('MCP financial reads retain explicit organization scope and omit payable li
   assert.equal(calls.invoice.select.stripePaymentLink, undefined);
   assert.equal(calls.expense.select.receiptUrl, undefined);
   assert.equal(calls.invoice.take, 26);
+});
+test('MCP invoice and expense reads are admin-only: a TEAM key is refused before any read', async () => {
+  let reads = 0;
+  const prisma = { project: { findMany: async () => { reads++; return []; } }, invoice: { findMany: async () => { reads++; return []; } }, expense: { findMany: async () => { reads++; return []; } } };
+  const tools = createWorkspaceTools();
+  for (const role of ['TEAM', 'BOT', 'CLIENT']) {
+    const ctx = { user: { id: 'u', role, organizationId: 'org-a' }, scopes: ['workspace:read'], prisma };
+    for (const name of ['list_invoices', 'list_expenses']) {
+      await assert.rejects(() => tools.call(ctx, name, {}), { code: 'TOOL_UNAVAILABLE' }, `${role} must not call ${name}`);
+    }
+  }
+  assert.equal(reads, 0);
 });
 test('invoice classification reads all authorized project IDs without altering archived history', async () => {
   const rows = Array.from({ length: 101 }, (_, i) => ({ id: `p${String(i).padStart(3, '0')}` }));
