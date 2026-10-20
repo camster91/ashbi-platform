@@ -43,6 +43,7 @@ const staffScreens: Array<{ name: string; path: string; ready: (page: Page) => P
   { name: 'dashboard', path: '/dashboard', ready: page => expect(page.getByRole('heading', { name: /Cameron/, level: 1 })).toBeVisible() },
   { name: 'projects list', path: '/projects', ready: page => expect(page.getByText('Website Redesign').filter({ visible: true }).first()).toBeVisible() },
   { name: 'project page', path: '/project/project-a', ready: page => expect(page.getByRole('heading', { name: 'Website Redesign', level: 1 })).toBeVisible() },
+  { name: 'time', path: '/timesheets', ready: page => expect(page.getByRole('table', { name: 'Hours per project and day' })).toBeVisible() },
   { name: 'clients', path: '/clients', ready: page => expect(page.getByText('Northwind Studio').filter({ visible: true }).first()).toBeVisible() },
   { name: 'invoices list', path: '/invoices', ready: page => expect(page.getByRole('link', { name: 'INV-2026-001' }).filter({ visible: true })).toBeVisible() },
   { name: 'invoice detail', path: '/invoices/invoice-a', ready: page => expect(page.getByText('Discovery and wireframes').filter({ visible: true }).first()).toBeVisible() },

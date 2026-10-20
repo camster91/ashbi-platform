@@ -20,7 +20,7 @@ test('document and timesheet portfolios persist without changing canonical recor
   await expect(page.getByLabel('Work portfolio')).toHaveValue('ASHBI_DESIGN');
   await expect(page.getByRole('button', { name: `Toggle note ASHBI_DESIGN brief ${suffix}` })).toBeVisible();
   await page.goto('/timesheets?portfolio=FREELANCE');
-  await expect(page.getByRole('heading', { name: 'Timesheets' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Time .*week$/, level: 1 })).toBeVisible();
   await page.reload();
   await expect(page.getByLabel('Work portfolio')).toHaveValue('FREELANCE');
   const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - 7);
