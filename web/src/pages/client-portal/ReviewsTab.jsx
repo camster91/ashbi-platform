@@ -85,10 +85,11 @@ function ReviewDetail({ reviewId, token, onBack, onOpen }) {
   );
 }
 
-export default function ReviewsTab({ token }) {
+export default function ReviewsTab({ token, initialOpenId = null }) {
   const [sessions, setSessions] = useState(null);
   const [error, setError] = useState('');
-  const [openId, setOpenId] = useState(null);
+  // The Overview's "Waiting on you" list opens a review directly.
+  const [openId, setOpenId] = useState(initialOpenId);
 
   const load = useCallback(async () => {
     try {
