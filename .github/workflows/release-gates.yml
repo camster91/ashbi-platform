@@ -135,7 +135,10 @@ jobs:
   browser:
     name: Browser and accessibility smoke
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # 15 -> 20 (owner-approved, Oct 2026): the suite now takes 12-14 minutes
+    # and runs were cancelled at the limit after every test had passed.
+    # No test, project or assertion changes.
+    timeout-minutes: 20
     # The official Playwright image ships Chromium, Firefox, WebKit and their
     # system libraries, so the gate no longer depends on apt mirror speed.
     # Keep the tag in step with the locked @playwright/test version.
