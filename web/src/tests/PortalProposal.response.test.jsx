@@ -83,6 +83,12 @@ describe('public proposal money', () => {
     expect(screen.queryByText('Discount')).not.toBeInTheDocument();
   });
 
+  it('shows the proposal overview the API sends as notes', async () => {
+    getPortalProposal.mockResolvedValue({ ...PROPOSAL, notes: 'Scope: five pages and a booking form.' });
+    renderProposal();
+    expect(await screen.findByText('Scope: five pages and a booking form.')).toBeInTheDocument();
+  });
+
   it('shows a real discount', async () => {
     getPortalProposal.mockResolvedValue({
       ...PROPOSAL, subtotal: 1000, discount: 100, total: 900, taxRate: 13, taxType: 'HST', tax: 117, totalWithTax: 1017,
