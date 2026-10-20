@@ -137,6 +137,7 @@ const darkScreens: Screen[] = [
   { name: 'project page', path: '/project/project-a', ready: page => expect(page.getByRole('heading', { name: 'Website Redesign', level: 1 })).toBeVisible() },
   { name: 'task board', path: '/project/project-a/kanban', ready: page => expect(page.getByRole('heading', { name: 'Kanban Board' })).toBeVisible() },
   { name: 'contracts', path: '/contracts', ready: page => expect(page.getByRole('heading', { name: 'Contracts', level: 1 })).toBeVisible() },
+  { name: 'proposal detail', path: '/proposal/proposal-a', ready: page => expect(page.getByRole('region', { name: 'Status' })).toBeVisible() },
 ];
 
 test.describe('UI quality', () => {
@@ -170,7 +171,7 @@ test.describe('UI quality', () => {
     });
   }
 
-  for (const path of ['/projects', '/project/project-a/kanban', '/project/project-a']) {
+  for (const path of ['/projects', '/project/project-a/kanban', '/project/project-a', '/proposal/proposal-a']) {
     test(`${path} does not scroll the page horizontally`, async ({ page }) => {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 }).last()).toBeVisible();
