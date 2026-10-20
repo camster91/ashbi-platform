@@ -17,6 +17,7 @@ import { useAuth } from '../hooks/useAuth';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import QueryErrorState from '../components/QueryErrorState';
 import { Button, Card, LoadingState, Tabs, TabList, Tab, TabPanel } from '../components/ui';
+import { cn } from '../lib/utils';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TwoFactorSettings from '../components/TwoFactorSettings';
 import OrganizationMfaPolicy from '../components/OrganizationMfaPolicy';
@@ -884,7 +885,12 @@ export default function Settings() {
             <Tab
               key={section.id}
               value={section.id}
-              className="justify-start rounded-md border border-transparent border-b px-3 text-left text-foreground hover:bg-muted/60 hover:text-foreground data-[state=active]:border-border/60 data-[state=active]:bg-card data-[state=active]:font-bold data-[state=active]:text-foreground data-[state=active]:shadow-xs whitespace-normal"
+              // Selected look from plain utilities (not data-[state] variants),
+              // which keeps the shared entry CSS inside its budget.
+              className={cn(
+                'justify-start rounded-md border border-transparent border-b px-3 text-left text-foreground hover:bg-muted/60 hover:text-foreground whitespace-normal',
+                section.id === sectionId && 'border-border/60 bg-card font-bold text-foreground shadow-xs',
+              )}
             >
               {section.label}
             </Tab>
