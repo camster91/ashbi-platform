@@ -160,8 +160,11 @@ export default function PortalProposal() {
             )}
           </div>
 
-          {proposal.description && (
-            <p className="text-muted-foreground mt-4 leading-relaxed">{proposal.description}</p>
+          {/* The public endpoint sends the proposal's notes (its overview);
+              older responses used description. Staff see the same text in the
+              proposal page's client preview. */}
+          {(proposal.notes || proposal.description) && (
+            <p className="text-muted-foreground mt-4 leading-relaxed whitespace-pre-line">{proposal.notes || proposal.description}</p>
           )}
         </div>
 
