@@ -20,7 +20,9 @@ function Dash() {
  */
 export default function TimesheetGrid({ rows, days, totalsByDay, total, selected, onSelect, panelId }) {
   return (
-    <div className="overflow-x-auto">
+    // relative: hidden screen-reader text (position: absolute) inside the
+    // wide table must stay clipped here, or it widens the whole page on phones.
+    <div className="relative overflow-x-auto">
       <table className="w-full min-w-[640px] border-collapse text-sm">
         <caption className="sr-only">Hours per project and day</caption>
         <thead>
