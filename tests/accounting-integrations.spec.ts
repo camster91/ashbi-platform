@@ -24,7 +24,7 @@ test('accounting providers are truthful, unavailable, and responsive', async ({ 
     });
   });
 
-  await page.goto('/settings');
+  await page.goto('/settings?section=payments');
 
   // Scope every assertion to the Accounting Integrations region so valid
   // integrations elsewhere on Settings (Google Calendar, Slack) cannot fail

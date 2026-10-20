@@ -1,57 +1,49 @@
 import { embeddedAiEnabled } from '../lib/features';
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  User,
   Lock,
   Save,
   CheckCircle,
   Eye,
   EyeOff,
-  Wrench,
-  Bot,
   Zap,
-  Key,
   Plus,
-  Trash2,
   Copy,
-  Link2,
-  Bell,
-  ListChecks,
-  CalendarDays,
-  ShieldCheck,
-  History,
-  KeyRound,
-  ClipboardCheck,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import QueryErrorState from '../components/QueryErrorState';
-import { Button, Card, LoadingState } from '../components/ui';
+import { Button, Card, LoadingState, Tabs, TabList, Tab, TabPanel } from '../components/ui';
+import { cn } from '../lib/utils';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TwoFactorSettings from '../components/TwoFactorSettings';
 import OrganizationMfaPolicy from '../components/OrganizationMfaPolicy';
 import ActivityLog from '../components/ActivityLog';
 import WorkspaceConnectionGuide from '../components/WorkspaceConnectionGuide';
-import { lazy, Suspense } from 'react';
+import { AgentAccessTable, AgentSafetyRules } from '../components/settings/AgentAccess';
 const AiByokSettings = lazy(() => import('../components/AiByokSettings'));
 const AiApprovals = lazy(() => import('../components/AiApprovals'));
 
-function Section({ icon: Icon, title, description, children }) {
+// Ashbi Hub settings (design: Settings mockup). A side list of sections kept
+// in ?section= so a link or the back button lands on the same view; Agents
+// and MCP is the default. Business, Payments and Team are admin-only, as are
+// the admin-only panels inside the shared sections (the API enforces each).
+
+function Section({ title, description, actions, children }) {
   // Expose each settings card as a named accessible region so screen-reader
   // users (and tests) can address one section without page-global queries.
   const headingId = `settings-section-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   return (
-    <Card className="p-6" role="region" aria-labelledby={headingId}>
-      <div className="flex items-start gap-4 mb-5">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-          <Icon className="w-5 h-5 text-primary" />
+    <Card padding="lg" className="border-border/60" role="region" aria-labelledby={headingId}>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 id={headingId} className="text-lg font-heading font-semibold tracking-tight text-foreground">{title}</h2>
+          {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
         </div>
-        <div>
-          <h2 id={headingId} className="text-base font-semibold text-foreground">{title}</h2>
-          {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
-        </div>
+        {actions}
       </div>
       {children}
     </Card>
@@ -286,7 +278,7 @@ function AIModelSection() {
   });
 
   return (
-    <Section icon={Bot} title="AI Model" description="Choose which Ollama model powers all AI features">
+    <Section title="AI Model" description="Choose which Ollama model powers all AI features">
       {aiLoading || modelsLoading ? (
         <LoadingState label="Loading AI model settings…" compact className="justify-start" size="sm" />
       ) : aiError || modelsError ? (
@@ -384,6 +376,8 @@ export function ApiKeysSection() {
   const [createdKey, setCreatedKey] = useState(null);
   const [keyToRevoke, setKeyToRevoke] = useState(null);
   const [copyFeedback, setCopyFeedback] = useState(null);
+  const [mcpFeedback, setMcpFeedback] = useState(null);
+  const nameInputRef = useRef(null);
   const { data: oauthStatus } = useQuery({ queryKey: ['mcp-oauth-status'], queryFn: () => api.getMcpOAuthStatus(), retry: false });
 
   const {
@@ -426,172 +420,215 @@ export function ApiKeysSection() {
     }
   };
 
+  const mcpUrl = `${window.location.origin}/api/mcp`;
+  const copyMcpAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(mcpUrl);
+      setMcpFeedback({ error: false, message: 'MCP address copied.' });
+    } catch {
+      setMcpFeedback({ error: true, message: 'Copy failed. Select the address and copy it manually.' });
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      <WorkspaceConnectionGuide oauthEnabled={oauthStatus?.enabled === true} />
-      {createMutation.error && (
-        <p role="alert" className="text-sm text-destructive">
-          {createMutation.error.message || 'The API key could not be created. Try again.'}
-        </p>
-      )}
-      {/* Create new key */}
-      <div className="flex flex-wrap gap-2">
-        <input
-          value={newKeyName}
-          onChange={(e) => setNewKeyName(e.target.value)}
-          placeholder="Key name, e.g. OpenClaw Bot"
-          aria-label="API key name"
-          className="min-w-0 flex-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-hidden focus:ring-2 focus:ring-primary/20"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && newKeyName.trim() && newKeyScopes.length > 0) {
-              createMutation.mutate(newKeyName.trim());
-            }
-          }}
-        />
-        <Button
-          onClick={() => createMutation.mutate(newKeyName.trim())}
-          disabled={!newKeyName.trim() || newKeyScopes.length === 0 || createMutation.isPending}
-          leftIcon={<Plus className="w-4 h-4" />}
-          loading={createMutation.isPending}
-        >
-          Create Key
-        </Button>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <fieldset>
-          <legend className="text-sm font-medium mb-1">Scopes</legend>
-          <div className="space-y-1">
-            {API_KEY_SCOPE_OPTIONS.map((option) => (
-              <label key={option.value} className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={newKeyScopes.includes(option.value)}
-                  onChange={(e) => setNewKeyScopes((current) => (e.target.checked
-                    ? [...new Set([...current, option.value])]
-                    : current.filter((scope) => scope !== option.value)))}
-                />
-                <span>
-                  {option.label}
-                  <span className="block text-xs text-muted-foreground">{option.description}</span>
+    <div className="space-y-5">
+      <Section
+        title="Connected agents"
+        description="Each agent connects with its own key. Revoke a key to switch that agent off straight away."
+        actions={(
+          <Button type="button" onClick={() => nameInputRef.current?.focus()} leftIcon={<Plus className="w-4 h-4" />}>
+            Connect an agent
+          </Button>
+        )}
+      >
+        {isLoading ? (
+          <LoadingState label="Loading API keys…" compact className="justify-start" size="sm" />
+        ) : keysError ? (
+          <QueryErrorState
+            error={keysError}
+            message="Failed to load API keys"
+            onRetry={refetchKeys}
+            isRetrying={keysFetching}
+          />
+        ) : !keysError && keysData.keys.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No agents are connected yet. Create a key below to connect one.</p>
+        ) : (
+          <ul aria-label="Connected agents" className="divide-y divide-border/40">
+            {keysData.keys.map((key) => (
+              <li key={key.id} className="flex flex-wrap items-center gap-3 py-3.5 first:pt-0">
+                <span className="inline-flex shrink-0 rounded bg-secondary px-2 py-0.5 text-eyebrow text-secondary-foreground">
+                  {(key.scopes || []).some((scope) => scope.endsWith(':actions')) ? 'Can prepare changes' : 'Read only'}
                 </span>
-              </label>
+                <div className="min-w-0 flex-[1_1_260px]">
+                  <p className="text-sm font-semibold text-foreground break-words">
+                    {key.name}
+                    {!key.expiresAt && (
+                      <span className="ml-2 inline-flex rounded bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning">
+                        No expiry
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Scopes: {(key.scopes || []).length
+                      ? key.scopes.map((scope) => API_KEY_SCOPE_LABELS[scope] || scope).join(', ')
+                      : 'none'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Created {new Date(key.createdAt).toLocaleDateString('en-CA')}
+                    {key.lastUsedAt && ` · Last used ${new Date(key.lastUsedAt).toLocaleDateString('en-CA')}`}
+                    {key.expiresAt && ` · Expires ${new Date(key.expiresAt).toLocaleDateString('en-CA')}`}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="danger-outline"
+                  size="sm"
+                  aria-label={`Revoke ${key.name}`}
+                  disabled={deleteMutation.isPending}
+                  onClick={() => { deleteMutation.reset(); setKeyToRevoke(key); }}
+                >
+                  Revoke
+                </Button>
+              </li>
             ))}
+          </ul>
+        )}
+
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border/40 bg-background p-4">
+          <div className="min-w-0 flex-[1_1_260px]">
+            <p className="text-eyebrow text-muted-foreground">MCP address</p>
+            <code className="block font-mono text-sm text-foreground break-all select-all">{mcpUrl}</code>
           </div>
-          {newKeyScopes.length === 0 && (
-            <p className="text-xs text-destructive mt-1">Choose at least one scope.</p>
+          <Button type="button" variant="outline" size="sm" onClick={copyMcpAddress} aria-label="Copy MCP address" leftIcon={<Copy className="w-4 h-4" />}>
+            Copy
+          </Button>
+          {mcpFeedback && (
+            <p role={mcpFeedback.error ? 'alert' : 'status'} className={`basis-full text-sm ${mcpFeedback.error ? 'text-destructive' : 'text-muted-foreground'}`}>
+              {mcpFeedback.message}
+            </p>
           )}
-        </fieldset>
-        <div>
-          <label htmlFor="api-key-expiry" className="block text-sm font-medium mb-1">Expires after</label>
-          <select
-            id="api-key-expiry"
-            value={newKeyExpiryDays}
-            onChange={(e) => setNewKeyExpiryDays(Number(e.target.value))}
-            className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-hidden focus:ring-2 focus:ring-primary/20"
-          >
-            {API_KEY_EXPIRY_OPTIONS.map((days) => (
-              <option key={days} value={days}>{days === 365 ? '1 year' : `${days} days`}</option>
-            ))}
-          </select>
-          <p className="text-xs text-muted-foreground mt-1">You will be asked to confirm your password or two-factor code.</p>
         </div>
-      </div>
 
-      {/* Show newly created key (only shown once) */}
-      {createdKey && (
-        <div className="p-3 bg-success/5 border border-success/30 rounded-lg">
-          <p className="text-sm font-medium text-success mb-1">
-            API key created! Copy it now — you won't see it again.
-          </p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 text-xs bg-card dark:bg-card p-2 rounded font-mono break-all select-all">
-              {createdKey}
-            </code>
-            <button
-              onClick={() => copyToClipboard(createdKey)}
-              className="p-1.5 text-muted-foreground hover:text-foreground"
-              title="Copy to clipboard"
-              aria-label="Copy API key"
-            >
-              <Copy className="w-4 h-4" />
-            </button>
-          </div>
-          {copyFeedback && <p role={copyFeedback.error ? 'alert' : 'status'} className="text-sm mt-2">{copyFeedback.message}</p>}
-          <button
-            onClick={() => { setCreatedKey(null); setCopyFeedback(null); }}
-            className="text-xs text-muted-foreground hover:text-foreground mt-2"
-          >
-            I've copied it — dismiss
-          </button>
-        </div>
-      )}
-
-      {/* Existing keys */}
-      {isLoading ? (
-        <LoadingState label="Loading API keys…" compact className="justify-start" size="sm" />
-      ) : keysError ? (
-        <QueryErrorState
-          error={keysError}
-          message="Failed to load API keys"
-          onRetry={refetchKeys}
-          isRetrying={keysFetching}
+        <ConfirmDialog
+          isOpen={Boolean(keyToRevoke)}
+          title="Revoke API key"
+          description={keyToRevoke ? `Revoke “${keyToRevoke.name}”? Any integrations using it will stop working immediately.` : ''}
+          confirmLabel="Revoke API key"
+          onConfirm={() => keyToRevoke && deleteMutation.mutate(keyToRevoke.id)}
+          onCancel={() => { deleteMutation.reset(); setKeyToRevoke(null); }}
+          pending={deleteMutation.isPending}
+          error={deleteMutation.error?.message}
         />
-      ) : !keysError && keysData.keys.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No API keys yet. Create one above.</p>
-      ) : (
-        <div className="space-y-2">
-          {keysData.keys.map((key) => (
-            <div key={key.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-              <div>
-                <p className="text-sm font-medium">
-                  {key.name}
-                  {!key.expiresAt && (
-                    <span className="ml-2 inline-flex rounded bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning">
-                      No expiry
+      </Section>
+
+      <Section title="Connect an agent" description="Create a key for Claude, Codex, ChatGPT or any other MCP client">
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">Discover tools at <code>/api/agent/tools</code>. MCP endpoint: <code>/api/mcp</code>. Use a scoped API key as a Bearer token. Writes return a preview and require a separate confirmation.</p>
+          <WorkspaceConnectionGuide oauthEnabled={oauthStatus?.enabled === true} showMcpEndpoint={false} />
+          {createMutation.error && (
+            <p role="alert" className="text-sm text-destructive">
+              {createMutation.error.message || 'The API key could not be created. Try again.'}
+            </p>
+          )}
+          {/* Create new key */}
+          <div className="flex flex-wrap gap-2">
+            <input
+              ref={nameInputRef}
+              value={newKeyName}
+              onChange={(e) => setNewKeyName(e.target.value)}
+              placeholder="Key name, e.g. Claude desktop"
+              aria-label="API key name"
+              className="min-h-11 min-w-0 flex-1 px-3 py-2 text-sm bg-background text-foreground rounded-lg border border-border focus:outline-hidden focus:ring-2 focus:ring-ring"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newKeyName.trim() && newKeyScopes.length > 0) {
+                  createMutation.mutate(newKeyName.trim());
+                }
+              }}
+            />
+            <Button
+              onClick={() => createMutation.mutate(newKeyName.trim())}
+              disabled={!newKeyName.trim() || newKeyScopes.length === 0 || createMutation.isPending}
+              leftIcon={<Plus className="w-4 h-4" />}
+              loading={createMutation.isPending}
+            >
+              Create Key
+            </Button>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <fieldset>
+              <legend className="text-sm font-medium mb-1">Scopes</legend>
+              <div className="space-y-1">
+                {API_KEY_SCOPE_OPTIONS.map((option) => (
+                  <label key={option.value} className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={newKeyScopes.includes(option.value)}
+                      onChange={(e) => setNewKeyScopes((current) => (e.target.checked
+                        ? [...new Set([...current, option.value])]
+                        : current.filter((scope) => scope !== option.value)))}
+                    />
+                    <span>
+                      {option.label}
+                      <span className="block text-xs text-muted-foreground">{option.description}</span>
                     </span>
-                  )}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Created {new Date(key.createdAt).toLocaleDateString('en-CA')}
-                  {key.lastUsedAt && ` · Last used ${new Date(key.lastUsedAt).toLocaleDateString('en-CA')}`}
-                  {key.expiresAt && ` · Expires ${new Date(key.expiresAt).toLocaleDateString('en-CA')}`}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Scopes: {(key.scopes || []).length
-                    ? key.scopes.map((scope) => API_KEY_SCOPE_LABELS[scope] || scope).join(', ')
-                    : 'none'}
-                </p>
+                  </label>
+                ))}
               </div>
-              <button
-                type="button"
-                aria-label={`Revoke ${key.name}`}
-                disabled={deleteMutation.isPending}
-                onClick={() => { deleteMutation.reset(); setKeyToRevoke(key); }}
-                className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"
-                title="Revoke key"
+              {newKeyScopes.length === 0 && (
+                <p className="text-xs text-destructive mt-1">Choose at least one scope.</p>
+              )}
+            </fieldset>
+            <div>
+              <label htmlFor="api-key-expiry" className="block text-sm font-medium mb-1">Expires after</label>
+              <select
+                id="api-key-expiry"
+                value={newKeyExpiryDays}
+                onChange={(e) => setNewKeyExpiryDays(Number(e.target.value))}
+                className="min-h-11 w-full px-3 py-2 text-sm bg-background text-foreground rounded-lg border border-border focus:outline-hidden focus:ring-2 focus:ring-ring"
               >
-                <Trash2 className="w-4 h-4" />
+                {API_KEY_EXPIRY_OPTIONS.map((days) => (
+                  <option key={days} value={days}>{days === 365 ? '1 year' : `${days} days`}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">You will be asked to confirm your password or two-factor code.</p>
+            </div>
+          </div>
+
+          {/* Show newly created key (only shown once) */}
+          {createdKey && (
+            <div className="p-3 bg-success/5 border border-success/30 rounded-lg">
+              <p className="text-sm font-medium text-success mb-1">
+                API key created! Copy it now — you won't see it again.
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs bg-card dark:bg-card p-2 rounded font-mono break-all select-all">
+                  {createdKey}
+                </code>
+                <button
+                  onClick={() => copyToClipboard(createdKey)}
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                  title="Copy to clipboard"
+                  aria-label="Copy API key"
+                >
+                  <Copy className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
+              {copyFeedback && <p role={copyFeedback.error ? 'alert' : 'status'} className="text-sm mt-2">{copyFeedback.message}</p>}
+              <button
+                onClick={() => { setCreatedKey(null); setCopyFeedback(null); }}
+                className="min-h-11 text-xs text-muted-foreground hover:text-foreground mt-1 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded"
+              >
+                I've copied it — dismiss
               </button>
             </div>
-          ))}
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            Use your API key in the <code className="bg-muted px-1 rounded">x-api-key</code> header or as a <code className="bg-muted px-1 rounded">Bearer</code> token.
+          </p>
         </div>
-      )}
-
-      <ConfirmDialog
-        isOpen={Boolean(keyToRevoke)}
-        title="Revoke API key"
-        description={keyToRevoke ? `Revoke “${keyToRevoke.name}”? Any integrations using it will stop working immediately.` : ''}
-        confirmLabel="Revoke API key"
-        onConfirm={() => keyToRevoke && deleteMutation.mutate(keyToRevoke.id)}
-        onCancel={() => { deleteMutation.reset(); setKeyToRevoke(null); }}
-        pending={deleteMutation.isPending}
-        error={deleteMutation.error?.message}
-      />
-
-      <p className="text-xs text-muted-foreground">
-        Use your API key in the <code className="bg-muted px-1 rounded">x-api-key</code> header or as a <code className="bg-muted px-1 rounded">Bearer</code> token.
-      </p>
+      </Section>
     </div>
   );
 }
@@ -603,7 +640,7 @@ export function IntegrationsSection() {
   ];
 
   return (
-    <Section icon={Link2} title="Accounting Integrations" description="Accounting providers are not currently available">
+    <Section title="Accounting Integrations" description="Accounting providers are not currently available">
       <div className="space-y-4">
         {providers.map(provider => {
           return (
@@ -707,9 +744,43 @@ function SlackIntegrationPreferences() {
   );
 }
 
+// Order follows the mockup, with the personal Profile first.
+const SETTINGS_SECTIONS = [
+  { id: 'profile', label: 'Profile', title: 'Your', accent: 'profile', description: 'Your name, skills and weekly capacity, and your getting-started checklist.' },
+  { id: 'business', label: 'Business', adminOnly: true, title: 'Your', accent: 'studio', description: 'Brand, workspace tools and the logins Ashbi Hub keeps for your clients.' },
+  { id: 'payments', label: 'Payments', adminOnly: true, title: 'Payments', accent: 'and billing', description: 'Accounting connections, retainers, rates and overdue follow-ups.' },
+  { id: 'agents', label: 'Agents and MCP', title: 'Agents', accent: 'and MCP', description: 'Let Claude, Codex or any MCP agent work in Ashbi Hub. You decide what each one can see and do.' },
+  { id: 'team', label: 'Team', adminOnly: true, title: 'Your', accent: 'team', description: 'The people in this workspace and how their time is reviewed.' },
+  { id: 'security', label: 'Security', title: 'Security', accent: 'and sign-in', description: 'Your password, two-factor authentication and, for administrators, workspace-wide rules and the activity log.' },
+  { id: 'alerts', label: 'Alerts', title: 'Your', accent: 'alerts', description: 'Browser notifications for assigned work and client activity.' },
+  { id: 'integrations', label: 'Integrations', title: 'Connected', accent: 'apps', description: 'Your Google Calendar and, for administrators, the Slack workspace.' },
+];
+const DEFAULT_SECTION = 'agents';
+
+function AdminLinks({ links }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {links.map(({ label, href, desc }) => (
+        href ? <Link
+          key={href}
+          to={href}
+          className="min-h-11 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+        </Link> : <div key={label} aria-disabled="true" className="min-h-11 p-3 rounded-lg border border-dashed border-border bg-muted/30">
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Settings() {
   const { user, checkAuth } = useAuth();
   const queryClient = useQueryClient();
+  const [params, setParams] = useSearchParams();
 
   // Profile form
   const [profile, setProfile] = useState({ name: '', skills: '', capacity: 100 });
@@ -781,16 +852,55 @@ export default function Settings() {
   };
 
   const isAdmin = user?.role === 'ADMIN';
+  const isStaff = user && user.role !== 'CLIENT' && user.role !== 'BOT';
+
+  const sections = SETTINGS_SECTIONS.filter((section) => isAdmin || !section.adminOnly);
+  const requested = params.get('section');
+  const oauthReturn = params.has('googleCalendar') || params.has('slack');
+  const sectionId = sections.some((section) => section.id === requested)
+    ? requested
+    : oauthReturn ? 'integrations' : DEFAULT_SECTION;
+  const current = sections.find((section) => section.id === sectionId);
+  const selectSection = (next) => {
+    const nextParams = new URLSearchParams(params);
+    // The OAuth return markers only choose the first view.
+    for (const marker of ['googleCalendar', 'slack', 'code']) nextParams.delete(marker);
+    if (next === DEFAULT_SECTION) nextParams.delete('section'); else nextParams.set('section', next);
+    setParams(nextParams, { replace: true });
+  };
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-6xl">
       <div>
-        <h1 className="text-2xl font-heading font-bold text-foreground">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage your account and preferences</p>
+        <p className="text-eyebrow text-muted-foreground">Settings</p>
+        <h1 className="mt-1.5 text-3xl font-heading font-semibold tracking-tight text-foreground">
+          {current.title} <span className="font-display italic font-normal text-primary">{current.accent}</span>
+        </h1>
+        <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">{current.description}</p>
       </div>
 
+      <Tabs value={sectionId} onValueChange={selectSection} orientation="vertical" className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        <TabList aria-label="Settings sections" className="grid grid-cols-2 gap-1 sm:grid-cols-4 lg:flex lg:w-52 lg:shrink-0 lg:flex-col">
+          {sections.map((section) => (
+            <Tab
+              key={section.id}
+              value={section.id}
+              // Selected look from plain utilities (not data-[state] variants),
+              // which keeps the shared entry CSS inside its budget.
+              className={cn(
+                'justify-start rounded-md border border-transparent border-b px-3 text-left text-foreground hover:bg-muted/60 hover:text-foreground whitespace-normal',
+                section.id === sectionId && 'border-border/60 bg-card font-bold text-foreground shadow-xs',
+              )}
+            >
+              {section.label}
+            </Tab>
+          ))}
+        </TabList>
+
+        <div className="min-w-0 flex-1">
+          <TabPanel value="profile" className="space-y-5">
       {/* Profile */}
-      <Section icon={User} title="Profile" description="Update your name, skills, and capacity percentage">
+      <Section title="Profile" description="Update your name, skills, and capacity percentage">
         <form onSubmit={handleProfileSave} className="space-y-4">
           <div>
             <label htmlFor="settings-profile-name" className="block text-sm font-medium mb-1">Full Name</label>
@@ -855,8 +965,87 @@ export default function Settings() {
         </form>
       </Section>
 
+
+            <Section title="Getting started" description="Resume or restart your role-specific first-success checklist">
+              <OnboardingPreferences />
+            </Section>
+          </TabPanel>
+
+          {isAdmin && (
+            <TabPanel value="business" className="space-y-5">
+              <Section title="Studio" description="Your brand, workspace tools and stored logins">
+                <AdminLinks links={[
+                  { label: 'Brand Settings', href: '/admin/brand', desc: 'Logo, colors, company info' },
+                  ...(embeddedAiEnabled ? [{ label: 'AI Context', href: '/admin/settings/ai-context', desc: 'Custom AI instructions' }] : []),
+                  { label: 'Command Center', href: '/admin/command-center', desc: 'VPS & GitHub integrations' },
+                  { label: 'Automations', href: '/automations', desc: 'Workflow automation log' },
+                  { label: 'Credentials', href: '/credentials', desc: 'Stored API keys & passwords' },
+                  { label: 'Approvals', href: '/approvals', desc: 'Pending automation and content approvals' },
+                ]} />
+              </Section>
+            </TabPanel>
+          )}
+
+          {isAdmin && (
+            <TabPanel value="payments" className="space-y-5">
+              <IntegrationsSection />
+              <Section title="Billing tools" description="Recurring plans, rates and overdue follow-ups">
+                <AdminLinks links={[
+                  { label: 'Retainers', href: '/retainers', desc: 'Recurring client retainers' },
+                  { label: 'Rate cards', href: '/rate-cards', desc: 'Billable rates for estimates and time' },
+                  { label: 'Invoice Chaser', href: '/invoice-chaser', desc: 'Overdue invoice follow-ups' },
+                  { label: 'Reports (planned)', desc: 'P&L and team utilization will appear after the finance workflow is approved.' },
+                ]} />
+              </Section>
+            </TabPanel>
+          )}
+
+          {/* Kept mounted (hidden) while another section is open: a newly
+              created key is shown only once, so leaving the section must not
+              discard it before it is copied. */}
+          <TabPanel value="agents" forceMount className="space-y-5">
+            <ApiKeysSection />
+            <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
+              <Section title="What agents can do" description="Access is set per key, by scope, when you create it">
+                <AgentAccessTable />
+              </Section>
+              <Section title="Safety rules" description="Enforced by Ashbi Hub for every agent">
+                <AgentSafetyRules />
+              </Section>
+            </div>
+
+            {/* AI approvals and receipts (#413 slice 2): admins see the workspace, team members their own */}
+            {embeddedAiEnabled && (isAdmin || user?.role === 'TEAM') && (
+              <Section title="Action approvals" description="Review proposed actions and their execution receipts">
+                <Suspense fallback={null}><AiApprovals /></Suspense>
+              </Section>
+            )}
+
+            {/* AI Model Picker — admin only */}
+            {embeddedAiEnabled && isAdmin && <AIModelSection />}
+
+            {/* Organization BYOK AI provider, budget and kill switch (#413) — admin only */}
+            {embeddedAiEnabled && isAdmin && (
+              <Section title="AI provider (bring your own key)" description="Use your own AI provider account, cap monthly spend, or turn AI off for this workspace">
+                <Suspense fallback={null}><AiByokSettings /></Suspense>
+              </Section>
+            )}
+          </TabPanel>
+
+          {isAdmin && (
+            <TabPanel value="team" className="space-y-5">
+              <Section title="People" description="Who works in this workspace and how their time is reviewed">
+                <AdminLinks links={[
+                  { label: 'Team', href: '/team', desc: 'Invite people, set roles and capacity' },
+                  { label: 'Timesheets', href: '/timesheets', desc: 'Review and approve logged time' },
+                ]} />
+              </Section>
+            </TabPanel>
+          )}
+
+          <TabPanel value="security" className="space-y-5">
       {/* Password */}
-      <Section icon={Lock} title="Password" description="Change your login password">
+      <Section title="Password" description="Change your login password">
         <form onSubmit={handlePasswordSave} className="space-y-4">
           <div>
             <label htmlFor="settings-current-password" className="block text-sm font-medium mb-1">Current Password</label>
@@ -919,97 +1108,43 @@ export default function Settings() {
           </div>
         </form>
       </Section>
+            {isStaff && (
+              <Section title="Two-factor authentication" description="Protect your account with an authenticator app">
+                <TwoFactorSettings />
+              </Section>
+            )}
 
-      {user && user.role !== 'CLIENT' && user.role !== 'BOT' && (
-        <Section icon={ShieldCheck} title="Security" description="Protect your account with two-factor authentication">
-          <TwoFactorSettings />
-        </Section>
-      )}
+            {/* Organization MFA requirement — admin only (the API also enforces this) */}
+            {isAdmin && (
+              <Section title="Organization security" description="Require two-factor authentication for every staff account in this workspace">
+                <OrganizationMfaPolicy />
+              </Section>
+            )}
 
-      {/* Organization MFA requirement — admin only (the API also enforces this) */}
-      {isAdmin && (
-        <Section icon={ShieldCheck} title="Organization security" description="Require two-factor authentication for every staff account in this workspace">
-          <OrganizationMfaPolicy />
-        </Section>
-      )}
+            {/* Append-only audit trail — admin only (the API also enforces this) */}
+            {isAdmin && (
+              <Section title="Activity log" description="Who sent or settled invoices, signed contracts, and changed access">
+                <ActivityLog />
+              </Section>
+            )}
+          </TabPanel>
 
-      <Section icon={Bell} title="Browser notifications" description="Inspect or change notifications for this browser">
-        <NotificationPreferences />
-      </Section>
+          <TabPanel value="alerts" className="space-y-5">
+            <Section title="Browser notifications" description="Inspect or change notifications for this browser">
+              <NotificationPreferences />
+            </Section>
+          </TabPanel>
 
-      <Section icon={CalendarDays} title="Google Calendar" description="Connect your own calendar and explicitly sync events you create">
-        <GoogleCalendarPreferences />
-      </Section>
+          <TabPanel value="integrations" className="space-y-5">
+            <Section title="Google Calendar" description="Connect your own calendar and explicitly sync events you create">
+              <GoogleCalendarPreferences />
+            </Section>
 
-      <Section icon={ListChecks} title="Getting started" description="Resume or restart your role-specific first-success checklist">
-        <OnboardingPreferences />
-      </Section>
-
-      {/* API Keys */}
-      <Section icon={Key} title="API Keys" description="Connect LLMs and integrations to workspace tools through HTTP or MCP">
-        <p className="text-sm text-muted-foreground mb-4">Discover tools at <code>/api/agent/tools</code>. MCP endpoint: <code>/api/mcp</code>. Use a scoped API key as a Bearer token. Writes return a preview and require a separate confirmation.</p>
-        <ApiKeysSection />
-      </Section>
-
-      {/* Integrations — admin only */}
-      {isAdmin && <IntegrationsSection />}
-
-      {isAdmin && <Section icon={Link2} title="Slack workspace" description="Install Slack and explicitly map project channels"><SlackIntegrationPreferences /></Section>}
-
-      {/* AI Model Picker — admin only */}
-      {embeddedAiEnabled && isAdmin && <AIModelSection />}
-
-      {/* Organization BYOK AI provider, budget and kill switch (#413) — admin only */}
-      {embeddedAiEnabled && isAdmin && (
-        <Section icon={KeyRound} title="AI provider (bring your own key)" description="Use your own AI provider account, cap monthly spend, or turn AI off for this workspace">
-          <Suspense fallback={null}><AiByokSettings /></Suspense>
-        </Section>
-      )}
-
-      {/* AI approvals and receipts (#413 slice 2): admins see the workspace, team members their own */}
-      {embeddedAiEnabled && (isAdmin || user?.role === 'TEAM') && (
-        <Section icon={ClipboardCheck} title="Action approvals" description="Review proposed actions and their execution receipts">
-          <Suspense fallback={null}><AiApprovals /></Suspense>
-        </Section>
-      )}
-
-      {/* Append-only audit trail — admin only (the API also enforces this) */}
-      {isAdmin && (
-        <Section icon={History} title="Activity log" description="Who sent or settled invoices, signed contracts, and changed access">
-          <ActivityLog />
-        </Section>
-      )}
-
-      {/* Admin links */}
-      {isAdmin && (
-        <Section icon={Wrench} title="Admin Settings" description="Additional configuration options">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {[
-              { label: 'Brand Settings', href: '/admin/brand', desc: 'Logo, colors, company info' },
-              ...(embeddedAiEnabled ? [{ label: 'AI Context', href: '/admin/settings/ai-context', desc: 'Custom AI instructions' }] : []),
-              { label: 'Command Center', href: '/admin/command-center', desc: 'VPS & GitHub integrations' },
-              { label: 'Automations', href: '/automations', desc: 'Workflow automation log' },
-              { label: 'Credentials', href: '/credentials', desc: 'Stored API keys & passwords' },
-              { label: 'Approvals', href: '/approvals', desc: 'Pending automation and content approvals' },
-              { label: 'Retainers', href: '/retainers', desc: 'Recurring client retainers' },
-              { label: 'Invoice Chaser', href: '/invoice-chaser', desc: 'Overdue invoice follow-ups' },
-              { label: 'Reports (planned)', desc: 'P&L and team utilization will appear after the finance workflow is approved.' },
-            ].map(({ label, href, desc }) => (
-              href ? <a
-                key={href}
-                href={href}
-                className="min-h-11 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <p className="text-sm font-medium text-foreground">{label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
-              </a> : <div key={label} aria-disabled="true" className="min-h-11 p-3 rounded-lg border border-dashed border-border bg-muted/30">
-                <p className="text-sm font-medium text-muted-foreground">{label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
+            {/* Slack — admin only */}
+            {isAdmin && <Section title="Slack workspace" description="Install Slack and explicitly map project channels"><SlackIntegrationPreferences /></Section>}
+          </TabPanel>
+        </div>
+      </Tabs>
 
       {/* Account info */}
       <div className="text-xs text-muted-foreground text-center pb-4">

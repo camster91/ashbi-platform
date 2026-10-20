@@ -101,7 +101,7 @@ test.describe('Authenticated accessibility', () => {
     await page.goto('/settings');
     const question = page.getByLabel('Question for the assistant');
     if (!embeddedAiEnabled) {
-      await expect(page.getByRole('heading', { name: 'API Keys', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Connected agents', exact: true })).toBeVisible();
       await expect(page.getByText('/api/mcp', { exact: true })).toBeVisible();
       await expect(question).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'AI provider (bring your own key)', exact: true })).toHaveCount(0);
