@@ -185,6 +185,38 @@ describe('Time page redesign', () => {
     await waitFor(() => expect(api.rejectTimesheetEntry).toHaveBeenCalledWith('e-wed', 'Wrong project'));
   });
 
+  it('keeps an in-flight review locked when another entry\'s review finishes first', async () => {
+    let finishTue;
+    api.approveTimesheetEntry.mockImplementation((id) => (id === 'e-tue'
+      ? new Promise((resolve) => { finishTue = resolve; })
+      : Promise.resolve({})));
+    renderTime();
+    await screen.findByRole('table', { name: 'Hours per project and day' });
+    const list = waiting();
+    fireEvent.click(within(list).getByRole('button', { name: 'Approve Booking widget' }));
+    fireEvent.click(within(list).getByRole('button', { name: 'Approve Product page' }));
+    await waitFor(() => expect(api.approveTimesheetEntry).toHaveBeenCalledWith('e-wed'));
+    // e-wed settled; e-tue is still pending, so its buttons stay locked and a
+    // second approve is not sent.
+    await waitFor(() => expect(within(list).getByRole('button', { name: 'Reject Booking widget' })).toBeDisabled());
+    fireEvent.click(within(list).getByRole('button', { name: 'Approve Booking widget' }));
+    expect(api.approveTimesheetEntry.mock.calls.filter(([id]) => id === 'e-tue')).toHaveLength(1);
+    finishTue({});
+  });
+
+  it('gives each open rejection field its own id', async () => {
+    renderTime();
+    await screen.findByRole('table', { name: 'Hours per project and day' });
+    const list = waiting();
+    fireEvent.click(within(list).getByRole('button', { name: 'Reject Booking widget' }));
+    fireEvent.click(within(grid()).getByRole('button', { name: /^Website rebuild, Tue \d+: 3\.5 hours$/ }));
+    const panel = screen.getByRole('region', { name: /^Website rebuild · / });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Reject Booking widget' }));
+    const fields = screen.getAllByLabelText('Rejection reason');
+    expect(fields).toHaveLength(2);
+    expect(fields[0].id).not.toBe(fields[1].id);
+  });
+
   it('lists approved, uninvoiced billable hours as ready to bill', async () => {
     renderTime();
     await screen.findByRole('table', { name: 'Hours per project and day' });

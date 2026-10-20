@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Button } from '../ui';
 import { cn } from '../../lib/utils';
 import { dayLabel, formatHours, isPending, spokenHours } from './timesheetWeek';
@@ -10,7 +10,10 @@ import { dayLabel, formatHours, isPending, spokenHours } from './timesheetWeek';
 export function ReviewActions({ entry, canReview, review }) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
-  const busy = review.busyId === entry.id;
+  const busy = review.isBusy(entry.id);
+  // An entry can show in two places at once (Waiting for OK and the day
+  // panel), so each rendered reason field gets its own id.
+  const fieldId = `time-reject-${useId()}`;
   const label = entry.description || entry.task?.title || entry.project?.name || 'time entry';
 
   if (entry.reviewStatus === 'APPROVED') return <span className="text-sm font-semibold text-success">Approved</span>;
@@ -25,7 +28,6 @@ export function ReviewActions({ entry, canReview, review }) {
   if (!canReview) return <span className="text-sm font-medium text-muted-foreground">Pending review</span>;
 
   if (rejecting) {
-    const fieldId = `time-reject-${entry.id}`;
     return (
       <form
         className="flex w-full flex-col gap-2"

@@ -85,26 +85,32 @@ export default function Timesheets() {
     staleTime: 30000,
   });
 
-  const [busyId, setBusyId] = useState(null);
-  const settle = () => { setBusyId(null); queryClient.invalidateQueries({ queryKey: ['weekly-timesheet'] }); };
+  // Pending reviews are tracked per entry, so one settling never re-enables
+  // another entry's buttons, and an entry already in flight can't be sent twice.
+  const [busyIds, setBusyIds] = useState(() => new Set());
+  const markBusy = (id) => setBusyIds((current) => new Set(current).add(id));
+  const settle = (id) => {
+    setBusyIds((current) => { const next = new Set(current); next.delete(id); return next; });
+    queryClient.invalidateQueries({ queryKey: ['weekly-timesheet'] });
+  };
   const approveMutation = useMutation({
     mutationFn: (id) => api.approveTimesheetEntry(id),
-    onMutate: (id) => setBusyId(id),
+    onMutate: (id) => markBusy(id),
     onSuccess: () => toast.success('Entry approved'),
     onError: () => toast.error('Approval failed'),
-    onSettled: settle,
+    onSettled: (_data, _error, id) => settle(id),
   });
   const rejectMutation = useMutation({
     mutationFn: ({ id, reason }) => api.rejectTimesheetEntry(id, reason),
-    onMutate: ({ id }) => setBusyId(id),
+    onMutate: ({ id }) => markBusy(id),
     onSuccess: () => toast.success('Entry rejected'),
     onError: () => toast.error('Rejection failed'),
-    onSettled: settle,
+    onSettled: (_data, _error, { id }) => settle(id),
   });
   const review = {
-    busyId,
-    approve: (id) => approveMutation.mutate(id),
-    reject: (id, reason) => rejectMutation.mutate({ id, reason }),
+    isBusy: (id) => busyIds.has(id),
+    approve: (id) => { if (!busyIds.has(id)) approveMutation.mutate(id); },
+    reject: (id, reason) => { if (!busyIds.has(id)) rejectMutation.mutate({ id, reason }); },
   };
 
   const timesheets = useMemo(() => (Array.isArray(data?.timesheets) ? data.timesheets : []), [data]);
