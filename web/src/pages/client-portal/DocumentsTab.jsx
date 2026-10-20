@@ -5,7 +5,7 @@ import { Alert, LoadingState } from '../../components/ui';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
 import { portalFetch, downloadPortalDocument, deletePortalDocument, PortalDocumentList, PortalUploadZone, portalFieldStyles, pageTitleClass } from './shared';
 
-// ── Documents Tab ─────────────────────────────────────────────────────────────
+// ── Files (documents) Tab ─────────────────────────────────────────────────────────────
 export default function DocumentsTab({ projects, token }) {
   const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.id || '');
   const [documents, setDocuments] = useState([]);
@@ -84,7 +84,7 @@ export default function DocumentsTab({ projects, token }) {
 
   return (
     <div className="space-y-4">
-      <h2 className={pageTitleClass}>Documents</h2>
+      <h2 className={pageTitleClass}>Files</h2>
 
       {/* Project selector */}
       {projects.length > 1 && (

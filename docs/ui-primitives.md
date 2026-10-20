@@ -920,7 +920,7 @@ allowlist.
 | `.cp-btn-primary` | `Button` (`primary`); `buttonStyles()` for the "Pay Now" and "Review and sign" links |
 | `.cp-btn-secondary` | `Button variant="outline"` |
 | `.cp-btn-danger` | `Button variant="danger-outline"` (document delete trigger; the dialog's confirm is the solid `danger`) |
-| `.cp-btn-ghost` | `Button variant="ghost"` (header logout, with on-primary token utilities) |
+| `.cp-btn-ghost` | `Button variant="ghost"` (header logout, with on-ink token utilities: `text-background`, `border-background/40`) |
 | `.cp-link` | `Button variant="link"`; `buttonStyles({ variant: 'link' })` for `<a href>` |
 | `.cp-input` | `Input`; `inputStyles()` for `<select>` and `<textarea>` (via `portalFieldStyles`) |
 | `.cp-label` | Label utilities (`labelClass`: `block text-sm font-medium text-foreground`) |
@@ -945,7 +945,7 @@ allowlist.
 | `.cp-loading` | `LoadingState` |
 | `.cp-text` | `text-foreground` |
 | `.cp-text-muted` | `text-muted-foreground` |
-| `.cp-page-title` | `pageTitleClass` (`mb-4 text-xl font-bold text-foreground`) |
+| `.cp-page-title` | `pageTitleClass` (`mb-4 text-2xl font-semibold tracking-tight text-foreground`) |
 | `.cp-section-title` | `sectionTitleClass` (`mb-3 text-base font-semibold text-foreground`) |
 | `.cp-grid-2` | `grid gap-4 md:grid-cols-2` |
 | `.cp-grid-3` | `grid gap-4 sm:grid-cols-2 lg:grid-cols-3` |
@@ -973,8 +973,8 @@ primitive covers them yet. Remove each one when its primitive lands.
 | `.cp-*` class | Why it stays |
 |---|---|
 | `.cp-root` | Scopes the portal focus contract: a 3px solid `--ring` outline on every focusable control, stronger than the primitives' `ring-4` at 20% opacity. Aligning `Button`'s own focus ring is follow-up work |
-| `.cp-header` | Switches that outline to `--accent` on the indigo header, where the ring colour would be invisible |
-| `.cp-tab` | Native `role="tab"` buttons; selected styling follows `aria-selected`. The shared `Tabs` primitive now exists; moving the portal tab bar onto it is follow-up work |
+| `.cp-header` | Switches that outline to `--accent` on the ink header band, where the ring colour would be invisible |
+| `.cp-tab` | Native `role="tab"` buttons; selected styling follows `aria-selected`. Inside `[data-portal-nav]` (the portal-level tabs on the ink header band, below `.cp-header`) they are pills: powder text, the selected tab filled indigo, a lime focus outline. The shared `Tabs` primitive now exists; moving the portal tab bar onto it is follow-up work |
 | `.cp-kanban` | No kanban primitive for read-only client boards (`KanbanBoard` is the staff drag-and-drop board) |
 | `.cp-kanban-col` | Kanban column surface |
 | `.cp-kanban-col-header` | Kanban column header row |
