@@ -402,6 +402,19 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
 
     // Proposals.
     if (path === '/proposals' && method === 'GET') return json(route, [proposal]);
+    if (path === `/proposals/${proposal.id}` && method === 'GET') return json(route, {
+      ...proposal,
+      notes: 'A new site with online booking and a class calendar.',
+      createdBy: { id: 'user-admin', name: 'Cameron Ashley' },
+      sentAt: LAST_WEEK,
+      deliveryStatus: 'DELIVERED',
+      deliveryFailed: false,
+      taxRate: 13,
+      taxType: 'HST',
+      tax: 1560,
+      totalWithTax: 13560,
+      contract: null,
+    });
 
     // Settings.
     if (path === '/mcp-oauth/status' && method === 'GET') return json(route, { enabled: false });

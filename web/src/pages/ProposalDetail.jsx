@@ -1,26 +1,36 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowLeft,
-  Send,
-  Plus,
-  Trash2,
-  Save,
-  FileText,
-  ExternalLink,
-  CheckCircle,
-  XCircle,
-} from 'lucide-react';
+import { Send, Save, Pencil, Copy, Link2, FileSignature, Receipt, BellRing, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, LoadingState } from '../components/ui';
+import { Button, LoadingState, StatusBadge } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import QueryErrorState from '../components/QueryErrorState';
-import { formatMoney } from '../lib/format';
+import ProposalClientPreview from '../components/proposals/ProposalClientPreview';
+import ProposalEditor from '../components/proposals/ProposalEditor';
+import ProposalTimeline from '../components/proposals/ProposalTimeline';
+import OtherProposals from '../components/proposals/OtherProposals';
+import { formatDate } from '../lib/format';
 import { taxTypeLabel } from '../lib/invoice-status';
-import { invoiceTotals } from '../lib/money-totals';
+import { invoiceTotals, lineTotal } from '../lib/money-totals';
+
+// Ashbi Hub proposal page (design: Proposals mockup). On the left, what the
+// client sees on the public proposal page (or the edit form for a draft); on
+// the right, the proposal's status from draft to invoice and the other
+// proposals.
+
+// "Booking site for Lakeside Yoga": the client's name is the serif accent,
+// inside the title when the title already names the client.
+export function ProposalTitle({ title, clientName }) {
+  const name = (clientName || '').trim();
+  const accent = (text) => <span className="font-display italic font-normal text-primary">{text}</span>;
+  if (!name) return title;
+  const at = title.toLowerCase().indexOf(name.toLowerCase());
+  if (at === -1) return <>{title} {accent(`for ${name}`)}</>;
+  return <>{title.slice(0, at)}{accent(title.slice(at, at + name.length))}{title.slice(at + name.length)}</>;
+}
 
 export default function ProposalDetail() {
   const { id } = useParams();
@@ -65,12 +75,16 @@ export default function ProposalDetail() {
     setEditing(true);
   };
 
+  const invalidateProposal = () => {
+    queryClient.invalidateQueries({ queryKey: ['proposal', id] });
+    queryClient.invalidateQueries({ queryKey: ['proposals'] });
+  };
+
   const updateMutation = useMutation({
     mutationFn: (data) => api.updateProposal(id, data),
     onSuccess: () => {
       void formDraft.clearDraft();
-      queryClient.invalidateQueries({ queryKey: ['proposal', id] });
-      queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      invalidateProposal();
       setEditing(false);
       toast.success('Proposal saved');
     },
@@ -79,13 +93,39 @@ export default function ProposalDetail() {
 
   const sendMutation = useMutation({
     mutationFn: () => api.sendProposal(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposal', id] });
+    onSuccess: (result) => {
       // The list shows the status (DRAFT -> SENT).
-      queryClient.invalidateQueries({ queryKey: ['proposals'] });
-      toast.success('Proposal sent', 'Client will receive a review link');
+      invalidateProposal();
+      if (result?.emailSent === false) {
+        toast.success('Proposal marked as sent', 'No email went out. Copy the client link to share it.');
+      } else {
+        toast.success('Proposal sent', 'Client will receive a review link');
+      }
     },
-    onError: () => toast.error('Failed to send proposal'),
+    onError: (error) => toast.error('Failed to send proposal', error.message),
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: () => api.resendProposal(id),
+    onSuccess: () => {
+      invalidateProposal();
+      toast.success('Reminder sent', 'The client was emailed the review link again');
+    },
+    onError: (error) => {
+      // A failed delivery is recorded on the proposal; show it in Status.
+      invalidateProposal();
+      toast.error('Failed to send reminder', error.message);
+    },
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: () => api.duplicateProposal(id),
+    onSuccess: (copy) => {
+      queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      toast.success('Proposal duplicated');
+      if (copy?.id) navigate(`/proposal/${copy.id}`);
+    },
+    onError: (error) => toast.error('Failed to duplicate proposal', error.message),
   });
 
   const generateContractMutation = useMutation({
@@ -158,7 +198,7 @@ export default function ProposalDetail() {
   }
 
   const subtotal = editing
-    ? lineItems.reduce((sum, li) => sum + (parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), 0)
+    ? lineItems.reduce((sum, li) => sum + lineTotal(parseFloat(li.quantity) || 1, li.unitPrice), 0)
     : proposal.subtotal;
   // Mirrors the server: a discount never takes the total below zero.
   const total = Math.max(0, subtotal - (editing ? parseFloat(discount) || 0 : proposal.discount));
@@ -171,10 +211,50 @@ export default function ProposalDetail() {
   const useServer = !editing && proposal.totalWithTax !== undefined && proposal.totalWithTax !== null;
   const tax = useServer ? Number(proposal.tax) || 0 : preview.tax;
   const totalWithTax = useServer ? Number(proposal.totalWithTax) || 0 : preview.total;
+  const taxLabel = `${taxTypeLabel(proposal.taxType)} (${taxRate}%)`;
   const isDraft = proposal.status === 'DRAFT';
+  const awaitingReply = proposal.status === 'SENT' || proposal.status === 'VIEWED';
+  const isApproved = proposal.status === 'APPROVED';
+  const clientName = proposal.client?.name || '';
+  // Approval revokes the public link, so it is offered only while the client
+  // still has a decision to make.
+  const clientLink = awaitingReply && proposal.viewToken
+    ? `${window.location.origin}/portal/proposal/${proposal.viewToken}`
+    : '';
+
+  const copyClientLink = async () => {
+    try {
+      await navigator.clipboard.writeText(clientLink);
+      toast.success('Client link copied');
+    } catch {
+      toast.error('Could not copy the link', clientLink);
+    }
+  };
+
+  const doc = {
+    title: proposal.title,
+    clientName,
+    notes: proposal.notes || '',
+    status: proposal.status,
+    validUntil: proposal.validUntil,
+    approvedAt: proposal.approvedAt,
+    declinedAt: proposal.declinedAt,
+    lines: (proposal.lineItems || []).map((li, index) => ({
+      key: li.id || index,
+      description: li.description,
+      quantity: li.quantity,
+      unitPrice: li.unitPrice,
+      total: Number.isFinite(Number(li.total)) ? Number(li.total) : lineTotal(li.quantity, li.unitPrice),
+    })),
+    subtotal: Number(proposal.subtotal) || 0,
+    discount: Number(proposal.discount) || 0,
+    tax: taxRate > 0 ? tax : 0,
+    taxLabel,
+    total: totalWithTax,
+  };
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-5 max-w-[1240px] mx-auto">
       {(editing || formDraft.draft) && (
         <DraftRecoveryNotice
           draft={formDraft.draft}
@@ -193,40 +273,38 @@ export default function ProposalDetail() {
           onRetry={formDraft.saveNow}
         />
       )}
+
+      <nav aria-label="Breadcrumb" className="text-eyebrow text-muted-foreground">
+        <Link to="/proposals" className="rounded-sm hover:text-foreground underline-offset-4 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">Proposals</Link>
+        <span aria-hidden="true"> / </span>
+        <span aria-current="page">{clientName || proposal.title}</span>
+      </nav>
+
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <button type="button" aria-label="Back to proposals" onClick={() => navigate('/proposals')} className="p-2 hover:bg-muted rounded-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
-          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
-        </button>
-        <div className="flex-1">
-          {editing ? (
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="text-2xl font-heading font-bold bg-transparent border-b border-border focus:border-primary outline-hidden w-full"
-            />
-          ) : (
-            <h1 className="text-2xl font-heading font-bold text-foreground">{proposal.title}</h1>
-          )}
-          <p className="text-sm text-muted-foreground mt-1">
-            {proposal.client?.name} &middot; Created by {proposal.createdBy?.name}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-3xl font-heading font-semibold tracking-tight text-foreground break-words">
+              <ProposalTitle title={proposal.title} clientName={clientName} />
+            </h1>
+            <StatusBadge domain="proposal" status={proposal.status} size="md" className="font-semibold" />
+            {proposal.deliveryFailed && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-2.5 py-0.5 text-sm font-semibold text-foreground">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+                Email not delivered
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {[
+              proposal.createdBy?.name && `Created by ${proposal.createdBy.name}`,
+              proposal.validUntil && `Valid until ${formatDate(proposal.validUntil)}`,
+            ].filter(Boolean).join(' · ')}
           </p>
         </div>
-        <div className="flex gap-2">
-          {isDraft && !editing && (
-            <>
-              <Button variant="outline" onClick={startEdit}>Edit</Button>
-              <Button
-                leftIcon={<Send className="w-4 h-4" />}
-                onClick={() => sendMutation.mutate()}
-                loading={sendMutation.isPending}
-              >
-                Send to Client
-              </Button>
-            </>
-          )}
-          {editing && (
+
+        <div className="flex flex-wrap items-center gap-2">
+          {editing ? (
             <>
               <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
               <Button
@@ -237,191 +315,92 @@ export default function ProposalDetail() {
                 Save
               </Button>
             </>
-          )}
-        </div>
-      </div>
-
-      {/* Status Banner */}
-      {proposal.status !== 'DRAFT' && (
-        <Card className={`p-4 ${
-          proposal.status === 'APPROVED' ? 'border-success/30 bg-success/5' :
-          proposal.status === 'DECLINED' ? 'border-destructive/30 bg-destructive/5' :
-          'border-info/30 bg-info/5'
-        }`}>
-          <div className="flex items-center gap-2 text-sm">
-            {proposal.status === 'APPROVED' && <CheckCircle className="w-4 h-4 text-success" />}
-            {proposal.status === 'DECLINED' && <XCircle className="w-4 h-4 text-destructive" />}
-            {proposal.status === 'SENT' && <Send className="w-4 h-4 text-info" />}
-            {proposal.status === 'VIEWED' && <FileText className="w-4 h-4 text-warning" />}
-            <span className="font-medium">
-              {proposal.status === 'APPROVED' && `Approved on ${new Date(proposal.approvedAt).toLocaleDateString('en-CA')}`}
-              {proposal.status === 'DECLINED' && `Declined on ${new Date(proposal.declinedAt).toLocaleDateString('en-CA')}`}
-              {proposal.status === 'SENT' && `Sent on ${new Date(proposal.sentAt).toLocaleDateString('en-CA')}`}
-              {proposal.status === 'VIEWED' && 'Viewed by client'}
-            </span>
-          </div>
-          {(proposal.status === 'SENT' || proposal.status === 'VIEWED') && proposal.viewToken && (
-            <button
-              onClick={() => navigator.clipboard.writeText(`${window.location.origin}/portal/proposal/${proposal.viewToken}`)}
-              className="mt-2 flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              <ExternalLink className="w-3 h-3" /> Copy client view link
-            </button>
-          )}
-          {/* Approval auto-generates the contract, so invoicing must not depend on
-              the contract being absent or accepted work could never be billed. */}
-          {proposal.status === 'APPROVED' && (
-            <div className="mt-2 flex gap-2">
-              {!proposal.contract && (
+          ) : (
+            <>
+              {isDraft && (
+                <Button variant="outline" leftIcon={<Pencil className="w-4 h-4" />} onClick={startEdit}>Edit</Button>
+              )}
+              {clientLink && (
+                <Button variant="outline" leftIcon={<Link2 className="w-4 h-4" />} onClick={copyClientLink}>Copy link</Button>
+              )}
+              <Button
+                variant="outline"
+                leftIcon={<Copy className="w-4 h-4" />}
+                onClick={() => duplicateMutation.mutate()}
+                loading={duplicateMutation.isPending}
+              >
+                Duplicate
+              </Button>
+              {/* Approval auto-generates the contract, so invoicing must not depend on
+                  the contract being absent or accepted work could never be billed. */}
+              {isApproved && !proposal.contract && (
                 <Button
-                  size="sm"
                   variant="outline"
+                  leftIcon={<FileSignature className="w-4 h-4" />}
                   onClick={() => generateContractMutation.mutate()}
                   loading={generateContractMutation.isPending}
                 >
                   Generate Contract
                 </Button>
               )}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => createInvoiceMutation.mutate()}
-                loading={createInvoiceMutation.isPending}
-              >
-                Create Invoice
-              </Button>
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* Line Items */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-4">Line Items</h2>
-        <div className="space-y-3">
-          <div className="grid grid-cols-12 gap-3 text-xs font-medium text-muted-foreground uppercase">
-            <div className="col-span-5">Description</div>
-            <div className="col-span-2 text-right">Qty</div>
-            <div className="col-span-2 text-right">Unit Price</div>
-            <div className="col-span-2 text-right">Total</div>
-            {editing && <div className="col-span-1" />}
-          </div>
-
-          {(editing ? lineItems : proposal.lineItems || []).map((item, idx) => (
-            <div key={item.id || idx} className="grid grid-cols-12 gap-3 items-center">
-              <div className="col-span-5">
-                {editing ? (
-                  <input
-                    type="text"
-                    value={item.description}
-                    onChange={(e) => updateLineItem(idx, 'description', e.target.value)}
-                    className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm"
-                    placeholder="Description"
-                  />
-                ) : (
-                  <span className="text-sm">{item.description}</span>
-                )}
-              </div>
-              <div className="col-span-2 text-right">
-                {editing ? (
-                  <input
-                    type="number"
-                    value={item.quantity}
-                    onChange={(e) => updateLineItem(idx, 'quantity', e.target.value)}
-                    className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm text-right"
-                    min="0"
-                    step="0.5"
-                  />
-                ) : (
-                  <span className="text-sm">{item.quantity}</span>
-                )}
-              </div>
-              <div className="col-span-2 text-right">
-                {editing ? (
-                  <input
-                    type="number"
-                    value={item.unitPrice}
-                    onChange={(e) => updateLineItem(idx, 'unitPrice', e.target.value)}
-                    className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm text-right"
-                    min="0"
-                    step="0.01"
-                  />
-                ) : (
-                  <span className="text-sm">${item.unitPrice?.toFixed(2)}</span>
-                )}
-              </div>
-              <div className="col-span-2 text-right text-sm font-medium">
-                ${((parseFloat(item.quantity) || 1) * (parseFloat(item.unitPrice) || 0)).toFixed(2)}
-              </div>
-              {editing && (
-                <div className="col-span-1">
-                  <button onClick={() => removeLineItem(idx)} className="p-1 text-muted-foreground hover:text-destructive">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+              {isApproved && (
+                <Button
+                  leftIcon={<Receipt className="w-4 h-4" />}
+                  onClick={() => createInvoiceMutation.mutate()}
+                  loading={createInvoiceMutation.isPending}
+                >
+                  Create Invoice
+                </Button>
               )}
-            </div>
-          ))}
+              {awaitingReply && (
+                <Button
+                  leftIcon={<BellRing className="w-4 h-4" />}
+                  onClick={() => resendMutation.mutate()}
+                  loading={resendMutation.isPending}
+                >
+                  Send reminder
+                </Button>
+              )}
+              {isDraft && (
+                <Button
+                  leftIcon={<Send className="w-4 h-4" />}
+                  onClick={() => sendMutation.mutate()}
+                  loading={sendMutation.isPending}
+                >
+                  Send to Client
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
 
-          {editing && (
-            <button
-              onClick={addLineItem}
-              className="flex items-center gap-1 text-sm text-primary hover:underline mt-2"
-            >
-              <Plus className="w-4 h-4" /> Add line item
-            </button>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)] lg:items-start">
+        <div className="min-w-0 space-y-5">
+          {editing ? (
+            <ProposalEditor
+              title={title}
+              onTitleChange={setTitle}
+              lineItems={lineItems}
+              onLineChange={updateLineItem}
+              onAddLine={addLineItem}
+              onRemoveLine={removeLineItem}
+              discount={discount}
+              onDiscountChange={setDiscount}
+              notes={notes}
+              onNotesChange={setNotes}
+              totals={{ subtotal, taxRate, tax, taxLabel, total: totalWithTax }}
+            />
+          ) : (
+            <ProposalClientPreview doc={doc} />
           )}
         </div>
 
-        {/* Totals */}
-        <div className="mt-6 border-t border-border pt-4 space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Subtotal</span>
-            <span>{formatMoney(subtotal)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Discount</span>
-            {editing ? (
-              <input
-                type="number"
-                value={discount}
-                onChange={(e) => setDiscount(e.target.value)}
-                className="w-24 px-2 py-1 rounded border border-border bg-background text-sm text-right"
-                min="0"
-                step="0.01"
-              />
-            ) : (
-              <span>-{formatMoney(proposal.discount || 0)}</span>
-            )}
-          </div>
-          {taxRate > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">{taxTypeLabel(proposal.taxType)} ({taxRate}%)</span>
-              <span>{formatMoney(tax)}</span>
-            </div>
-          )}
-          <div className="flex justify-between text-base font-semibold border-t border-border pt-2">
-            <span>Total</span>
-            <span>{formatMoney(totalWithTax)}</span>
-          </div>
-        </div>
-      </Card>
-
-      {/* Notes */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-2">Notes</h2>
-        {editing ? (
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
-            rows={3}
-            placeholder="Notes visible to client..."
-          />
-        ) : (
-          <p className="text-sm text-muted-foreground">{proposal.notes || 'No notes'}</p>
-        )}
-      </Card>
+        <aside aria-label="Proposal status and other proposals" className="min-w-0 space-y-4">
+          <ProposalTimeline proposal={proposal} />
+          <OtherProposals currentId={proposal.id} />
+        </aside>
+      </div>
     </div>
   );
 }

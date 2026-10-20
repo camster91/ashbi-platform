@@ -945,6 +945,9 @@ export const api = {
     request(`/proposals/${id}`, { method: 'DELETE' }),
   sendProposal: (id) =>
     request(`/proposals/${id}/send`, { method: 'POST' }),
+  /** Email the review link again to the primary contact of a sent proposal. */
+  resendProposal: (id) =>
+    request(`/proposals/${id}/resend`, { method: 'POST' }),
   duplicateProposal: (id) =>
     request(`/proposals/${id}/duplicate`, { method: 'POST' }),
   // Bulk proposal actions
