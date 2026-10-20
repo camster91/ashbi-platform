@@ -1,10 +1,11 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getApiKeys = vi.fn();
+const createApiKey = vi.fn();
 const deleteApiKey = vi.fn();
 const auth = { user: { id: 'u1', role: 'ADMIN', email: 'admin@example.com', name: 'Admin', skills: ['design'], capacity: 100 }, checkAuth: vi.fn() };
 
@@ -12,7 +13,7 @@ vi.mock('../lib/api', () => ({
   api: {
     getApiKeys: (...args) => getApiKeys(...args),
     deleteApiKey: (...args) => deleteApiKey(...args),
-    createApiKey: vi.fn(),
+    createApiKey: (...args) => createApiKey(...args),
     getMcpOAuthStatus: vi.fn(async () => ({ enabled: false })),
     getGoogleCalendarConnection: vi.fn(async () => ({ connection: null })),
     getSlackInstallations: vi.fn(async () => ({ installations: [] })),
@@ -171,6 +172,27 @@ describe('agents and MCP', () => {
     expect(await screen.findByText('MCP address copied.')).toHaveAttribute('role', 'status');
     // The setup guide does not repeat the address.
     expect(screen.queryByRole('button', { name: 'Copy MCP endpoint' })).not.toBeInTheDocument();
+  });
+
+  it('keeps a just-created key on screen after visiting another section', async () => {
+    const user = userEvent.setup();
+    createApiKey.mockResolvedValue({ key: 'ahk_live_secret_shown_once', id: 'k-new' });
+    renderSettings();
+    await user.type(await screen.findByPlaceholderText(/key name/i), 'Claude Code');
+    await user.click(screen.getByRole('button', { name: /Create Key/ }));
+    expect(await screen.findByText('ahk_live_secret_shown_once')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Security' }));
+    await user.click(screen.getByRole('tab', { name: 'Agents and MCP' }));
+    expect(screen.getByText('ahk_live_secret_shown_once')).toBeVisible();
+  });
+
+  it('puts the password form under Security, not Profile', async () => {
+    renderSettings('/settings?section=security');
+    expect(await screen.findByLabelText('Current Password')).toBeInTheDocument();
+    cleanup();
+    renderSettings('/settings?section=profile');
+    await screen.findByRole('tab', { name: 'Profile', selected: true });
+    expect(screen.queryByLabelText('Current Password')).toBeNull();
   });
 
   it('says what each scope allows, in a scrollable region a keyboard can reach', () => {

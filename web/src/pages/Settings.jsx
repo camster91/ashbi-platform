@@ -959,6 +959,85 @@ export default function Settings() {
         </form>
       </Section>
 
+
+            <Section title="Getting started" description="Resume or restart your role-specific first-success checklist">
+              <OnboardingPreferences />
+            </Section>
+          </TabPanel>
+
+          {isAdmin && (
+            <TabPanel value="business" className="space-y-5">
+              <Section title="Studio" description="Your brand, workspace tools and stored logins">
+                <AdminLinks links={[
+                  { label: 'Brand Settings', href: '/admin/brand', desc: 'Logo, colors, company info' },
+                  ...(embeddedAiEnabled ? [{ label: 'AI Context', href: '/admin/settings/ai-context', desc: 'Custom AI instructions' }] : []),
+                  { label: 'Command Center', href: '/admin/command-center', desc: 'VPS & GitHub integrations' },
+                  { label: 'Automations', href: '/automations', desc: 'Workflow automation log' },
+                  { label: 'Credentials', href: '/credentials', desc: 'Stored API keys & passwords' },
+                  { label: 'Approvals', href: '/approvals', desc: 'Pending automation and content approvals' },
+                ]} />
+              </Section>
+            </TabPanel>
+          )}
+
+          {isAdmin && (
+            <TabPanel value="payments" className="space-y-5">
+              <IntegrationsSection />
+              <Section title="Billing tools" description="Recurring plans, rates and overdue follow-ups">
+                <AdminLinks links={[
+                  { label: 'Retainers', href: '/retainers', desc: 'Recurring client retainers' },
+                  { label: 'Rate cards', href: '/rate-cards', desc: 'Billable rates for estimates and time' },
+                  { label: 'Invoice Chaser', href: '/invoice-chaser', desc: 'Overdue invoice follow-ups' },
+                  { label: 'Reports (planned)', desc: 'P&L and team utilization will appear after the finance workflow is approved.' },
+                ]} />
+              </Section>
+            </TabPanel>
+          )}
+
+          {/* Kept mounted (hidden) while another section is open: a newly
+              created key is shown only once, so leaving the section must not
+              discard it before it is copied. */}
+          <TabPanel value="agents" forceMount className="space-y-5">
+            <ApiKeysSection />
+            <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
+              <Section title="What agents can do" description="Access is set per key, by scope, when you create it">
+                <AgentAccessTable />
+              </Section>
+              <Section title="Safety rules" description="Enforced by Ashbi Hub for every agent">
+                <AgentSafetyRules />
+              </Section>
+            </div>
+
+            {/* AI approvals and receipts (#413 slice 2): admins see the workspace, team members their own */}
+            {embeddedAiEnabled && (isAdmin || user?.role === 'TEAM') && (
+              <Section title="Action approvals" description="Review proposed actions and their execution receipts">
+                <Suspense fallback={null}><AiApprovals /></Suspense>
+              </Section>
+            )}
+
+            {/* AI Model Picker — admin only */}
+            {embeddedAiEnabled && isAdmin && <AIModelSection />}
+
+            {/* Organization BYOK AI provider, budget and kill switch (#413) — admin only */}
+            {embeddedAiEnabled && isAdmin && (
+              <Section title="AI provider (bring your own key)" description="Use your own AI provider account, cap monthly spend, or turn AI off for this workspace">
+                <Suspense fallback={null}><AiByokSettings /></Suspense>
+              </Section>
+            )}
+          </TabPanel>
+
+          {isAdmin && (
+            <TabPanel value="team" className="space-y-5">
+              <Section title="People" description="Who works in this workspace and how their time is reviewed">
+                <AdminLinks links={[
+                  { label: 'Team', href: '/team', desc: 'Invite people, set roles and capacity' },
+                  { label: 'Timesheets', href: '/timesheets', desc: 'Review and approve logged time' },
+                ]} />
+              </Section>
+            </TabPanel>
+          )}
+
+          <TabPanel value="security" className="space-y-5">
       {/* Password */}
       <Section title="Password" description="Change your login password">
         <form onSubmit={handlePasswordSave} className="space-y-4">
@@ -1023,82 +1102,6 @@ export default function Settings() {
           </div>
         </form>
       </Section>
-
-            <Section title="Getting started" description="Resume or restart your role-specific first-success checklist">
-              <OnboardingPreferences />
-            </Section>
-          </TabPanel>
-
-          {isAdmin && (
-            <TabPanel value="business" className="space-y-5">
-              <Section title="Studio" description="Your brand, workspace tools and stored logins">
-                <AdminLinks links={[
-                  { label: 'Brand Settings', href: '/admin/brand', desc: 'Logo, colors, company info' },
-                  ...(embeddedAiEnabled ? [{ label: 'AI Context', href: '/admin/settings/ai-context', desc: 'Custom AI instructions' }] : []),
-                  { label: 'Command Center', href: '/admin/command-center', desc: 'VPS & GitHub integrations' },
-                  { label: 'Automations', href: '/automations', desc: 'Workflow automation log' },
-                  { label: 'Credentials', href: '/credentials', desc: 'Stored API keys & passwords' },
-                  { label: 'Approvals', href: '/approvals', desc: 'Pending automation and content approvals' },
-                ]} />
-              </Section>
-            </TabPanel>
-          )}
-
-          {isAdmin && (
-            <TabPanel value="payments" className="space-y-5">
-              <IntegrationsSection />
-              <Section title="Billing tools" description="Recurring plans, rates and overdue follow-ups">
-                <AdminLinks links={[
-                  { label: 'Retainers', href: '/retainers', desc: 'Recurring client retainers' },
-                  { label: 'Rate cards', href: '/rate-cards', desc: 'Billable rates for estimates and time' },
-                  { label: 'Invoice Chaser', href: '/invoice-chaser', desc: 'Overdue invoice follow-ups' },
-                  { label: 'Reports (planned)', desc: 'P&L and team utilization will appear after the finance workflow is approved.' },
-                ]} />
-              </Section>
-            </TabPanel>
-          )}
-
-          <TabPanel value="agents" className="space-y-5">
-            <ApiKeysSection />
-            <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
-              <Section title="What agents can do" description="Access is set per key, by scope, when you create it">
-                <AgentAccessTable />
-              </Section>
-              <Section title="Safety rules" description="Enforced by Ashbi Hub for every agent">
-                <AgentSafetyRules />
-              </Section>
-            </div>
-
-            {/* AI approvals and receipts (#413 slice 2): admins see the workspace, team members their own */}
-            {embeddedAiEnabled && (isAdmin || user?.role === 'TEAM') && (
-              <Section title="Action approvals" description="Review proposed actions and their execution receipts">
-                <Suspense fallback={null}><AiApprovals /></Suspense>
-              </Section>
-            )}
-
-            {/* AI Model Picker — admin only */}
-            {embeddedAiEnabled && isAdmin && <AIModelSection />}
-
-            {/* Organization BYOK AI provider, budget and kill switch (#413) — admin only */}
-            {embeddedAiEnabled && isAdmin && (
-              <Section title="AI provider (bring your own key)" description="Use your own AI provider account, cap monthly spend, or turn AI off for this workspace">
-                <Suspense fallback={null}><AiByokSettings /></Suspense>
-              </Section>
-            )}
-          </TabPanel>
-
-          {isAdmin && (
-            <TabPanel value="team" className="space-y-5">
-              <Section title="People" description="Who works in this workspace and how their time is reviewed">
-                <AdminLinks links={[
-                  { label: 'Team', href: '/team', desc: 'Invite people, set roles and capacity' },
-                  { label: 'Timesheets', href: '/timesheets', desc: 'Review and approve logged time' },
-                ]} />
-              </Section>
-            </TabPanel>
-          )}
-
-          <TabPanel value="security" className="space-y-5">
             {isStaff && (
               <Section title="Two-factor authentication" description="Protect your account with an authenticator app">
                 <TwoFactorSettings />
