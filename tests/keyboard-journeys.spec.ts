@@ -195,7 +195,7 @@ portalChooserTest('client contact navigates portal tabs, uploads, chats and canc
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
 
     // Tabs.
-    const documentsTab = page.getByRole('tab', { name: 'Documents' });
+    const documentsTab = page.getByRole('tab', { name: 'Files' });
     await tabTo(page, documentsTab);
     await expectVisibleFocus(documentsTab);
     await page.keyboard.press('Enter');
@@ -248,7 +248,7 @@ portalChooserTest('client contact navigates portal tabs, uploads, chats and canc
     expect(portal.deleted).toEqual(['document-a']);
 
     // Chat.
-    const chatTab = page.getByRole('tab', { name: 'Chat' });
+    const chatTab = page.getByRole('tab', { name: 'Messages' });
     await tabTo(page, chatTab, { backwards: true });
     await expectVisibleFocus(chatTab);
     await page.keyboard.press('Enter');

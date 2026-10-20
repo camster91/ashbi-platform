@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { preferredScrollBehavior } from '../lib/motion';
 import './client-portal/portal.css';
 import { API, portalFetch, downloadPortalInvoice, downloadPortalContract, fmt, fmtDate, invoiceStatusBadge, StatusBadge, projectStatusLabel, projectStatusColor, Icons, useProjectChat, PortalChatComposer, PortalMessageAttachments, canSendPortalMessage, PortalProgress, usePortalLightTheme, portalFieldClass, portalFieldStyles, busyLabelButtonClass, pageTitleClass, sectionTitleClass, labelClass } from './client-portal/shared';
-import { Alert, Button, Card, CardDescription, CardTitle, Input, LoadingState, StatCard } from '../components/ui';
+import { Alert, Badge, Button, Card, CardDescription, CardTitle, Input, LoadingState, StatCard } from '../components/ui';
 import { buttonStyles } from '../components/ui/Button';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../components/ui/SlowNotice';
 import { cn } from '../lib/utils';
@@ -146,8 +146,257 @@ export function LoginScreen({ onSignedIn = () => window.location.assign('/client
 }
 
 // ── Overview Tab ──────────────────────────────────────────────────────────────
-function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSelectedProject }) {
-  const activeProjects = projects.filter(p => !['LAUNCHED', 'CANCELLED', 'ON_HOLD'].includes(p.status));
+// The delivery stages a client project moves through, in order. Projects in
+// another status (Active, On hold, …) show their status badge instead.
+const PROJECT_STAGES = ['STARTING_UP', 'DESIGN_DEV', 'ADDING_CONTENT', 'FINALIZING', 'LAUNCHED'];
+
+// Pay opens the public invoice page, which starts a fresh Stripe Checkout
+// session; void and draft invoices are never payable.
+function canPayInvoice(inv) {
+  const isPaid = inv.status?.toUpperCase() === 'PAID';
+  return !isPaid && UNPAID_INVOICE_STATUSES.includes(inv.status?.toUpperCase()) && Boolean(inv.payUrl);
+}
+
+function firstNameOf(name) {
+  return (typeof name === 'string' ? name.trim().split(/\s+/)[0] : '') || '';
+}
+
+function initialsOf(name) {
+  const parts = (typeof name === 'string' ? name.trim() : '').split(/\s+/).filter(Boolean);
+  return parts.slice(0, 2).map(part => part[0].toUpperCase()).join('') || '?';
+}
+
+function todayLabel(now = new Date()) {
+  return now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+// GET a client-portal list for the Overview. Every list is the client's own,
+// from the session-scoped portal API. Each section loads on its own, so one
+// failed request never blanks the page.
+async function portalList(path, token, pick = data => data) {
+  const response = await portalFetch(path, token);
+  if (!response.ok) throw new Error(`Request failed (${response.status})`);
+  const data = pick(await response.json());
+  return Array.isArray(data) ? data : [];
+}
+
+const LOADING_LIST = { status: 'loading', items: [] };
+
+const INACTIVE_PROJECT_STATUSES = new Set(['LAUNCHED', 'COMPLETED', 'CANCELLED', 'ON_HOLD', 'PAUSED', 'DRAFT']);
+
+// Settles a list request into section state; the returned cleanup ignores a
+// response that arrives after the section unmounted or its inputs changed.
+function settleList(promise, setState) {
+  let cancelled = false;
+  promise.then(
+    items => { if (!cancelled) setState({ status: 'ready', items }); },
+    () => { if (!cancelled) setState({ status: 'error', items: [] }); },
+  );
+  return () => { cancelled = true; };
+}
+
+function ProjectStages({ status, needsReview }) {
+  const current = PROJECT_STAGES.indexOf(status);
+  if (current < 0) return null;
+  return (
+    <ol aria-label="Project stages" className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+      {PROJECT_STAGES.map((stage, index) => {
+        const state = index < current ? 'done' : index === current ? 'current' : 'next';
+        const note = state === 'done' ? 'Done' : state === 'next' ? 'Up next' : needsReview ? 'Needs your OK' : 'In progress';
+        return (
+          <li key={stage} aria-current={state === 'current' ? 'step' : undefined} className="flex min-w-0 flex-col gap-1.5">
+            <span aria-hidden="true" className={cn('h-1.5 rounded-full', state === 'next' ? 'bg-muted' : 'bg-primary')} />
+            <span className="text-sm font-semibold text-foreground">{projectStatusLabel(stage)}</span>
+            <span className={cn('text-xs', state === 'current' && needsReview ? 'font-semibold text-warning' : 'text-muted-foreground')}>{note}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function WaitingOnYou({ reviews, reviewsStatus = 'ready', contracts, invoices, onOpenReview, setActiveTab }) {
+  // Reviews still open on their newest version, contracts to sign, then what
+  // is still owed (overdue first).
+  const openReviews = reviews.filter(review => review.status === 'open' && !review.nextSessionId);
+  const toSign = contracts.filter(contract => contract.canReview && contract.signToken);
+  const owed = invoices
+    .filter(inv => UNPAID_INVOICE_STATUSES.includes(inv.status?.toUpperCase()))
+    .sort((a, b) => Number(b.status?.toUpperCase() === 'OVERDUE') - Number(a.status?.toUpperCase() === 'OVERDUE'));
+
+  const items = [
+    ...openReviews.map(review => ({
+      key: `review-${review.id}`,
+      title: `Review ${review.title}`,
+      detail: [review.projectName, `${review.openAnnotationCount || 0} open comment${review.openAnnotationCount === 1 ? '' : 's'}`, 'comment right on the file'].filter(Boolean).join(' · '),
+      action: (
+        <Button type="button" onClick={() => onOpenReview(review.id)}>
+          Review{' '}<span className="sr-only">{review.title}</span>
+        </Button>
+      ),
+    })),
+    ...toSign.map(contract => ({
+      key: `contract-${contract.id}`,
+      title: `Sign ${contract.title}`,
+      detail: 'Awaiting your signature',
+      action: (
+        <a className={buttonStyles({ variant: 'outline' })} href={`/portal/contract/${contract.signToken}`}>
+          Review and sign{' '}<span className="sr-only">{contract.title}</span>
+        </a>
+      ),
+    })),
+    ...owed.map(inv => {
+      const overdue = inv.status?.toUpperCase() === 'OVERDUE';
+      return {
+        key: `invoice-${inv.id}`,
+        title: `Pay invoice ${inv.invoiceNumber}`,
+        detail: (
+          <>
+            <span className="figure">{fmt(invoiceBalanceDue(inv), inv.currency)}</span>
+            {inv.dueDate && <> · {overdue ? 'overdue, was due' : 'due'} {formatInvoiceDate(inv.dueDate)}</>}
+            {isPartlyPaid(inv) && <> · balance after {fmt(inv.amountPaid, inv.currency)} paid</>}
+          </>
+        ),
+        action: canPayInvoice(inv) ? (
+          <a href={inv.payUrl} className={buttonStyles({ variant: 'outline' })}>
+            View and pay{' '}<span className="sr-only">invoice {inv.invoiceNumber}</span>
+          </a>
+        ) : (
+          <Button type="button" variant="outline" onClick={() => setActiveTab('invoices')}>
+            View invoice{' '}<span className="sr-only">{inv.invoiceNumber}</span>
+          </Button>
+        ),
+      };
+    }),
+  ];
+
+  return (
+    <Card as="section" aria-labelledby="portal-waiting-heading" padding="lg" className="border-2 border-foreground">
+      <div className="flex items-center gap-2">
+        <h2 id="portal-waiting-heading" className="text-lg font-semibold tracking-tight text-foreground">Waiting on you</h2>
+        {items.length > 0 && (
+          <Badge variant="subtle" color="accent" className="figure">
+            {items.length}<span className="sr-only"> {items.length === 1 ? 'item' : 'items'}</span>
+          </Badge>
+        )}
+      </div>
+      {/* Reviews that are still loading or failed to load are not proof that
+          nothing needs the client: say so instead of "Nothing needs you". */}
+      {reviewsStatus === 'loading' && <p role="status" className="mt-2 text-sm text-muted-foreground">Checking for reviews…</p>}
+      {reviewsStatus === 'error' && (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Reviews could not be loaded.{' '}
+          <Button type="button" variant="link" onClick={() => setActiveTab('reviews')}>Open Reviews</Button>
+        </p>
+      )}
+      {items.length === 0 ? (
+        reviewsStatus === 'ready' && <p className="mt-2 text-sm text-muted-foreground">Nothing needs you right now. Anything to approve, sign or pay shows up here.</p>
+      ) : (
+        <ul className="mt-1 divide-y divide-border/40">
+          {items.map(item => (
+            <li key={item.key} className="flex flex-wrap items-center gap-3 py-4 last:pb-0">
+              <div className="min-w-0 flex-[1_1_16rem]">
+                <p className="break-words font-semibold text-foreground">{item.title}</p>
+                <p className="text-sm text-muted-foreground">{item.detail}</p>
+              </div>
+              {item.action}
+            </li>
+          ))}
+        </ul>
+      )}
+      {invoices.length > 0 && (
+        <Button type="button" aria-label="View all invoices" variant="link" onClick={() => setActiveTab('invoices')} className="mt-2">
+          View all invoices &rarr;
+        </Button>
+      )}
+    </Card>
+  );
+}
+
+function RetainerCard({ retainer }) {
+  const over = retainer.hoursRemaining < 0;
+  const month = new Date().toLocaleDateString(undefined, { month: 'long' });
+  return (
+    <section aria-labelledby="portal-retainer-heading" className="rounded-2xl bg-primary p-5 text-primary-foreground">
+      <p className="text-eyebrow text-primary-foreground/80">Retainer · {month}</p>
+      <h2 id="portal-retainer-heading" className="mt-1.5 text-lg font-semibold tracking-tight">
+        {over
+          ? <><span className="font-display italic font-normal text-accent">{Math.abs(retainer.hoursRemaining)}h</span> over this month&rsquo;s hours</>
+          : <><span className="font-display italic font-normal text-accent">{retainer.hoursRemaining}h</span> left this month</>}
+      </h2>
+      <ul className="mt-3 space-y-1 text-sm text-primary-foreground/80">
+        <li><span className="figure">{retainer.hoursUsed}h</span> of <span className="figure">{retainer.hoursPerMonth}h</span> used</li>
+        <li><span className="figure">{retainer.percentUsed}%</span> of your monthly hours</li>
+      </ul>
+      <PortalProgress value={retainer.percentUsed} tone="bg-accent" className="mt-3 bg-primary-foreground/25" />
+    </section>
+  );
+}
+
+function RecentFiles({ files, setActiveTab }) {
+  return (
+    <Card as="section" aria-labelledby="portal-files-heading" padding="lg">
+      <h2 id="portal-files-heading" className="text-lg font-semibold tracking-tight text-foreground">Recent files</h2>
+      {files.status === 'loading' && <p role="status" className="mt-2 text-sm text-muted-foreground">Loading files…</p>}
+      {files.status === 'error' && <p className="mt-2 text-sm text-muted-foreground">Recent files could not be loaded. Open Files to see them all.</p>}
+      {files.status === 'ready' && files.items.length === 0 && <p className="mt-2 text-sm text-muted-foreground">No files shared yet.</p>}
+      {files.items.length > 0 && (
+        <ul className="mt-2">
+          {files.items.map(doc => (
+            <li key={doc.id} className="flex items-baseline justify-between gap-3 border-t border-border/40 py-2.5 first:border-t-0">
+              <span className="min-w-0 truncate text-sm text-foreground" title={doc.originalName}>{doc.originalName}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{fmtDate(doc.createdAt)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Button type="button" variant="link" onClick={() => setActiveTab('documents')}>
+        All files &rarr;
+      </Button>
+    </Card>
+  );
+}
+
+function RecentMessages({ project, messages, teamName, onOpenChat }) {
+  return (
+    <Card as="section" aria-labelledby="portal-messages-heading" padding="lg">
+      <h2 id="portal-messages-heading" className="text-lg font-semibold tracking-tight text-foreground">
+        Messages with {teamName || 'your team'}
+      </h2>
+      <p className="text-sm text-muted-foreground">{project.name}</p>
+      {messages.status === 'loading' && <p role="status" className="mt-3 text-sm text-muted-foreground">Loading messages…</p>}
+      {messages.status === 'error' && <p className="mt-3 text-sm text-muted-foreground">Recent messages could not be loaded. Open Messages to see the conversation.</p>}
+      {messages.status === 'ready' && messages.items.length === 0 && <p className="mt-3 text-sm text-muted-foreground">No messages yet. Ask a question or share feedback any time.</p>}
+      {messages.items.length > 0 && (
+        <ul className="mt-3 space-y-3">
+          {messages.items.map(msg => (
+            <li key={msg.id} className="flex gap-2.5">
+              <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-bold text-secondary-foreground">
+                {initialsOf(msg.author?.name)}
+              </span>
+              <div className="min-w-0 max-w-[38rem] rounded-lg bg-muted px-3.5 py-2.5">
+                <p className="whitespace-pre-wrap break-words text-sm text-foreground">
+                  {msg.content || (msg.attachments?.length ? 'Shared a file' : '')}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {msg.author?.name || 'Team'} · {fmtDate(msg.createdAt)}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Button type="button" variant="outline" className="mt-4" onClick={() => onOpenChat(project.id)}>
+        Write a message
+      </Button>
+    </Card>
+  );
+}
+
+function OverviewTab({ token, contactName, teamName, projects, invoices, contracts, retainer, unread, setActiveTab, setSelectedProject, onOpenReview, onOpenChat }) {
+  // Ongoing work only: finished, cancelled, paused, on-hold and draft
+  // projects are never the "current project" or counted as active.
+  const activeProjects = projects.filter(p => !INACTIVE_PROJECT_STATUSES.has(p.status));
   const overdueInvoices = invoices.filter(i => i.status?.toUpperCase() === 'OVERDUE');
   // Outstanding is what is still owed (each open invoice's balance after
   // payments), summed per currency; different currencies are never added
@@ -165,12 +414,39 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
     ? fmt(0)
     : unpaidEntries.map(([currency, amount]) => fmt(amount, currency)).join(' · ');
 
-  const retainerTone = retainer
-    ? retainer.percentUsed >= 100 ? 'bg-destructive' : retainer.percentUsed >= 80 ? 'bg-warning' : retainer.percentUsed >= 60 ? 'bg-accent' : 'bg-success'
-    : '';
+  // The project in focus is the most recently updated active one (the API
+  // sorts by update); recent files come from the three latest projects.
+  const featured = activeProjects[0] || null;
+  const otherProjects = activeProjects.slice(1, 4);
+
+  const [reviews, setReviews] = useState(LOADING_LIST);
+  const [files, setFiles] = useState(LOADING_LIST);
+  const [messages, setMessages] = useState(LOADING_LIST);
+  const fileKey = projects.slice(0, 3).map(p => p.id).join(',');
+  const featuredId = featured?.id || '';
+  useEffect(() => settleList(portalList('/api/client-portal/reviews', token, data => data?.sessions), setReviews), [token]);
+  useEffect(() => settleList(
+    Promise.all(fileKey.split(',').filter(Boolean).map(id => portalList(`/api/client-portal/projects/${id}/documents`, token)))
+      .then(lists => lists.flat().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3)),
+    setFiles,
+  ), [fileKey, token]);
+  useEffect(() => settleList(
+    featuredId ? portalList(`/api/client-portal/projects/${featuredId}/messages?limit=2`, token) : Promise.resolve([]),
+    setMessages,
+  ), [featuredId, token]);
+
+  const featuredNeedsReview = Boolean(featured) && reviews.items.some(review => review.projectId === featured.id && review.status === 'open' && !review.nextSessionId);
+  const firstName = firstNameOf(contactName);
 
   return (
     <div className="space-y-6">
+      <div>
+        <p className="text-eyebrow text-muted-foreground">{todayLabel()}</p>
+        <h1 className="mt-1.5 font-heading text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+          Hi <span className="font-display italic font-normal text-primary">{firstName || 'there'}</span>, here&rsquo;s where things stand
+        </h1>
+      </div>
+
       {/* Urgent alerts: a static banner that is part of the page on load, so
           it is not a live region (live={false}). */}
       {overdueInvoices.length > 0 && (
@@ -188,99 +464,101 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
         </Alert>
       )}
 
-      {/* Stats row */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {/* The tiles are not interactive, so they drop StatCard's hover lift. */}
-        <StatCard label="Active Projects" value={activeProjects.length} className={staticStatClass} />
-        <StatCard label="Outstanding" value={unpaidLabel} variant={unpaidTotal > 0 ? 'warning' : 'success'} className={staticStatClass} />
-        <StatCard label="Upcoming Deadlines" value={unread?.upcomingDeadlines ?? 0} variant={(unread?.upcomingDeadlines || 0) > 0 ? 'warning' : 'default'} className={staticStatClass} />
-      </div>
+      <WaitingOnYou
+        reviews={reviews.items} reviewsStatus={reviews.status} contracts={contracts} invoices={invoices}
+        onOpenReview={onOpenReview} setActiveTab={setActiveTab}
+      />
 
-      {/* Retainer (if exists) */}
-      {retainer && (
-        <Card padding="lg">
-          <CardTitle className="mb-2 text-base font-semibold">Monthly Retainer</CardTitle>
-          <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <div>
-              <p className="mb-1.5 text-xs uppercase tracking-wider text-muted-foreground">Hours Included</p>
-              <p className="font-semibold text-foreground">{retainer.hoursPerMonth}h</p>
-            </div>
-            <div>
-              <p className="mb-1.5 text-xs uppercase tracking-wider text-muted-foreground">Hours Used</p>
-              <p className={cn('font-semibold', retainer.percentUsed >= 90 ? 'text-destructive' : retainer.percentUsed >= 70 ? 'text-warning' : 'text-success')}>
-                {retainer.hoursUsed}h
-              </p>
-            </div>
-            <div>
-              <p className="mb-1.5 text-xs uppercase tracking-wider text-muted-foreground">Remaining</p>
-              <p className="font-semibold text-foreground">{retainer.hoursRemaining >= 0 ? `${retainer.hoursRemaining}h` : `${Math.abs(retainer.hoursRemaining)}h over`}</p>
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="mb-1 flex justify-between text-xs text-muted-foreground">
-              <span>Monthly usage</span>
-              <span className="font-semibold">{retainer.percentUsed}%</span>
-            </div>
-            <PortalProgress value={retainer.percentUsed} tone={retainerTone} />
-          </div>
-        </Card>
-      )}
-
-      {/* Active projects preview */}
-      {activeProjects.length > 0 && (
-        <div>
-          <h3 className={sectionTitleClass}>Active Projects</h3>
-          <div className="space-y-3">
-            {activeProjects.slice(0, 4).map(p => (
-              <Card as="button" type="button" isInteractive key={p.id} onClick={() => { setSelectedProject(p.id); setActiveTab('projects'); }} className={interactiveCardClass}>
-                <span className="sr-only">Open project</span>{' '}
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="font-semibold text-foreground">{p.name}</span>
-                  <StatusBadge color={projectStatusColor(p.status)}>{projectStatusLabel(p.status)}</StatusBadge>
-                </div>
-                <div className="mb-1.5 flex justify-between text-xs text-muted-foreground">
-                  <span>Progress</span>
-                  <span className="font-semibold text-foreground">{p.progressPct}%</span>
-                </div>
-                <PortalProgress value={p.progressPct} tone={p.progressPct >= 80 ? 'bg-success' : 'bg-primary'} className="h-1.5" />
-              </Card>
-            ))}
-            {activeProjects.length > 4 && (
-              <Button type="button" aria-label="View all projects" variant="link" onClick={() => setActiveTab('projects')}>
-                View all projects &rarr;
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Recent invoices */}
-      {invoices.length > 0 && (
-        <div>
-          <h3 className={sectionTitleClass}>Recent Invoices</h3>
-          <div className="space-y-2">
-            {invoices.slice(0, 3).map(inv => (
-              <Card key={inv.id} padding="none" className="flex items-center justify-between gap-4 px-5 py-3.5">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-sm font-semibold text-primary">{inv.invoiceNumber}</span>
-                    {invoiceStatusBadge(inv)}
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="flex min-w-0 flex-[2_1_30rem] flex-col gap-4">
+          <Card as="section" aria-labelledby="portal-project-heading" padding="lg">
+            {featured ? (
+              <>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-eyebrow text-muted-foreground">Current project</p>
+                    <h2 id="portal-project-heading" className="mt-1 break-words text-lg font-semibold tracking-tight text-foreground">{featured.name}</h2>
                   </div>
-                  {inv.dueDate && inv.status !== 'PAID' && (
-                    <p className="mt-1 text-xs text-muted-foreground">Due {formatInvoiceDate(inv.dueDate)}</p>
+                  {featured.endDate && (
+                    <span className="text-sm text-muted-foreground">Launch planned for <strong className="font-semibold text-foreground">{fmtDate(featured.endDate)}</strong></span>
                   )}
                 </div>
-                <InvoiceAmount invoice={inv} className="text-lg" />
-              </Card>
-            ))}
-            {invoices.length > 3 && (
-              <Button type="button" aria-label="View all invoices" variant="link" onClick={() => setActiveTab('invoices')}>
-                View all invoices &rarr;
-              </Button>
+                {PROJECT_STAGES.includes(featured.status) ? (
+                  <ProjectStages status={featured.status} needsReview={featuredNeedsReview} />
+                ) : (
+                  <div className="mt-3"><StatusBadge color={projectStatusColor(featured.status)}>{projectStatusLabel(featured.status)}</StatusBadge></div>
+                )}
+                {featured.totalTasks > 0 && (
+                  <div className="mt-5">
+                    <div className="mb-1.5 flex justify-between text-xs text-muted-foreground">
+                      <span>{featured.completedTasks} of {featured.totalTasks} tasks done</span>
+                      <span className="figure font-semibold text-foreground">{featured.progressPct}%</span>
+                    </div>
+                    <PortalProgress value={featured.progressPct} tone={featured.progressPct >= 80 ? 'bg-success' : 'bg-primary'} className="h-1.5" />
+                  </div>
+                )}
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/40 bg-background px-4 py-3">
+                  <p className="text-sm text-muted-foreground">Updated {fmtDate(featured.updatedAt)}</p>
+                  <Button type="button" variant="outline" size="sm" onClick={() => { setSelectedProject(featured.id); setActiveTab('projects'); }}>
+                    Open project{' '}<span className="sr-only">{featured.name}</span>
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 id="portal-project-heading" className="text-lg font-semibold tracking-tight text-foreground">Your projects</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {projects.length > 0 ? 'No project is in progress right now.' : 'Your projects will show here once they start.'}
+                </p>
+                {projects.length > 0 && (
+                  <Button type="button" variant="link" onClick={() => setActiveTab('projects')}>All projects &rarr;</Button>
+                )}
+              </>
             )}
-          </div>
+          </Card>
+
+          {otherProjects.length > 0 && (
+            <div>
+              <h2 className={sectionTitleClass}>Also in progress</h2>
+              <div className="space-y-3">
+                {otherProjects.map(p => (
+                  <Card as="button" type="button" isInteractive key={p.id} onClick={() => { setSelectedProject(p.id); setActiveTab('projects'); }} className={interactiveCardClass}>
+                    <span className="sr-only">Open project</span>{' '}
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="font-semibold text-foreground">{p.name}</span>
+                      <StatusBadge color={projectStatusColor(p.status)}>{projectStatusLabel(p.status)}</StatusBadge>
+                    </div>
+                    <div className="mb-1.5 flex justify-between text-xs text-muted-foreground">
+                      <span>Progress</span>
+                      <span className="font-semibold text-foreground">{p.progressPct}%</span>
+                    </div>
+                    <PortalProgress value={p.progressPct} tone={p.progressPct >= 80 ? 'bg-success' : 'bg-primary'} className="h-1.5" />
+                  </Card>
+                ))}
+                {activeProjects.length > 4 && (
+                  <Button type="button" aria-label="View all projects" variant="link" onClick={() => setActiveTab('projects')}>
+                    View all projects &rarr;
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+
+        <div className="flex min-w-0 flex-[1_1_18rem] flex-col gap-4">
+          {retainer && <RetainerCard retainer={retainer} />}
+          <RecentFiles files={files} setActiveTab={setActiveTab} />
+        </div>
+      </div>
+
+      {/* At a glance. The tiles are not interactive, so they drop StatCard's hover lift. */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Active projects" value={activeProjects.length} className={staticStatClass} />
+        <StatCard label="Outstanding" value={unpaidLabel} variant={unpaidTotal > 0 ? 'warning' : 'success'} className={staticStatClass} />
+        <StatCard label="Upcoming deadlines" value={unread?.upcomingDeadlines ?? 0} variant={(unread?.upcomingDeadlines || 0) > 0 ? 'warning' : 'default'} className={staticStatClass} />
+      </div>
+
+      {featured && <RecentMessages project={featured} messages={messages} teamName={teamName} onOpenChat={onOpenChat} />}
     </div>
   );
 }
@@ -289,7 +567,7 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
 function ProjectsTab({ projects, setSelectedProject }) {
   return (
     <div className="space-y-4">
-      <h2 className={pageTitleClass}>Your Projects</h2>
+      <h2 className={pageTitleClass}>Your projects</h2>
       {projects.length === 0 ? (
         <Card padding="none" className="p-12 text-center">
           <p className="text-muted-foreground">No projects found.</p>
@@ -372,9 +650,7 @@ function InvoicesTab({ invoices, token }) {
         <div className="space-y-3">
           {invoices.map(inv => {
             const isPaid = inv.status?.toUpperCase() === 'PAID';
-            // Pay opens the public invoice page, which starts a fresh Stripe
-            // Checkout session; void and draft invoices are never payable.
-            const canPay = !isPaid && UNPAID_INVOICE_STATUSES.includes(inv.status?.toUpperCase()) && Boolean(inv.payUrl);
+            const canPay = canPayInvoice(inv);
             return (
               <Card key={inv.id} padding="none" className="p-5">
                 <div className="flex flex-col gap-3">
@@ -478,9 +754,9 @@ function ContractsTab({ contracts, token }) {
   );
 }
 
-// ── Chat Tab (Global) ─────────────────────────────────────────────────────────
-function ChatTab({ projects, token }) {
-  const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.id || '');
+// ── Messages Tab (Global) ─────────────────────────────────────────────────────────
+function ChatTab({ projects, token, initialProjectId }) {
+  const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId || projects[0]?.id || '');
   const { messages, connected, sendMessage, sendError, sending, messagesError, loadingMessages, reloadMessages, attachments } = useProjectChat(selectedProjectId, token);
   const [input, setInput] = useState('');
   const chatEndRef = useRef(null);
@@ -504,7 +780,7 @@ function ChatTab({ projects, token }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className={cn(pageTitleClass, 'mb-0')}>Chat</h2>
+        <h2 className={cn(pageTitleClass, 'mb-0')}>Messages</h2>
         {projects.length > 1 && (
           <select aria-label="Project for chat" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)} className={portalFieldStyles('max-w-[240px]')}>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -555,6 +831,9 @@ function PortalDashboard({ token }) {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedProject, setSelectedProject] = useState(null);
+  // Set when the Overview opens a review or a project's messages directly.
+  const [reviewToOpen, setReviewToOpen] = useState(null);
+  const [chatProjectId, setChatProjectId] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -616,68 +895,81 @@ function PortalDashboard({ token }) {
   const clientName = me?.client?.name || 'Client';
   const contactName = me?.contact?.name || '';
 
+  // Mockup order: Overview, Projects, Files, Invoices, Messages, with Reviews
+  // and Contracts beside the work they belong to. Counts stay in the names.
   const tabs = [
-    { id: 'overview', label: 'Overview', icon: Icons.overview },
-    { id: 'projects', label: `Projects (${projects.length})`, icon: Icons.projects },
-    { id: 'invoices', label: `Invoices (${invoices.length})`, icon: Icons.invoices },
-    { id: 'contracts', label: `Contracts (${contracts.length})`, icon: Icons.documents },
-    { id: 'documents', label: 'Documents', icon: Icons.documents },
-    { id: 'reviews', label: 'Reviews', icon: Icons.overview },
-    { id: 'chat', label: 'Chat', icon: Icons.chat },
+    { id: 'overview', label: 'Overview' },
+    { id: 'projects', label: `Projects (${projects.length})` },
+    { id: 'reviews', label: 'Reviews' },
+    { id: 'documents', label: 'Files' },
+    { id: 'invoices', label: `Invoices (${invoices.length})` },
+    { id: 'contracts', label: `Contracts (${contracts.length})` },
+    { id: 'chat', label: 'Messages' },
   ];
+
+  function openTab(id) {
+    setActiveTab(id);
+    if (id !== 'projects') setSelectedProject(null);
+    setReviewToOpen(null);
+    setChatProjectId(null);
+  }
 
   // The agency's name from GET /api/client-portal/me (its brand settings).
   const brandName = typeof me?.brand?.companyName === 'string' ? me.brand.companyName.trim() : '';
 
-  // If a project is selected, show project detail
-  const showProjectDetail = activeTab === 'projects' && selectedProject;
-
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Header */}
-      <div className="sticky top-0 z-20">
-      <header className="cp-header flex flex-wrap items-center justify-between gap-3 bg-primary px-4 py-4 sm:px-6">
-        <div className="flex min-w-0 flex-1 basis-full items-center gap-3 sm:basis-auto">
-          <div className="flex min-w-0 items-center gap-2">
+      {/* Ink header band: the brand row (.cp-header) and, below it, the
+          section tabs. Sticky from the sm breakpoint; on phones the wrapped
+          tabs would cover too much of the screen. */}
+      <div className="z-20 bg-foreground text-background sm:sticky sm:top-0">
+        <header className="cp-header mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-3 px-4 pb-2 pt-3 sm:px-6">
+          <div className="flex min-w-0 flex-1 basis-full flex-wrap items-center gap-x-2 gap-y-1 sm:basis-auto">
             {Icons.logo}
-            {brandName && <span className="min-w-0 break-words text-lg font-bold text-primary-foreground">{brandName}</span>}
+            {brandName && <span className="min-w-0 break-words text-lg font-bold tracking-tight">{brandName}</span>}
+            {brandName && <span className="text-sm text-secondary">for</span>}
+            <span className="min-w-0 break-words text-sm text-secondary">{clientName}</span>
           </div>
-          <span className="text-xs text-primary-foreground/30">|</span>
-          <span className="min-w-0 break-words text-sm text-primary-foreground/70">{clientName}</span>
-        </div>
-        <div className="flex max-w-full items-center gap-3">
-          {contactName && <span className="min-w-0 break-words text-sm text-primary-foreground/80">Hi, {contactName}</span>}
-          <Button type="button" onClick={handleLogout} variant="ghost" size="sm" leftIcon={Icons.logout} className="shrink-0 border border-primary-foreground/20 text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground">
-            Logout{' '}<span className="sr-only">of client portal</span>
-          </Button>
-        </div>
-      </header>
+          <div className="flex max-w-full items-center gap-3">
+            {contactName && (
+              <span role="img" aria-label={`Signed in as ${contactName}`} title={contactName} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-bold text-secondary-foreground">
+                <span aria-hidden="true">{initialsOf(contactName)}</span>
+              </span>
+            )}
+            <Button type="button" onClick={handleLogout} variant="ghost" size="sm" leftIcon={Icons.logout} className="shrink-0 border border-background/40 text-background hover:bg-background/10 hover:text-background">
+              Logout{' '}<span className="sr-only">of client portal</span>
+            </Button>
+          </div>
+        </header>
 
-      {/* Tab navigation */}
-      <div className="border-b-2 border-border bg-card px-6">
-        <div role="tablist" aria-label="Portal sections" className="mx-auto flex max-w-[960px] gap-1 overflow-x-auto">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              className="cp-tab"
-              onClick={() => { setActiveTab(tab.id); if (tab.id !== 'projects') setSelectedProject(null); }}
-            >
-              {tab.icon} {tab.label}
-            </button>
-          ))}
+        {/* Tab navigation */}
+        <div data-portal-nav="" className="border-t border-background/15">
+          <div role="tablist" aria-label="Portal sections" className="mx-auto flex max-w-[1120px] flex-wrap gap-1 px-4 py-2 sm:px-6">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                className="cp-tab"
+                onClick={() => openTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
       </div>
 
       {/* Content */}
-      <main className="mx-auto max-w-[960px] px-6 py-8">
+      <main className="mx-auto max-w-[1120px] px-4 py-8 sm:px-6">
         {activeTab === 'overview' && (
           <OverviewTab
-            projects={projects} invoices={invoices} retainer={retainer}
-            unread={unread} setActiveTab={setActiveTab} setSelectedProject={setSelectedProject}
+            token={token} contactName={contactName} teamName={brandName}
+            projects={projects} invoices={invoices} contracts={contracts} retainer={retainer}
+            unread={unread} setActiveTab={openTab} setSelectedProject={setSelectedProject}
+            onOpenReview={(id) => { openTab('reviews'); setReviewToOpen(id); }}
+            onOpenChat={(id) => { openTab('chat'); setChatProjectId(id); }}
           />
         )}
         {activeTab === 'projects' && !selectedProject && (
@@ -700,10 +992,10 @@ function PortalDashboard({ token }) {
         )}
         {activeTab === 'reviews' && (
           <Suspense fallback={<LoadingState label="Loading reviews..." />}>
-            <ReviewsTab token={token} />
+            <ReviewsTab token={token} initialOpenId={reviewToOpen} />
           </Suspense>
         )}
-        {activeTab === 'chat' && <ChatTab projects={projects} token={token} />}
+        {activeTab === 'chat' && <ChatTab projects={projects} token={token} initialProjectId={chatProjectId} />}
       </main>
 
       {/* Footer */}
