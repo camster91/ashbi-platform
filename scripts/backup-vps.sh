@@ -22,7 +22,7 @@ die() { printf 'backup error: %s\n' "$*" >&2; exit 1; }
 [[ -s $RECIPIENT_FILE ]] || die "age recipient file is missing or empty: $RECIPIENT_FILE"
 [[ -f $ROOT_DIR/.env && -d $ROOT_DIR/data ]] || die 'runtime configuration or persistent data directory is missing'
 [[ $STATUS_FILE == "$ROOT_DIR"/data/config/* ]] || die 'status file must be inside the mounted configuration directory'
-for command in age docker pg_restore sha256sum tar flock; do command -v "$command" >/dev/null || die "missing command: $command"; done
+for command in age docker sha256sum tar flock; do command -v "$command" >/dev/null || die "missing command: $command"; done
 docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1 || die 'PostgreSQL container is unavailable'
 
 mkdir -p "$BACKUP_DIR"
@@ -43,7 +43,8 @@ trap 'rm -rf -- "$work" "$status_tmp"; rm -f -- "$archive.tmp"' EXIT
 chmod 0700 "$work"
 docker exec "$POSTGRES_CONTAINER" pg_dump -U "$DATABASE_USER" -d "$DATABASE_NAME" --format=custom --no-owner --no-acl > "$work/database.dump"
 [[ -s $work/database.dump ]] || die 'database dump is empty'
-pg_restore -l "$work/database.dump" >/dev/null || die 'database dump catalog is invalid'
+# Inspect with the same engine tools that wrote the dump, never host PG16 tools.
+docker exec -i "$POSTGRES_CONTAINER" pg_restore -l < "$work/database.dump" >/dev/null 2>&1 || die 'database dump catalog is invalid'
 
 mkdir "$work/runtime"
 cp -a "$ROOT_DIR/data" "$work/runtime/data"

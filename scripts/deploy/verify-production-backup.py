@@ -11,13 +11,23 @@ import tempfile
 from datetime import datetime, timezone
 
 
+def database_catalog(dump):
+    """Read a private dump through the current canonical engine's own tools."""
+    with dump.open('rb') as stream:
+        result = subprocess.run(
+            ['docker', 'exec', '-i', 'ashbi-hub-postgres', 'pg_restore', '-l'],
+            stdin=stream, capture_output=True, check=True, timeout=60,
+        )
+    return result.stdout.decode('utf-8')
+
+
 def run():
     sha, nonce = sys.argv[1:]
     assert os.geteuid() == 0
     assert re.fullmatch(r'[a-f0-9]{40}', sha) and re.fullmatch(r'[a-f0-9]{32}', nonce)
     script = Path('/opt/ashbi-platform/scripts/backup-vps.sh')
     # Reviewed live script equals the repository backup script (LF bytes).
-    assert hashlib.sha256(script.read_bytes()).hexdigest() == '8b95a0c0291e0ab4ba8960dc80da93148a59b91441c38ccb7b09ffef2f24b627'
+    assert hashlib.sha256(script.read_bytes()).hexdigest() == '7132ad128b332eab62f035c0c8448745ba4196729be8539cc69cd025114f0ac0'
     result = subprocess.run(['bash', str(script)], capture_output=True, text=True, timeout=600, check=True)
     fields = dict(line.split('=', 1) for line in result.stdout.splitlines() if line.startswith('BACKUP_'))
     archive = Path(fields['BACKUP_ARCHIVE'])
@@ -50,7 +60,7 @@ def run():
             dump = Path(directory) / 'database.dump'
             dump.write_bytes(bundle.extractfile(members['./database.dump']).read())
             os.chmod(dump, 0o600)
-            catalog = subprocess.run(['pg_restore', '-l', str(dump)], capture_output=True, text=True, check=True, timeout=60).stdout
+            catalog = database_catalog(dump)
             assert ' TABLE DATA public ' in catalog
     return {'status': 'ok', 'releaseSha': sha, 'nonce': nonce, 'archive': str(archive), 'sha256': digest,
             'bytes': archive.stat().st_size, 'completedAt': datetime.now(timezone.utc).isoformat(),
