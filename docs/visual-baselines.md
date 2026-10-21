@@ -98,7 +98,8 @@ so a macOS or Windows render is never compared against a Linux one. Generate
 and update them on Linux (Ubuntu 24.04, as used by `ubuntu-latest`).
 
 The committed set was generated in a Linux container with Chromium
-141.0.7390.37 (a pre-installed build), while `npx playwright install` on
+141.0.7390.37 (a pre-installed build) and last regenerated in October 2026
+after the Ashbi Hub redesign (37 of 39 screens changed), while `npx playwright install` on
 `ubuntu-latest` currently installs Chromium 153 for `@playwright/test` 1.63. A
 different Chromium build can render text anti-aliasing and some raster details
 differently. **Before turning this into a gate, regenerate the baselines once on
