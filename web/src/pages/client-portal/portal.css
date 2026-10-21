@@ -35,6 +35,19 @@
 }
 .cp-root .cp-tab:focus-visible { outline-offset: -3px; }
 
+/* The portal-level tabs sit on the ink header band ([data-portal-nav]) as
+   pills: powder text, the selected tab filled indigo with white text. The
+   lime outline replaces the ring colour, which is invisible on ink. */
+.cp-root [data-portal-nav] .cp-tab {
+  margin-bottom: 0; padding: 0 0.875rem; border-bottom: 0; border-radius: 6px;
+  color: hsl(var(--secondary)); font-size: 0.875rem;
+}
+.cp-root [data-portal-nav] .cp-tab:hover { color: hsl(var(--background)); background: hsl(var(--background) / 0.08); }
+.cp-root [data-portal-nav] .cp-tab[aria-selected='true'] {
+  color: hsl(var(--primary-foreground)); background: hsl(var(--primary)); font-weight: 600;
+}
+.cp-root [data-portal-nav] .cp-tab:focus-visible { outline-color: hsl(var(--accent)); }
+
 /* Kanban board (no shared primitive; cards inside are <Card padding="sm">). */
 .cp-kanban { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .cp-kanban-col { background: hsl(var(--background)); border-radius: 14px; padding: 0.75rem; }

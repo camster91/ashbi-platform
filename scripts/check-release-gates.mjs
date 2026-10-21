@@ -94,6 +94,53 @@ export function validateReleaseGates(root = process.cwd()) {
     || !/REQUIRE_REDIS_TESTS:\s*'1'/.test(qualityJob)) {
     failures.push('release-gates.yml quality job does not run the Redis realtime integration tests (redis service, REDIS_URL, REQUIRE_REDIS_TESTS)');
   }
+  // These checks moved here from the retired enterprise-compliance.yml; the
+  // quality job is now their only home, so their removal must fail closed.
+  const qualityRequirements = [
+    [`! grep -r "import prisma from '../config/db.js'" src/routes/`, 'multi-tenancy route import guard'],
+    ['CREATE DATABASE baseline_adoption;', 'baseline adoption rehearsal'],
+    ['CREATE DATABASE baseline_drift;', 'baseline drift-refusal proof'],
+    ['ALLOW_BASELINE_ADOPTION: 20260808040000_baseline', 'baseline adoption confirmation'],
+    ['npm run db:adopt-baseline', 'baseline adoption command'],
+    [/set \+e\r?\n\s+npm run db:adopt-baseline\r?\n\s+adopt_status=\$\?\r?\n\s+set -e\r?\n\s+if \[ "\$adopt_status" -ne 2 \]; then\r?\n\s+echo "[^"\n]*" >&2\r?\n\s+exit 1\r?\n/, 'baseline drift-refusal requires exit 2'],
+    ['node scripts/assert-no-prisma-migrations.mjs', 'baseline drift-refusal migration-table assertion'],
+    ['npm --prefix web test -- --coverage', 'frontend unit tests with coverage instrumentation'],
+  ];
+  for (const [needle, label] of qualityRequirements) {
+    const present = typeof needle === 'string' ? qualityJob.includes(needle) : needle.test(qualityJob);
+    if (!present) failures.push(`release-gates.yml quality job is missing the ${label}`);
+  }
+  // Each baseline step must rehearse the real scenario: a database built from
+  // the baseline migration SQL alone (never a db push of the current schema),
+  // compared through an empty shadow database, with its outcome asserted.
+  const qualitySteps = qualityJob.split(/^ {6}- /m);
+  const baselineSql = 'npx prisma db execute --file prisma/migrations/20260808040000_baseline/migration.sql';
+  const baselineSteps = [
+    ['baseline adoption rehearsal', 'CREATE DATABASE baseline_adoption;', [
+      'CREATE DATABASE baseline_adoption_shadow;',
+      'export BASELINE_SHADOW_DATABASE_URL=postgresql://postgres:testpass@localhost:5432/baseline_adoption_shadow',
+      baselineSql,
+      'npm run db:adopt-baseline',
+      'npx prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma',
+      'node scripts/assert-baseline-adoption.mjs applied',
+    ]],
+    ['baseline drift-refusal proof', 'CREATE DATABASE baseline_drift;', [
+      'CREATE DATABASE baseline_drift_shadow;',
+      'export BASELINE_SHADOW_DATABASE_URL=postgresql://postgres:testpass@localhost:5432/baseline_drift_shadow',
+      baselineSql,
+      'ADD COLUMN "unexpectedBaselineDrift"',
+      'node scripts/assert-no-prisma-migrations.mjs',
+      'node scripts/assert-baseline-adoption.mjs shadow-built',
+    ]],
+  ];
+  for (const [label, marker, needles] of baselineSteps) {
+    const step = qualitySteps.find((candidate) => candidate.includes(marker)) ?? '';
+    for (const needle of needles) {
+      if (!step.includes(needle)) failures.push(`release-gates.yml ${label} step is missing ${needle}`);
+    }
+    if (/prisma db push/.test(step)) failures.push(`release-gates.yml ${label} step builds its database with prisma db push instead of the baseline migration`);
+    if (!/ALLOW_BASELINE_ADOPTION: 20260808040000_baseline/.test(step)) failures.push(`release-gates.yml ${label} step is missing the baseline adoption confirmation`);
+  }
   const browserJob = release.split(/^ {2}browser:/m)[1]?.split(/^ {2}stack-e2e:/m)[0] ?? '';
   if (!browserJob.includes('npm run build')) failures.push('release-gates.yml browser job does not build the production frontend');
 

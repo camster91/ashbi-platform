@@ -299,6 +299,27 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
     if (path === '/time-sessions/running') return json(route, null);
     if (path.startsWith('/draft/')) return json(route, null);
 
+    // Time (/timesheets): the week the page asks for, so entries always land
+    // on its Monday to Wednesday whatever today's date is.
+    if (path === '/timesheets/weekly' && method === 'GET') {
+      const weekStart = new URL(request.url()).searchParams.get('weekStart') || NOW;
+      const day = (offset: number) => new Date(Date.parse(weekStart.slice(0, 10) + 'T12:00:00.000Z') + offset * 86400000).toISOString();
+      const ref = { id: project.id, name: project.name };
+      const entries = [
+        { id: 'time-a', duration: 120, billable: true, reviewStatus: 'APPROVED', invoiced: false, description: 'Homepage wireframe', date: day(0), project: ref },
+        { id: 'time-b', duration: 90, billable: true, reviewStatus: 'PENDING', invoiced: false, description: 'Brand asset review', date: day(1), project: ref },
+        { id: 'time-c', duration: 45, billable: false, reviewStatus: 'PENDING', invoiced: false, description: 'Studio admin', date: day(2), project: { id: 'project-internal', name: 'Ashbi internal' } },
+      ];
+      const days: Record<string, { entries: typeof entries; totalMinutes: number }> = {};
+      for (const entry of entries) {
+        const key = entry.date.slice(0, 10);
+        days[key] ??= { entries: [], totalMinutes: 0 };
+        days[key].entries.push(entry);
+        days[key].totalMinutes += entry.duration;
+      }
+      return json(route, { weekStart, weekEnd: day(7), timesheets: [{ user: { id: user.id, name: user.name }, days, totalMinutes: 255, billableMinutes: 210 }] });
+    }
+
     // Dashboard.
     if (path === '/dashboard/stats') {
       return json(route, {
@@ -331,6 +352,9 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
 
     // Clients.
     if (path === '/clients') return json(route, { clients: [client], total: 1 });
+    // Client page: Activity panel and this month's hours tile.
+    if (path === `/clients/${client.id}/activity`) return json(route, { items: [{ id: 'thread:thread-a', kind: 'conversation', at: YESTERDAY, title: 'Homepage feedback', status: 'OPEN', project: { id: project.id, name: project.name }, href: '/thread/thread-a' }], nextBefore: null });
+    if (path === '/time-entries/summary') return json(route, { byProject: [{ project: { id: project.id, name: project.name }, totalMinutes: 150, billableMinutes: 120, entries: 2 }], byUser: user.role === 'ADMIN' ? [] : null, totalMinutes: 150 });
     if (path === '/ai/client-health') return json(route, { clients: [{ id: client.id, name: client.name, score: 86, status: 'HEALTHY', summary: 'Responsive and engaged.' }] });
 
     // Projects.
@@ -378,6 +402,19 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
 
     // Proposals.
     if (path === '/proposals' && method === 'GET') return json(route, [proposal]);
+    if (path === `/proposals/${proposal.id}` && method === 'GET') return json(route, {
+      ...proposal,
+      notes: 'A new site with online booking and a class calendar.',
+      createdBy: { id: 'user-admin', name: 'Cameron Ashley' },
+      sentAt: LAST_WEEK,
+      deliveryStatus: 'DELIVERED',
+      deliveryFailed: false,
+      taxRate: 13,
+      taxType: 'HST',
+      tax: 1560,
+      totalWithTax: 13560,
+      contract: null,
+    });
 
     // Settings.
     if (path === '/mcp-oauth/status' && method === 'GET') return json(route, { enabled: false });
@@ -426,6 +463,8 @@ export const portalFixture = {
   contracts: [{ id: 'contract-a', title: 'Project agreement', status: 'SENT', signToken: 'sign-a', canReview: true }],
   documents: [{ id: 'document-a', originalName: 'brand-guidelines.pdf', size: 204800, createdAt: YESTERDAY, uploadedBy: { name: 'Dana Rivera' } }],
   messages: [{ id: 'portal-message-a', content: 'Homepage draft is ready for review.', createdAt: YESTERDAY, author: { name: adminUser.name }, authorId: adminUser.id }],
+  // A review shared with the client and still open (the Overview's "Waiting on you").
+  reviews: [{ id: 'review-a', projectId: project.id, projectName: project.name, title: 'Homepage draft', status: 'open', version: 1, previousSessionId: null, nextSessionId: null, createdAt: YESTERDAY, capture: null, media: null, openAnnotationCount: 1 }],
 };
 
 /** Routes every `/api/client-portal/**` call for a signed-in CLIENT contact. */
@@ -453,6 +492,7 @@ export async function mockClientPortalApi(page: Page) {
     if (path === '/contracts') return json(route, portalFixture.contracts);
     if (path === '/retainer') return json(route, null);
     if (path === '/unread-count') return json(route, { recentMessages: 1, upcomingDeadlines: 1 });
+    if (path === '/reviews' && method === 'GET') return json(route, { sessions: portalFixture.reviews });
     if (path === `/projects/${projectId}`) {
       return json(route, {
         ...portalFixture.projects[0],

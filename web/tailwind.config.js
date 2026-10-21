@@ -52,19 +52,24 @@ export default {
           foreground: "hsl(var(--card-foreground))",
         },
         // Brand colors
+        // Fixed brand surfaces only (sidebar, login panel); see docs/ui-primitives.md.
+        // Values follow ashbi.ca: ink navy, indigo, lime, mint, powder, paper.
         brand: {
           indigo: "#2e2958",
-          // Lighter brand indigo for decorative glows on brand surfaces.
-          "indigo-soft": "#4a4294",
+          // Indigo for the active sidebar item and decorative glows on brand surfaces.
+          "indigo-soft": "#42467d",
           lime: "#e6f354",
           sage: "#d0dd9a",
+          mint: "#d8ffc2",
+          powder: "#d2deea",
           cream: "#faf9f2",
         },
       },
       fontFamily: {
-        sans: ['DM Sans', 'system-ui', 'sans-serif'],
-        display: ['Instrument Serif', 'serif'],
-        heading: ['DM Sans', 'system-ui', 'sans-serif'],
+        sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+        display: ['Instrument Serif', 'Georgia', 'serif'],
+        heading: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+        mono: ['Geist Mono', 'ui-monospace', 'monospace'],
       },
       borderRadius: {
         lg: "var(--radius)",

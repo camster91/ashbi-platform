@@ -5,7 +5,7 @@ Everything here is taken from the component source. When you change a
 primitive's props, variants or accessibility behaviour, update this file in the
 same change.
 
-`web/src/tests/ui-primitives-docs.test.js` keeps this file honest. It checks
+`web/src/tests/contracts/ui-primitives-docs.test.js` keeps this file honest. It checks
 that:
 
 - every PascalCase export of a primitive source file has a `###` heading here
@@ -43,9 +43,17 @@ colours as `hsl(var(--token))`. Light values live in `:root` and dark values in
 | `border` | `--border` | Input, Card, Modal, StatCard, skeletons |
 | `ring` | `--ring` | Input and Alert dismiss focus ring |
 | `rounded-lg` / `-md` / `-sm` | `--radius` | Button, Input, Modal, Skeleton |
-| `font-display` / `font-heading` | Tailwind `fontFamily` (Instrument Serif / DM Sans) | CardTitle / EmptyState, StatCard |
+| `font-display` / `font-heading` / `font-mono` | Tailwind `fontFamily` (Instrument Serif italic accents / Plus Jakarta Sans / Geist Mono) | CardTitle / EmptyState, StatCard, Button labels |
 
-Custom utilities defined in `web/src/index.css`: `animate-fade-in` (Alert,
+Brand (ashbi.ca, #118): paper `--background`, ink `--foreground`, indigo
+`--primary`, powder `--secondary`, lime `--accent`. The primary `Button` is lime
+with ink text and an ink outline, and every Button label is small Geist Mono
+caps. Headings use Plus Jakarta Sans 600; `font-display` (Instrument Serif
+italic) is for a single accent word inside a heading, not whole headings.
+`text-eyebrow` (mono caps label) and `figure` (mono tabular numbers) are the
+label and number utilities used by StatCard and the shell.
+
+Custom utilities defined in `web/src/index.css`: `text-eyebrow`, `figure`, `animate-fade-in` (Alert,
 SlowMessage, page skeletons), `hover-lift` (interactive Card), `glass-card`
 (Card `glass`), `skeleton-shimmer` (Skeleton) and `stagger-children`
 (AnimatedList).
@@ -78,14 +86,14 @@ Deliberate exceptions:
 
 - **Brand surfaces.** The staff sidebar, the top-bar quick-add button and the
   login brand panel are fixed brand colours in both themes. They use the
-  `brand-indigo`, `brand-indigo-soft`, `brand-lime`, `brand-sage` and
-  `brand-cream` colours from `web/tailwind.config.js` (never hex arbitrary
+  `brand-indigo`, `brand-indigo-soft`, `brand-lime`, `brand-sage`,
+  `brand-mint`, `brand-powder` and `brand-cream` colours from `web/tailwind.config.js` (never hex arbitrary
   values) and translucent white tints (`bg-white/10`, `text-white/60`).
   Use `brand-*` only on these fixed surfaces; everywhere else use tokens.
 - **Light-only client pages.** The client portal and the public `Portal*`
   token pages call `usePortalLightTheme()` (`web/src/hooks`), so their tokens
   always resolve to the light set.
-- **Allowlisted files.** `web/src/tests/raw-color-guard.test.js` fails on any
+- **Allowlisted files.** `web/src/tests/contracts/raw-color-guard.test.js` fails on any
   raw palette class, opaque `bg-white` or hex colour in `web/src` outside
   `web/src/tests/raw-color-allowlist.json`. Each allowlist entry has a reason
   (categorical colours, colours stored as data, canvas drawing, the dark
@@ -143,7 +151,7 @@ active)`) the browser swaps author colours for the user's system palette and
 drops box-shadows and most background fills. Tailwind's `ring-*` focus
 indicators are box-shadows and many controls are drawn only by their fill, so
 a block at the end of `web/src/index.css` restores each cue with CSS system
-colours (#317). `web/src/tests/forced-colors.test.js` checks it.
+colours (#317). `web/src/tests/contracts/forced-colors.test.js` checks it.
 
 | Cue | Forced-colours rule |
 |---|---|
@@ -885,7 +893,7 @@ system with hardcoded hex colours. It now uses the shared primitives above
 and design tokens (#316). `web/src/pages/client-portal/portal.css` keeps only
 portal-specific layout that has no shared primitive yet.
 
-`web/src/tests/client-portal-primitives-convergence.test.js` guards this. It
+`web/src/tests/contracts/client-portal-primitives-convergence.test.js` guards this. It
 fails if a `.cp-*` class outside the kept list appears in portal JSX or CSS,
 if a retired class comes back, if portal JSX or `portal.css` uses a colour
 literal or inline colour style, or if a native `<button>`/`<input>` appears
@@ -912,7 +920,7 @@ allowlist.
 | `.cp-btn-primary` | `Button` (`primary`); `buttonStyles()` for the "Pay Now" and "Review and sign" links |
 | `.cp-btn-secondary` | `Button variant="outline"` |
 | `.cp-btn-danger` | `Button variant="danger-outline"` (document delete trigger; the dialog's confirm is the solid `danger`) |
-| `.cp-btn-ghost` | `Button variant="ghost"` (header logout, with on-primary token utilities) |
+| `.cp-btn-ghost` | `Button variant="ghost"` (header logout, with on-ink token utilities: `text-background`, `border-background/40`) |
 | `.cp-link` | `Button variant="link"`; `buttonStyles({ variant: 'link' })` for `<a href>` |
 | `.cp-input` | `Input`; `inputStyles()` for `<select>` and `<textarea>` (via `portalFieldStyles`) |
 | `.cp-label` | Label utilities (`labelClass`: `block text-sm font-medium text-foreground`) |
@@ -937,7 +945,7 @@ allowlist.
 | `.cp-loading` | `LoadingState` |
 | `.cp-text` | `text-foreground` |
 | `.cp-text-muted` | `text-muted-foreground` |
-| `.cp-page-title` | `pageTitleClass` (`mb-4 text-xl font-bold text-foreground`) |
+| `.cp-page-title` | `pageTitleClass` (`mb-4 text-2xl font-semibold tracking-tight text-foreground`) |
 | `.cp-section-title` | `sectionTitleClass` (`mb-3 text-base font-semibold text-foreground`) |
 | `.cp-grid-2` | `grid gap-4 md:grid-cols-2` |
 | `.cp-grid-3` | `grid gap-4 sm:grid-cols-2 lg:grid-cols-3` |
@@ -965,8 +973,8 @@ primitive covers them yet. Remove each one when its primitive lands.
 | `.cp-*` class | Why it stays |
 |---|---|
 | `.cp-root` | Scopes the portal focus contract: a 3px solid `--ring` outline on every focusable control, stronger than the primitives' `ring-4` at 20% opacity. Aligning `Button`'s own focus ring is follow-up work |
-| `.cp-header` | Switches that outline to `--accent` on the indigo header, where the ring colour would be invisible |
-| `.cp-tab` | Native `role="tab"` buttons; selected styling follows `aria-selected`. The shared `Tabs` primitive now exists; moving the portal tab bar onto it is follow-up work |
+| `.cp-header` | Switches that outline to `--accent` on the ink header band, where the ring colour would be invisible |
+| `.cp-tab` | Native `role="tab"` buttons; selected styling follows `aria-selected`. Inside `[data-portal-nav]` (the portal-level tabs on the ink header band, below `.cp-header`) they are pills: powder text, the selected tab filled indigo, a lime focus outline. The shared `Tabs` primitive now exists; moving the portal tab bar onto it is follow-up work |
 | `.cp-kanban` | No kanban primitive for read-only client boards (`KanbanBoard` is the staff drag-and-drop board) |
 | `.cp-kanban-col` | Kanban column surface |
 | `.cp-kanban-col-header` | Kanban column header row |

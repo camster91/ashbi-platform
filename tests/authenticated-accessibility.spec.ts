@@ -43,10 +43,12 @@ const staffScreens: Array<{ name: string; path: string; ready: (page: Page) => P
   { name: 'dashboard', path: '/dashboard', ready: page => expect(page.getByRole('heading', { name: /Cameron/, level: 1 })).toBeVisible() },
   { name: 'projects list', path: '/projects', ready: page => expect(page.getByText('Website Redesign').filter({ visible: true }).first()).toBeVisible() },
   { name: 'project page', path: '/project/project-a', ready: page => expect(page.getByRole('heading', { name: 'Website Redesign', level: 1 })).toBeVisible() },
+  { name: 'time', path: '/timesheets', ready: page => expect(page.getByRole('table', { name: 'Hours per project and day' })).toBeVisible() },
   { name: 'clients', path: '/clients', ready: page => expect(page.getByText('Northwind Studio').filter({ visible: true }).first()).toBeVisible() },
   { name: 'invoices list', path: '/invoices', ready: page => expect(page.getByRole('link', { name: 'INV-2026-001' }).filter({ visible: true })).toBeVisible() },
   { name: 'invoice detail', path: '/invoices/invoice-a', ready: page => expect(page.getByText('Discovery and wireframes').filter({ visible: true }).first()).toBeVisible() },
   { name: 'proposals', path: '/proposals', ready: page => expect(page.getByText('Website Redesign Proposal').filter({ visible: true }).first()).toBeVisible() },
+  { name: 'proposal detail', path: '/proposal/proposal-a', ready: page => expect(page.getByRole('region', { name: 'Status' })).toBeVisible() },
   { name: 'settings', path: '/settings', ready: page => expect(page.getByText('Zapier').filter({ visible: true }).first()).toBeVisible() },
   { name: 'notifications', path: '/notifications', ready: page => expect(page.getByText('Northwind Studio viewed INV-2026-001.')).toBeVisible() },
   { name: 'media review', path: '/review/review-a', ready: page => expect(page.getByRole('heading', { name: 'Homepage draft', level: 1 })).toBeVisible() },
@@ -99,7 +101,7 @@ test.describe('Authenticated accessibility', () => {
     await page.goto('/settings');
     const question = page.getByLabel('Question for the assistant');
     if (!embeddedAiEnabled) {
-      await expect(page.getByRole('heading', { name: 'API Keys', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Connected agents', exact: true })).toBeVisible();
       await expect(page.getByText('/api/mcp', { exact: true })).toBeVisible();
       await expect(question).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'AI provider (bring your own key)', exact: true })).toHaveCount(0);
@@ -121,15 +123,24 @@ test.describe('Authenticated accessibility', () => {
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
     await expectNoAxeViolations(page, 'client portal overview');
 
-    for (const tab of ['Projects (1)', 'Invoices (1)', 'Contracts (1)', 'Documents', 'Chat']) {
+    // The Overview's "Waiting on you" lists the open review, the contract to
+    // sign and the invoice to pay.
+    const waiting = page.getByRole('region', { name: 'Waiting on you' });
+    await expect(waiting.getByRole('button', { name: 'Review Homepage draft' })).toBeVisible();
+    await expect(waiting.getByRole('link', { name: /^Review and sign/ })).toHaveAttribute('href', '/portal/contract/sign-a');
+    await expect(page.getByRole('region', { name: 'Recent files' }).getByText('brand-guidelines.pdf')).toBeVisible();
+    await expectNoAxeViolations(page, 'client portal overview sections');
+
+    for (const tab of ['Projects (1)', 'Reviews', 'Files', 'Invoices (1)', 'Contracts (1)', 'Messages']) {
       await page.getByRole('tab', { name: tab }).click();
       await expect(page.getByRole('tab', { name: tab })).toHaveAttribute('aria-selected', 'true');
-      if (tab === 'Documents') await expect(page.getByText('brand-guidelines.pdf')).toBeVisible();
-      if (tab === 'Chat') await expect(page.getByText('Homepage draft is ready for review.')).toBeVisible();
+      if (tab === 'Reviews') await expect(page.getByRole('list', { name: 'Reviews' }).getByText('Homepage draft', { exact: false })).toBeVisible();
+      if (tab === 'Files') await expect(page.getByText('brand-guidelines.pdf')).toBeVisible();
+      if (tab === 'Messages') await expect(page.getByText('Homepage draft is ready for review.')).toBeVisible();
       await expectNoAxeViolations(page, `client portal ${tab}`);
     }
 
-    await page.getByRole('tab', { name: 'Documents' }).click();
+    await page.getByRole('tab', { name: 'Files' }).click();
     await page.getByRole('button', { name: 'Delete brand-guidelines.pdf' }).click();
     await expect(page.getByRole('dialog', { name: 'Delete document?' })).toBeVisible();
     await expectNoAxeViolations(page, 'client portal delete confirmation');

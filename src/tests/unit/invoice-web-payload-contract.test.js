@@ -111,3 +111,53 @@ test('the shared web payload builders produce payloads the API validators accept
     assert.equal(createInvoiceSchema.safeParse({ ...create, currency }).success, true, currency);
   }
 });
+
+test('the edit payload sends the issue date and recurrence only when the form changed them', () => {
+  const saved = { issueDate: '2026-10-17', isRecurring: false, recurringInterval: null };
+  const form = {
+    title: 'Care plan', notes: '', internalNotes: '', dueDate: '2026-11-01', currency: 'CAD',
+    taxRate: '13', taxType: 'HST', discountAmount: '0', issueDate: '2026-10-17', isRecurring: false, recurringInterval: 'MONTHLY',
+    lineItems: [{ description: 'Care plan', itemType: 'LABOR', quantity: '1', unitPrice: '950' }],
+  };
+
+  const untouched = buildInvoiceUpdatePayload(form, saved);
+  assert.equal('issueDate' in untouched, false, 'an unchanged issue date is not resent');
+  assert.equal('isRecurring' in untouched, false, 'unchanged recurrence is not resent');
+  assert.equal('recurringInterval' in untouched, false);
+
+  const changed = buildInvoiceUpdatePayload({ ...form, issueDate: '2026-10-20', isRecurring: true, recurringInterval: 'QUARTERLY' }, saved);
+  assert.equal(changed.issueDate, '2026-10-20');
+  assert.equal(changed.isRecurring, true);
+  assert.equal(changed.recurringInterval, 'QUARTERLY');
+  const parsed = updateInvoiceSchema.safeParse(changed);
+  assert.equal(parsed.success, true, JSON.stringify(parsed.error?.errors));
+
+  const stopped = buildInvoiceUpdatePayload({ ...form, isRecurring: false }, { ...saved, isRecurring: true, recurringInterval: 'MONTHLY' });
+  assert.equal(stopped.isRecurring, false);
+  assert.equal('recurringInterval' in stopped, false, 'turning recurrence off lets the API clear the interval');
+  assert.equal(updateInvoiceSchema.safeParse(stopped).success, true);
+
+  const intervalOnly = buildInvoiceUpdatePayload({ ...form, isRecurring: true, recurringInterval: 'ANNUALLY' }, { ...saved, isRecurring: true, recurringInterval: 'MONTHLY' });
+  assert.deepEqual([intervalOnly.isRecurring, intervalOnly.recurringInterval], [true, 'ANNUALLY']);
+
+  // A draft autosaved before these fields existed sends neither.
+  const { issueDate: _issue, isRecurring: _repeat, recurringInterval: _interval, ...legacy } = form;
+  const legacyPayload = buildInvoiceUpdatePayload(legacy, saved);
+  assert.equal('issueDate' in legacyPayload || 'isRecurring' in legacyPayload, false);
+});
+
+test('a changed issue date and recurrence from the edit form are stored by the route', async (t) => {
+  const db = fakeDb({ invoices: [{ id: 'invoice-a', clientId: 'client-a', status: 'DRAFT', invoiceNumber: 'INV-2026-0001', taxRate: 13, discountAmount: 0, total: 0, isRecurring: false, issueDate: new Date('2026-10-17T12:00:00Z') }] });
+  const app = await buildInvoiceApp(t, invoiceRoutes, db);
+  const payload = buildInvoiceUpdatePayload(
+    { ...UI_UPDATE_PAYLOAD, issueDate: '2026-10-20', isRecurring: true, recurringInterval: 'MONTHLY' },
+    { issueDate: '2026-10-17', isRecurring: false, recurringInterval: null },
+  );
+  const response = await app.inject({ method: 'PUT', url: '/invoice-a', payload });
+  assert.equal(response.statusCode, 200, response.body);
+  const [stored] = db.state.invoices;
+  assert.equal(new Date(stored.issueDate).toISOString(), '2026-10-20T00:00:00.000Z');
+  assert.equal(stored.isRecurring, true);
+  assert.equal(stored.recurringInterval, 'MONTHLY');
+  assert.ok(stored.recurringNextDate, 'the recurring job needs a next date');
+});

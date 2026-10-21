@@ -3,9 +3,20 @@
 import { safeParse } from '../utils/safeParse.js';
 import { clampTake } from '../utils/query-limits.js';
 import { clientStateRevokesPortal, revokeClientSocketsFrom } from '../auth/client-socket-revocation.js';
-import { validateBody, createClientSchema, updateClientSchema, clientContactSchema, clientNoteCreateSchema } from '../validators/schemas.js';
+import { validateBody, validateQuery, createClientSchema, updateClientSchema, clientContactSchema, clientNoteCreateSchema } from '../validators/schemas.js';
 import { normalizeClientDomain, normalizeContactEmail } from '../utils/client-identity.js';
 import { invoiceBalance, roundMoney, UNPAID_INVOICE_STATUSES } from '../utils/invoice-balance.js';
+import { z } from 'zod';
+import { requireStaff } from '../middleware/require-staff.js';
+import { buildClientActivity, CLIENT_ACTIVITY_DEFAULT_LIMIT, CLIENT_ACTIVITY_MAX_LIMIT } from '../services/client-activity.service.js';
+
+// GET /api/clients/:id/activity query: a page size and the previous page's
+// cursor (`nextBefore` time and `nextBeforeId` item id) to read past.
+export const clientActivityQuerySchema = z.object({
+  limit: z.string().trim().regex(/^\d{1,3}$/, 'must be a whole number').optional(),
+  before: z.string().trim().max(40).refine((value) => !Number.isNaN(Date.parse(value)), 'must be an ISO date').optional(),
+  beforeId: z.string().trim().max(120).regex(/^(thread|activity|invoice-sent|invoice-paid|payment):[A-Za-z0-9_-]{1,100}$/, 'must be an activity item id').optional(),
+}).strict();
 
 const DUPLICATE_DOMAIN_ERROR = 'Client with this domain already exists';
 
@@ -58,6 +69,21 @@ export function clientInvoiceSummary(invoices, now = new Date()) {
   };
 }
 
+// Client money (revenue totals, payment status, invoices) is for admins only.
+// Team members, bots and API keys get the client without it; the page hiding
+// it is not enough, because the raw response is readable.
+const CLIENT_MONEY_FIELDS = ['totalRevenueUsd', 'totalRevenueCad', 'lastInvoiceDate', 'lastInvoiceStatus', 'paymentStatus'];
+
+export function withoutClientMoney(client) {
+  if (!client) return client;
+  const copy = { ...client };
+  for (const field of CLIENT_MONEY_FIELDS) delete copy[field];
+  delete copy.invoices;
+  return copy;
+}
+
+const seesClientMoney = (request) => request.user?.role === 'ADMIN';
+
 export default async function clientRoutes(fastify) {
   // List all clients
   fastify.get('/', {
@@ -109,7 +135,7 @@ export default async function clientRoutes(fastify) {
       request.prisma.client.count({ where })
     ]);
 
-    return { clients, total, limit: take, offset: skip };
+    return { clients: seesClientMoney(request) ? clients : clients.map(withoutClientMoney), total, limit: take, offset: skip };
   });
 
   // Create client
@@ -144,7 +170,7 @@ export default async function clientRoutes(fastify) {
       include: contactRows?.length ? { contacts: true } : undefined
     });
 
-    return reply.status(201).send(client);
+    return reply.status(201).send(seesClientMoney(request) ? client : withoutClientMoney(client));
   });
 
   // Get single client with full details
@@ -173,14 +199,17 @@ export default async function clientRoutes(fastify) {
             assignedTo: { select: { id: true, name: true } }
           }
         },
-        invoices: {
-          orderBy: { createdAt: 'desc' },
-          include: {
-            createdBy: { select: { id: true, name: true } },
-            // Partial payments: outstanding money is each invoice's balance.
-            payments: { select: { amount: true } }
+        // Invoices are read for admins only (see withoutClientMoney).
+        ...(seesClientMoney(request) ? {
+          invoices: {
+            orderBy: { createdAt: 'desc' },
+            include: {
+              createdBy: { select: { id: true, name: true } },
+              // Partial payments: outstanding money is each invoice's balance.
+              payments: { select: { amount: true } }
+            }
           }
-        }
+        } : {})
       }
     });
 
@@ -188,12 +217,12 @@ export default async function clientRoutes(fastify) {
       return reply.status(404).send({ error: 'Client not found' });
     }
 
-    // Invoice money: balances after payments, grouped by currency.
-    const summary = clientInvoiceSummary(client.invoices);
+    // Invoice money: balances after payments, grouped by currency (admins only).
+    const summary = seesClientMoney(request) ? clientInvoiceSummary(client.invoices) : {};
 
     // Parse JSON fields
     return {
-      ...client,
+      ...(seesClientMoney(request) ? client : withoutClientMoney(client)),
       ...summary,
       communicationPrefs: safeParse(client.communicationPrefs, {}),
       satisfactionSignals: safeParse(client.satisfactionSignals, {}),
@@ -253,7 +282,31 @@ export default async function clientRoutes(fastify) {
       revokeClientSocketsFrom(fastify, { clientId: client.id }, request.log);
     }
 
-    return client;
+    return seesClientMoney(request) ? client : withoutClientMoney(client);
+  });
+
+  // One activity timeline for the client page (staff only). Invoices and
+  // payments are added for admins only; team members get work activity.
+  fastify.get('/:id/activity', {
+    onRequest: [fastify.authenticate, requireStaff],
+    preHandler: [validateQuery(clientActivityQuerySchema)],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const client = await request.prisma.client.findUnique({ where: { id }, select: { id: true } });
+    if (!client) {
+      return reply.status(404).send({ error: 'Client not found' });
+    }
+    const limit = clampTake(request.query.limit, {
+      defaultTake: CLIENT_ACTIVITY_DEFAULT_LIMIT,
+      maxTake: CLIENT_ACTIVITY_MAX_LIMIT,
+    });
+    const before = request.query.before ? new Date(request.query.before) : null;
+    return buildClientActivity(request.prisma, client.id, {
+      isAdmin: request.user.role === 'ADMIN',
+      limit,
+      before,
+      beforeId: before ? request.query.beforeId || null : null,
+    });
   });
 
   // Get client contacts

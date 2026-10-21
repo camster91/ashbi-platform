@@ -28,7 +28,6 @@ import {
   PanelLeftOpen,
   ChevronDown,
   ChevronUp,
-  Sparkles,
   Briefcase,
   Key,
   Calculator,
@@ -177,13 +176,26 @@ export default function Layout({ children }) {
     setExpandedSections(prev => ({ ...prev, [key]: !shown }));
   };
 
-  // One navigation taxonomy for desktop and mobile. Role filtering only
-  // controls discoverability; existing route/API authorization remains authoritative.
-  const workNav = [
+  // One navigation taxonomy for desktop and mobile, grouped like the Ashbi Hub
+  // mockups: a pinned top group, then Sales, Work, Money and Studio. Role
+  // filtering only controls discoverability; existing route/API authorization
+  // remains authoritative.
+  const pinnedNav = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true },
     { name: 'Daily Queue', href: '/queue', icon: ListTodo },
-    { name: 'Messages', href: '/messages', icon: MessageSquare },
+    { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
+    { name: 'Clients', href: '/clients', icon: Users, id: 'clients-link' },
+  ];
+  const salesNav = [
+    { name: 'Pipeline', href: '/pipeline', icon: Filter },
+    { name: 'Proposals', href: '/proposals', icon: FileText, id: 'proposals-link' },
+    { name: 'Estimates', href: '/estimates', icon: ClipboardList },
+    { name: 'Contracts', href: '/contracts', icon: ScrollText },
+    ...(embeddedAiEnabled ? [{ name: 'Chat', href: '/chat', icon: MessageSquare }] : []),
+  ];
+  const workNav = [
     { name: 'Projects', href: '/projects', icon: FolderOpen, id: 'projects-link' },
+    { name: 'Messages', href: '/messages', icon: MessageSquare },
     { name: 'Schedule', href: '/schedule', icon: Calendar },
     ...((isAdmin || user?.role === 'TEAM') ? [{ name: 'Timesheets', href: '/timesheets', icon: Clock }] : []),
     ...(isAdmin ? [
@@ -191,31 +203,22 @@ export default function Layout({ children }) {
     ] : []),
     ...(embeddedAiEnabled ? [{ name: 'Project Planner', href: '/project-planner', icon: LayoutTemplate }] : []),
   ];
-  const clientsNav = [
-    { name: 'Clients', href: '/clients', icon: Users, id: 'clients-link' },
-    { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
-    { name: 'Pipeline', href: '/pipeline', icon: Filter },
-    ...(embeddedAiEnabled ? [{ name: 'Chat', href: '/chat', icon: MessageSquare }] : []),
-  ];
-  const knowledgeNav = [
-    { name: 'Docs', href: '/docs', icon: BookOpen },
-    { name: 'Workspace wiki', href: '/wiki', icon: BookOpen },
-    { name: 'Collections', href: '/collections', icon: Folders },
-    { name: 'Assets', href: '/assets', icon: Image },
-    { name: 'Templates', href: '/project-templates', icon: Folders },
-    ...(embeddedAiEnabled ? [{ name: 'Semantic Search', href: '/semantic-search', icon: Search }] : []),
-  ];
-  const financeNav = [
+  const moneyNav = [
     { name: 'Invoices', href: '/invoices', icon: Receipt },
-    { name: 'Proposals', href: '/proposals', icon: FileText, id: 'proposals-link' },
-    { name: 'Estimates', href: '/estimates', icon: ClipboardList },
-    { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
     ...(isAdmin ? [
       { name: 'Retainers', href: '/retainers', icon: Repeat },
       { name: 'Invoice Chaser', href: '/invoice-chaser', icon: Send },
       { name: 'Rate Cards', href: '/rate-cards', icon: CreditCard },
     ] : []),
+  ];
+  const studioNav = [
+    { name: 'Docs', href: '/docs', icon: BookOpen },
+    { name: 'Workspace wiki', href: '/wiki', icon: BookOpen },
+    { name: 'Collections', href: '/collections', icon: Folders },
+    { name: 'Assets', href: '/assets', icon: Image },
+    { name: 'Templates', href: '/project-templates', icon: Folders },
+    ...(embeddedAiEnabled ? [{ name: 'Semantic Search', href: '/semantic-search', icon: Search }] : []),
   ];
   const settingsNav = [
     ...(isAdmin ? [
@@ -226,10 +229,10 @@ export default function Layout({ children }) {
     ...(isAdmin ? [{ name: 'Trash', href: '/trash', icon: X }] : []),
   ];
   const navSections = [
+    { key: 'sales', label: 'Sales', icon: Target, items: salesNav },
     { key: 'work', label: 'Work', icon: FolderOpen, items: workNav },
-    { key: 'clients', label: 'Clients', icon: Users, items: clientsNav },
-    { key: 'knowledge', label: 'Knowledge', icon: BookOpen, items: knowledgeNav },
-    { key: 'finance', label: 'Finance', icon: Receipt, items: financeNav },
+    { key: 'money', label: 'Money', icon: Receipt, items: moneyNav },
+    { key: 'studio', label: 'Studio', icon: BookOpen, items: studioNav },
     { key: 'settings', label: 'Settings', icon: Settings, items: settingsNav },
   ];
 
@@ -274,11 +277,11 @@ export default function Layout({ children }) {
             sidebarCollapsed ? 'px-2.5 py-2 justify-center' : 'px-3 py-1.5',
             'group relative',
             isActive
-              ? 'bg-brand-lime/10 text-brand-lime border-l-2 border-brand-lime'
-              : 'text-white/70 hover:text-white hover:bg-white/5'
+              ? 'bg-brand-indigo-soft text-white font-semibold'
+              : 'text-brand-powder hover:text-white hover:bg-white/5'
           )}
         >
-          <item.icon className={cn('w-4 h-4 shrink-0', !sidebarCollapsed && 'mr-2.5')} />
+          <item.icon aria-hidden="true" className={cn('w-4 h-4 shrink-0', !sidebarCollapsed && 'mr-2.5', isActive && 'text-brand-lime')} />
           {!sidebarCollapsed && <span className="flex-1 truncate">{item.name}</span>}
           {item.soon && !sidebarCollapsed && (
             <span className="ml-1.5 px-1 py-0.5 text-[9px] font-semibold rounded bg-muted text-muted-foreground">
@@ -292,8 +295,8 @@ export default function Layout({ children }) {
               </span>
             ) : (
               <span className={cn(
-                'ml-auto px-1.5 py-0.5 text-[10px] font-semibold rounded-full min-w-[18px] text-center',
-                isActive ? 'bg-brand-lime/20 text-brand-lime' : 'bg-brand-lime text-brand-indigo'
+                'ml-auto px-1.5 py-0.5 font-mono text-[10px] font-medium rounded-full min-w-[18px] text-center',
+                'bg-brand-lime text-brand-indigo'
               )}>
                 {badge > 99 ? '99+' : badge}
               </span>
@@ -307,7 +310,11 @@ export default function Layout({ children }) {
   function renderCollapsibleSection(key, label, items, Icon) {
     const isExpanded = expandedSections[key];
     const hasActiveChild = items.some(isNavItemActive);
-    const show = isExpanded ?? hasActiveChild;
+    // The section holding the current page opens. On pages outside every
+    // section (Dashboard, Inbox, Clients) Work opens, as the everyday area.
+    // Only one section opens by default, which keeps the Tab path short.
+    const inSomeSection = navSections.some(section => section.items.some(isNavItemActive));
+    const show = isExpanded ?? (hasActiveChild || (key === 'work' && !inSomeSection));
 
     if (sidebarCollapsed) {
       // Keep the compact rail to five areas rather than dozens of icons.
@@ -317,7 +324,7 @@ export default function Layout({ children }) {
           try { localStorage.setItem('sidebar-collapsed', 'false'); } catch { /* optional preference */ }
           setExpandedSections(prev => ({ ...prev, [key]: true }));
         }}
-        className={cn('w-full min-h-11 flex items-center justify-center rounded-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white', hasActiveChild ? 'text-brand-lime bg-brand-lime/10' : 'text-white/70 hover:text-white hover:bg-white/5')}>
+        className={cn('w-full min-h-11 flex items-center justify-center rounded-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white', hasActiveChild ? 'text-brand-lime bg-brand-indigo-soft' : 'text-brand-powder hover:text-white hover:bg-white/5')}>
         <Icon className="w-5 h-5" aria-hidden="true" />
       </button>;
     }
@@ -330,11 +337,10 @@ export default function Layout({ children }) {
           aria-expanded={show}
           aria-controls={`nav-area-${key}`}
           aria-label={`${show ? 'Collapse' : 'Expand'} ${label}`}
-          className="w-full min-h-11 flex items-center px-3 py-1.5 text-xs font-semibold text-white/70 uppercase tracking-wider hover:text-white transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
+          className="w-full min-h-11 flex items-center px-3 pt-3 pb-1 text-eyebrow text-white/70 hover:text-white transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
         >
-          <Icon className="w-4 h-4 mr-2" aria-hidden="true" />
-          <ChevronRight className={cn('w-3 h-3 mr-1 transition-transform duration-150', show && 'rotate-90')} />
-          {label}
+          <span className="flex-1 text-left">{label}</span>
+          <ChevronRight aria-hidden="true" className={cn('w-3 h-3 transition-transform duration-150 motion-reduce:transition-none', show && 'rotate-90')} />
         </button>
         {show && <div id={`nav-area-${key}`} className="space-y-0.5 pl-1">{renderNavItems(items)}</div>}
       </div>
@@ -373,11 +379,18 @@ export default function Layout({ children }) {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className={cn('flex items-center h-16 border-b border-white/10', sidebarCollapsed ? 'px-2 justify-center' : 'px-4')}>
-            <Link to="/" className={cn('flex items-center gap-2', sidebarCollapsed && 'justify-center')}>
-              <div className="w-8 h-8 rounded-lg bg-brand-lime flex items-center justify-center shrink-0">
-                <Sparkles className="w-5 h-5 text-brand-indigo" />
-              </div>
-              {!sidebarCollapsed && <p className="text-xl font-heading font-bold text-white">Ashbi</p>}
+            <Link to="/" aria-label="Ashbi Hub home" className={cn('flex items-center gap-2 rounded-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white', sidebarCollapsed && 'justify-center')}>
+              {sidebarCollapsed ? (
+                <span aria-hidden="true" className="w-8 h-8 rounded-md bg-brand-lime flex items-center justify-center shrink-0 font-heading text-base font-bold text-brand-indigo">A</span>
+              ) : (
+                <span aria-hidden="true" className="flex items-baseline gap-1.5">
+                  <span className="font-heading text-[22px] font-bold tracking-tight text-white">Ashbi</span>
+                  {/* A real space, so the visible text reads "Ashbi Hub" and
+                      matches the link's accessible name (axe label-content-name-mismatch). */}
+                  {' '}
+                  <span className="font-display text-2xl italic text-brand-lime">Hub</span>
+                </span>
+              )}
             </Link>
             {!sidebarCollapsed && (
               <>
@@ -415,6 +428,7 @@ export default function Layout({ children }) {
 
           {/* Navigation */}
           <nav aria-label="Workspace navigation" className={cn('flex-1 py-3 space-y-1 overflow-y-auto', sidebarCollapsed ? 'px-1.5' : 'px-3')}>
+            <div className="space-y-0.5 pb-1">{renderNavItems(pinnedNav)}</div>
             {navSections.map(section => (
               <div key={section.key}>
                 {renderCollapsibleSection(section.key, section.label, section.items, section.icon)}
@@ -437,7 +451,7 @@ export default function Layout({ children }) {
                 <button
                   type="button"
                   aria-label="Create new project"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-full bg-brand-lime text-brand-indigo hover:bg-brand-sage transition-colors"
+                  className="w-full min-h-11 flex items-center justify-center gap-2 px-4 py-2 font-mono text-xs font-medium uppercase tracking-[0.1em] rounded-md bg-brand-lime text-brand-indigo hover:bg-brand-sage transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
                   onClick={() => navigate('/projects?create=true')}
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -465,8 +479,8 @@ export default function Layout({ children }) {
               </div>
             ) : (
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-brand-lime/20 flex items-center justify-center">
-                  <span className="text-sm font-semibold text-brand-lime">
+                <div className="w-10 h-10 rounded-full bg-brand-powder flex items-center justify-center">
+                  <span className="text-sm font-bold text-brand-indigo">
                     {user?.name?.charAt(0)?.toUpperCase()}
                   </span>
                 </div>
@@ -474,7 +488,7 @@ export default function Layout({ children }) {
                   <p className="text-sm font-medium text-white truncate">
                     {user?.name}
                   </p>
-                  <p className="text-xs text-white/50 truncate">
+                  <p className="text-xs text-brand-powder/80 truncate">
                     {isAdmin ? 'Administrator' : 'Team Member'}
                   </p>
                 </div>
@@ -510,7 +524,7 @@ export default function Layout({ children }) {
         sidebarCollapsed ? 'lg:ml-[60px]' : 'lg:ml-72'
       )}>
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-card/80 backdrop-blur-md border-b border-border/60 lg:px-6 shrink-0">
+        <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-background/90 backdrop-blur-md border-b border-border/40 lg:px-6 shrink-0">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
@@ -526,7 +540,6 @@ export default function Layout({ children }) {
             <div
               className={cn(
                 'relative group transition-all duration-200',
-                isSearchFocused && 'scale-[1.02]'
               )}
             >
               <Search aria-hidden="true" className={cn(
@@ -540,9 +553,9 @@ export default function Layout({ children }) {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setIsSearchFocused(false)}
-                placeholder="Search Hub..."
+                placeholder="Search clients, projects, invoices…"
                 className={cn(
-                  'w-full min-h-11 pl-10 pr-4 py-2 text-sm bg-muted border-0 rounded-xl',
+                  'w-full min-h-11 pl-10 pr-4 py-2 text-sm bg-card border border-border/60 rounded-md',
                   'placeholder:text-muted-foreground',
                   'focus:outline-hidden focus:ring-2 focus:ring-ring/40 focus:bg-card',
                   'transition-all duration-200'
@@ -641,10 +654,10 @@ export default function Layout({ children }) {
       {/* Mobile bottom nav with More menu */}
       <nav className="fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border/60 flex lg:hidden safe-area-inset-bottom shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]" role="navigation" aria-label="Mobile navigation">
         {[
-          { href: '/dashboard', icon: LayoutDashboard, label: 'Work', activeItems: workNav },
-          { href: '/clients', icon: Users, label: 'Clients', badge: stats?.needsResponse, activeItems: clientsNav },
-          { href: '/docs', icon: BookOpen, label: 'Knowledge', activeItems: knowledgeNav },
-          { href: '/invoices', icon: Receipt, label: 'Finance', activeItems: financeNav },
+          { href: '/dashboard', icon: LayoutDashboard, label: 'Home', badge: stats?.needsResponse, activeItems: [...pinnedNav, ...workNav] },
+          { href: '/pipeline', icon: Target, label: 'Sales', activeItems: salesNav },
+          { href: '/invoices', icon: Receipt, label: 'Money', activeItems: moneyNav },
+          { href: '/docs', icon: BookOpen, label: 'Studio', activeItems: studioNav },
           { href: '#more', icon: Settings, label: 'Settings', isMore: true },
         ].map((item) => {
           const isActive = item.activeItems?.some(isNavItemActive) ?? false;
@@ -703,7 +716,7 @@ export default function Layout({ children }) {
                         ))}
                       </div>
 
-                      {navSections.map(section => (
+                      {[{ key: 'pinned', label: 'Home', items: pinnedNav }, ...navSections].map(section => (
                         <div key={section.key}>
                           <div className="px-4 py-3 border-t border-border/40">
                             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{section.label}</p>
@@ -872,15 +885,15 @@ function QuickCreateMenu({ navigate, isAdmin, onCreateTask }) {
         aria-haspopup="menu"
         aria-describedby="quick-add-shortcut-hint"
         className={cn(
-          'flex min-h-11 items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-indigo',
-          open ? 'bg-brand-lime text-brand-indigo' : 'bg-brand-lime text-brand-indigo hover:bg-brand-sage'
+          'flex min-h-11 items-center gap-1.5 px-3 py-1.5 font-mono text-xs font-medium uppercase tracking-[0.1em] rounded-md border border-brand-indigo transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-indigo',
+          open ? 'bg-brand-sage text-brand-indigo' : 'bg-brand-lime text-brand-indigo hover:bg-brand-sage'
         )}
         title="Create (press ⌘K or Ctrl+K for Quick add)"
       >
         <Plus className="w-4 h-4" aria-hidden="true" />
         <span className="sr-only sm:not-sr-only">Create</span>
         {' '}
-        <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border border-brand-indigo/30 px-1 text-[11px] font-sans font-medium">
+        <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border border-brand-indigo/30 px-1 text-[11px] font-mono font-medium normal-case tracking-normal">
           <Command className="w-3 h-3" />K
         </kbd>
       </button>

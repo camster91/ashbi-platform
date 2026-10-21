@@ -18,7 +18,9 @@ for (const width of [1280, 390]) {
     await page.route('**/*.woff2', async route => {
       const pathname = new URL(route.request().url()).pathname;
       if (!pathname.includes('/@fs/') && !pathname.includes('/node_modules/')) return route.continue();
-      const family = pathname.includes('instrument-serif') ? 'instrument-serif' : 'dm-sans';
+      // The fonts web/src/index.css loads (brand: Plus Jakarta Sans, Geist Mono, Instrument Serif).
+      const family = ['instrument-serif', 'plus-jakarta-sans', 'geist-mono'].find(name => pathname.includes(name));
+      if (!family) return route.continue();
       const directory = path.dirname(require.resolve(`@fontsource/${family}/400.css`, { paths: [path.resolve('web')] }));
       return route.fulfill({ path: path.join(directory, 'files', path.basename(pathname)), contentType: 'font/woff2' });
     });

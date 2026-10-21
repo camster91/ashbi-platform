@@ -10,7 +10,8 @@ import { statusLabel } from '../lib/status';
 import useClients from '../hooks/useClients';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { Button, Card, EmptyState, LoadingState, SlowNotice, StatusBadge, PageHeading } from '../components/ui';
+import { Button, Card, EmptyState, LoadingState, SlowNotice, StatusBadge } from '../components/ui';
+import { formatDate, formatMoney } from '../lib/format';
 import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -106,18 +107,23 @@ export default function Proposals() {
 
   return (
     <div className="space-y-6">
-      <PageHeading
-        title="Proposals"
-        description="Scope and pricing for client approval."
-        actions={<>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-eyebrow text-muted-foreground">Sales</p>
+          <h1 className="mt-1.5 text-3xl font-heading font-semibold tracking-tight text-foreground">
+            Proposals <span className="font-display italic font-normal text-primary">to win</span>
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">Scope and pricing for client approval.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" leftIcon={<Sparkles className="w-4 h-4" />} onClick={() => setShowGenerator(true)}>
+            AI Generate
+          </Button>
           <Button leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowCreate(true)}>
             New Proposal
           </Button>
-          <Button variant="ghost" leftIcon={<Sparkles className="w-4 h-4" />} onClick={() => setShowGenerator(true)}>
-            AI Generate
-          </Button>
-        </>}
-      />
+        </div>
+      </div>
 
       {/* Status Filters */}
       <div role="group" aria-label="Proposal status" className="grid grid-cols-3 gap-1 rounded-xl bg-muted/50 p-1 sm:flex sm:flex-wrap">
@@ -172,8 +178,9 @@ export default function Proposals() {
           />
           <form onSubmit={handleCreate} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Client</label>
+              <label htmlFor="new-proposal-client" className="block text-sm font-medium mb-1">Client</label>
               <select
+                id="new-proposal-client"
                 value={form.clientId}
                 onChange={(e) => setForm({ ...form, clientId: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -186,8 +193,9 @@ export default function Proposals() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Title</label>
+              <label htmlFor="new-proposal-title" className="block text-sm font-medium mb-1">Title</label>
               <input
+                id="new-proposal-title"
                 type="text"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -197,8 +205,9 @@ export default function Proposals() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Notes (optional)</label>
+              <label htmlFor="new-proposal-notes" className="block text-sm font-medium mb-1">Notes (optional)</label>
               <textarea
+                id="new-proposal-notes"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -240,7 +249,7 @@ export default function Proposals() {
         <div className="space-y-3">
           {proposals.map((proposal) => {
             return (
-              <Card key={proposal.id} className="p-4 transition-colors hover:border-primary/30">
+              <Card key={proposal.id} padding="none" className="rounded-lg p-4 transition-colors hover:border-primary/30">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                   <div className="flex-1 min-w-0">
                     <Link
@@ -253,19 +262,19 @@ export default function Proposals() {
                       <span className="min-w-0 break-words">{proposal.client?.name}</span>
                       {proposal.validUntil && (
                         <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap">
-                          <Clock className="w-3 h-3" />
-                          Valid until {new Date(proposal.validUntil).toLocaleDateString('en-CA')}
+                          <Clock className="w-3 h-3" aria-hidden="true" />
+                          Valid until {formatDate(proposal.validUntil)}
                         </span>
                       )}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2 sm:shrink-0 sm:border-0 sm:pt-0">
                   <div className="flex flex-wrap items-center gap-3">
-                    <span className="text-sm font-medium tabular-nums">${proposal.total?.toFixed(2)}</span>
-                    <StatusBadge domain="proposal" status={proposal.status} className="px-2.5 py-1" />
+                    <span className="figure text-sm font-medium">{formatMoney(proposal.total)}</span>
+                    <StatusBadge domain="proposal" status={proposal.status} className="px-2.5 py-1 font-semibold" />
                   </div>
                   <div className="flex items-center gap-1">
-                    {proposal.status === 'SENT' && proposal.viewToken && (
+                    {(proposal.status === 'SENT' || proposal.status === 'VIEWED') && proposal.viewToken && (
                       <button
                         onClick={() => navigator.clipboard.writeText(`${window.location.origin}/portal/proposal/${proposal.viewToken}`)}
                         className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
@@ -273,7 +282,7 @@ export default function Proposals() {
                         aria-label="Copy client link"
                         title="Copy client link"
                       >
-                        <ExternalLink className="w-4 h-4" />
+                        <ExternalLink className="w-4 h-4" aria-hidden="true" />
                       </button>
                     )}
                     <button
@@ -283,7 +292,7 @@ export default function Proposals() {
                         aria-label="Duplicate"
                         title="Duplicate"
                     >
-                      <Copy className="w-4 h-4" />
+                      <Copy className="w-4 h-4" aria-hidden="true" />
                     </button>
                     {proposal.status === 'DRAFT' && (
                       <button
@@ -293,7 +302,7 @@ export default function Proposals() {
                         aria-label="Delete"
                         title="Delete"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
                       </button>
                     )}
                   </div>
@@ -438,14 +447,14 @@ function ProposalGenerator({ clients, onClose, onSaveDraft, saving = false }) {
   };
 
   return (
-    <Card className="p-6 border-2 border-brand-indigo/20">
+    <Card padding="none" className="rounded-lg p-6 border-2 border-primary/20">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-brand-indigo" />
+          <Sparkles className="w-5 h-5 text-primary" aria-hidden="true" />
           <h2 className="text-lg font-semibold">AI Proposal Generator</h2>
         </div>
         <button type="button" onClick={onClose} aria-label="Close proposal generator" className="min-h-11 min-w-11 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
-          <XCircle className="w-5 h-5" />
+          <XCircle className="w-5 h-5" aria-hidden="true" />
         </button>
       </div>
 
@@ -522,29 +531,20 @@ function ProposalGenerator({ clients, onClose, onSaveDraft, saving = false }) {
           </div>
         </div>
 
-        <button
+        <Button
           type="submit"
-          disabled={isGenerating}
-          className="inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium rounded-full bg-brand-lime text-brand-indigo hover:brightness-95 transition disabled:opacity-60 disabled:cursor-not-allowed"
+          loading={isGenerating}
+          slowAfterMs={false}
+          leftIcon={<Sparkles className="w-4 h-4" />}
         >
-          {isGenerating ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-brand-indigo border-t-transparent" />
-              Generating proposal...
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4" />
-              Generate
-            </>
-          )}
-        </button>
+          {isGenerating ? 'Generating proposal...' : 'Generate'}
+        </Button>
       </form>
 
       {/* Loading state */}
       {isGenerating && (
         <div className="mt-6 flex flex-col items-center justify-center py-12 text-muted-foreground">
-          <div className="animate-spin rounded-full h-10 w-10 border-2 border-brand-indigo border-t-transparent mb-4" />
+          <div aria-hidden="true" className="animate-spin motion-reduce:animate-none rounded-full h-10 w-10 border-2 border-primary border-t-transparent mb-4" />
           <p className="text-sm font-medium">Generating proposal...</p>
           <p className="text-xs mt-1">This usually takes 10-20 seconds</p>
         </div>
@@ -580,15 +580,14 @@ function ProposalGenerator({ clients, onClose, onSaveDraft, saving = false }) {
               >
                 {isEditing ? 'Preview' : 'Edit'}
               </Button>
-              <button
-                type="button"
+              <Button
+                size="xs"
                 onClick={handleSaveDraft}
                 disabled={saving || draftTooLong}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-full bg-brand-indigo text-brand-lime hover:brightness-110 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                leftIcon={<Save className="w-3 h-3" />}
               >
-                <Save className="w-3 h-3" />
                 {saving ? 'Creating...' : 'Create Proposal'}
-              </button>
+              </Button>
             </div>
           </div>
 

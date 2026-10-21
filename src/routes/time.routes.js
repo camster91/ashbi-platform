@@ -62,6 +62,20 @@ async function summaryLabels(delegate, ids, includeArchived = false) {
   return labels;
 }
 
+// Billing rates and invoice links on time entries are admin-only money; team
+// members still see their hours. Applies to every entry list returned below.
+export function withoutTimeEntryMoney(entry) {
+  if (!entry) return entry;
+  const { hourlyRate: _rate, invoiceId: _invoiceId, ...rest } = entry;
+  if (rest.user && 'hourlyRate' in rest.user) {
+    const { hourlyRate: _userRate, ...user } = rest.user;
+    rest.user = user;
+  }
+  return rest;
+}
+
+const seesTimeMoney = (request) => request.user?.role === 'ADMIN';
+
 export default async function timeRoutes(fastify) {
   // Get time entries for a project
   fastify.get('/projects/:projectId/time-entries', {
@@ -122,7 +136,7 @@ export default async function timeRoutes(fastify) {
     });
 
     return {
-      entries,
+      entries: seesTimeMoney(request) ? entries : entries.map(withoutTimeEntryMoney),
       totals: {
         totalMinutes: aggregates._sum.duration || 0,
         totalHours: Math.round((aggregates._sum.duration || 0) / 60 * 100) / 100,
@@ -168,7 +182,7 @@ export default async function timeRoutes(fastify) {
       if (!acc[dateKey]) {
         acc[dateKey] = { entries: [], totalMinutes: 0 };
       }
-      acc[dateKey].entries.push(entry);
+      acc[dateKey].entries.push(seesTimeMoney(request) ? entry : withoutTimeEntryMoney(entry));
       acc[dateKey].totalMinutes += entry.duration;
       return acc;
     }, {});
@@ -234,7 +248,7 @@ export default async function timeRoutes(fastify) {
       }
     });
 
-    return reply.status(201).send(entry);
+    return reply.status(201).send(seesTimeMoney(request) ? entry : withoutTimeEntryMoney(entry));
   });
 
   // Update time entry
@@ -269,13 +283,14 @@ export default async function timeRoutes(fastify) {
     const { count } = await request.prisma.timeEntry.updateMany({ where: unlockedTimeEntryWhere(id), data });
     if (count === 0) return lockedWriteReply(request, reply, id);
 
-    return request.prisma.timeEntry.findUnique({
+    const updated = await request.prisma.timeEntry.findUnique({
       where: { id },
       include: {
         user: { select: { id: true, name: true } },
         task: { select: { id: true, title: true } }
       }
     });
+    return seesTimeMoney(request) ? updated : withoutTimeEntryMoney(updated);
   });
 
   // Delete time entry
@@ -374,7 +389,7 @@ export default async function timeRoutes(fastify) {
       const page = await request.prisma.timeEntry.findMany({
         where,
         include: {
-          user: { select: { id: true, name: true, hourlyRate: true } },
+          user: { select: { id: true, name: true, hourlyRate: seesTimeMoney(request) } },
           project: { select: { id: true, name: true } },
           task: { select: { id: true, title: true } }
         },
@@ -396,7 +411,7 @@ export default async function timeRoutes(fastify) {
       if (!byUser[entry.userId].days[dayKey]) {
         byUser[entry.userId].days[dayKey] = { entries: [], totalMinutes: 0 };
       }
-      byUser[entry.userId].days[dayKey].entries.push(entry);
+      byUser[entry.userId].days[dayKey].entries.push(seesTimeMoney(request) ? entry : withoutTimeEntryMoney(entry));
       byUser[entry.userId].days[dayKey].totalMinutes += entry.duration;
       byUser[entry.userId].totalMinutes += entry.duration;
       if (entry.billable) byUser[entry.userId].billableMinutes += entry.duration;

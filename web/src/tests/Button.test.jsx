@@ -94,7 +94,7 @@ describe('Button Component', () => {
     expect(classes).toContain('border-border');
     expect(classes).toContain('min-h-11');
     expect(classes).toContain('w-full');
-    expect(buttonStyles({ variant: 'nope' })).toContain('bg-primary');
+    expect(buttonStyles({ variant: 'nope' })).toContain('bg-accent');
   });
 
   it('offers an outlined destructive variant for delete triggers', () => {

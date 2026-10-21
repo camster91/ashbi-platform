@@ -39,8 +39,10 @@ describe('Client Portal Token Security', () => {
         console.warn('   Recommend: Require tokens in cookies or Authorization header only');
       }
 
-      // Document current state; hard failure when fixed
-      assert.ok(true, `Query string token acceptance: ${queryTokenUsage.length} occurrences (documented)`);
+      // The portal reads session tokens only from the cookie or the
+      // Authorization header; a query-string token would leak via history,
+      // proxy logs and Referer headers.
+      assert.equal(queryTokenUsage.length, 0, 'client-portal.routes.js must not read request.query?.token');
     });
 
     it('should use httpOnly cookies for auth tokens', () => {
@@ -66,32 +68,6 @@ describe('Client Portal Token Security', () => {
 
       assert.ok(httpOnly.length > 0, 'Should set httpOnly: true on auth cookies');
     });
-
-    it('magic link flow should POST token and redirect (not pass in URL)', () => {
-      if (!fs.existsSync(clientPortalPath)) {
-        return;
-      }
-
-      const content = fs.readFileSync(clientPortalPath, 'utf-8');
-
-      // Look for the magic link verification endpoint
-      const hasMagicLinkVerify = content.includes('/auth/verify') || content.includes('/verify');
-
-      if (hasMagicLinkVerify) {
-        // The verify endpoint should accept the token from the body or params, not query
-        const verifySection = content.substring(
-          content.indexOf('/auth/verify') !== -1 ? content.indexOf('/auth/verify') : content.indexOf('/verify'),
-          content.indexOf('/auth/verify') !== -1 ? content.indexOf('/auth/verify') + 500 : content.indexOf('/verify') + 500
-        );
-
-        const usesQueryToken = verifySection.includes('request.query');
-        if (usesQueryToken) {
-          console.warn('  ⚠ Magic link verify uses query string token - should use POST body instead');
-        }
-      }
-
-      assert.ok(true, 'Magic link flow documented');
-    });
   });
 
   describe('portal.routes.js', () => {
@@ -108,26 +84,6 @@ describe('Client Portal Token Security', () => {
       console.log(`  âœ“ portal.routes.js: ${paramTokenUsage.length} param-based tokens (acceptable - not JWTs)`);
 
       assert.ok(paramTokenUsage.length > 0, 'Portal should use param-based viewTokens');
-    });
-  });
-
-  describe('Token distinction', () => {
-    it('viewTokens (portal) are not JWTs and do not carry session state', () => {
-      // This test documents an important distinction:
-      // - viewTokens = random opaque tokens stored in DB, verified by lookup
-      // - JWT tokens = contain session claims, can be used for any auth action
-      //
-      // viewTokens in URLs are safe because:
-      // 1. They're single-purpose (only for the specific resource)
-      // 2. They can be revoked by deleting from DB
-      // 3. They don't grant broader access
-      //
-      // JWT tokens in URLs are unsafe because:
-      // 1. They grant access to ALL authenticated endpoints
-      // 2. They can't be easily revoked
-      // 3. They leak to browser history, referer headers
-
-      assert.ok(true, 'Token security distinction documented: viewTokens ≠ JWT');
     });
   });
 });

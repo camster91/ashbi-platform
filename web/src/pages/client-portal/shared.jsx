@@ -173,7 +173,7 @@ export const busyLabelButtonClass = 'disabled:opacity-100';
 export const portalFieldStyles = (className) => inputStyles(cn(portalFieldClass, className));
 
 // Portal typography on design tokens.
-export const pageTitleClass = 'mb-4 text-xl font-bold text-foreground';
+export const pageTitleClass = 'mb-4 text-2xl font-semibold tracking-tight text-foreground';
 export const sectionTitleClass = 'mb-3 text-base font-semibold text-foreground';
 export const labelClass = 'mb-1.5 block text-sm font-medium text-foreground';
 

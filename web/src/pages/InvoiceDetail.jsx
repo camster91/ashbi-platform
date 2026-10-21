@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, Send, DollarSign, Printer, FileText, CheckCircle, AlertTriangle,
-  Edit2, Save, CreditCard, Trash2, ExternalLink, RefreshCw,
+  Send, Printer, FileText, CheckCircle, AlertTriangle, Plus,
+  Edit2, Save, CreditCard, Trash2, ExternalLink, RefreshCw, Copy, Info,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import useAutosave from '../hooks/useAutosave';
@@ -12,16 +12,44 @@ import { invoiceTotals, lineTotal } from '../lib/money-totals';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, LoadingState, StatusBadge } from '../components/ui';
+import { Button, Card, Field, Input, LoadingState, Select, StatusBadge, Textarea } from '../components/ui';
+import { buttonStyles } from '../components/ui/Button';
 import Modal, { ModalFooter } from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
-import { buildInvoiceUpdatePayload, INVOICE_CURRENCY_OPTIONS } from '../lib/invoice-payloads';
-import { formatInvoiceMoney, formatInvoiceDate, toDateInputValue } from '../lib/format';
-import { invoiceDisplayStatus, isOpenInvoice, recurrenceSummary, taxTypeLabel } from '../lib/invoice-status';
+import { buildInvoiceUpdatePayload, INVOICE_CURRENCY_OPTIONS, INVOICE_RECURRING_INTERVALS } from '../lib/invoice-payloads';
+import { DEFAULT_LOCALE, formatInvoiceMoney, formatInvoiceDate, toDateInputValue } from '../lib/format';
+import { invoiceBalanceDue, invoiceDisplayStatus, isOpenInvoice, recurrenceSummary, recurrenceWord, taxTypeLabel } from '../lib/invoice-status';
+import { cn } from '../lib/utils';
+
+// Ashbi Hub invoice page (design: Invoice mockup). Details, line items and
+// payment/schedule panels on the left; on the right, a preview of what the
+// client sees on the pay page. A draft switches the same panels into its
+// edit form.
 
 const HST_RATE = 13;
 const INITIAL_PAYMENT_FORM = { paymentMethod: 'BANK', paymentNotes: '', transactionId: '', amount: '' };
+const LINE_ITEM_TYPES = [
+  { value: 'LABOR', label: 'Labor' },
+  { value: 'MATERIALS', label: 'Materials' },
+  { value: 'EXPENSE', label: 'Expense' },
+  { value: 'DISCOUNT', label: 'Discount' },
+  { value: 'CUSTOM', label: 'Custom' },
+];
+const TAX_TYPE_OPTIONS = [
+  { value: 'HST', label: 'HST' },
+  { value: 'GST', label: 'GST' },
+  { value: 'PST', label: 'PST' },
+  { value: 'TAX', label: 'Tax' },
+  { value: 'NONE', label: 'None' },
+];
+
+const panelHeaderClass = 'px-5 pt-4 pb-3 flex flex-wrap items-baseline justify-between gap-2';
+const panelTitleClass = 'text-lg font-semibold tracking-tight text-foreground';
+const panelBodyClass = 'px-5 pb-5';
+const thClass = 'py-2 text-eyebrow text-muted-foreground font-normal';
+const smallLinkClass = 'inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-sm font-semibold text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:no-underline';
+const cellInputClass = 'min-h-11 text-sm';
 
 // Whether the invoice has nothing left to pay (a $0 total, or fully covered).
 export function nothingOwed(balanceDue) {
@@ -67,12 +95,165 @@ export function paymentMethodLabel(method) {
   return PAYMENT_METHOD_LABELS[method] || method;
 }
 
+/** "HST 13%", "Tax 5%", "No tax": the tax line's label. */
+export function taxLineLabel(taxType, taxRate) {
+  const name = taxTypeLabel(taxType);
+  if (name === 'No tax') return name;
+  return taxRate === null || taxRate === undefined || taxRate === '' ? name : `${name} ${taxRate}%`;
+}
+
+/** "Priya" from "Priya Shah": who the client preview is addressed to. */
+export function previewViewerName(invoice) {
+  const name = String(invoice?.client?.contacts?.[0]?.name || '').trim();
+  return name ? name.split(/\s+/)[0] : null;
+}
+
 function fmt(n, currency) {
   return formatInvoiceMoney(n, currency);
 }
 
+// "1,200.00": a bare amount for table cells, where the currency is in the
+// heading or the total line (as on the mockup).
+const plainNumber = new Intl.NumberFormat(DEFAULT_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function plain(n) {
+  return plainNumber.format(Number(n) || 0);
+}
+
 function formatDate(date) {
   return formatInvoiceDate(date, { month: 'long' });
+}
+
+function shortDate(date) {
+  return formatInvoiceDate(date);
+}
+
+function Panel({ id, title, action, children, className }) {
+  return (
+    <Card as="section" padding="none" className={cn('rounded-lg', className)} aria-labelledby={id}>
+      <div className={panelHeaderClass}>
+        <h2 id={id} className={panelTitleClass}>{title}</h2>
+        {action}
+      </div>
+      {children}
+    </Card>
+  );
+}
+
+function DetailItem({ label, children }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-eyebrow text-muted-foreground">{label}</dt>
+      <dd className="mt-1 text-foreground break-words">{children}</dd>
+    </div>
+  );
+}
+
+function TotalRow({ label, value, className }) {
+  return (
+    <div className={cn('flex justify-between gap-4', className)}>
+      <dt>{label}</dt>
+      <dd className="figure text-right">{value}</dd>
+    </div>
+  );
+}
+
+// What the client sees on the public pay page (PortalInvoice), drawn from
+// the stored invoice, or from the edit form while a draft is being edited.
+function ClientPreview({ invoice, doc, viewer, clientInvoiceUrl, showPayPageLink }) {
+  const isPaid = invoice.status === 'PAID';
+  const isVoid = invoice.status === 'VOID';
+  const balance = doc.balanceDue;
+  return (
+    <aside aria-labelledby="invoice-preview-heading" className="space-y-2.5 min-w-0">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="invoice-preview-heading" className="text-eyebrow text-muted-foreground">
+          {viewer ? `What ${viewer} sees` : 'What the client sees'}
+        </h2>
+        {showPayPageLink && (
+          <a href={clientInvoiceUrl} target="_blank" rel="noopener noreferrer" className={cn(smallLinkClass, '-my-3 -mr-2')}>
+            Open pay page <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          </a>
+        )}
+      </div>
+      <Card padding="none" className="rounded-lg overflow-hidden">
+        <div className="bg-primary text-primary-foreground px-6 py-5 flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-lg font-bold tracking-tight break-words">{doc.title || 'Invoice'}</div>
+            {invoice.client?.name && <div className="text-xs text-primary-foreground/80 break-words">For {invoice.client.name}</div>}
+          </div>
+          <div className="text-right shrink-0">
+            <div className="text-eyebrow text-primary-foreground/80">Invoice</div>
+            <div className="figure font-medium">{invoice.invoiceNumber}</div>
+          </div>
+        </div>
+        <div className="px-6 pt-5 pb-6 space-y-5">
+          <dl className="grid grid-cols-2 gap-3 text-sm">
+            <div className="min-w-0">
+              <dt className="text-eyebrow text-muted-foreground">Billed to</dt>
+              <dd className="font-semibold text-foreground break-words">{invoice.client?.name || '—'}</dd>
+              {invoice.client?.contacts?.[0]?.name && <dd className="text-foreground break-words">{invoice.client.contacts[0].name}</dd>}
+            </div>
+            <div className="min-w-0">
+              <dt className="text-eyebrow text-muted-foreground">Due</dt>
+              <dd className="font-semibold text-foreground">{doc.dueDate ? shortDate(doc.dueDate) : 'Upon receipt'}</dd>
+              <dd className="text-muted-foreground">Issued {shortDate(doc.issueDate)}</dd>
+            </div>
+          </dl>
+
+          <dl className="space-y-2 text-sm">
+            {doc.lines.map((line, index) => (
+              <div key={line.key ?? index} className="flex justify-between gap-3">
+                <dt className="min-w-0 break-words text-foreground">
+                  {line.description || 'Untitled line'}
+                  {Number(line.quantity) !== 1 && (
+                    <span className="text-muted-foreground"> · <span className="figure">{line.quantity}</span> × <span className="figure">{plain(line.unitPrice)}</span></span>
+                  )}
+                </dt>
+                <dd className="figure shrink-0">{plain(line.total)}</dd>
+              </div>
+            ))}
+            {doc.discount > 0 && <TotalRow label="Discount" value={`-${plain(doc.discount)}`} className="text-muted-foreground" />}
+            {doc.tax > 0 && <TotalRow label={doc.taxLabel} value={plain(doc.tax)} className="text-muted-foreground" />}
+            <TotalRow
+              label={isPaid ? 'Total' : 'Total due'}
+              value={fmt(doc.total, doc.currency)}
+              className="border-t border-border/60 pt-2.5 text-base font-bold"
+            />
+            {!isPaid && doc.amountPaid > 0 && (
+              <>
+                <TotalRow label="Paid so far" value={`-${fmt(doc.amountPaid, doc.currency)}`} className="text-muted-foreground" />
+                <TotalRow label="Balance due" value={fmt(balance, doc.currency)} className="font-semibold" />
+              </>
+            )}
+          </dl>
+
+          {isPaid ? (
+            <p className="flex items-center justify-center gap-2 rounded-md border border-success/30 bg-success/5 px-3 py-3 text-sm font-semibold text-success">
+              <CheckCircle className="h-4 w-4" aria-hidden="true" />
+              {invoice.paidAt ? `Paid on ${formatDate(invoice.paidAt)}` : 'Payment received'}
+            </p>
+          ) : isVoid ? (
+            <p className="rounded-md border border-border/60 bg-muted/50 px-3 py-3 text-center text-sm text-muted-foreground">This invoice is void. The client can no longer pay it.</p>
+          ) : balance > 0 ? (
+            <div className="space-y-2">
+              {/* A picture of the pay button, not a control: paying happens on the pay page. */}
+              <div className="flex min-h-12 items-center justify-center gap-2 rounded-md border border-foreground bg-accent px-4 font-mono text-xs font-medium uppercase tracking-[0.1em] text-accent-foreground">
+                <CreditCard className="h-4 w-4" aria-hidden="true" />
+                Pay Now - {fmt(balance, doc.currency)}
+              </div>
+              <p className="text-center text-xs text-muted-foreground">
+                {invoice.status === 'DRAFT'
+                  ? 'The client can pay by card (Stripe) once you send the invoice.'
+                  : 'Card payments go through Stripe.'}
+              </p>
+            </div>
+          ) : (
+            <p className="text-center text-sm text-muted-foreground">Nothing is owed on this invoice.</p>
+          )}
+        </div>
+      </Card>
+    </aside>
+  );
 }
 
 export default function InvoiceDetail() {
@@ -85,11 +266,10 @@ export default function InvoiceDetail() {
 
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  const [issueDateError, setIssueDateError] = useState(null);
   const [showMarkPaid, setShowMarkPaid] = useState(false);
   const [payForm, setPayForm] = useState(INITIAL_PAYMENT_FORM);
-  const [showPdf, setShowPdf] = useState(false);
   const [showVoidConfirm, setShowVoidConfirm] = useState(false);
-  const pdfRef = useRef(null);
   const paymentAmountRef = useRef(null);
   // The edit form renders one set of line-item inputs for the layout in use.
   const isSmUp = useIsSmUp();
@@ -235,11 +415,14 @@ export default function InvoiceDetail() {
       title: invoice.title || '',
       notes: invoice.notes || '',
       internalNotes: invoice.internalNotes || '',
+      issueDate: toDateInputValue(invoice.issueDate || invoice.createdAt),
       dueDate: toDateInputValue(invoice.dueDate),
       currency: invoice.currency || 'CAD',
       taxRate: invoice.taxRate ?? HST_RATE,
       taxType: invoice.taxType || 'HST',
       discountAmount: invoice.discountAmount || 0,
+      isRecurring: Boolean(invoice.isRecurring),
+      recurringInterval: invoice.recurringInterval || 'MONTHLY',
       lineItems: (invoice.lineItems || []).map(li => ({
         id: li.id,
         description: li.description,
@@ -252,10 +435,22 @@ export default function InvoiceDetail() {
     setEditing(true);
   };
 
+  const cancelEdit = () => { setEditing(false); setEditForm(null); setIssueDateError(null); };
+
   const handleUpdate = (e) => {
     e.preventDefault();
+    // A cleared issue date must not save as "no change": stop and say so.
+    if (!editForm.issueDate) {
+      setIssueDateError('Enter an issue date.');
+      return;
+    }
+    setIssueDateError(null);
     // Shared with the API contract test so the UI payload always validates.
-    updateMutation.mutate(buildInvoiceUpdatePayload(editForm));
+    updateMutation.mutate(buildInvoiceUpdatePayload(editForm, {
+      issueDate: toDateInputValue(invoice.issueDate || invoice.createdAt),
+      isRecurring: invoice.isRecurring,
+      recurringInterval: invoice.recurringInterval,
+    }));
   };
 
   const handlePrint = () => {
@@ -293,6 +488,7 @@ export default function InvoiceDetail() {
   const displayStatus = invoiceDisplayStatus(invoice);
   const repeats = recurrenceSummary(invoice);
   const isDraft = invoice.status === 'DRAFT';
+  const isVoid = invoice.status === 'VOID';
   const sourceBacked = Boolean(invoice.sourceBilling || invoice.billingSources);
   const canManage = isAdmin || !sourceBacked;
   // Sent, viewed by the client, or overdue: payable and resendable.
@@ -306,629 +502,588 @@ export default function InvoiceDetail() {
   const clientInvoiceUrl = invoice.viewToken && (isSent || isPaid)
     ? `${window.location.origin}/portal/invoice/${invoice.viewToken}`
     : null;
+  const isEditing = Boolean(editing && editForm && canManage);
+  const contact = invoice.client?.contacts?.[0];
+  const viewer = previewViewerName(invoice);
+  const showSourceRelease = isAdmin && isVoid && invoice.billingSources && !invoice.billingSourcesReleasedAt;
+  const canVoid = isAdmin && !isPaid && !hasPayments;
 
   // Edit form calculations
   // The API's arithmetic (lib/money-totals.js), so the preview is what is billed.
   const editDiscount = editForm ? parseFloat(editForm.discountAmount) || 0 : 0;
+  const editLines = (editForm?.lineItems || []).map((li) => ({
+    quantity: parseFloat(li.quantity) || 1,
+    unitPrice: parseFloat(li.unitPrice) || 0,
+  }));
   const { subtotal: editSubtotal, tax: editTax, total: editTotal } = invoiceTotals(
-    (editForm?.lineItems || []).map((li) => ({ total: lineTotal(parseFloat(li.quantity) || 1, parseFloat(li.unitPrice) || 0) })),
+    editLines.map((li) => ({ total: lineTotal(li.quantity, li.unitPrice) })),
     parseFloat(editForm?.taxRate || HST_RATE),
     editDiscount,
   );
 
+  const updateLine = (idx, field, value) => setEditForm(f => {
+    const items = [...f.lineItems];
+    items[idx] = { ...items[idx], [field]: value };
+    return { ...f, lineItems: items };
+  });
+  const removeLine = (idx) => setEditForm(f => ({ ...f, lineItems: f.lineItems.filter((_, i) => i !== idx) }));
+  const addLine = () => setEditForm(f => ({ ...f, lineItems: [...f.lineItems, { description: '', itemType: 'LABOR', quantity: 1, unitPrice: 0 }] }));
+
+  // What the client preview shows: the saved invoice, or the form being edited.
+  const previewDoc = isEditing
+    ? {
+      title: editForm.title || invoice.title,
+      currency: editForm.currency || 'CAD',
+      issueDate: editForm.issueDate || invoice.issueDate || invoice.createdAt,
+      dueDate: editForm.dueDate || null,
+      lines: editForm.lineItems.map((li, idx) => ({
+        key: li.id || `new-${idx}`,
+        description: li.description,
+        quantity: editLines[idx].quantity,
+        unitPrice: editLines[idx].unitPrice,
+        total: lineTotal(editLines[idx].quantity, editLines[idx].unitPrice),
+      })),
+      discount: editDiscount,
+      tax: editTax,
+      taxLabel: taxLineLabel(editForm.taxType, editForm.taxRate),
+      total: editTotal,
+      amountPaid: 0,
+      balanceDue: editTotal,
+    }
+    : {
+      title: invoice.title,
+      currency: invoice.currency,
+      issueDate: invoice.issueDate || invoice.createdAt,
+      dueDate: invoice.dueDate,
+      lines: (invoice.lineItems || []).map((li) => ({ key: li.id, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, total: li.total })),
+      discount: Number(invoice.discountAmount) || 0,
+      tax: Number(invoice.tax) || 0,
+      taxLabel: taxLineLabel(invoice.taxType, invoice.taxRate),
+      total: Number(invoice.total) || 0,
+      amountPaid: Number(invoice.amountPaid) || 0,
+      balanceDue: invoiceBalanceDue(invoice),
+    };
+
+  const copyPayLink = () => {
+    navigator.clipboard.writeText(clientInvoiceUrl || '');
+    setCopyLinkMsg('Copied!');
+    setTimeout(() => setCopyLinkMsg(''), 2000);
+  };
+
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-5 max-w-[1240px] mx-auto">
+      <nav aria-label="Breadcrumb" className="text-eyebrow text-muted-foreground">
+        <Link to="/invoices" className="rounded-sm hover:text-foreground underline-offset-4 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">Invoices</Link>
+        <span aria-hidden="true"> / </span>
+        <span aria-current="page">{invoice.invoiceNumber}</span>
+      </nav>
+
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => navigate('/invoices')}
-            aria-label="Back to invoices"
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
-            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
-          </button>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl sm:text-2xl font-bold font-mono">{invoice.invoiceNumber}</h1>
-              <StatusBadge domain="invoice" status={displayStatus} className="px-2.5 py-1 font-semibold" />
-            </div>
-            {invoice.title && <p className="text-muted-foreground mt-0.5">{invoice.title}</p>}
-            {!isPaid && invoice.amountPaid > 0 && (
-              <p className="text-sm text-muted-foreground mt-0.5">
-                <span className="font-semibold text-foreground">{fmt(invoice.balanceDue, invoice.currency)}</span> left to pay of {fmt(invoice.total, invoice.currency)}
-              </p>
-            )}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="figure text-3xl font-medium tracking-tight text-foreground break-all">{invoice.invoiceNumber}</h1>
+            <StatusBadge domain="invoice" status={displayStatus} size="md" className="font-semibold" />
             {repeats && (
-              <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1">
-                <RefreshCw className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-sm font-semibold text-secondary-foreground">
+                <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 {repeats}
-              </p>
+              </span>
             )}
           </div>
+          {invoice.title && <p className="text-muted-foreground break-words">{invoice.title}</p>}
+          {!isPaid && invoice.amountPaid > 0 && (
+            <p className="text-sm text-muted-foreground">
+              <span className="figure font-semibold text-foreground">{fmt(invoice.balanceDue, invoice.currency)}</span> left to pay of <span className="figure">{fmt(invoice.total, invoice.currency)}</span>
+            </p>
+          )}
         </div>
 
-        {/* Desktop Actions */}
-        <div className="hidden sm:flex items-center gap-2 flex-wrap justify-end">
-          {isDraft && canManage && (
+        <div className="flex flex-wrap items-center gap-2">
+          {showSourceRelease && <Button variant="outline" onClick={() => navigate(`/invoices/unbilled?release=${invoice.id}`)}>Review source release</Button>}
+          {isEditing ? (
             <>
-              <Button variant="outline" size="sm" leftIcon={<Edit2 className="w-4 h-4" />} onClick={startEdit}>
-                Edit
+              <Button type="submit" form="invoice-edit-form" loading={updateMutation.isPending} leftIcon={<Save className="w-4 h-4" />} variant="outline">
+                Save draft
               </Button>
-              {isAdmin && (
-                <Button size="sm" leftIcon={<Send className="w-4 h-4" />}
-                  onClick={() => sendMutation.mutate()} loading={sendMutation.isPending}>
-                  Send to Client
-                </Button>
-              )}
+              <Button variant="ghost" type="button" onClick={cancelEdit}>Cancel</Button>
             </>
+          ) : (
+            isDraft && canManage && (
+              <Button variant="outline" leftIcon={<Edit2 className="w-4 h-4" />} onClick={startEdit}>Edit</Button>
+            )
           )}
-          {isSent && !isPaid && canManage && (
-            <Button size="sm" leftIcon={<DollarSign className="w-4 h-4" />}
-              onClick={openMarkPaid}>
-              Mark as Paid
-            </Button>
-          )}
-          <Button variant="outline" size="sm" leftIcon={<Printer className="w-4 h-4" />}
-            onClick={handlePrint}>
-            Print / PDF
-          </Button>
+          <Button variant="outline" leftIcon={<Printer className="w-4 h-4" />} onClick={handlePrint}>Print</Button>
           <a
             href={`/api/invoices/${id}/pdf`}
             download={`${invoice.invoiceNumber || 'invoice'}.pdf`}
+            className={buttonStyles({ variant: 'outline' })}
           >
-            <Button variant="outline" size="sm" leftIcon={<FileText className="w-4 h-4" />}>
-              Download PDF
-            </Button>
+            <FileText className="w-4 h-4" aria-hidden="true" />
+            Download PDF
           </a>
-          {isAdmin && invoice.status === 'VOID' && invoice.billingSources && !invoice.billingSourcesReleasedAt && <Button variant="outline" size="sm" onClick={() => navigate(`/invoices/unbilled?release=${invoice.id}`)}>Review source release</Button>}
-          {invoice.stripePaymentLink ? (
-            <div className="flex items-center gap-1">
-              <span className="inline-flex items-center gap-1 text-xs font-medium bg-success/10 text-success px-2 py-1 rounded-full">
-                <CheckCircle className="w-3 h-3" /> Payment Link Active
-              </span>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(clientInvoiceUrl || '');
-                  setCopyLinkMsg('Copied!');
-                  setTimeout(() => setCopyLinkMsg(''), 2000);
-                }}
-                className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded border border-border"
-                title="Copy the client's pay link (public invoice page)"
-                disabled={!clientInvoiceUrl}
-              >
-                {copyLinkMsg || 'Copy Link'}
-              </button>
-            </div>
-          ) : (
-            canManage && invoice.status !== 'VOID' && invoice.status !== 'PAID' && (
-              <Button
-                variant="outline" size="sm"
-                leftIcon={<CreditCard className="w-4 h-4" />}
-                onClick={() => generatePaymentLinkMutation.mutate()}
-                disabled={generatePaymentLinkMutation.isPending}
-              >
-                {generatePaymentLinkMutation.isPending ? 'Generating…' : 'Generate Payment Link'}
-              </Button>
-            )
+          {canVoid && (
+            <Button variant="danger-outline" leftIcon={<Trash2 className="w-4 h-4" />} onClick={() => { deleteMutation.reset(); setShowVoidConfirm(true); }}>
+              Void invoice
+            </Button>
           )}
-          {invoice.viewToken && (
-            <button
-              onClick={() => navigator.clipboard.writeText(`${window.location.origin}/portal/invoice/${invoice.viewToken}`)}
-              className="p-1.5 text-muted-foreground hover:text-foreground rounded" title="Copy client link">
-              <ExternalLink className="w-4 h-4" />
-            </button>
-          )}
-          {isAdmin && !isPaid && !hasPayments && (
-            <button
-              onClick={() => { deleteMutation.reset(); setShowVoidConfirm(true); }}
-              className="p-1.5 text-muted-foreground hover:text-destructive rounded" title="Void invoice">
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Mobile Actions - Stacked */}
-        <div className="sm:hidden flex flex-wrap gap-2">
-          {isAdmin && invoice.status === 'VOID' && invoice.billingSources && !invoice.billingSourcesReleasedAt && <Button variant="outline" size="sm" onClick={() => navigate(`/invoices/unbilled?release=${invoice.id}`)}>Review source release</Button>}
-          {isDraft && canManage && (
-            <>
-              <Button variant="outline" size="sm" leftIcon={<Edit2 className="w-4 h-4" />} onClick={startEdit}>
-                Edit
-              </Button>
-              {isAdmin && (
-                <Button size="sm" leftIcon={<Send className="w-4 h-4" />}
-                  onClick={() => sendMutation.mutate()} loading={sendMutation.isPending}>
-                  Send
-                </Button>
-              )}
-            </>
+          {isDraft && canManage && isAdmin && (
+            <Button leftIcon={<Send className="w-4 h-4" />} onClick={() => sendMutation.mutate()} loading={sendMutation.isPending}>
+              Send invoice
+            </Button>
           )}
           {isSent && !isPaid && canManage && (
-            <Button size="sm" leftIcon={<DollarSign className="w-4 h-4" />}
-              onClick={openMarkPaid}>
-              Mark Paid
-            </Button>
-          )}
-          <Button variant="outline" size="sm" leftIcon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
-            Print
-          </Button>
-          {isAdmin && !isPaid && !hasPayments && (
-            <Button variant="ghost" size="sm" leftIcon={<Trash2 className="w-4 h-4" />} onClick={() => { deleteMutation.reset(); setShowVoidConfirm(true); }} className="text-destructive">
-              Void
+            <Button leftIcon={<CheckCircle className="w-4 h-4" />} onClick={openMarkPaid}>
+              Record payment
             </Button>
           )}
         </div>
       </div>
 
-      {/* Alert: Overdue */}
-      {isAdmin && invoice.billingSources && <Card className="p-4 [overflow-wrap:anywhere]">
-        <details>
-          <summary className="min-h-11 flex items-center cursor-pointer font-semibold">Original billed work</summary>
-          <div className="space-y-3 pt-3">
-            <p>Original draft: {fmt(invoice.billingSources.totals?.total, invoice.billingSources.currency)} · {invoice.billingSources.taxType} {invoice.billingSources.taxRate}%</p>
-            <p>{invoice.billingSourcesReleasedAt ? `Sources released ${formatDate(invoice.billingSourcesReleasedAt)}. Original history is retained.` : 'Sources remain reserved for this invoice.'}</p>
-            <p className="text-sm text-muted-foreground">Later invoice edits do not replace this original source record.</p>
-            {invoice.billingSources.lineItems?.map(line => <div key={`${line.source.kind}:${line.source.id}`} className="border-t border-border pt-3 space-y-1">
-              <p>{line.description} · {line.quantity} × {fmt(line.unitPrice, invoice.billingSources.currency)} · {fmt(line.total, invoice.billingSources.currency)}</p>
-              <p className="text-sm">{line.source.kind}: {line.source.id} · {line.source.project?.name || 'Client expense'} · {line.source.user?.name || ''} · {formatDate(line.source.date)}</p>
-            </div>)}
-          </div>
-        </details>
-      </Card>}
       {invoice.isOverdue && (
-        <div className="flex items-center gap-3 p-4 bg-destructive/5 border border-destructive/30 rounded-lg">
-          <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
+        <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
           <div>
-            <p className="font-medium text-destructive">Invoice Overdue</p>
-            <p className="text-sm text-destructive">
-              Was due {formatDate(invoice.dueDate)} · {getDaysOverdue(invoice.dueDate)} days overdue
-            </p>
+            <p className="font-semibold text-destructive">Invoice Overdue</p>
+            <p className="text-destructive">Was due {formatDate(invoice.dueDate)} · {getDaysOverdue(invoice.dueDate)} days overdue</p>
           </div>
         </div>
       )}
+      {isDraft && !isEditing && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-secondary bg-secondary/40 px-4 py-3 text-sm text-foreground">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <p>This invoice is a draft. Check the lines, then send.</p>
+        </div>
+      )}
 
-      {/* Edit Mode */}
-      {editing && editForm && canManage ? (
-        <Card className="p-4 sm:p-6">
-          <h2 className="font-semibold text-lg mb-4">Edit Invoice</h2>
-          <DraftRecoveryNotice
-            draft={formDraft.draft}
-            draftSavedAt={formDraft.draftMeta?.draftSavedAt}
-            status={formDraft.status}
-            lastSaved={formDraft.lastSaved}
-            onRecover={(recovered) => { setEditForm(recovered); formDraft.setDraft(null); }}
-            onDiscard={formDraft.discardDraft}
-            onRetry={formDraft.saveNow}
-          />
-          <form onSubmit={handleUpdate} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Title</label>
-                <input type="text" value={editForm.title}
-                  onChange={(e) => setEditForm(f => ({ ...f, title: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
-              </div>
-              <div>
-                <label htmlFor="invoice-edit-due-date" className="block text-sm font-medium mb-1">Due Date <span className="font-normal text-muted-foreground">(blank = upon receipt)</span></label>
-                <input id="invoice-edit-due-date" type="date" value={editForm.dueDate}
-                  onChange={(e) => setEditForm(f => ({ ...f, dueDate: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
-              </div>
-              <div>
-                <label htmlFor="invoice-edit-currency" className="block text-sm font-medium mb-1">Currency</label>
-                <select id="invoice-edit-currency" disabled={sourceBacked} value={editForm.currency || 'CAD'}
-                  onChange={(e) => setEditForm(f => ({ ...f, currency: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm">
-                  {INVOICE_CURRENCY_OPTIONS.map(code => <option key={code} value={code}>{code}</option>)}
-                </select>
-              </div>
+      {isAdmin && invoice.billingSources && (
+        <Card padding="none" className="rounded-lg px-5 py-1 [overflow-wrap:anywhere]">
+          <details>
+            <summary className="min-h-11 flex items-center cursor-pointer font-semibold">Original billed work</summary>
+            <div className="space-y-3 pb-4 pt-1 text-sm">
+              <p>Original draft: <span className="figure">{fmt(invoice.billingSources.totals?.total, invoice.billingSources.currency)}</span> · {invoice.billingSources.taxType} {invoice.billingSources.taxRate}%</p>
+              <p>{invoice.billingSourcesReleasedAt ? `Sources released ${formatDate(invoice.billingSourcesReleasedAt)}. Original history is retained.` : 'Sources remain reserved for this invoice.'}</p>
+              <p className="text-muted-foreground">Later invoice edits do not replace this original source record.</p>
+              {invoice.billingSources.lineItems?.map(line => <div key={`${line.source.kind}:${line.source.id}`} className="border-t border-border/40 pt-3 space-y-1">
+                <p>{line.description} · {line.quantity} × {fmt(line.unitPrice, invoice.billingSources.currency)} · {fmt(line.total, invoice.billingSources.currency)}</p>
+                <p className="text-muted-foreground">{line.source.kind}: {line.source.id} · {line.source.project?.name || 'Client expense'} · {line.source.user?.name || ''} · {formatDate(line.source.date)}</p>
+              </div>)}
             </div>
-
-            {/* Line Items */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Line Items</label>
-
-              {/* Desktop Layout */}
-              {isSmUp ? (
-              <div className="space-y-1.5">
-                <div className="grid grid-cols-12 gap-2 mb-1 text-xs text-muted-foreground font-medium px-1">
-                  <span className="col-span-1">Type</span>
-                  <span className="col-span-4">Description</span>
-                  <span className="col-span-2 text-center">Qty</span>
-                  <span className="col-span-2 text-right">Unit Price</span>
-                  <span className="col-span-2 text-right">Total</span>
-                  <span className="col-span-1" />
-                </div>
-                {editForm.lineItems.map((li, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                    <select value={li.itemType}
-                      onChange={(e) => setEditForm(f => {
-                        const items = [...f.lineItems];
-                        items[idx] = { ...items[idx], itemType: e.target.value };
-                        return { ...f, lineItems: items };
-                      })}
-                      className="col-span-1 px-1 py-1.5 rounded border border-border bg-background text-xs">
-                      <option value="LABOR">Labor</option>
-                      <option value="MATERIALS">Materials</option>
-                      <option value="EXPENSE">Expense</option>
-                      <option value="DISCOUNT">Discount</option>
-                      <option value="CUSTOM">Custom</option>
-                    </select>
-                    <input type="text" value={li.description}
-                      onChange={(e) => setEditForm(f => {
-                        const items = [...f.lineItems];
-                        items[idx] = { ...items[idx], description: e.target.value };
-                        return { ...f, lineItems: items };
-                      })}
-                      className="col-span-4 px-2 py-1.5 rounded border border-border bg-background text-sm" required />
-                    <input type="number" value={li.quantity} min="0" step="0.5"
-                      onChange={(e) => setEditForm(f => {
-                        const items = [...f.lineItems];
-                        items[idx] = { ...items[idx], quantity: e.target.value };
-                        return { ...f, lineItems: items };
-                      })}
-                      className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-center" />
-                    <input type="number" value={li.unitPrice} min="0" step="0.01"
-                      onChange={(e) => setEditForm(f => {
-                        const items = [...f.lineItems];
-                        items[idx] = { ...items[idx], unitPrice: e.target.value };
-                        return { ...f, lineItems: items };
-                      })}
-                      className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-right" />
-                    <span className="col-span-2 text-sm text-right font-medium">
-                      {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), editForm.currency)}
-                    </span>
-                    <button type="button"
-                      onClick={() => setEditForm(f => ({ ...f, lineItems: f.lineItems.filter((_, i) => i !== idx) }))}
-                      className="col-span-1 text-muted-foreground hover:text-destructive text-center text-lg leading-none">
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              ) : (
-              /* Mobile Layout */
-              <div className="space-y-2">
-                {editForm.lineItems.map((li, idx) => (
-                  <div key={idx} className="p-3 border border-border rounded-lg bg-muted/30">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex-1">
-                        <input type="text" value={li.description}
-                          onChange={(e) => setEditForm(f => {
-                            const items = [...f.lineItems];
-                            items[idx] = { ...items[idx], description: e.target.value };
-                            return { ...f, lineItems: items };
-                          })}
-                          placeholder="Description"
-                          className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm mb-2"
-                          required />
-                        <select value={li.itemType}
-                          onChange={(e) => setEditForm(f => {
-                            const items = [...f.lineItems];
-                            items[idx] = { ...items[idx], itemType: e.target.value };
-                            return { ...f, lineItems: items };
-                          })}
-                          className="w-full px-2 py-1.5 rounded border border-border bg-background text-xs">
-                          <option value="LABOR">Labor</option>
-                          <option value="MATERIALS">Materials</option>
-                          <option value="EXPENSE">Expense</option>
-                          <option value="DISCOUNT">Discount</option>
-                          <option value="CUSTOM">Custom</option>
-                        </select>
-                      </div>
-                      <button type="button"
-                        onClick={() => setEditForm(f => ({ ...f, lineItems: f.lineItems.filter((_, i) => i !== idx) }))}
-                        className="p-2 text-muted-foreground hover:text-destructive rounded hover:bg-muted">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-0.5">Qty</label>
-                        <input type="number" value={li.quantity} min="0" step="0.5"
-                          onChange={(e) => setEditForm(f => {
-                            const items = [...f.lineItems];
-                            items[idx] = { ...items[idx], quantity: e.target.value };
-                            return { ...f, lineItems: items };
-                          })}
-                          className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm text-center" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-0.5">Unit Price</label>
-                        <input type="number" value={li.unitPrice} min="0" step="0.01"
-                          onChange={(e) => setEditForm(f => {
-                            const items = [...f.lineItems];
-                            items[idx] = { ...items[idx], unitPrice: e.target.value };
-                            return { ...f, lineItems: items };
-                          })}
-                          className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-0.5">Total</label>
-                        <div className="px-2 py-1.5 text-sm font-medium">
-                          {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), editForm.currency)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              )}
-              <button type="button"
-                onClick={() => setEditForm(f => ({ ...f, lineItems: [...f.lineItems, { description: '', itemType: 'LABOR', quantity: 1, unitPrice: 0 }] }))}
-                className="text-sm text-primary hover:underline mt-2">
-                + Add line item
-              </button>
-            </div>
-
-            {/* Tax / Discount */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Tax Type</label>
-                <select value={editForm.taxType}
-                  onChange={(e) => setEditForm(f => ({ ...f, taxType: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm">
-                  <option value="HST">HST</option>
-                  <option value="GST">GST</option>
-                  <option value="PST">PST</option>
-                  <option value="TAX">Tax</option>
-                  <option value="NONE">None</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Tax Rate (%)</label>
-                <input type="number" value={editForm.taxRate} min="0" max="30" step="0.5"
-                  onChange={(e) => setEditForm(f => ({ ...f, taxRate: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Discount ({editForm.currency || 'CAD'})</label>
-                <input type="number" value={editForm.discountAmount} min="0" step="0.01"
-                  onChange={(e) => setEditForm(f => ({ ...f, discountAmount: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Notes (client-visible)</label>
-                <textarea value={editForm.notes}
-                  onChange={(e) => setEditForm(f => ({ ...f, notes: e.target.value }))}
-                  rows={2} className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Internal Notes</label>
-                <textarea value={editForm.internalNotes}
-                  onChange={(e) => setEditForm(f => ({ ...f, internalNotes: e.target.value }))}
-                  rows={2} className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
-              </div>
-            </div>
-
-            {/* Total preview */}
-            <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
-              <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(editSubtotal, editForm.currency)}</span></div>
-              {editDiscount > 0 && <div className="flex justify-between text-success"><span>Discount</span><span>-{fmt(editDiscount, editForm.currency)}</span></div>}
-              <div className="flex justify-between text-muted-foreground"><span>{taxTypeLabel(editForm.taxType)} ({editForm.taxRate}%)</span><span>{fmt(editTax, editForm.currency)}</span></div>
-              <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>{fmt(editTotal, editForm.currency)}</span></div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button type="submit" loading={updateMutation.isPending} leftIcon={<Save className="w-4 h-4" />}>Save Changes</Button>
-              <Button variant="ghost" type="button" onClick={() => { setEditing(false); setEditForm(null); }}>Cancel</Button>
-            </div>
-          </form>
+          </details>
         </Card>
-      ) : (
-        <>
-          {/* Invoice View */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Main invoice details */}
-            <div className="lg:col-span-2 space-y-6">
-              <Card className="p-4 sm:p-6">
-                {/* Bill to / dates */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Bill To</p>
-                    <p className="font-semibold text-lg">{invoice.client?.name}</p>
-                    {invoice.client?.domain && <p className="text-sm text-muted-foreground">{invoice.client.domain}</p>}
-                    {invoice.client?.contacts?.[0] && (
-                      <p className="text-sm text-muted-foreground">{invoice.client.contacts[0].email}</p>
-                    )}
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-5 items-start">
+        {isEditing ? (
+          <form id="invoice-edit-form" onSubmit={handleUpdate} className="space-y-4 min-w-0" aria-label={`Edit ${invoice.invoiceNumber}`}>
+            <DraftRecoveryNotice
+              draft={formDraft.draft}
+              draftSavedAt={formDraft.draftMeta?.draftSavedAt}
+              status={formDraft.status}
+              lastSaved={formDraft.lastSaved}
+              onRecover={(recovered) => { setEditForm(recovered); formDraft.setDraft(null); }}
+              onDiscard={formDraft.discardDraft}
+              onRetry={formDraft.saveNow}
+            />
+
+            <Panel id="invoice-details-heading" title="Details">
+              <div className={cn(panelBodyClass, 'grid grid-cols-1 sm:grid-cols-2 gap-4')}>
+                <div className="space-y-1.5">
+                  <span className="block text-sm font-medium text-foreground">Client</span>
+                  <p className="flex min-h-11 items-center rounded-lg border border-border/60 bg-muted/50 px-3 text-sm text-foreground">{invoice.client?.name || '—'}</p>
+                </div>
+                <fieldset className="space-y-1.5 min-w-0">
+                  <legend className="mb-1.5 text-sm font-medium text-foreground">Currency</legend>
+                  <div className="flex overflow-hidden rounded-lg border border-border">
+                    {INVOICE_CURRENCY_OPTIONS.map((code) => {
+                      const checked = (editForm.currency || 'CAD') === code;
+                      return (
+                        <label
+                          key={code}
+                          className={cn(
+                            'flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-1.5 border-l border-border first:border-l-0 font-mono text-xs tracking-[0.08em] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring',
+                            checked ? 'bg-foreground text-background' : 'bg-card text-foreground',
+                            sourceBacked && 'cursor-not-allowed opacity-60',
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name="invoice-edit-currency"
+                            value={code}
+                            checked={checked}
+                            disabled={sourceBacked}
+                            onChange={() => setEditForm(f => ({ ...f, currency: code }))}
+                            className="m-0 accent-accent"
+                          />
+                          {code}
+                        </label>
+                      );
+                    })}
                   </div>
-                  <div className="sm:text-right">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Invoice Details</p>
-                    <p className="font-mono font-bold text-xl">{invoice.invoiceNumber}</p>
-                    <p className="text-sm text-muted-foreground mt-1">Issued: {formatDate(invoice.issueDate || invoice.createdAt)}</p>
-                    {invoice.dueDate && (
-                      <p className={`text-sm mt-0.5 ${invoice.isOverdue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
-                        Due: {formatDate(invoice.dueDate)}
-                      </p>
-                    )}
-                    {invoice.sentAt && <p className="text-sm text-muted-foreground mt-0.5">Sent: {formatDate(invoice.sentAt)}</p>}
+                </fieldset>
+                <Field label="Title" id="invoice-edit-title">
+                  <Input value={editForm.title} onChange={(e) => setEditForm(f => ({ ...f, title: e.target.value }))} />
+                </Field>
+                <div className="hidden sm:block" aria-hidden="true" />
+                <Field label="Issue date" id="invoice-edit-issue-date" required error={issueDateError}>
+                  <Input type="date" value={editForm.issueDate || ''} onChange={(e) => { setIssueDateError(null); setEditForm(f => ({ ...f, issueDate: e.target.value })); }} />
+                </Field>
+                <Field label="Due date" id="invoice-edit-due-date" hint="Leave blank for due upon receipt.">
+                  <Input type="date" value={editForm.dueDate} onChange={(e) => setEditForm(f => ({ ...f, dueDate: e.target.value }))} />
+                </Field>
+              </div>
+            </Panel>
+
+            <Panel id="invoice-lines-heading" title="Line items">
+              <div className={panelBodyClass}>
+                {isSmUp ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[560px] text-sm">
+                      <thead>
+                        <tr className="text-left">
+                          <th scope="col" className={cn(thClass, 'pr-2 w-32')}>Type</th>
+                          <th scope="col" className={cn(thClass, 'px-2')}>Description</th>
+                          <th scope="col" className={cn(thClass, 'px-2 w-20 text-right')}>Qty</th>
+                          <th scope="col" className={cn(thClass, 'px-2 w-28 text-right')}>Rate</th>
+                          <th scope="col" className={cn(thClass, 'px-2 w-28 text-right')}>Amount</th>
+                          <th scope="col" className={cn(thClass, 'pl-2 w-12')}><span className="sr-only">Remove</span></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {editForm.lineItems.map((li, idx) => (
+                          <tr key={idx} className="border-t border-border/40 align-middle">
+                            <td className="py-2 pr-2">
+                              <Select aria-label={`Line ${idx + 1} type`} value={li.itemType} onChange={(e) => updateLine(idx, 'itemType', e.target.value)} options={LINE_ITEM_TYPES} className={cellInputClass} />
+                            </td>
+                            <td className="py-2 px-2">
+                              <Input aria-label={`Line ${idx + 1} description`} value={li.description} onChange={(e) => updateLine(idx, 'description', e.target.value)} className={cellInputClass} required />
+                            </td>
+                            <td className="py-2 px-2">
+                              <Input aria-label={`Line ${idx + 1} quantity`} type="number" min="0" step="0.5" value={li.quantity} onChange={(e) => updateLine(idx, 'quantity', e.target.value)} className={cn(cellInputClass, 'figure text-right')} />
+                            </td>
+                            <td className="py-2 px-2">
+                              <Input aria-label={`Line ${idx + 1} rate`} type="number" min="0" step="0.01" value={li.unitPrice} onChange={(e) => updateLine(idx, 'unitPrice', e.target.value)} className={cn(cellInputClass, 'figure text-right')} />
+                            </td>
+                            <td className="py-2 px-2 figure text-right">{plain(lineTotal(editLines[idx].quantity, editLines[idx].unitPrice))}</td>
+                            <td className="py-2 pl-2 text-right">
+                              <Button type="button" variant="ghost" size="sm" aria-label={`Remove line ${idx + 1}`} onClick={() => removeLine(idx)} className="px-2 text-muted-foreground hover:text-destructive">
+                                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
+                ) : (
+                  <ul className="space-y-2">
+                    {editForm.lineItems.map((li, idx) => (
+                      <li key={idx} className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 space-y-2">
+                            <Input aria-label={`Line ${idx + 1} description`} placeholder="Description" value={li.description} onChange={(e) => updateLine(idx, 'description', e.target.value)} className={cellInputClass} required />
+                            <Select aria-label={`Line ${idx + 1} type`} value={li.itemType} onChange={(e) => updateLine(idx, 'itemType', e.target.value)} options={LINE_ITEM_TYPES} className={cellInputClass} />
+                          </div>
+                          <Button type="button" variant="ghost" size="sm" aria-label={`Remove line ${idx + 1}`} onClick={() => removeLine(idx)} className="px-2 text-muted-foreground hover:text-destructive">
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <Field label="Qty" labelClassName="text-xs text-muted-foreground" id={`invoice-line-${idx}-qty`}>
+                            <Input type="number" min="0" step="0.5" value={li.quantity} onChange={(e) => updateLine(idx, 'quantity', e.target.value)} className={cn(cellInputClass, 'figure')} />
+                          </Field>
+                          <Field label="Rate" labelClassName="text-xs text-muted-foreground" id={`invoice-line-${idx}-rate`}>
+                            <Input type="number" min="0" step="0.01" value={li.unitPrice} onChange={(e) => updateLine(idx, 'unitPrice', e.target.value)} className={cn(cellInputClass, 'figure')} />
+                          </Field>
+                          <div className="space-y-1.5">
+                            <span className="block text-xs text-muted-foreground">Amount</span>
+                            <p className="figure flex min-h-11 items-center text-sm font-medium">{plain(lineTotal(editLines[idx].quantity, editLines[idx].unitPrice))}</p>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" leftIcon={<Plus className="h-3.5 w-3.5" />} onClick={addLine} className="border-dashed">
+                    Add line
+                  </Button>
                 </div>
 
-                {/* Line Items - Desktop Table */}
-                <div className="hidden sm:block border border-border rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</th>
-                        <th className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-3 py-2.5 text-center w-16">Qty</th>
-                        <th className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-3 py-2.5 text-right w-24">Unit</th>
-                        <th className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-4 py-2.5 text-right w-24">Total</th>
+                <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Field label="Tax type" id="invoice-edit-tax-type">
+                    <Select value={editForm.taxType} onChange={(e) => setEditForm(f => ({ ...f, taxType: e.target.value }))} options={TAX_TYPE_OPTIONS} />
+                  </Field>
+                  <Field label="Tax rate (%)" id="invoice-edit-tax-rate">
+                    <Input type="number" min="0" max="30" step="0.5" value={editForm.taxRate} onChange={(e) => setEditForm(f => ({ ...f, taxRate: e.target.value }))} />
+                  </Field>
+                  <Field label={`Discount (${editForm.currency || 'CAD'})`} id="invoice-edit-discount">
+                    <Input type="number" min="0" step="0.01" value={editForm.discountAmount} onChange={(e) => setEditForm(f => ({ ...f, discountAmount: e.target.value }))} />
+                  </Field>
+                </div>
+
+                <dl className="ml-auto mt-4 max-w-72 space-y-1.5 text-sm" aria-label="Totals">
+                  <TotalRow label={<span className="text-muted-foreground">Subtotal</span>} value={plain(editSubtotal)} />
+                  {editDiscount > 0 && <TotalRow label={<span className="text-muted-foreground">Discount</span>} value={`-${plain(editDiscount)}`} />}
+                  <TotalRow label={<span className="text-muted-foreground">{taxLineLabel(editForm.taxType, editForm.taxRate)}</span>} value={plain(editTax)} />
+                  <TotalRow label={`Total ${editForm.currency || 'CAD'}`} value={fmt(editTotal, editForm.currency)} className="border-t border-border/60 pt-2 text-base font-bold" />
+                </dl>
+              </div>
+            </Panel>
+
+            <Panel id="invoice-payment-heading" title="Payment and schedule">
+              <div className={cn(panelBodyClass, 'space-y-4')}>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editForm.isRecurring)}
+                      disabled={sourceBacked}
+                      onChange={(e) => setEditForm(f => ({ ...f, isRecurring: e.target.checked, recurringInterval: f.recurringInterval || 'MONTHLY' }))}
+                      className="h-4.5 w-4.5 accent-primary"
+                    />
+                    Repeat this invoice
+                  </label>
+                  {editForm.isRecurring && (
+                    <Select
+                      aria-label="Repeat every"
+                      value={editForm.recurringInterval || 'MONTHLY'}
+                      onChange={(e) => setEditForm(f => ({ ...f, recurringInterval: e.target.value }))}
+                      options={INVOICE_RECURRING_INTERVALS.map((value) => ({ value, label: recurrenceWord(value).replace(/^./, (c) => c.toUpperCase()) }))}
+                      className="w-auto"
+                    />
+                  )}
+                  {sourceBacked && <p className="text-xs text-muted-foreground">Reviewed work is billed once, so it cannot repeat.</p>}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Note to client" id="invoice-edit-notes" hint="Shown on the invoice.">
+                    <Textarea rows={2} value={editForm.notes} onChange={(e) => setEditForm(f => ({ ...f, notes: e.target.value }))} />
+                  </Field>
+                  <Field label="Internal notes" id="invoice-edit-internal-notes" hint="Only your team sees these.">
+                    <Textarea rows={2} value={editForm.internalNotes} onChange={(e) => setEditForm(f => ({ ...f, internalNotes: e.target.value }))} />
+                  </Field>
+                </div>
+              </div>
+            </Panel>
+          </form>
+        ) : (
+          <div className="space-y-4 min-w-0">
+            <Panel id="invoice-details-heading" title="Details">
+              <dl className={cn(panelBodyClass, 'grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm')}>
+                <DetailItem label="Client">
+                  {invoice.client?.id
+                    ? <Link to={`/client/${invoice.client.id}`} className="font-semibold text-foreground underline-offset-4 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded-sm">{invoice.client.name}</Link>
+                    : <span className="font-semibold">{invoice.client?.name || '—'}</span>}
+                  {invoice.client?.domain && <span className="block text-muted-foreground">{invoice.client.domain}</span>}
+                  {contact?.email && <span className="block text-muted-foreground break-all">{contact.email}</span>}
+                </DetailItem>
+                <DetailItem label="Currency"><span className="figure">{invoice.currency || 'CAD'}</span></DetailItem>
+                <DetailItem label="Issue date">{formatDate(invoice.issueDate || invoice.createdAt)}</DetailItem>
+                <DetailItem label="Due date">
+                  {invoice.dueDate
+                    ? <span className={cn(invoice.isOverdue && 'font-semibold text-destructive')}>{formatDate(invoice.dueDate)}</span>
+                    : 'Upon receipt'}
+                </DetailItem>
+                <DetailItem label="Sent">{invoice.sentAt ? formatDate(invoice.sentAt) : 'Not sent yet'}</DetailItem>
+                <DetailItem label="Created by">
+                  {invoice.createdBy?.name || '—'}
+                  <span className="block text-muted-foreground">{formatDate(invoice.createdAt)}</span>
+                  {invoice.updatedAt !== invoice.createdAt && <span className="block text-muted-foreground">Updated {formatDate(invoice.updatedAt)}</span>}
+                </DetailItem>
+              </dl>
+            </Panel>
+
+            <Panel id="invoice-lines-heading" title="Line items">
+              <div className={panelBodyClass}>
+                {/* Keyboard users can scroll the table sideways on narrow screens. */}
+                <div className="overflow-x-auto focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded-sm" tabIndex={0} role="region" aria-label="Line items table">
+                  <table className="w-full min-w-[480px] text-sm">
+                    <caption className="sr-only">Line items in {invoice.currency || 'CAD'}</caption>
+                    <thead>
+                      <tr className="text-left">
+                        <th scope="col" className={cn(thClass, 'pr-2')}>Description</th>
+                        <th scope="col" className={cn(thClass, 'px-2 w-20 text-right')}>Qty</th>
+                        <th scope="col" className={cn(thClass, 'px-2 w-28 text-right')}>Rate</th>
+                        <th scope="col" className={cn(thClass, 'pl-2 w-28 text-right')}>Amount</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(invoice.lineItems || []).map((li, idx) => (
-                        <tr key={li.id} className={idx % 2 === 0 ? '' : 'bg-muted/20'}>
-                          <td className="px-4 py-3">
-                            <div>{li.description}</div>
-                            <div className="text-xs text-muted-foreground mt-0.5">{li.itemType}</div>
+                      {(invoice.lineItems || []).map((li) => (
+                        <tr key={li.id} className="border-t border-border/40 align-top">
+                          <td className="py-3 pr-2">
+                            <div className="font-semibold text-foreground break-words">{li.description}</div>
+                            {li.itemType && <div className="text-muted-foreground">{LINE_ITEM_TYPES.find(t => t.value === li.itemType)?.label || li.itemType}</div>}
                           </td>
-                          <td className="px-3 py-3 text-center text-muted-foreground">{li.quantity}</td>
-                          <td className="px-3 py-3 text-right">{fmt(li.unitPrice, invoice.currency)}</td>
-                          <td className="px-4 py-3 text-right font-medium">{fmt(li.total, invoice.currency)}</td>
+                          <td className="py-3 px-2 figure text-right">{li.quantity}</td>
+                          <td className="py-3 px-2 figure text-right">{plain(li.unitPrice)}</td>
+                          <td className="py-3 pl-2 figure text-right">{plain(li.total)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  {(invoice.lineItems || []).length === 0 && <p className="py-3 text-sm text-muted-foreground">No line items yet.</p>}
                 </div>
 
-                {/* Line Items - Mobile Cards */}
-                <div className="sm:hidden space-y-2">
-                  {(invoice.lineItems || []).map((li, idx) => (
-                    <div key={li.id} className={`p-3 border border-border rounded-lg ${idx % 2 === 0 ? '' : 'bg-muted/20'}`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{li.description}</p>
-                          <p className="text-xs text-muted-foreground">{li.itemType}</p>
-                        </div>
-                        <p className="font-semibold whitespace-nowrap">{fmt(li.total, invoice.currency)}</p>
-                      </div>
-                      <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                        <span>Qty: {li.quantity}</span>
-                        <span>@ {fmt(li.unitPrice, invoice.currency)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <dl className="ml-auto mt-4 max-w-72 space-y-1.5 text-sm" aria-label="Totals">
+                  <TotalRow label={<span className="text-muted-foreground">Subtotal</span>} value={plain(invoice.subtotal)} />
+                  {invoice.discountAmount > 0 && <TotalRow label={<span className="text-muted-foreground">Discount</span>} value={`-${plain(invoice.discountAmount)}`} />}
+                  <TotalRow label={<span className="text-muted-foreground">{taxLineLabel(invoice.taxType, invoice.taxRate)}</span>} value={plain(invoice.tax)} />
+                  <TotalRow label={`Total ${invoice.currency || 'CAD'}`} value={fmt(invoice.total, invoice.currency)} className="border-t border-border/60 pt-2 text-base font-bold" />
+                  {!isPaid && invoice.amountPaid > 0 && (
+                    <>
+                      <TotalRow label="Paid so far" value={`-${fmt(invoice.amountPaid, invoice.currency)}`} className="text-success" />
+                      <TotalRow label="Balance due" value={fmt(invoice.balanceDue, invoice.currency)} className="font-semibold" />
+                    </>
+                  )}
+                  {isPaid && (
+                    <TotalRow
+                      label={<span className="flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" aria-hidden="true" />Paid</span>}
+                      value={formatDate(invoice.paidAt)}
+                      className="text-success"
+                    />
+                  )}
+                </dl>
+              </div>
+            </Panel>
 
-                {/* Totals */}
-                <div className="mt-4 flex justify-end">
-                  <div className="w-full sm:w-64 space-y-1.5 text-sm">
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Subtotal</span><span>{fmt(invoice.subtotal, invoice.currency)}</span>
-                    </div>
-                    {invoice.discountAmount > 0 && (
-                      <div className="flex justify-between text-success">
-                        <span>Discount</span><span>-{fmt(invoice.discountAmount, invoice.currency)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>{taxTypeLabel(invoice.taxType)} ({invoice.taxRate}%)</span><span>{fmt(invoice.tax, invoice.currency)}</span>
-                    </div>
-                    <div className="flex justify-between font-bold text-lg border-t border-border pt-2 mt-2">
-                      <span>Total</span><span>{fmt(invoice.total, invoice.currency)}</span>
-                    </div>
-                    {!isPaid && invoice.amountPaid > 0 && (
-                      <>
-                        <div className="flex justify-between text-success text-sm">
-                          <span>Paid so far</span><span>-{fmt(invoice.amountPaid, invoice.currency)}</span>
-                        </div>
-                        <div className="flex justify-between font-semibold">
-                          <span>Balance due</span><span>{fmt(invoice.balanceDue, invoice.currency)}</span>
-                        </div>
-                      </>
-                    )}
-                    {isPaid && (
-                      <div className="flex justify-between text-success text-sm">
-                        <span className="flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" />Paid</span>
-                        <span>{formatDate(invoice.paidAt)}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Notes */}
-                {invoice.notes && (
-                  <div className="mt-5 pt-5 border-t border-border">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Notes</p>
-                    <p className="text-sm text-muted-foreground">{invoice.notes}</p>
+            <Panel id="invoice-payment-heading" title="Payment and schedule">
+              <div className={cn(panelBodyClass, 'space-y-4 text-sm')}>
+                {isPaid && (
+                  <div className="rounded-lg border border-success/30 bg-success/5 px-4 py-3">
+                    <p className="flex items-center gap-2 font-semibold text-success">
+                      <CheckCircle className="h-4 w-4" aria-hidden="true" /> Payment received
+                    </p>
+                    <p className="mt-0.5 text-muted-foreground">
+                      {formatDate(invoice.paidAt)}
+                      {invoice.paymentMethod && <> · via {paymentMethodLabel(invoice.paymentMethod)}</>}
+                    </p>
+                    {invoice.paymentNotes && <p className="mt-1 text-muted-foreground">{invoice.paymentNotes}</p>}
                   </div>
                 )}
-              </Card>
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-4">
-              {/* Internal Notes */}
-              {invoice.internalNotes && (
-                <Card className="p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Internal Notes</p>
-                  <p className="text-sm">{invoice.internalNotes}</p>
-                </Card>
-              )}
-
-              {/* Payment Method (if paid) */}
-              {isPaid && (
-                <Card className="p-4 border-success/30">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="w-4 h-4 text-success" />
-                    <p className="text-sm font-semibold text-success">Payment Received</p>
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                  <DetailItem label="Card (Stripe)">
+                    {invoice.stripePaymentLink ? (
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-success">
+                          <CheckCircle className="h-3 w-3" aria-hidden="true" /> Payment link active
+                        </span>
+                        <button
+                          type="button"
+                          onClick={copyPayLink}
+                          className={cn(smallLinkClass, '-my-2')}
+                          title="Copy the client's pay link (public invoice page)"
+                          disabled={!clientInvoiceUrl}
+                        >
+                          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                          {copyLinkMsg || 'Copy link'}
+                        </button>
+                      </span>
+                    ) : canManage && !isVoid && !isPaid ? (
+                      <Button
+                        variant="outline" size="sm"
+                        leftIcon={<CreditCard className="w-4 h-4" />}
+                        onClick={() => generatePaymentLinkMutation.mutate()}
+                        disabled={generatePaymentLinkMutation.isPending}
+                      >
+                        {generatePaymentLinkMutation.isPending ? 'Generating…' : 'Generate payment link'}
+                      </Button>
+                    ) : (
+                      <span className="text-muted-foreground">No payment link</span>
+                    )}
+                  </DetailItem>
+                  {!isPaid && !isVoid && (
+                    <DetailItem label="Bank transfer, e-Transfer, cheque or cash">
+                      <span className="text-muted-foreground">Record it with Record payment when it arrives.</span>
+                    </DetailItem>
+                  )}
+                  <DetailItem label="Repeats">{repeats || 'Does not repeat'}</DetailItem>
+                  {(invoice.reminderSentAt || invoice.overdueEscalatedAt) && (
+                    <DetailItem label="Reminders">
+                      {invoice.reminderSentAt && <span className="block">Last reminder sent {formatDate(invoice.reminderSentAt)}</span>}
+                      {invoice.overdueEscalatedAt && <span className="block text-muted-foreground">Escalated {formatDate(invoice.overdueEscalatedAt)}</span>}
+                    </DetailItem>
+                  )}
+                </dl>
+                {(invoice.notes || invoice.internalNotes) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-border/40 pt-4">
+                    {invoice.notes && (
+                      <div>
+                        <h3 className="text-eyebrow text-muted-foreground">Note to client</h3>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-foreground">{invoice.notes}</p>
+                      </div>
+                    )}
+                    {invoice.internalNotes && (
+                      <div className="rounded-lg border border-accent bg-accent/25 p-3">
+                        <h3 className="text-eyebrow text-foreground">Internal notes</h3>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-foreground">{invoice.internalNotes}</p>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground">{formatDate(invoice.paidAt)}</p>
-                  {invoice.paymentMethod && (
-                    <p className="text-xs text-muted-foreground">via {paymentMethodLabel(invoice.paymentMethod)}</p>
-                  )}
-                  {invoice.paymentNotes && (
-                    <p className="text-xs text-muted-foreground mt-1">{invoice.paymentNotes}</p>
-                  )}
-                </Card>
-              )}
+                )}
+              </div>
+            </Panel>
 
-              {/* Payment History */}
-              {(paymentsError || payments.length > 0) && (
-                <Card className="p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Payment History</p>
-                  {paymentsError ? (
+            {(paymentsError || payments.length > 0) && (
+              <Panel id="invoice-payments-heading" title="Payment history">
+                {paymentsError ? (
+                  <div className={panelBodyClass}>
                     <QueryErrorState
                       error={paymentsRequestError}
                       message="Payment history could not be loaded"
                       onRetry={refetchPayments}
                       isRetrying={paymentsFetching}
                     />
-                  ) : (
-                    <div className="space-y-2">
-                      {payments.map(p => (
-                        <div key={p.id} className="flex items-center justify-between text-sm">
-                          <div>
-                            <p className="font-medium">{fmt(p.amount, invoice.currency)}</p>
-                            <p className="text-xs text-muted-foreground">{paymentMethodLabel(p.method)} · {formatDate(p.paidAt)}</p>
-                            {p.transactionId && <p className="text-xs text-muted-foreground font-mono">{p.transactionId}</p>}
-                            {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
-                          </div>
-                          <CheckCircle className="w-4 h-4 text-success" />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </Card>
-              )}
-
-              {/* Quick Actions */}
-              {clientInvoiceUrl && isSent && (
-                <Card className="p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Payment Link</p>
-                  <a href={clientInvoiceUrl} target="_blank" rel="noopener noreferrer"
-                    className="text-sm text-primary hover:underline flex items-center gap-1">
-                    <CreditCard className="w-3.5 h-3.5" />
-                    Open client pay page
-                  </a>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(clientInvoiceUrl)}
-                    className="text-xs text-muted-foreground hover:text-foreground mt-1 block">
-                    Copy link
-                  </button>
-                </Card>
-              )}
-
-              {/* Created by */}
-              <Card className="p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Created By</p>
-                <p className="text-sm">{invoice.createdBy?.name}</p>
-                <p className="text-xs text-muted-foreground">{formatDate(invoice.createdAt)}</p>
-                {invoice.updatedAt !== invoice.createdAt && (
-                  <p className="text-xs text-muted-foreground">Updated {formatDate(invoice.updatedAt)}</p>
+                  </div>
+                ) : (
+                  <div className={cn(panelBodyClass, 'overflow-x-auto focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded-sm')} tabIndex={0} role="region" aria-label="Payment history table">
+                    <table className="w-full min-w-[440px] text-sm">
+                      <thead>
+                        <tr className="text-left">
+                          <th scope="col" className={cn(thClass, 'pr-2')}>Date</th>
+                          <th scope="col" className={cn(thClass, 'px-2')}>Method</th>
+                          <th scope="col" className={cn(thClass, 'pl-2 text-right')}>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payments.map(p => (
+                          <tr key={p.id} className="border-t border-border/40 align-top">
+                            <td className="py-3 pr-2 text-foreground">{formatDate(p.paidAt)}</td>
+                            <td className="py-3 px-2">
+                              <span className="text-foreground">{paymentMethodLabel(p.method)}</span>
+                              {p.transactionId && <span className="block figure text-xs text-muted-foreground break-all">{p.transactionId}</span>}
+                              {p.notes && <span className="block text-xs text-muted-foreground">{p.notes}</span>}
+                            </td>
+                            <td className="py-3 pl-2 figure text-right text-foreground">{fmt(p.amount, invoice.currency)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
-              </Card>
-            </div>
+              </Panel>
+            )}
           </div>
-        </>
-      )}
+        )}
+
+        <div className="space-y-3 min-w-0">
+          <ClientPreview
+            invoice={invoice}
+            doc={previewDoc}
+            viewer={viewer}
+            clientInvoiceUrl={clientInvoiceUrl}
+            showPayPageLink={Boolean(clientInvoiceUrl && isSent)}
+          />
+          {invoice.viewToken && (
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(`${window.location.origin}/portal/invoice/${invoice.viewToken}`)}
+              className={cn(smallLinkClass, '-ml-2')}
+            >
+              <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy client link
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Mark Paid Modal */}
       <Modal

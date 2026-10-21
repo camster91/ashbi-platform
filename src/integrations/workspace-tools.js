@@ -64,6 +64,8 @@ function listTool(name, description, model, select, where, inputSchema = pageSch
   };
 }
 
+const adminOnly = (tool) => ({ ...tool, roles: ['ADMIN'] });
+
 export const workspaceRegistry = createToolRegistry([
   ...WORKSPACE_SERVICE_PUBLICATION_TOOLS,
   ...WORKSPACE_SERVICE_PANEL_TOOLS,
@@ -107,14 +109,16 @@ export const workspaceRegistry = createToolRegistry([
     resolveScope: async ({ user }) => ({ ids: { organizationId: user.organizationId } }), timeoutMs: 5000,
     run: async ({ prisma, user }) => readTeamWorkload(prisma, user),
   },
-  listTool('list_invoices', 'Page through internal invoice identities and monetary values, preserving each currency. Optionally filter by portfolio.',
+  // Money is admin-only (as on the website and REST API): a TEAM member's
+  // agent key must not read invoice or expense amounts.
+  adminOnly(listTool('list_invoices', 'Page through internal invoice identities and monetary values, preserving each currency. Optionally filter by portfolio. Administrators only.',
     'invoice', { id: true, invoiceNumber: true, status: true, total: true, currency: true, clientId: true, projectId: true, issueDate: true, dueDate: true },
     async (user, input, prisma) => ({ organizationId: user.organizationId, ...await invoicePortfolioWhere(prisma, input.portfolio, user.organizationId) }),
-    pageSchema.extend({ portfolio: portfolioFilterSchema })),
-  listTool('list_expenses', 'Page through expenses with their original currency and project/client identities. Optionally filter by portfolio; receipt URLs are omitted.',
+    pageSchema.extend({ portfolio: portfolioFilterSchema }))),
+  adminOnly(listTool('list_expenses', 'Page through expenses with their original currency and project/client identities. Optionally filter by portfolio; receipt URLs are omitted. Administrators only.',
     'expense', { id: true, description: true, amount: true, currency: true, category: true, date: true, clientId: true, projectId: true, billable: true, invoiced: true },
     (user, input) => ({ organizationId: user.organizationId, ...financialPortfolioWhere(input.portfolio) }),
-    pageSchema.extend({ portfolio: portfolioFilterSchema })),
+    pageSchema.extend({ portfolio: portfolioFilterSchema }))),
   listTool('list_notes', 'Page through internal project documents and notes. Optionally filter by portfolio.',
     'note', { id: true, title: true, content: true, type: true, projectId: true, revision: true, updatedAt: true },
     async (user, input, prisma) => ({ id: { in: await visibleNoteIds(prisma, user, { project: { organizationId: user.organizationId, ...portfolioWhere(input.portfolio) } }) } }),

@@ -53,6 +53,7 @@ const clientDetail = {
   invoices: [{ id: 'invoice-a', invoiceNumber: 'INV-2026-001', status: 'SENT', total: 4520, currency: 'USD', dueDate: NEXT_WEEK, createdAt: YESTERDAY }],
   communicationPrefs: {},
   knowledgeBase: {},
+  clientNotes: 'Dana prefers short updates on Fridays.',
   createdAt: YESTERDAY,
   updatedAt: YESTERDAY,
 };
@@ -69,6 +70,12 @@ async function mockExtraApi(page: Page) {
     if (path === '/tasks/task-a/page') return json(route, taskPage);
     if (path === '/tasks/task-a/breadcrumbs') return json(route, [{ id: 'project-a', title: 'Website Redesign', isProject: true }]);
     if (path === '/clients/client-a') return json(route, clientDetail);
+    if (path === '/retainers') return json(route, [{ id: 'retainer-a', clientId: 'client-a', serviceDescription: 'Monthly care plan', tier: '999', hoursPerMonth: 20, hoursUsed: 6, currency: 'USD', monthlyAmountUsd: 999, billingDay: 1, retainerStatus: 'ACTIVE', percentUsed: 30, scopeCreepRisk: false, client: { id: 'client-a', name: 'Northwind Studio', status: 'ACTIVE' } }]);
+    if (path === '/clients/client-a/activity') return json(route, { items: [
+      { id: 'activity:a1', kind: 'file', type: 'FILE_UPLOADED', action: 'uploaded', at: YESTERDAY, title: 'homepage-v2.png', actor: { id: adminUser.id, name: adminUser.name }, project: { id: 'project-a', name: 'Website Redesign' }, href: '/project/project-a' },
+      { id: 'invoice-sent:invoice-a', kind: 'invoice_sent', at: YESTERDAY, title: 'INV-2026-001', amount: 4520, currency: 'USD', href: '/invoices/invoice-a' },
+    ], nextBefore: null });
+    if (path === '/time-entries/summary') return json(route, { byProject: [{ project: { id: 'project-a', name: 'Website Redesign' }, totalMinutes: 870, billableMinutes: 780, entries: 6 }], byUser: [], totalMinutes: 870 });
     if (path === '/clients/client-a/insights') return json(route, { recentThreadCount: 2, sentimentBreakdown: { positive: 2 }, satisfactionTrend: 'Stable' });
     if (path === '/expenses') return json(route, { expenses: [{ id: 'expense-a', description: 'Stock photos', amount: 49, currency: 'USD', category: 'SOFTWARE', date: YESTERDAY, billable: true, client: { id: 'client-a', name: 'Northwind Studio' } }], total: 1 });
     if (path === '/expenses/summary') return json(route, { totalThisMonth: 49, allTimeTotal: 49, byCategory: { SOFTWARE: 49 }, billableTotal: 49 });
@@ -130,6 +137,8 @@ const darkScreens: Screen[] = [
   { name: 'project page', path: '/project/project-a', ready: page => expect(page.getByRole('heading', { name: 'Website Redesign', level: 1 })).toBeVisible() },
   { name: 'task board', path: '/project/project-a/kanban', ready: page => expect(page.getByRole('heading', { name: 'Kanban Board' })).toBeVisible() },
   { name: 'contracts', path: '/contracts', ready: page => expect(page.getByRole('heading', { name: 'Contracts', level: 1 })).toBeVisible() },
+  { name: 'time', path: '/timesheets', ready: page => expect(page.getByRole('table', { name: 'Hours per project and day' })).toBeVisible() },
+  { name: 'proposal detail', path: '/proposal/proposal-a', ready: page => expect(page.getByRole('region', { name: 'Status' })).toBeVisible() },
 ];
 
 test.describe('UI quality', () => {
@@ -163,7 +172,7 @@ test.describe('UI quality', () => {
     });
   }
 
-  for (const path of ['/projects', '/project/project-a/kanban', '/project/project-a']) {
+  for (const path of ['/projects', '/project/project-a/kanban', '/project/project-a', '/timesheets', '/proposal/proposal-a']) {
     test(`${path} does not scroll the page horizontally`, async ({ page }) => {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 }).last()).toBeVisible();
@@ -173,6 +182,24 @@ test.describe('UI quality', () => {
         clientWidth: document.documentElement.clientWidth,
       }));
       expect(scrollWidth, `${path} is wider than the viewport`).toBeLessThanOrEqual(clientWidth + 1);
+    });
+  }
+
+  // The Time page's indigo running-timer band (light) turns lime in dark mode;
+  // its text and Stop button must keep AA contrast in both.
+  for (const colorScheme of ['light', 'dark'] as const) {
+    test(`time page running timer has no WCAG violations (${colorScheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+      await page.route('**/api/time-sessions/running', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'session-a', startTime: new Date(Date.now() - 42 * 60 * 1000).toISOString(), description: 'Date picker', project: { id: 'project-a', name: 'Website Redesign' }, task: { id: 'task-a', title: 'Finalize homepage wireframe' } }),
+      }));
+      await page.goto('/timesheets');
+      const band = page.getByRole('region', { name: 'Running timer' });
+      await expect(band).toBeVisible();
+      await expect(band.getByRole('button', { name: 'Stop' })).toBeVisible();
+      expect(await axeViolations(page), `time page running timer ${colorScheme} axe violations`).toEqual([]);
     });
   }
 

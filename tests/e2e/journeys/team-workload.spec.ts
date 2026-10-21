@@ -36,7 +36,7 @@ test('profile percentage capacity preserves zero and updates weekly workload hou
   const original = await json(await api.get('/api/auth/me'));
   try {
     await json(await api.put('/api/auth/me', { data: { capacity: 0 } }));
-    await page.goto('/settings');
+    await page.goto('/settings?section=profile');
     const capacity = page.getByLabel('Capacity (%)', { exact: true });
     await expect(capacity).toHaveValue('0');
     await capacity.fill('50');

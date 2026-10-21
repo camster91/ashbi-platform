@@ -58,7 +58,7 @@ enough to review (roughly 40-60 images).
 - Fonts: the app declares its self-hosted fonts with `font-display: optional`,
   which makes a cold page fall back to the system font on some runs. The suite
   serves the stylesheet with `font-display: block` and waits for every face to
-  load, so baselines always show DM Sans and Instrument Serif.
+  load, so baselines always show Plus Jakarta Sans, Geist Mono and Instrument Serif.
 - Realtime: socket.io is blocked (there is no backend), and the
   push-notification prompt is marked as already answered on every screen except
   the dashboard.
@@ -98,7 +98,8 @@ so a macOS or Windows render is never compared against a Linux one. Generate
 and update them on Linux (Ubuntu 24.04, as used by `ubuntu-latest`).
 
 The committed set was generated in a Linux container with Chromium
-141.0.7390.37 (a pre-installed build), while `npx playwright install` on
+141.0.7390.37 (a pre-installed build) and last regenerated in October 2026
+after the Ashbi Hub redesign (37 of 39 screens changed), while `npx playwright install` on
 `ubuntu-latest` currently installs Chromium 153 for `@playwright/test` 1.63. A
 different Chromium build can render text anti-aliasing and some raster details
 differently. **Before turning this into a gate, regenerate the baselines once on

@@ -1,210 +1,70 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Clock, User, Tag, CalendarDays } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { api } from '../lib/api';
-import { EmptyState, KanbanPageSkeleton } from '../components/ui';
+import { Button, EmptyState, KanbanPageSkeleton } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
-import { getHealthColor, getProjectStatusColor, getProjectStatusLabel, cn } from '../lib/utils';
 import CreateProjectModal from '../components/CreateProjectModal';
-import { formatDate } from '../lib/format';
+import ProjectBoard from '../components/projects/ProjectBoard';
+import ProjectListView from '../components/projects/ProjectListView';
+import ProjectCalendarView from '../components/projects/ProjectCalendarView';
+import { matchesOwner, projectSummary, teamOwners } from '../components/projects/projectBoard';
+import { useAuth } from '../hooks/useAuth';
+import { cn } from '../lib/utils';
 import { PORTFOLIO_OPTIONS, PORTFOLIO_VALUES } from '@shared/portfolio.js';
 
-// Kanban column definitions. Project status vocabularies still differ between
-// the DB model and the API (#405), so every value either maps to a column here
-// or lands in the visible "Other" column — no project is dropped.
-const KANBAN_COLUMNS = [
-  {
-    key: 'LEAD',
-    label: 'Lead',
-    emptyText: 'No leads right now.',
-    headerColor: 'border-border text-foreground',
-    bgColor: 'bg-muted/40',
-    statuses: ['STARTING_UP', 'ON_HOLD', 'DRAFT'],
-  },
-  {
-    key: 'ACTIVE',
-    label: 'Active',
-    emptyText: 'No active projects.',
-    headerColor: 'border-info text-info',
-    bgColor: 'bg-muted/40',
-    statuses: ['ACTIVE', 'DESIGN_DEV', 'ADDING_CONTENT'],
-  },
-  {
-    key: 'REVIEW',
-    label: 'Review',
-    emptyText: 'Nothing is waiting for review.',
-    headerColor: 'border-warning text-warning',
-    bgColor: 'bg-muted/40',
-    statuses: ['FINALIZING'],
-  },
-  {
-    key: 'DONE',
-    label: 'Done',
-    emptyText: 'No finished projects yet.',
-    headerColor: 'border-success text-success',
-    bgColor: 'bg-muted/40',
-    statuses: ['LAUNCHED', 'COMPLETED', 'CANCELLED'],
-  },
+// Ashbi Hub projects page (design: Projects mockup). Board, List and Calendar
+// views of the same projects, kept in ?view= with the portfolio (?portfolio=)
+// and owner (?owner=) filters, so a link or reload lands on the same view.
+// ?create=true (with an optional &clientId=) opens the new project dialog.
+// Nothing here shows money; the project list API leaves budgets out for
+// non-admins too.
+
+const VIEWS = [
+  { value: 'board', label: 'Board' },
+  { value: 'list', label: 'List' },
+  { value: 'calendar', label: 'Calendar' },
 ];
+const VIEW_VALUES = VIEWS.map((view) => view.value);
 
-const OTHER_COLUMN = {
-  key: 'OTHER',
-  label: 'Other',
-  emptyText: '',
-  headerColor: 'border-border text-muted-foreground',
-  bgColor: 'bg-muted/40',
-  statuses: [],
-};
+const toolbarSelect = 'min-h-11 max-w-full rounded-md border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring';
 
-export function groupProjectsByColumn(projects) {
-  const known = new Set(KANBAN_COLUMNS.flatMap((col) => col.statuses));
-  const columns = KANBAN_COLUMNS.map((col) => ({
-    ...col,
-    projects: projects.filter((p) => col.statuses.includes(p.status)),
-  }));
-  const other = projects.filter((p) => !known.has(p.status));
-  if (other.length > 0) columns.push({ ...OTHER_COLUMN, projects: other });
-  return columns;
-}
-
-function ProjectCard({ project, onPortfolioChange, saving }) {
-  const totalTasks = (project._count?.tasks || 0);
-  const completedTasks = project.completedTaskCount || 0;
-  const progressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
+function Chip({ children, tone }) {
   return (
-    <div>
-    <Link
-      to={`/project/${project.id}`}
-      className="block bg-card rounded-lg border border-border p-3 hover:border-primary/30 hover:shadow-xs transition-all group"
+    <span
+      className={cn(
+        'rounded-full px-2.5 py-1',
+        tone === 'warning' && 'bg-warning/10 text-warning font-semibold',
+        tone === 'danger' && 'bg-destructive/10 text-destructive font-semibold',
+        tone === 'info' && 'bg-secondary text-secondary-foreground',
+        !tone && 'border border-border/40 bg-card',
+      )}
     >
-      {/* Header: name + health */}
-      <div className="flex items-start justify-between gap-2 mb-1.5">
-        <h3 className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate">
-          {project.name}
-        </h3>
-        {project.health && (
-          <span className={cn('px-1.5 py-0.5 text-[10px] font-medium rounded shrink-0', getHealthColor(project.health))}>
-            {project.health === 'AT_RISK' ? '⚠' : project.health === 'ON_TRACK' ? '✓' : ''}
-          </span>
-        )}
-      </div>
-
-      {/* Client name */}
-      {project.client && (
-        <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1.5">
-          <User className="w-3 h-3" />
-          <span className="truncate">{project.client.name}</span>
-          {project.client.email && (
-            <span className="text-[10px] opacity-50 truncate">{project.client.email}</span>
-          )}
-        </div>
-      )}
-
-      {/* Summary */}
-      {project.aiSummary && (
-        <p className="text-xs text-muted-foreground mb-2 line-clamp-2 leading-relaxed">
-          {project.aiSummary}
-        </p>
-      )}
-
-      {/* Tags */}
-      {project.tags && project.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2">
-          {project.tags.map((tag) => (
-            <span key={tag} className="px-1.5 py-0.5 text-[10px] bg-muted rounded text-muted-foreground flex items-center gap-0.5">
-              <Tag className="w-2.5 h-2.5" />
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Status badge + last activity */}
-      <div className="flex items-center justify-between gap-2">
-        <span className={cn('px-1.5 py-0.5 text-[10px] font-medium rounded-full', getProjectStatusColor(project.status))}>
-          {getProjectStatusLabel(project.status)}
-        </span>
-        {project.endDate ? (
-          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <CalendarDays className="w-3 h-3" aria-hidden="true" />
-            <span>Due {formatDate(project.endDate, { dateOnly: true })}</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <Clock className="w-3 h-3" aria-hidden="true" />
-            <span>Updated {formatDate(project.updatedAt)}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Progress bar */}
-      {totalTasks > 0 && (
-        <div className="mt-2">
-          <div className="w-full h-1 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary rounded-full transition-all duration-300"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-        </div>
-      )}
-    </Link>
-    <label className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-      <span className="sr-only">Portfolio for {project.name}</span>
-      <select
-        aria-label={`Portfolio for ${project.name}`}
-        value={project.portfolio || ''}
-        disabled={saving}
-        onChange={(event) => onPortfolioChange(project.id, event.target.value || null)}
-        className="min-h-11 w-full rounded border border-border bg-card px-2 focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <option value="">Unclassified</option>
-        {PORTFOLIO_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
-      </select>
-    </label>
-    <Link to={`/project/${project.id}/views`} className="inline-flex min-h-11 items-center text-xs text-primary">Task views</Link>
-    </div>
-  );
-}
-
-function KanbanColumn({ column, projects, count, onPortfolioChange, savingId }) {
-  return (
-    <div className="flex flex-col min-w-[280px] max-w-[320px] shrink-0">
-      {/* Column header */}
-      <div className={cn('flex items-center gap-2 pb-2 mb-3 border-b-2', column.headerColor)}>
-        <h2 className="text-sm font-semibold uppercase tracking-wider">{column.label}</h2>
-        <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full tabular-nums">{count}</span>
-      </div>
-
-      {/* Cards */}
-      <div className={cn('flex-1 space-y-2 overflow-y-auto max-h-[calc(100vh-260px)] p-1', column.bgColor, 'rounded-lg')}>
-        {projects.length === 0 ? (
-          <EmptyState
-            icon="projects"
-            title="No projects"
-            description={column.emptyText}
-            className="py-8"
-          />
-        ) : (
-          projects.map((project) => (
-            <ProjectCard key={project.id} project={project} onPortfolioChange={onPortfolioChange} saving={savingId === project.id} />
-          ))
-        )}
-      </div>
-    </div>
+      {children}
+    </span>
   );
 }
 
 export default function Projects() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
   const [portfolioError, setPortfolioError] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedPortfolio = searchParams.get('portfolio');
   const portfolio = [...PORTFOLIO_VALUES, 'UNCLASSIFIED'].includes(requestedPortfolio) ? requestedPortfolio : '';
+  const requestedView = searchParams.get('view');
+  const view = VIEW_VALUES.includes(requestedView) ? requestedView : 'board';
+  const owner = (searchParams.get('owner') || '').slice(0, 80);
   const showCreateModal = searchParams.get('create') === 'true';
   const preselectedClientId = searchParams.get('clientId') || '';
+
+  const setParam = useCallback((key, value, fallback = '') => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (value && value !== fallback) nextParams.set(key, value); else nextParams.delete(key);
+    setSearchParams(nextParams);
+  }, [searchParams, setSearchParams]);
 
   const openCreateModal = useCallback(() => {
     const nextParams = new URLSearchParams(searchParams);
@@ -218,6 +78,13 @@ export default function Projects() {
     nextParams.delete('create');
     nextParams.delete('clientId');
     setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const clearFilters = useCallback(() => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('portfolio');
+    nextParams.delete('owner');
+    setSearchParams(nextParams);
   }, [searchParams, setSearchParams]);
 
   const { data: projects = [], isLoading, isError, error, refetch, isFetching } = useQuery({
@@ -234,6 +101,18 @@ export default function Projects() {
       return all;
     },
   });
+
+  // Names for owner avatars and the owner filter. Shares the create dialog's
+  // cache; without it the page still works, just without names.
+  const { data: team } = useQuery({
+    queryKey: ['team'],
+    queryFn: () => api.getTeam(),
+    retry: false,
+  });
+  const owners = useMemo(() => teamOwners(team), [team]);
+  const ownerById = useMemo(() => new Map(owners.map((member) => [member.id, member])), [owners]);
+  const ownerFor = useCallback((project) => ownerById.get(project.defaultOwnerId) || null, [ownerById]);
+
   const classify = useMutation({
     mutationFn: ({ id, value }) => api.updateProject(id, { portfolio: value }),
     onSuccess: () => {
@@ -243,13 +122,15 @@ export default function Projects() {
     },
     onError: (err) => setPortfolioError(err.message || 'Portfolio could not be saved. Try again.'),
   });
+  const onPortfolioChange = useCallback((id, value) => classify.mutate({ id, value }), [classify]);
+  const savingId = classify.isPending ? classify.variables?.id : null;
 
   // Show real API data only. (Previously fell back to hardcoded demo projects
   // when the response looked empty, which hid real projects.)
-  const displayProjects = Array.isArray(projects) ? projects : [];
-
-  // Group projects by kanban column (unknown statuses go to "Other")
-  const columns = groupProjectsByColumn(displayProjects);
+  const allProjects = Array.isArray(projects) ? projects : [];
+  const shown = owner ? allProjects.filter((project) => matchesOwner(project, owner, user?.id)) : allProjects;
+  const summary = projectSummary(shown);
+  const filtered = Boolean(portfolio || owner);
 
   if (isLoading) {
     return <KanbanPageSkeleton label="Loading projects" />;
@@ -266,38 +147,78 @@ export default function Projects() {
     );
   }
 
+  const ownerKnown = !owner || ['me', 'none'].includes(owner) || ownerById.has(owner);
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground">Projects</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {displayProjects.length} total · Kanban view
-          </p>
+          <p className="text-eyebrow text-muted-foreground">Work</p>
+          <h1 className="mt-1.5 text-3xl font-heading font-semibold tracking-tight text-foreground">
+            Projects <span className="font-display italic font-normal text-primary">in motion</span>
+          </h1>
         </div>
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="min-h-11 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-2 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Plus className="w-4 h-4" aria-hidden="true" />
-          New Project
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="group" aria-label="View" className="flex overflow-hidden rounded-md border border-border/60">
+            {VIEWS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={view === value}
+                onClick={() => setParam('view', value, 'board')}
+                className={cn(
+                  'min-h-11 px-3.5 font-mono text-xs uppercase tracking-[0.1em] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                  view === value ? 'bg-foreground text-background' : 'bg-transparent text-foreground hover:bg-muted',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <Button type="button" onClick={openCreateModal}>
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" /> New project
+          </Button>
+        </div>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <label htmlFor="project-portfolio" className="text-sm font-medium">Work portfolio</label>
-        <select id="project-portfolio" value={portfolio} className="min-h-11 rounded-lg border border-border bg-card px-3 focus-visible:ring-2 focus-visible:ring-ring"
-          onChange={(event) => {
-            const next = new URLSearchParams(searchParams);
-            if (event.target.value) next.set('portfolio', event.target.value); else next.delete('portfolio');
-            setSearchParams(next);
-          }}>
-          <option value="">All work</option>
-          {PORTFOLIO_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
-          <option value="UNCLASSIFIED">Unclassified</option>
-        </select>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex items-center gap-2">
+          <label htmlFor="project-owner" className="text-eyebrow text-muted-foreground">Owner</label>
+          <select id="project-owner" value={owner} className={toolbarSelect} onChange={(event) => setParam('owner', event.target.value)}>
+            <option value="">Everyone</option>
+            {user?.id && <option value="me">Mine</option>}
+            {owners.filter((member) => member.id !== user?.id).map((member) => (
+              <option key={member.id} value={member.id}>{member.name}</option>
+            ))}
+            {!ownerKnown && <option value={owner}>Selected person</option>}
+            <option value="none">No owner</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="project-portfolio" className="text-eyebrow text-muted-foreground">Work portfolio</label>
+          <select id="project-portfolio" value={portfolio} className={toolbarSelect} onChange={(event) => setParam('portfolio', event.target.value)}>
+            <option value="">All work</option>
+            {PORTFOLIO_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+            <option value="UNCLASSIFIED">Unclassified</option>
+          </select>
+        </div>
         <p className="text-xs text-muted-foreground">Both portfolios are shared with the Ashbi team.</p>
+      </div>
+
+      {/* Summary */}
+      <div aria-label="Project summary" role="group" className="flex flex-wrap items-center gap-2.5 text-sm text-muted-foreground">
+        <Chip><span className="figure">{summary.active}</span> active · <span className="figure">{summary.total}</span> in total</Chip>
+        {summary.overdue > 0 && <Chip tone="danger"><span className="figure">{summary.overdue}</span> overdue</Chip>}
+        <Chip tone={summary.dueThisWeek > 0 ? 'warning' : undefined}><span className="figure">{summary.dueThisWeek}</span> due this week</Chip>
+        <Chip tone="info"><span className="figure">{summary.inReview}</span> in client review</Chip>
+        <Link
+          to="/project-templates"
+          className="inline-flex min-h-11 items-center rounded-full px-2.5 font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Project templates
+        </Link>
       </div>
       {portfolioError && <p role="alert" className="text-sm text-destructive">{portfolioError}</p>}
 
@@ -308,24 +229,31 @@ export default function Projects() {
         preselectedPortfolio={portfolio === 'UNCLASSIFIED' ? '' : portfolio}
       />
 
-      {/* Kanban Board */}
-      <div
-        className="flex gap-4 overflow-x-auto pb-4 min-w-0 [contain:inline-size] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
-        role="region"
-        aria-label="Project status board"
-        tabIndex={0}
-      >
-        {columns.map((col) => (
-          <KanbanColumn
-            key={col.key}
-            column={col}
-            projects={col.projects}
-            count={col.projects.length}
-            onPortfolioChange={(id, value) => classify.mutate({ id, value })}
-            savingId={classify.isPending ? classify.variables?.id : null}
-          />
-        ))}
-      </div>
+      {shown.length === 0 ? (
+        <div className="rounded-lg border border-border/60 bg-card">
+          {filtered ? (
+            <EmptyState
+              icon="search"
+              title="No projects match these filters"
+              description="Try another owner or portfolio."
+              actionLabel="Show all projects"
+              onAction={clearFilters}
+            />
+          ) : (
+            <EmptyState
+              icon="projects"
+              title="No projects yet"
+              description="Use New project to set up the first one, or start from a project template."
+            />
+          )}
+        </div>
+      ) : view === 'list' ? (
+        <ProjectListView projects={shown} ownerFor={ownerFor} savingId={savingId} onPortfolioChange={onPortfolioChange} />
+      ) : view === 'calendar' ? (
+        <ProjectCalendarView projects={shown} />
+      ) : (
+        <ProjectBoard projects={shown} ownerFor={ownerFor} isAdmin={isAdmin} savingId={savingId} onPortfolioChange={onPortfolioChange} />
+      )}
     </div>
   );
 }

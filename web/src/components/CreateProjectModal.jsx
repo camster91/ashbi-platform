@@ -4,6 +4,7 @@ import Modal, { ModalFooter } from './Modal';
 import { api } from '../lib/api';
 import useClients from '../hooks/useClients';
 import { PORTFOLIO_OPTIONS } from '@shared/portfolio.js';
+import { teamOwners } from './projects/projectBoard';
 
 export default function CreateProjectModal({ isOpen, onClose, preselectedClientId, preselectedPortfolio = '' }) {
   const queryClient = useQueryClient();
@@ -177,7 +178,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
               className="w-full px-3 py-2 border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
             >
               <option value="">No default owner</option>
-              {(team?.team || []).map((member) => (
+              {teamOwners(team).map((member) => (
                 <option key={member.id} value={member.id}>
                   {member.name} ({member.role})
                 </option>

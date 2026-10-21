@@ -16,23 +16,30 @@ test('five desktop areas reveal workflows and the compact rail stays small', asy
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/dashboard');
   const nav = page.getByRole('navigation', { name: 'Workspace navigation' });
+  // A pinned group (Dashboard, Daily Queue, Inbox, Clients) stays visible above
+  // five collapsible areas: Sales, Work, Money, Studio and Settings.
+  for (const name of ['Dashboard', 'Daily Queue', 'Inbox', 'Clients']) {
+    await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
+  }
   await expect(nav.getByRole('button', { name: /^(Expand|Collapse) / })).toHaveCount(5);
+  // Work is open by default; the other areas open with their routes.
   await expect(nav.getByRole('link', { name: 'Projects', exact: true })).toBeVisible();
-  await expect(nav.getByRole('link', { name: 'Invoices', exact: true })).toHaveCount(0);
   await nav.getByRole('button', { name: 'Collapse Work', exact: true }).click();
   await expect(nav.getByRole('link', { name: 'Projects', exact: true })).toHaveCount(0);
-  await nav.getByRole('button', { name: 'Expand Finance', exact: true }).click();
+  await expect(nav.getByRole('link', { name: 'Invoices', exact: true })).toHaveCount(0);
+  await nav.getByRole('button', { name: 'Expand Money', exact: true }).click();
   await expect(nav.getByRole('link', { name: 'Invoices', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
+  // The compact rail: four pinned icons plus one button per area.
   await expect(nav.getByRole('button', { name: /^Open / })).toHaveCount(5);
-  await expect(nav.getByRole('link')).toHaveCount(0);
-  await nav.getByRole('button', { name: 'Open Knowledge', exact: true }).click();
+  await expect(nav.getByRole('link')).toHaveCount(4);
+  await nav.getByRole('button', { name: 'Open Studio', exact: true }).click();
   await expect(nav.getByRole('link', { name: 'Docs', exact: true })).toBeVisible();
   await nav.getByRole('link', { name: 'Docs', exact: true }).click();
   await expect(page).toHaveURL(/\/docs$/);
   await expect(nav.getByRole('link', { name: 'Docs', exact: true })).toHaveAttribute('aria-current', 'page');
   await page.reload();
-  await expect(nav.getByRole('button', { name: 'Collapse Knowledge', exact: true })).toBeVisible();
+  await expect(nav.getByRole('button', { name: 'Collapse Studio', exact: true })).toBeVisible();
 });
 
 test('staff navigation retains daily work and excludes administrator destinations', async ({ page }) => {
@@ -42,7 +49,7 @@ test('staff navigation retains daily work and excludes administrator destination
   const nav = page.getByRole('navigation', { name: 'Workspace navigation' });
   await expect(nav.getByRole('link', { name: 'Daily Queue', exact: true })).toBeVisible();
   await expect(nav.getByRole('link', { name: 'Timesheets', exact: true })).toBeVisible();
-  for (const area of ['Clients', 'Knowledge', 'Finance', 'Settings']) {
+  for (const area of ['Sales', 'Money', 'Studio', 'Settings']) {
     await nav.getByRole('button', { name: `Expand ${area}`, exact: true }).click();
   }
   for (const name of ['Team', 'Credentials', 'Trash', 'Retainers', 'Rate Cards', 'Approvals']) {
@@ -57,7 +64,7 @@ test('phone navigation uses the same areas and keeps Inbox discoverable', async 
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto('/dashboard');
   const nav = page.getByRole('navigation', { name: 'Mobile navigation' });
-  for (const name of ['Work', 'Clients', 'Knowledge', 'Finance']) {
+  for (const name of ['Home', 'Sales', 'Money', 'Studio']) {
     await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
   }
   await nav.getByRole('button', { name: 'Open Settings navigation options' }).click();
@@ -69,7 +76,8 @@ test('phone navigation uses the same areas and keeps Inbox discoverable', async 
   await inbox.click();
   await expect(page).toHaveURL(/\/inbox$/);
   await expect(menu).toHaveCount(0);
-  await expect(nav.getByRole('link', { name: 'Clients', exact: true })).toHaveAttribute('aria-current', 'page');
+  // Inbox is in the pinned group, which the phone's Home tab covers.
+  await expect(nav.getByRole('link', { name: 'Home', exact: true })).toHaveAttribute('aria-current', 'page');
 });
 
 
@@ -84,6 +92,6 @@ test('staff can open personal timesheets from phone navigation', async ({ page }
   await expect(timesheets).toBeVisible();
   await timesheets.click();
   await expect(page).toHaveURL(/\/timesheets$/);
-  await expect(page.getByRole('heading', { name: 'Timesheets', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Time this week', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('button', { name: /Approve|Reject/ })).toHaveCount(0);
 });

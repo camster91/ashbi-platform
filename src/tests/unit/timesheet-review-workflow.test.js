@@ -58,13 +58,16 @@ test('admin rejection records a reason without calling approval', async (t) => {
 test('timesheet UI calls the rejection API and renders persisted review state', () => {
   const api = readFileSync(resolve(process.cwd(), 'web/src/lib/api.js'), 'utf8');
   const page = readFileSync(resolve(process.cwd(), 'web/src/pages/Timesheets.jsx'), 'utf8');
+  // The review state and buttons render in the Time page's entry component.
+  const review = readFileSync(resolve(process.cwd(), 'web/src/components/time/EntryReview.jsx'), 'utf8');
 
   assert.match(api, /rejectTimesheetEntry: \(id, reason\)/);
   assert.match(page, /api\.rejectTimesheetEntry\(id, reason\)/);
   assert.match(page, /const canReview = user\?\.role === 'ADMIN'/);
   assert.match(page, /canReview=\{canReview\}/);
-  assert.match(page, /entry\.reviewStatus === 'APPROVED'/);
-  assert.match(page, /entry\.reviewStatus === 'REJECTED'/);
+  assert.match(review, /entry\.reviewStatus === 'APPROVED'/);
+  assert.match(review, /entry\.reviewStatus === 'REJECTED'/);
+  assert.match(review, /if \(!canReview\) return/);
 });
 
 
