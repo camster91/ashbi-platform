@@ -21,13 +21,24 @@ The canonical gate owns these blocking checks:
   workflows and deployment scripts);
 - production dependency audit (`npm audit --omit=dev --audit-level=high`, backend
   and frontend);
+- multi-tenancy route import guard (routes must use `request.prisma`; the step
+  fails if any file under `src/routes/` imports the global Prisma client);
+- Prisma baseline adoption (`npm run db:adopt-baseline`, see
+  [prisma-migration-baseline.md](prisma-migration-baseline.md)): a rehearsal
+  that builds a populated database from the baseline migration SQL alone,
+  adopts it, and proves zero drift from `prisma/schema.prisma` with every
+  committed migration recorded (the baseline recorded, every later migration
+  executed by `migrate deploy`); and a negative proof that a drifted baseline
+  is refused after the schema comparison ran, with no `_prisma_migrations`
+  table created. Each uses its own throwaway target and shadow databases in
+  the job's PostgreSQL service;
 - package-boundary validation;
 - backend type check and backend/frontend lint;
 - backend unit and integration tests against PostgreSQL with pgvector (the
   committed migration chain is applied with `prisma migrate deploy`) and Redis
   (the realtime adapter/emitter tests; the gate sets `REQUIRE_REDIS_TESTS=1`, so
   a missing Redis fails the run instead of skipping those tests);
-- frontend unit tests;
+- frontend unit tests (run with v8 coverage instrumentation; no thresholds);
 - the production build, frontend performance budgets and Lighthouse budgets;
 - desktop, mobile, and accessibility browser smoke, public-route splitting and
   PWA offline policy;
@@ -50,9 +61,25 @@ The secret scan runs inside check 1, so it is enforced even if the standalone
 Actions UI. That standalone workflow still exists and additionally runs the
 scanner's negative regression fixtures; it is advisory, not a required check.
 
-Other workflows in `.github/workflows/` (`enterprise-compliance.yml`,
-`codeql.yml`, `pr-review.yml`, `build-and-push.yml`, `browser-e2e.yml`,
-`db-backup.yml`) are supplementary and are not part of the required contract.
+Other workflows in `.github/workflows/` (`codeql.yml`, `pr-review.yml`,
+`build-and-push.yml`, `browser-e2e.yml`, `db-backup.yml`) are supplementary
+and are not part of the required contract. `browser-e2e.yml` is manual-only
+(`workflow_dispatch`) and never runs on a pull request.
+
+The former `enterprise-compliance.yml` (`Enterprise Compliance & Tests`) was
+retired. It had been disabled in the Actions UI (`disabled_manually`) and had
+not run since 13 August 2026, so none of its checks were being enforced. Its
+duplicate steps (lint, the release gate contract, Prisma generate/migrate, the
+schema-drift diff, `npm test` and the frontend Vitest suite) already ran in
+check 1. Its unique steps moved into the quality job above: the multi-tenancy
+route import guard, the baseline adoption rehearsal (rewritten to adopt a
+baseline-only database, because the old `db push` rehearsal could never pass
+once later migrations existed), the drift-refusal proof, and `--coverage` on
+the frontend Vitest run. `npm run check:release-gates` fails if any of them is
+removed from that job or if a baseline step goes back to `db push`. Its job
+names (`Lint & Compliance Scan`, `Backend Unit Tests`, `Frontend Unit Tests`)
+never report, so they must not be listed as required checks.
+
 The visual-regression baselines (`npm run test:visual`, see
 [visual-baselines.md](visual-baselines.md)) are opt-in and not a release gate
 until they are regenerated and proven stable on the CI runner.
