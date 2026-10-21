@@ -25,7 +25,9 @@ const RELATION_COUNT_SQL = `
       WHERE c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
         AND n.nspname NOT IN ('pg_catalog', 'information_schema')
         AND n.nspname NOT LIKE 'pg_toast%'
-        AND n.nspname NOT LIKE 'pg_temp%') AS "relationCount"`;
+        AND n.nspname NOT LIKE 'pg_temp%') AS "relationCount",
+    (SELECT pg_postmaster_start_time()::text || '/' || d.oid::text || '/' || d.datname
+      FROM pg_database d WHERE d.datname = current_database()) AS "serverIdentity"`;
 
 function databaseIdentity(url) {
   try {
@@ -70,7 +72,13 @@ export async function inspectDatabase(url) {
   await client.connect();
   try {
     const { rows } = await client.query(RELATION_COUNT_SQL);
-    return { hasMigrationsTable: Boolean(rows[0].hasMigrationsTable), relationCount: Number(rows[0].relationCount) };
+    return {
+      hasMigrationsTable: Boolean(rows[0].hasMigrationsTable),
+      relationCount: Number(rows[0].relationCount),
+      // Server start time + database OID + name: identical only when both URLs
+      // reach the same database, whatever host alias or port mapping is used.
+      serverIdentity: rows[0].serverIdentity ?? null,
+    };
   } finally {
     await client.end();
   }
@@ -131,6 +139,9 @@ export async function adoptBaseline({
     return refuse(log, 1, 'Refusing baseline adoption: the database is empty. Use `prisma migrate deploy` for a fresh database.');
   }
   const shadow = await inspect(env[SHADOW_ENV]);
+  if (!target.serverIdentity || !shadow.serverIdentity || target.serverIdentity === shadow.serverIdentity) {
+    return refuse(log, 1, `Refusing baseline adoption: ${SHADOW_ENV} reaches the same database as DATABASE_URL (or its identity could not be read). Prisma resets the shadow database, so it must be a separate one.`);
+  }
   if (shadow.hasMigrationsTable || shadow.relationCount !== 0) {
     return refuse(log, 1, `Refusing baseline adoption: ${SHADOW_ENV} is not empty (${shadow.relationCount} relations). Prisma resets the shadow database, so it must be a new, disposable database.`);
   }

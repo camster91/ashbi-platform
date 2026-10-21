@@ -134,8 +134,14 @@ jobs:
           export BASELINE_SHADOW_DATABASE_URL=postgresql://postgres:testpass@localhost:5432/baseline_drift_shadow
           npx prisma db execute --file prisma/migrations/20260808040000_baseline/migration.sql
           printf 'ALTER TABLE "clients" ADD COLUMN "unexpectedBaselineDrift" TEXT;' | npx prisma db execute --stdin
-          if npm run db:adopt-baseline; then
-            echo 'Baseline adoption unexpectedly accepted drift' >&2
+          # Exactly exit 2 (schema drift). Any other non-zero code is an error,
+          # not a proven drift refusal, and must fail this step.
+          set +e
+          npm run db:adopt-baseline
+          adopt_status=$?
+          set -e
+          if [ "$adopt_status" -ne 2 ]; then
+            echo "Baseline adoption must refuse drift with exit 2, got $adopt_status" >&2
             exit 1
           fi
           node scripts/assert-no-prisma-migrations.mjs

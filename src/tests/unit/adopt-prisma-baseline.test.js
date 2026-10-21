@@ -22,8 +22,8 @@ const silent = { log() {}, error() {} };
 
 // Fake dependencies: records every Prisma invocation and returns scripted
 // exit codes keyed by the Prisma subcommand.
-function harness({ env = validEnv, target = { hasMigrationsTable: false, relationCount: 79 },
-  shadow = { hasMigrationsTable: false, relationCount: 0 }, codes = {} } = {}) {
+function harness({ env = validEnv, target = { hasMigrationsTable: false, relationCount: 79, serverIdentity: 'start/16384/target' },
+  shadow = { hasMigrationsTable: false, relationCount: 0, serverIdentity: 'start/16385/shadow' }, codes = {} } = {}) {
   const calls = [];
   const inspected = [];
   let cleaned = 0;
@@ -97,7 +97,7 @@ describe('baseline adoption decisions', () => {
   });
 
   it('refuses a shadow database that is not empty, because Prisma resets it', async () => {
-    for (const shadow of [{ hasMigrationsTable: false, relationCount: 3 }, { hasMigrationsTable: true, relationCount: 1 }]) {
+    for (const shadow of [{ hasMigrationsTable: false, relationCount: 3, serverIdentity: 's/2' }, { hasMigrationsTable: true, relationCount: 1, serverIdentity: 's/2' }]) {
       const h = harness({ shadow });
       assert.equal(await h.run(), 1);
       assert.deepEqual(h.calls, []);
@@ -212,4 +212,28 @@ describe('baseline adoption rehearsal assertion', () => {
       assert.ok(migrationRecordFailures(expected, rows).some((failure) => pattern.test(failure)));
     });
   }
+});
+
+describe('baseline adoption shadow identity', () => {
+  it('refuses when the shadow URL reaches the same database through another host alias', async () => {
+    const same = 'start/16384/testdb';
+    const h = harness({
+      env: { ...validEnv, DATABASE_URL: 'postgresql://u:p@localhost:5432/testdb', BASELINE_SHADOW_DATABASE_URL: 'postgresql://u:p@127.0.0.1:5432/testdb' },
+      target: { hasMigrationsTable: false, relationCount: 79, serverIdentity: same },
+      shadow: { hasMigrationsTable: false, relationCount: 0, serverIdentity: same },
+    });
+    assert.equal(await h.run(), 1);
+    assert.equal(h.calls.length, 0);
+  });
+
+  it('refuses when either database identity cannot be read', async () => {
+    for (const [target, shadow] of [
+      [{ hasMigrationsTable: false, relationCount: 79, serverIdentity: null }, undefined],
+      [undefined, { hasMigrationsTable: false, relationCount: 0, serverIdentity: null }],
+    ]) {
+      const h = harness({ ...(target && { target }), ...(shadow && { shadow }) });
+      assert.equal(await h.run(), 1);
+      assert.equal(h.calls.length, 0);
+    }
+  });
 });

@@ -102,7 +102,7 @@ export function validateReleaseGates(root = process.cwd()) {
     ['CREATE DATABASE baseline_drift;', 'baseline drift-refusal proof'],
     ['ALLOW_BASELINE_ADOPTION: 20260808040000_baseline', 'baseline adoption confirmation'],
     ['npm run db:adopt-baseline', 'baseline adoption command'],
-    [/if npm run db:adopt-baseline; then\r?\n\s+echo 'Baseline adoption unexpectedly accepted drift' >&2\r?\n\s+exit 1\r?\n/, 'baseline drift-refusal failure exit'],
+    [/set \+e\r?\n\s+npm run db:adopt-baseline\r?\n\s+adopt_status=\$\?\r?\n\s+set -e\r?\n\s+if \[ "\$adopt_status" -ne 2 \]; then\r?\n\s+echo "[^"\n]*" >&2\r?\n\s+exit 1\r?\n/, 'baseline drift-refusal requires exit 2'],
     ['node scripts/assert-no-prisma-migrations.mjs', 'baseline drift-refusal migration-table assertion'],
     ['npm --prefix web test -- --coverage', 'frontend unit tests with coverage instrumentation'],
   ];

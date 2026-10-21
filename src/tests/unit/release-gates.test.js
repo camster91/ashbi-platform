@@ -93,7 +93,9 @@ describe('mandatory release gates', () => {
     ['multi-tenancy route import guard', `! grep -r "import prisma from '../config/db.js'" src/routes/`, 'echo skipped'],
     ['baseline adoption rehearsal', 'CREATE DATABASE baseline_adoption;', 'SELECT 1;'],
     ['baseline drift-refusal proof', 'CREATE DATABASE baseline_drift;', 'SELECT 1;'],
-    ['baseline drift-refusal failure exit', "accepted drift' >&2\n            exit 1", "accepted drift' >&2\n            true"],
+    ['baseline drift-refusal requires exit 2', 'if [ "$adopt_status" -ne 2 ]; then', 'if [ "$adopt_status" -eq 0 ]; then'],
+    ['baseline drift-refusal requires exit 2', 'adopt_status=$?\n', 'adopt_status=2\n'],
+    ['baseline drift-refusal requires exit 2', 'got $adopt_status" >&2\n            exit 1', 'got $adopt_status" >&2\n            true'],
     ['baseline drift-refusal migration-table assertion', 'node scripts/assert-no-prisma-migrations.mjs', 'echo skipped'],
     ['frontend unit tests with coverage instrumentation', 'npm --prefix web test -- --coverage', 'npm --prefix web test'],
   ]) {
