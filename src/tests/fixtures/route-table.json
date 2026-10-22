@@ -360,6 +360,8 @@
   "GET /api/workspace-chat/channels/:channelId/messages",
   "GET /api/workspace-chat/channels/:channelId/messages/by-intent/:key",
   "GET /api/workspace-chat/people",
+  "GET /api/wp-bridge",
+  "GET /api/wp-bridge/",
   "HEAD /api/agent/tools",
   "HEAD /api/ai-bridge/capabilities",
   "HEAD /api/ai-connections",
@@ -681,6 +683,8 @@
   "HEAD /api/workspace-chat/channels/:channelId/messages",
   "HEAD /api/workspace-chat/channels/:channelId/messages/by-intent/:key",
   "HEAD /api/workspace-chat/people",
+  "HEAD /api/wp-bridge",
+  "HEAD /api/wp-bridge/",
   "OPTIONS /*",
   "PATCH /api/ai-connections/settings",
   "PATCH /api/approvals/:id",
@@ -1021,6 +1025,9 @@
   "POST /api/workspace-chat/channels/:channelId/attention/:attentionId/ack",
   "POST /api/workspace-chat/channels/:channelId/messages",
   "POST /api/workspace-chat/channels/:channelId/read",
+  "POST /api/wp-bridge",
+  "POST /api/wp-bridge/",
+  "POST /api/wp-bridge/:id/rotate-secret",
   "PUT /api/auth/me",
   "PUT /api/brand",
   "PUT /api/brand/",
@@ -1070,5 +1077,7 @@
   "PUT /api/threads/:id",
   "PUT /api/time-entries/:id",
   "PUT /api/wiki/pages/:id",
-  "PUT /api/wiki/pages/:id/access"
+  "PUT /api/wiki/pages/:id/access",
+  "PUT /api/wp-bridge",
+  "PUT /api/wp-bridge/"
 ]

@@ -23,9 +23,10 @@ import { prisma } from '../config/db.js';
  * matrix test, which lists every signed-in route that relies on that).
  *
  * @param {string} url
+ * @param {string} [method] HTTP method; required for signed plugin-write exemptions.
  * @returns {boolean}
  */
-export function isTenancyExemptUrl(url) {
+export function isTenancyExemptUrl(url, method) {
   // Exempt Auth, Health, Public Portal, and Webhooks from strict isolation.
   //
   // Webhooks (Stripe, email inbound) authenticate via HMAC, not JWT —
@@ -33,6 +34,8 @@ export function isTenancyExemptUrl(url) {
   // every webhook POST fails with 403 ORG_CONTEXT_REQUIRED before the
   // HMAC verify ever runs. Routes still verify signatures themselves.
   return (
+    // Only signed plugin writes bypass JWT tenancy; fleet/admin operations do not.
+    (method === 'PUT' && /^\/api\/wp-bridge\/?$/.test(url)) ||
     url.startsWith('/api/auth') ||
     url.startsWith('/api/webhooks') ||
     url.startsWith('/api/portal') ||
@@ -105,7 +108,7 @@ export async function tenancyMiddleware(request, reply) {
     return;
   }
 
-  if (isTenancyExemptUrl(path)) {
+  if (isTenancyExemptUrl(path, request.method)) {
     request.prisma = prisma; // Use global for auth/portal/health/public routes
     enterRequestContext({ prisma, organizationId: null, impersonation: impersonationOf(request) });
     return;

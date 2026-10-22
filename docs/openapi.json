@@ -43926,6 +43926,271 @@
         "x-access": "staff",
         "x-tenancy": "scoped"
       }
+    },
+    "/api/wp-bridge": {
+      "get": {
+        "operationId": "get_api_wp_bridge",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/wp-bridge",
+        "tags": [
+          "wp-bridge"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
+      "post": {
+        "operationId": "post_api_wp_bridge",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "siteName": {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "siteUrl": {
+                    "format": "uri",
+                    "maxLength": 2048,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "siteUrl"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/wp-bridge",
+        "tags": [
+          "wp-bridge"
+        ],
+        "x-access": "admin + staff",
+        "x-tenancy": "scoped"
+      },
+      "put": {
+        "operationId": "put_api_wp_bridge",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "activePlugins": {
+                    "items": {
+                      "maxLength": 255,
+                      "type": "string"
+                    },
+                    "maxItems": 1000,
+                    "type": "array"
+                  },
+                  "bridgeVersion": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "dbSize": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "diskBytes": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "diskUsagePct": {
+                    "maximum": 100,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "healthScore": {
+                    "maximum": 100,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "phpVersion": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "pluginCount": {
+                    "maximum": 2147483647,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "pluginUpdates": {
+                    "maximum": 2147483647,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "siteUrl": {
+                    "format": "uri",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "ACTIVE",
+                      "MAINTENANCE",
+                      "ERROR",
+                      "OFFLINE"
+                    ],
+                    "type": "string"
+                  },
+                  "theme": {
+                    "maxLength": 255,
+                    "type": "string"
+                  },
+                  "ttfb": {
+                    "maximum": 2147483647,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "wordpressVersion": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "wpVersion": {
+                    "maxLength": 100,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "siteUrl"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [],
+        "summary": "PUT /api/wp-bridge",
+        "tags": [
+          "wp-bridge"
+        ],
+        "x-access": "public",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/wp-bridge/{id}/rotate-secret": {
+      "post": {
+        "operationId": "post_api_wp_bridge_id_rotate_secret",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/wp-bridge/:id/rotate-secret",
+        "tags": [
+          "wp-bridge"
+        ],
+        "x-access": "admin + staff",
+        "x-tenancy": "scoped"
+      }
     }
   },
   "servers": [
@@ -44194,6 +44459,9 @@
     },
     {
       "name": "workspace-chat"
+    },
+    {
+      "name": "wp-bridge"
     }
   ]
 }
