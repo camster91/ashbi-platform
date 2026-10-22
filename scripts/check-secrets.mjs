@@ -3,10 +3,15 @@ import { readdir, readFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 
 const root = resolve(process.argv[2] || '.');
-const allowedExtensions = new Set(['.js', '.ts', '.json', '.yml', '.yaml', '.md', '.sh', '.py']);
+const allowedExtensions = new Set(['.js', '.ts', '.jsx', '.tsx', '.json', '.yml', '.yaml', '.md', '.sh', '.py', '.csv']);
 const excludedDirectories = new Set(['.git', 'node_modules', 'dist']);
 const excludedFiles = new Set(['check-secrets.mjs', 'check-secrets.yml']);
 const placeholder = /CHANGE_ME|PLACEHOLDER|your-|example|TestPass/i;
+// Reserved documentation domains (example.com / .example / .invalid / .test / .localhost).
+const documentationEmail = /@(?:[a-z0-9-]+\.)*example\.(?:com|net|org|invalid)$|@(?:[a-z0-9-]+\.)+(?:example|invalid|test|localhost)$/i;
+const emailLiteral = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+const clientBookMarker = /\b(?:contactPerson|Contact Email|postalCode|totalRevenueUsd|totalRevenueCad|client_email)\b/;
+const streetAddress = /\b\d{2,6}\s+(?!Example\b|Sample\b|Placeholder\b|Fake\b)[A-Za-z][A-Za-z0-9.'-]*(?:\s+[A-Za-z0-9.'-]+){0,5}\s+(?:Street|Drive|Avenue|Road|Boulevard|Lane|Court|Place)\b/g;
 const patterns = [
   ['database password', /postgresql?:\/\/[a-zA-Z0-9_]+:[-A-Za-z0-9_!@#$%^&*()+=]{20,}@/g, placeholder],
   ['Redis password', /redis:\/\/[^:]+:[-A-Za-z0-9_!@#$%^&*()+=]{16,}@/g],
@@ -18,6 +23,34 @@ const patterns = [
 ];
 
 let bad = false;
+
+function report(path, content, index, label) {
+  const line = content.slice(0, index).split('\n').length;
+  const relative = path.slice(root.length + 1).replaceAll('\\', '/');
+  console.error(`::error file=${relative},line=${line}::Potential ${label} detected (value redacted)`);
+  bad = true;
+}
+
+function scanClientBook(path, content) {
+  const revenueHits = (content.match(/\btotalRevenue(?:Usd|Cad)\b/g) || []).length;
+  const contactHits = (content.match(/\bcontactPerson\b/g) || []).length;
+  const roster = revenueHits >= 5 || contactHits >= 8;
+  const emails = [];
+  emailLiteral.lastIndex = 0;
+  let match;
+  while ((match = emailLiteral.exec(content)) !== null) {
+    if (!documentationEmail.test(match[0])) emails.push(match);
+  }
+  if (roster || (clientBookMarker.test(content) && emails.length >= 5)) {
+    for (const hit of emails) report(path, content, hit.index, 'committed client-book email');
+  }
+  if (roster || (/\bpostalCode\b/.test(content) && /\bcontactPerson\b/.test(content))) {
+    streetAddress.lastIndex = 0;
+    while ((match = streetAddress.exec(content)) !== null) {
+      report(path, content, match.index, 'committed client street address');
+    }
+  }
+}
 
 async function scan(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -41,12 +74,13 @@ async function scan(directory) {
         bad = true;
       }
     }
+    scanClientBook(path, content);
   }
 }
 
 await scan(root);
 if (bad) {
-  console.error('Secret leak gate: FAIL. Move credentials to the approved secret store.');
+  console.error('Secret leak gate: FAIL. Move credentials to the approved secret store and keep client books out of git.');
   process.exit(1);
 }
-console.log('Secret leak gate: PASS (no hardcoded credentials found)');
+console.log('Secret leak gate: PASS (no hardcoded credentials or client-book exports found)');

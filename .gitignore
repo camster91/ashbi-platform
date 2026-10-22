@@ -40,6 +40,10 @@ coverage/
 prisma/migrations/**/migration_lock.toml
 config/google-tokens.json
 
+# Local Bonsai client book. Never commit a real export.
+prisma/bonsai-seed.local.json
+prisma/bonsai-seed.local.js
+
 # Security - never commit secrets or keys
 .vapid-keys.json
 *.pem

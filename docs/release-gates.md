@@ -16,7 +16,11 @@ The canonical gate owns these blocking checks:
 
 - secret leak scan (`npm run check:secrets`, which runs
   `scripts/check-secrets.mjs` offline against the checkout and exits non-zero on
-  any finding without printing matched values);
+  any finding without printing matched values). The same scan rejects a
+  committed client-book export: a file that repeats revenue or contact fields
+  and contains an email outside the reserved documentation domains
+  (`.example`, `.invalid`, `.test`, `.localhost`, `example.com`), or a street
+  address in that kind of roster. Real exports stay in gitignored local files;
 - release gate contract (`npm run check:release-gates`, a static check of the
   workflows and deployment scripts);
 - production dependency audit (`npm audit --omit=dev --audit-level=high`, backend
