@@ -1,4 +1,5 @@
 import integrationRoutes from '../../routes/integration.routes.js';
+import wpBridgeRoutes from '../../routes/wp-bridge.routes.js';
 import workspaceApiRoutes from '../../routes/workspace-api.routes.js';
 import commandCenterRoutes from '../../routes/integrations.command-center.routes.js';
 import mailgunHitlRoutes from '../../routes/mailgun-hitl.routes.js';
@@ -36,6 +37,7 @@ export async function registerIntegrationRoutes(fastify) {
   await fastify.register(mcpOAuthRoutes, { prefix: '', ...(oauthProvider ? { provider: oauthProvider } : {}) });
   await fastify.register(workspaceApiRoutes, { prefix: '/api', ...(oauthProvider ? { oauthProvider } : {}) });
   await fastify.register(integrationRoutes, { prefix: '/api/integrations' });
+  await fastify.register(wpBridgeRoutes, { prefix: '/api/wp-bridge' });
   await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });
   await fastify.register(mailgunHitlRoutes, { prefix: '/api/mailgun-hitl' });
   await fastify.register(mailgunRoutes, { prefix: '/api/mailgun' });

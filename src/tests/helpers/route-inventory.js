@@ -127,7 +127,7 @@ export async function collectRouteInventory({ jwtSecret = 'test-only-jwt-secret'
       const jsonSchema = opts.schema && typeof opts.schema === 'object' ? opts.schema : {};
       for (const method of methods) {
         routes.push({
-          method, url, guards, tenancy: isTenancyExemptUrl(url) ? 'exempt' : 'scoped', zod, jsonSchema,
+          method, url, guards, tenancy: isTenancyExemptUrl(url, method) ? 'exempt' : 'scoped', zod, jsonSchema,
           public: opts.config?.public === true,
           actsForStaff: opts.config?.actsForStaff === true,
         });

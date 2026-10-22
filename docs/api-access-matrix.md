@@ -51,17 +51,17 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | admin | 41 |
 | admin + recent-auth | 14 |
 | admin + recent-auth (access change) | 1 |
-| admin + staff | 6 |
+| admin + staff | 8 |
 | api-key | 6 |
 | api-key + scope ai_bridge:actions | 2 |
 | api-key + scope ai_bridge:read | 1 |
 | bot-secret | 40 |
 | client-portal | 39 |
-| public | 51 |
+| public | 52 |
 | recent-auth + staff | 9 |
-| staff | 477 |
+| staff | 478 |
 | staff (inline) | 1 |
-| **total** | 688 |
+| **total** | 692 |
 
 ## Routes by prefix
 
@@ -1192,3 +1192,12 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/workspace-chat/channels/:channelId/messages/by-intent/:key` | staff | scoped |  |
 | POST | `/api/workspace-chat/channels/:channelId/read` | staff | scoped |  |
 | GET | `/api/workspace-chat/people` | staff | scoped |  |
+
+### /api/wp-bridge
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/wp-bridge` | staff | scoped |  |
+| POST | `/api/wp-bridge` | admin + staff | scoped |  |
+| PUT | `/api/wp-bridge` | public | exempt | signed webhook: Provisioned per-site HMAC over timestamp, nonce and raw body; persistent nonce prevents replay and site ownership supplies organization context. |
+| POST | `/api/wp-bridge/:id/rotate-secret` | admin + staff | scoped |  |

@@ -33,6 +33,7 @@ const DOC_URL = new URL('../../../docs/api-access-matrix.md', import.meta.url);
  */
 const INTENTIONALLY_PUBLIC_ROUTES = {
   'OPTIONS *': { category: 'infrastructure', reason: 'CORS preflight handled by @fastify/cors.' },
+  'PUT /api/wp-bridge': { category: 'signed webhook', reason: 'Provisioned per-site HMAC over timestamp, nonce and raw body; persistent nonce prevents replay and site ownership supplies organization context.' },
   'GET /api/live': { category: 'health', reason: 'Liveness probe; returns only status and revision.' },
   'GET /api/health': { category: 'health', reason: 'Readiness probe for uptime checks; dependency states and revision only (details at /api/health/details).' },
 

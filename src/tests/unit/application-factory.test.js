@@ -302,6 +302,7 @@ const DOMAIN_REGISTRARS = [
       ['mcp-oauth', ''],
       ['workspace-api', '/api'],
       ['integration', '/api/integrations'],
+      ['wp-bridge', '/api/wp-bridge'],
       ['integrations.command-center', '/api/command-center'],
       ['mailgun-hitl', '/api/mailgun-hitl'],
       ['mailgun', '/api/mailgun'],
@@ -389,7 +390,7 @@ test('every domain-registered route module has exactly one owner', () => {
   // media review staff and share-link APIs (#417), the domain event
   // outbox admin API (#412), and support impersonation / break-glass
   // recovery (#416), and the daily operator queue (#461).
-  assert.equal(owners.size, 91); // Includes principal-bound portal handoffs and named resource links.
+  assert.equal(owners.size, 92); // Includes principal-bound portal handoffs, named resource links, and the restored WordPress bridge.
 });
 
 test('route modules stay encapsulated so cross-domain registration order cannot leak hooks', () => {
