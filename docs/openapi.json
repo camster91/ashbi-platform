@@ -44061,19 +44061,19 @@
                   "healthScore": {
                     "maximum": 100,
                     "minimum": 0,
-                    "type": "number"
+                    "type": "integer"
                   },
                   "phpVersion": {
                     "maxLength": 100,
                     "type": "string"
                   },
                   "pluginCount": {
-                    "maximum": 9007199254740991,
+                    "maximum": 2147483647,
                     "minimum": 0,
                     "type": "integer"
                   },
                   "pluginUpdates": {
-                    "maximum": 9007199254740991,
+                    "maximum": 2147483647,
                     "minimum": 0,
                     "type": "integer"
                   },
@@ -44086,7 +44086,7 @@
                       "ACTIVE",
                       "MAINTENANCE",
                       "ERROR",
-                      "INACTIVE"
+                      "OFFLINE"
                     ],
                     "type": "string"
                   },
@@ -44095,8 +44095,9 @@
                     "type": "string"
                   },
                   "ttfb": {
+                    "maximum": 2147483647,
                     "minimum": 0,
-                    "type": "number"
+                    "type": "integer"
                   },
                   "wordpressVersion": {
                     "maxLength": 100,

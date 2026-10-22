@@ -107,8 +107,20 @@ describe('full-stack hub smoke', () => {
     expect(list.json.clients.map((client) => client.id)).toContain(clientId);
   });
 
-  test('retired WordPress bridge endpoints are gone', async () => {
+  test('WordPress health bridge requires authentication and keeps fleet endpoints retired', async () => {
     const res = await http('GET', '/api/wp-bridge', { cookie: sessionCookie });
-    expect(res.status).toBe(404);
+    expect(res.status, res.text).toBe(200);
+    expect(Array.isArray(res.json.sites)).toBe(true);
+
+    const anonymous = await http('GET', '/api/wp-bridge');
+    expect(anonymous.status).toBe(401);
+    const unsigned = await http('PUT', '/api/wp-bridge', {
+      body: { siteUrl: 'https://unsigned.example', wordpressVersion: '7.1.3' }
+    });
+    expect(unsigned.status).toBe(401);
+    expect(unsigned.json.error).toBe('Invalid site signature');
+
+    const retired = await http('GET', '/api/wp-bridge/fleet/status', { cookie: sessionCookie });
+    expect(retired.status).toBe(404);
   });
 });
