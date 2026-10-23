@@ -20,7 +20,11 @@ The canonical gate owns these blocking checks:
   committed client-book export: a file that repeats revenue or contact fields
   and contains an email outside the reserved documentation domains
   (`.example`, `.invalid`, `.test`, `.localhost`, `example.com`), or a street
-  address in that kind of roster. Real exports stay in gitignored local files;
+  address in that kind of roster, including St, Dr, Ave, Rd and Blvd with
+  optional periods. Only `prisma/bonsai-seed.local.json` at the Git root is
+  exempt when Git confirms it is both ignored and untracked; force-added
+  imports, copies elsewhere and standalone scan fixtures remain scanned;
+  Git lookup failures also keep the full scan. Real exports stay local;
 - release gate contract (`npm run check:release-gates`, a static check of the
   workflows and deployment scripts);
 - production dependency audit (`npm audit --omit=dev --audit-level=high`, backend

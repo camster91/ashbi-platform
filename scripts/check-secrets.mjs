@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 
@@ -11,7 +12,7 @@ const placeholder = /CHANGE_ME|PLACEHOLDER|your-|example|TestPass/i;
 const documentationEmail = /@(?:[a-z0-9-]+\.)*example\.(?:com|net|org|invalid)$|@(?:[a-z0-9-]+\.)+(?:example|invalid|test|localhost)$/i;
 const emailLiteral = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const clientBookMarker = /\b(?:contactPerson|Contact Email|postalCode|totalRevenueUsd|totalRevenueCad|client_email)\b/;
-const streetAddress = /\b\d{2,6}\s+(?!Example\b|Sample\b|Placeholder\b|Fake\b)[A-Za-z][A-Za-z0-9.'-]*(?:\s+[A-Za-z0-9.'-]+){0,5}\s+(?:Street|Drive|Avenue|Road|Boulevard|Lane|Court|Place)\b/g;
+const streetAddress = /\b\d{1,6}\s+(?!Example\b|Sample\b|Placeholder\b|Fake\b)[A-Za-z][A-Za-z0-9.'-]*(?:\s+[A-Za-z0-9.'-]+){0,5}\s+(?:Street|Drive|Avenue|Road|Boulevard|Lane|Court|Place|St|Dr|Ave|Rd|Blvd)\b\.?/gi;
 const patterns = [
   ['database password', /postgresql?:\/\/[a-zA-Z0-9_]+:[-A-Za-z0-9_!@#$%^&*()+=]{20,}@/g, placeholder],
   ['Redis password', /redis:\/\/[^:]+:[-A-Za-z0-9_!@#$%^&*()+=]{16,}@/g],
@@ -22,6 +23,25 @@ const patterns = [
   ['documented login credential', /\bLogin as [^\r\n]{1,120} with:\s*(?=\S{8,})(?=[^\r\n]*[A-Za-z])(?=[^\r\n]*[0-9])(?=[^\r\n]*[!@#$%^&*])[^\s`\r\n]+/gi],
 ];
 
+// Only the documented import at the Git root is private local input. Git's
+// index takes precedence over ignore rules, including after `git add --force`.
+function approvedLocalImport() {
+  try {
+    const repository = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    const localPath = 'prisma/bonsai-seed.local.json';
+    const options = { cwd: repository, stdio: ['ignore', 'pipe', 'ignore'] };
+    const tracked = execFileSync('git', ['ls-files', '-z', '--', localPath], options);
+    if (tracked.length) return null;
+    execFileSync('git', ['check-ignore', '--quiet', '--', localPath], options);
+    return resolve(repository, localPath);
+  } catch {
+    // Standalone fixture directories and Git errors get the full scan.
+    return null;
+  }
+}
+const localImport = approvedLocalImport();
 let bad = false;
 
 function report(path, content, index, label) {
@@ -62,6 +82,7 @@ async function scan(directory) {
     if (!allowedExtensions.has(extname(entry.name)) && !entry.name.includes('.env')) continue;
 
     const path = resolve(directory, entry.name);
+    if (path === localImport) continue;
     const content = await readFile(path, 'utf8');
     for (const [label, pattern, allowed] of patterns) {
       pattern.lastIndex = 0;
