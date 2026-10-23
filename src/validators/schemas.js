@@ -1981,11 +1981,6 @@ export const invoiceBulkArchiveSchema = z.object({
   ids: z.array(cuidId).min(1).max(100),
 });
 
-export const landingLeadUpdateSchema = z.object({
-  status: z.enum(['NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'ARCHIVED']).optional(),
-  notes: z.string().max(10_000).optional(),
-});
-
 export const mailgunSendSchema = z.object({
   to: z.string().email().max(255),
   subject: z.string().min(1).max(500),
