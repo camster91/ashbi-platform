@@ -31,7 +31,9 @@ only the non-secret keys it preserved, then appends the new PRODUCTION_*
 values, sets `chmod 600`, and restarts the local `ashbi-platform` container.
 The CI gate `.github/workflows/check-secrets.yml` blocks PRs that hardcode
 any of these patterns: `postgresql://user:password@host` (>= 20 char non-placeholder
-password), `redis://...:password@host`, `sk_live_*` / `sk_test_*`, `AKIA*`.
+password), `redis://...:password@host`, `sk_live_*` / `sk_test_*`, `AKIA*`, and
+a committed client-book export (repeated revenue or contact fields plus a
+non-documentation email, or a street address in that roster).
 
 ## NODE_ENV and staging
 
