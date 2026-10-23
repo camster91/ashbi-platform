@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { generateKeyPair, SignJWT } from 'jose';
 import { Miniflare } from 'miniflare';
 import { createWorker } from './worker.mjs';
@@ -10,8 +10,9 @@ test('workspace with signed identity and actual local D1 storage', async t => {
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("test storage")}}',d1Databases:{DB:'workspace-test'},cf:false});
  t.after(()=>mf.dispose());
  const DB=await mf.getD1Database('DB');
- const schema=await readFile(new URL('./migrations/0001.sql',import.meta.url),'utf8')+await readFile(new URL('./migrations/0002.sql',import.meta.url),'utf8');
- await DB.batch(schema.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));
+ for(const name of (await readdir(new URL('./migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()){
+  const sql=await readFile(new URL('./migrations/'+name,import.meta.url),'utf8');await DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));
+ }
  const env={DB,APP_ORIGIN:origin,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'workspace',RELEASE:'test'};
  const worker=createWorker(publicKey);
  const tokens={};

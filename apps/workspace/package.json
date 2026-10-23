@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test auth.test.mjs test.mjs",
+    "test": "node --test auth.test.mjs test.mjs files.test.mjs",
     "build": "wrangler deploy --dry-run --outdir dist",
     "dev": "wrangler dev --local --ip 127.0.0.1",
     "test:browser": "node browser.test.mjs"
