@@ -26,6 +26,6 @@
 
 Fourteen issues were closed as not planned/superseded, with explanatory comments and retained history: #418, #415, #411, #410, #393, #392, #390, #407, #288, #391, #287, #324, #323 and #548. None is a claim that migration, QA, media, integration or UX work was completed.
 
-#545 can be closed as completed after verifying merged #669 and current Tailwind 4 source. Security/build advisory #533 remains open until its actual dependency graph and advisory are rechecked; a version migration alone is not a security verdict.
+#545 was closed as completed after verifying merged #669 and current Tailwind 4 source. Security/build advisory #533 remains open until its actual dependency graph and advisory are rechecked; a version migration alone is not a security verdict.
 
 Security #296/#381/#382, privacy #310, contract evidence #380, backup #282, accessibility and the two unresolved browser flakes #547/#659 stay open. Existing runtime alerting work remains relevant while the old application runs. Operational and cross-repository work is not silently erased as feature clutter.
