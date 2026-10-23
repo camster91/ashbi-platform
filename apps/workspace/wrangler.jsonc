@@ -1,0 +1,31 @@
+{
+  "name": "ashbi-workspace",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-07-30",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "APP_ORIGIN": "https://ashbi-workspace.camster915391.workers.dev",
+    "ACCESS_TEAM_DOMAIN": "https://camster91.cloudflareaccess.com",
+    "ACCESS_AUD": "8e494036a6600cbf748527a570ab915df430785c4a4a3aba2442b21204c76441",
+    "RELEASE": "workspace-20261023-1"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": false
+    },
+    "redact_query_string": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ashbi-workspace",
+      "database_id": "15dd758d-7871-4dd2-95bc-08600c5f8700",
+      "migrations_dir": "migrations",
+      "remote": false
+    }
+  ]
+}
