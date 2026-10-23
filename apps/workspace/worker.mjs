@@ -1,5 +1,6 @@
 import { html, css, clientScript } from './ui.mjs';
 import { authenticate } from './auth.mjs';
+import { filesRoute } from './files.mjs';
 import { records } from './records.mjs';
 import { timeRoute, exportRecords } from './time.mjs';
 const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','Strict-Transport-Security':'max-age=31536000'};
@@ -23,7 +24,8 @@ export function createWorker(resolveKey){return {async fetch(request,env){try{
   return new Response(url.pathname==='/'?html:url.pathname==='/app.js'?clientScript:css,{headers:{...security,'Content-Type':type+'; charset=utf-8','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"}});
  }
  if(!['GET','HEAD'].includes(request.method)&&request.headers.get('origin')!==url.origin)throw 403;
- if(url.pathname==='/api/me'&&request.method==='GET')return json({role:actor.role,id:actor.id,pilot:true});
+ if(url.pathname==='/api/files'||url.pathname.startsWith('/api/files/'))return await filesRoute(request,env,actor,readBody,json);
+ if(url.pathname==='/api/me'&&request.method==='GET')return json({role:actor.role,id:actor.id,pilot:true,features:{files:!!env.FILES}});
  if(url.pathname==='/api/export'&&request.method==='GET')return await exportRecords(env.DB,actor,json);
  if(url.pathname.startsWith('/api/time')){const result=await timeRoute(request,env.DB,actor,request.method==='POST'?await readBody(request):{},json);if(result)return result;}
  if(url.pathname==='/api/staff'&&request.method==='GET'){if(actor.role!=='staff')throw 403;const r=await env.DB.prepare("SELECT id,id AS name FROM actors WHERE organization_id=? AND active=1 AND role='staff' ORDER BY id LIMIT 50").bind(actor.organization_id).all();return json({items:r.results});}
