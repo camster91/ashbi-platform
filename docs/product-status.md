@@ -1,5 +1,7 @@
 # Canonical product and release status
 
+> **Planning direction — 23 October 2026:** The two-person Bonsai/Notion replacement is now scoped in [tasks/plan.md](../tasks/plan.md) and [GitHub #565](https://github.com/camster91/ashbi-platform/issues/565). The Cloudflare target is unverified; the runtime/deployment evidence below remains historical evidence for the existing application. No production cutover or release-setting change is authorized by this planning update.
+
 ## Current checkpoint — October 17, 2026, 03:18 UTC
 
 [Issue #565](https://github.com/camster91/ashbi-platform/issues/565) is the single active execution checklist; [current release evidence](launch-status.md) records deployed **2a6061e**, bounded ADMIN/TEAM normal API smoke (**29 checks**), and merged **26a9981** diagnostics whose exact-main CI remains **pending at this checkpoint**. Positive live owned-run/acknowledgement, real provider/company and manual acceptance remain open; public **degraded:true** retains the operational-alert owner/destination gate, and sources remain primary through reviewed input/cutover.
