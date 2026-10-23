@@ -1,0 +1,36 @@
+name: Cloudflare workspace checks
+
+on:
+  pull_request:
+    paths:
+      - 'apps/workspace/**'
+      - '.github/workflows/cloudflare-workspace.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  workspace:
+    name: Local Worker and D1 integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CI: true
+      WRANGLER_SEND_METRICS: 'false'
+    defaults:
+      run:
+        working-directory: apps/workspace
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+          package-manager-cache: false
+      - name: Install locked workspace dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Exercise signed identity and local persistence
+        run: npm test
+      - name: Build without publishing
+        run: npm run build

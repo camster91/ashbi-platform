@@ -1,0 +1,17 @@
+{
+  "name": "ashbi-workspace",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test auth.test.mjs test.mjs",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "dev": "wrangler dev --local --ip 127.0.0.1"
+  },
+  "dependencies": {
+    "jose": "6.2.12"
+  },
+  "devDependencies": {
+    "miniflare": "4.20260730.0",
+    "wrangler": "4.152.0"
+  }
+}
