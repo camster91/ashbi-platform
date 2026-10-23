@@ -43,7 +43,7 @@ The session is an opaque 256-bit token stored only as SHA-256; expiry and actor 
 | Stripe Checkout and PostgreSQL settlement | Existing Stripe service creates Checkout sessions and transactional settlement | #693/#694 add native invoice drafts and signed-event projection. Use test mode, exact minor units and idempotency; never infer payment from a redirect. |
 | PDF/browser automation and integrations | Existing deployment has Node-only rendering/provider paths | Inventory retained contract/PDF delivery before removing packages. Stripe can host new invoice PDFs; other document formats still need a separate proven implementation. |
 
-No root package, runtime, schema, workflow, deployment setting or existing feature was changed by this prototype. The required main CI does **not** automatically run this separately packaged suite; its local evidence must not be called hosted CI acceptance. Add a narrowly scoped non-deploying check when the prototype is adopted into the supported build.
+No root package, runtime, schema, deployment setting or existing feature was changed by this prototype. `.github/workflows/cloudflare-prototype.yml` adds a separate pull-request check for prototype changes, including stacked PRs: install the locked prototype dependencies, run the local workerd/D1 suite and build with Wrangler's dry-run. It has read-only repository permissions, no persisted checkout credentials, no provider secrets, no publish step and no production environment. It does not invoke the existing Coolify release workflow or change required branch checks. The required main CI still does **not** run this separately packaged suite; local results and hosted workflow results must be reported separately.
 
 ## Cost worksheet: assumptions, not measured billing
 
