@@ -34,3 +34,7 @@ jobs:
         run: npm test
       - name: Build without publishing
         run: npm run build
+      - name: Install browser for built-artifact checks
+        run: npx playwright install --with-deps chromium
+      - name: Exercise built UI, keyboard and responsive accessibility
+        run: npm run test:browser

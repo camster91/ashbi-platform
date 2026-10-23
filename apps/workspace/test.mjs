@@ -10,7 +10,7 @@ test('workspace with signed identity and actual local D1 storage', async t => {
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("test storage")}}',d1Databases:{DB:'workspace-test'},cf:false});
  t.after(()=>mf.dispose());
  const DB=await mf.getD1Database('DB');
- const schema=await readFile(new URL('./migrations/0001.sql',import.meta.url),'utf8');
+ const schema=await readFile(new URL('./migrations/0001.sql',import.meta.url),'utf8')+await readFile(new URL('./migrations/0002.sql',import.meta.url),'utf8');
  await DB.batch(schema.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));
  const env={DB,APP_ORIGIN:origin,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'workspace',RELEASE:'test'};
  const worker=createWorker(publicKey);
@@ -34,8 +34,8 @@ test('workspace with signed identity and actual local D1 storage', async t => {
  await t.test('staff creates clients/projects/tasks/documents without caller-controlled ownership',async()=>{
   assert.equal((await call('/api/clients','staff','POST',{name:'Fixture',organization_id:'b'})).status,400);
   const c=await call('/api/clients','staff','POST',{name:'Synthetic client'});assert.equal(c.status,201);client=await c.json();
-  await DB.prepare('INSERT INTO clients VALUES(?,?,?,0)').bind('c1','a','Own client').run();
-  await DB.prepare('INSERT INTO clients VALUES(?,?,?,0)').bind('c2','a','Other client').run();
+  await DB.prepare('INSERT INTO clients(id,organization_id,name,revision) VALUES(?,?,?,0)').bind('c1','a','Own client').run();
+  await DB.prepare('INSERT INTO clients(id,organization_id,name,revision) VALUES(?,?,?,0)').bind('c2','a','Other client').run();
   const p=await call('/api/projects','staff','POST',{name:'Launch',clientId:'c1',clientVisible:true});assert.equal(p.status,201);project=await p.json();
   const r=await call('/api/tasks','staff','POST',{title:'Review design',projectId:project.id,clientVisible:true});assert.equal(r.status,201);task=await r.json();
   const n=await call('/api/notes','staff','POST',{title:'Brief',text:'Synthetic brief',projectId:project.id,clientVisible:false});assert.equal(n.status,201);note=await n.json();
@@ -59,6 +59,15 @@ test('workspace with signed identity and actual local D1 storage', async t => {
   assert.equal((await call('/api/notes/'+note.id,'staff','PATCH',{text:'x'.repeat(21000),revision:0})).status,400);
   assert.equal((await call('/api/clients','staff','POST',{name:'x'.repeat(70000)})).status,413);
  });
+ await t.test('staff contact, assignment and due-date edits validate ownership and calendar dates',async()=>{
+  assert.equal((await call('/api/clients/'+client.id,'staff','PATCH',{email:'contact@example.invalid',company:'Synthetic company',revision:0})).status,200);
+  assert.equal((await call('/api/tasks/'+task.id,'staff','PATCH',{assigneeId:'foreign',dueOn:'2026-11-12',revision:1})).status,404);
+  assert.equal((await call('/api/tasks/'+task.id,'staff','PATCH',{assigneeId:'staff2',dueOn:'2026-02-30',revision:1})).status,400);
+  const edit=await call('/api/tasks/'+task.id,'staff','PATCH',{assigneeId:'staff2',dueOn:'2026-11-12',revision:1});assert.equal(edit.status,200);assert.equal((await edit.json()).assignee_id,'staff2');
+  assert.equal((await call('/api/tasks/'+task.id,'staff','PATCH',{assigneeId:null,dueOn:null,revision:2})).status,200);
+  assert.equal((await call('/api/staff','client')).status,403);
+  assert.equal((await (await call('/api/staff')).json()).items.length,2);
+ });
  await t.test('one running timer per staff, own-actor stop and exact manual seconds persist',async()=>{
   const starts=await Promise.all([1,2].map(()=>call('/api/timer/start','staff','POST',{projectId:project.id})));
   assert.deepEqual(starts.map(r=>r.status).sort(),[201,409]);
@@ -70,7 +79,7 @@ test('workspace with signed identity and actual local D1 storage', async t => {
   assert.equal((await call('/api/time/manual','staff','POST',{projectId:project.id,seconds:1.5})).status,400);
  });
  await t.test('lists are bounded and have continuation, output is private, export never exposes identities',async()=>{
-  for(let i=0;i<55;i++) await DB.prepare('INSERT INTO clients VALUES(?,?,?,0)').bind('page-'+String(i).padStart(3,'0'),'a','Page fixture').run();
+  for(let i=0;i<55;i++) await DB.prepare('INSERT INTO clients(id,organization_id,name,revision) VALUES(?,?,?,0)').bind('page-'+String(i).padStart(3,'0'),'a','Page fixture').run();
   const r=await call('/api/clients');const first=await r.json();assert.equal(first.items.length,50);assert.ok(first.nextCursor);
   assert.equal(r.headers.get('cache-control'),'no-store');
   const next=await (await call('/api/clients?after='+first.nextCursor)).json();assert.ok(next.items.length>0);

@@ -1,12 +1,14 @@
 const short=value=>typeof value==='string'&&value.trim().length>0&&value.length<=200;
 const bool=value=>typeof value==='boolean';
+const date=value=>value===null||(typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value);
+const sqlValue=value=>typeof value==='boolean'?Number(value):typeof value==='string'?value.trim():value;
 const descriptors={
- clients:{fields:{name:short},create:['name']},
- projects:{fields:{name:short,clientId:short,clientVisible:bool},create:['name','clientId','clientVisible'],parent:'clients'},
- tasks:{fields:{title:short,projectId:short,clientVisible:bool,status:v=>['todo','doing','done'].includes(v)},create:['title','projectId','clientVisible'],parent:'projects'},
+ clients:{fields:{name:short,email:v=>typeof v==='string'&&v.length<=254&&(v===''||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)),company:v=>typeof v==='string'&&v.length<=200},create:['name']},
+ projects:{fields:{name:short,clientId:short,clientVisible:bool,status:v=>['planned','active','complete'].includes(v)},create:['name','clientId','clientVisible'],parent:'clients'},
+ tasks:{fields:{title:short,projectId:short,clientVisible:bool,assigneeId:v=>v===null||short(v),dueOn:date,status:v=>['todo','doing','done'].includes(v)},create:['title','projectId','clientVisible'],parent:'projects'},
  notes:{fields:{title:short,projectId:short,clientVisible:bool,text:v=>typeof v==='string'&&v.trim().length>0&&v.length<=20000},create:['title','projectId','clientVisible','text'],parent:'projects'},
 };
-const columns={clientId:'client_id',projectId:'project_id',clientVisible:'client_visible'};
+const columns={clientId:'client_id',projectId:'project_id',clientVisible:'client_visible',assigneeId:'assignee_id',dueOn:'due_on'};
 export function scope(table,actor){
  let clause=`${table}.organization_id=?`;const values=[actor.organization_id];
  if(actor.role==='client'){
@@ -31,11 +33,12 @@ export async function records(request,db,actor,table,id,input,json){
  const allowed=Object.keys(spec.fields).filter(k=>!id||!['projectId','clientId'].includes(k));
  if(Object.keys(input).some(k=>!allowed.includes(k)&&!(id&&k==='revision')))throw 400;
  for(const key of Object.keys(input).filter(k=>k!=='revision'))if(!spec.fields[key](input[key]))throw 400;
+ if(input.assigneeId){const target=await db.prepare("SELECT id FROM actors WHERE id=? AND organization_id=? AND role='staff' AND active=1").bind(input.assigneeId,actor.organization_id).first();if(!target)throw 404;}
  if(id){
   if(!Number.isSafeInteger(input.revision)||input.revision<0)throw 400;
   const keys=Object.keys(input).filter(k=>k!=='revision');if(!keys.length)throw 400;
   const row=await db.prepare(`UPDATE ${table} SET ${keys.map(k=>`${columns[k]||k}=?`).join(',')},revision=revision+1 WHERE organization_id=? AND id=? AND revision=? RETURNING *`)
-   .bind(...keys.map(k=>typeof input[k]==='boolean'?Number(input[k]):typeof input[k]==='string'?input[k].trim():input[k]),actor.organization_id,id,input.revision).first();
+   .bind(...keys.map(k=>sqlValue(input[k])),actor.organization_id,id,input.revision).first();
   if(row)return json(row);
   const exists=await db.prepare(`SELECT id FROM ${table} WHERE organization_id=? AND id=?`).bind(actor.organization_id,id).first();throw exists?409:404;
  }
@@ -43,6 +46,6 @@ export async function records(request,db,actor,table,id,input,json){
  if(spec.parent){const parent=input.clientId||input.projectId;const found=await db.prepare(`SELECT id FROM ${spec.parent} WHERE organization_id=? AND id=?`).bind(actor.organization_id,parent).first();if(!found)throw 404;}
  const keys=Object.keys(input),recordId=crypto.randomUUID();
  await db.prepare(`INSERT INTO ${table}(id,organization_id,${keys.map(k=>columns[k]||k).join(',')}) VALUES(${Array(keys.length+2).fill('?').join(',')})`)
-  .bind(recordId,actor.organization_id,...keys.map(k=>typeof input[k]==='boolean'?Number(input[k]):input[k].trim())).run();
+  .bind(recordId,actor.organization_id,...keys.map(k=>sqlValue(input[k]))).run();
  return json(await db.prepare(`SELECT * FROM ${table} WHERE id=? AND organization_id=?`).bind(recordId,actor.organization_id).first(),201);
 }
