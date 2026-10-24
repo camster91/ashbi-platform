@@ -8,6 +8,7 @@ import {Miniflare} from 'miniflare';
 import {generateKeyPair,SignJWT} from 'jose';
 import {createWorker} from './dist/worker.js';
 import {runRegressions} from './browser-regressions.mjs';
+import {runTaskBoardTests} from './browser-task-board.mjs';
 const base=fileURLToPath(new URL('.',import.meta.url));
 const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'qa'},r2Buckets:['FILES'],cf:false});
 const DB=await mf.getD1Database('DB'),FILES=await mf.getR2Bucket('FILES');
@@ -38,4 +39,5 @@ await page.getByRole('button',{name:'Edit QA task revised',exact:true}).click();
 await page.goto(origin);await page.keyboard.press('Tab');assert.equal(await page.locator(':focus').textContent(),'Skip to content');await page.keyboard.press('Enter');assert.equal(await page.locator(':focus').getAttribute('id'),'main');
 assert.deepEqual(errors,[]);console.log('Browser workflow, reload, timer, keyboard, responsive and axe checks: PASS');
 await runRegressions({browser,origin,DB});
+await runTaskBoardTests({browser,origin,DB,axe});
 }finally{await browser.close();await new Promise(r=>server.close(r));await mf.dispose();}

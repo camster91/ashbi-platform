@@ -42,3 +42,11 @@ The record export remains unchanged and excludes file metadata/bytes. Soft resto
 Each route load owns its records, parent choices, cursor and request generation. Only the current generation can render, report an error, clear loading or move focus; list continuations and mutation completions keep the originating view. The skip link focuses main without changing the hash route. Time reads use one D1 snapshot with the active timer independent of bounded completed history.
 
 `npm test` retains the original 20 checks and adds actual-D1 timer recovery beyond 100 newer entries, actor/organization isolation, concurrent Stop and restart. `npm run test:browser` retains the built-artifact workflow/responsive/axe suite and runs `browser-regressions.mjs` with explicitly held out-of-order responses, stale pagination/errors/loading/focus, keyboard skip on Tasks/Files/Overview and visible Stop/restart with 105 newer entries. All fixtures stay local and synthetic.
+
+## Task list and board (source increment)
+
+Tasks have List and Board views over the same authorized task records. The board groups the pilot's existing `todo`, `doing` and `done` values as To do, In progress and Done. Use the existing Edit dialog to change a status; revisions still reject concurrent overwrites. Source project-lifecycle mapping under #405 and task comments remain outstanding under #691.
+
+Project, status and staff-assignee filters apply to loaded records only. The count explicitly says when more records are available; Load more retains the view and filters. View/filter changes preserve an unsaved create form. In-place status saves retain the view/filter options; full reload starts in List and reloads persisted task data. No schema or API change is needed for this presentation increment.
+
+`browser-task-board.mjs` adds List/Board/filter and pagination coverage, keyboard status-save/reload, a real local-D1 edit conflict, and 390/768/1440px Board axe/overflow checks. Set `WORKSPACE_TEST_OUTPUT_DIR` to retain synthetic Board screenshots when running the built browser suite.
