@@ -56,7 +56,7 @@ export async function runRegressions({browser,origin,DB}){
   await page.getByLabel('Name',{exact:true}).fill('Keep unsaved value');await page.getByLabel('Name',{exact:true}).focus();
   await more.release(failure?failed:json({items:[{id:'delayed-client',name:'Delayed client'}],nextCursor:'stale-cursor'}));
   assert.equal(await page.getByLabel('Name',{exact:true}).inputValue(),'Keep unsaved value');
-  assert.equal(await page.locator(':focus').getAttribute('name'),'name');
+  assert.equal(await page.locator(':focus').getAttribute('name'),destination==='tasks'?'title':'name');
   assert.equal(await page.getByRole('button',{name:'Edit Delayed client',exact:true}).count(),0);
   assert.equal(await page.getByRole('button',{name:'Load more',exact:true}).count(),0);
   assert.equal(await page.getByRole('alert').count(),0);
