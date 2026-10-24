@@ -116,3 +116,99 @@ test('workspace with signed identity and actual local D1 storage', async t => {
   assert.equal((await call('/api/export','client')).status,403);
  });
 });
+
+test('task comments persist with author identity, client scope and retry safety in actual D1',async t=>{
+ const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("comments fixture")}}',d1Databases:{DB:'comments'},cf:false});t.after(()=>mf.dispose());
+ const DB=await mf.getD1Database('DB');
+ for(const name of (await readdir(new URL('./migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')&&n<'0004.sql').sort()){
+  const sql=await readFile(new URL('./migrations/'+name,import.meta.url),'utf8');await DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));
+ }
+ const tokens={};
+ for(const [id,org,role,client]of [['staff','a','staff',null],['staff2','a','staff',null],['client','a','client','c'],['other','a','client','d'],['foreign','b','staff',null]]){
+  const email=id+'@example.invalid';await DB.prepare('INSERT INTO actors VALUES(?,?,?,?,?,1)').bind(id,email,org,role,client).run();
+  tokens[id]=await new SignJWT({email}).setProtectedHeader({alg:'RS256'}).setIssuer(issuer).setAudience('comments').setSubject(id).setIssuedAt().setExpirationTime('10m').sign(privateKey);
+ }
+ await DB.batch([
+  DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('c','a','Own client')"),
+  DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES('p','a','c','Shared project',1)"),
+  DB.prepare("INSERT INTO tasks(id,organization_id,project_id,title,client_visible) VALUES('t','a','p','Shared task',1)"),
+  DB.prepare("INSERT INTO tasks(id,organization_id,project_id,title,client_visible) VALUES('internal','a','p','Internal task',0)"),
+ ]);
+ const originalTasks=(await DB.prepare('SELECT * FROM tasks ORDER BY id').all()).results;
+ const migration=await readFile(new URL('./migrations/0004.sql',import.meta.url),'utf8');
+ await DB.batch(migration.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));
+ await t.test('additive comment migration preserves existing populated tasks and actors',async()=>{
+  assert.deepEqual((await DB.prepare('SELECT * FROM tasks ORDER BY id').all()).results,originalTasks);
+  assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM actors').first()).n,5);
+  assert.deepEqual((await DB.prepare('PRAGMA foreign_key_check').all()).results,[]);
+ });
+ const worker=createWorker(publicKey),env={DB,APP_ORIGIN:origin,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'comments'};
+ const path='/api/tasks/t/comments';
+ const call=(url=path,actor='staff',method='GET',body,bindings=env,headers={})=>worker.fetch(new Request(origin+url,{method,headers:{...(actor?{'Cf-Access-Jwt-Assertion':tokens[actor]}:{}),...(body?{'Content-Type':'application/json',Origin:origin}:{}),...headers},body:body?JSON.stringify(body):undefined}),bindings);
+ const post=(content,extra={})=>({content,requestId:crypto.randomUUID(),...extra});let shared;
+ await t.test('both staff can comment; client replies are shared and server-owned authors persist',async()=>{
+  const internal=await call(path,'staff','POST',post('Internal discussion'));assert.equal(internal.status,201);const a=await internal.json();assert.equal(a.actor_id,'staff');assert.equal(a.client_visible,0);
+  const visible=await call(path,'staff2','POST',post('Client checkpoint',{clientVisible:true}));assert.equal(visible.status,201);shared=await visible.json();assert.equal(shared.actor_id,'staff2');
+  const reply=await call(path,'client','POST',post('<script>literal plain text</script>'));assert.equal(reply.status,201);const c=await reply.json();assert.equal(c.actor_id,'client');assert.equal(c.client_visible,1);assert.equal(c.content,'<script>literal plain text</script>');
+  const staff=await call();assert.equal(staff.headers.get('cache-control'),'no-store');assert.equal((await staff.json()).items.length,3);
+  const client=await (await call(path,'client')).json();assert.equal(client.items.length,2);assert.ok(client.items.every(c=>c.client_visible===1));assert.ok(client.items.every(c=>!('request_id'in c)&&!('organization_id'in c)));
+ });
+ await t.test('task, project, client and organization visibility gates both reads and writes',async()=>{
+  for(const actor of ['other','foreign']){assert.equal((await call(path,actor)).status,404);assert.equal((await call(path,actor,'POST',post('Denied'))).status,404);}
+  assert.equal((await call('/api/tasks/internal/comments','client')).status,404);
+  assert.equal((await call(path,'client','POST',post('Cannot be internal',{clientVisible:false}))).status,403);
+  for(const [table,column,id]of [['tasks','client_visible','t'],['projects','client_visible','p']]){
+   await DB.prepare(`UPDATE ${table} SET ${column}=0 WHERE id=?`).bind(id).run();
+   assert.equal((await call(path,'client')).status,404);assert.equal((await call(path,'client','POST',post('Hidden parent'))).status,404);
+   assert.equal((await call()).status,200);await DB.prepare(`UPDATE ${table} SET ${column}=1 WHERE id=?`).bind(id).run();
+  }
+  assert.equal((await call(path,null)).status,401);
+ });
+ await t.test('concurrent retries create one comment; changed payloads conflict and keys belong to their author',async()=>{
+  const input=post('Exactly once',{clientVisible:true});const attempts=await Promise.all([1,2].map(()=>call(path,'staff','POST',input)));
+  assert.deepEqual(attempts.map(r=>r.status).sort(),[200,201]);const rows=await Promise.all(attempts.map(r=>r.json()));assert.equal(rows[0].id,rows[1].id);
+  const replay=await call(path,'staff','POST',{...input,requestId:input.requestId.toUpperCase()});assert.equal(replay.status,200);assert.equal((await replay.json()).id,rows[0].id);
+  assert.equal((await call(path,'staff','POST',{...input,content:'Different'})).status,409);
+  assert.equal((await call(path,'staff','POST',{...input,clientVisible:false})).status,409);
+  assert.equal((await call('/api/tasks/internal/comments','staff','POST',input)).status,409);
+  assert.equal((await call(path,'staff2','POST',input)).status,201);
+  assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM task_comments WHERE actor_id=? AND request_id=?').bind('staff',input.requestId).first()).n,1);
+  const clientInput=post('Client retry');assert.equal((await call(path,'client','POST',clientInput)).status,201);
+  await DB.prepare("UPDATE tasks SET client_visible=0 WHERE id='t'").run();assert.equal((await call(path,'client','POST',clientInput)).status,404);await DB.prepare("UPDATE tasks SET client_visible=1 WHERE id='t'").run();
+ });
+ await t.test('parent visibility is rechecked atomically at insert after a client loses access',async()=>{
+  const guarded={...env,DB:{prepare(sql){const statement=DB.prepare(sql);if(!sql.startsWith('INSERT INTO task_comments'))return statement;
+   return {bind(...values){const bound=statement.bind(...values);return {async first(){await DB.prepare("UPDATE tasks SET client_visible=0 WHERE id='t'").run();return bound.first();}};}};
+  }}};
+  const before=(await DB.prepare('SELECT COUNT(*) AS n FROM task_comments').first()).n;
+  assert.equal((await call(path,'client','POST',post('Must not insert'),guarded)).status,404);
+  assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM task_comments').first()).n,before);
+  await DB.prepare("UPDATE tasks SET client_visible=1 WHERE id='t'").run();
+ });
+ await t.test('pagination is stable for tied timestamps and filters internal comments before bounding',async()=>{
+  await DB.batch(Array.from({length:65},(_,i)=>DB.prepare('INSERT INTO task_comments(id,organization_id,task_id,actor_id,request_id,content,client_visible,created_at) VALUES(?,?,?,?,?,?,?,?)').bind('page-'+String(i).padStart(3,'0'),'a','t','staff',crypto.randomUUID(),'Page '+i,i<55?1:0,1)));
+  for(const actor of ['staff','client']){
+   let items=[],after='';for(let i=0;i<3;i++){const r=await (await call(path+(after?'?after='+encodeURIComponent(after):''),actor)).json();assert.ok(r.items.length<=50);items.push(...r.items);after=r.nextCursor;if(!after)break;}
+   assert.equal(after,null);assert.equal(new Set(items.map(r=>r.id)).size,items.length);
+   assert.equal(items.filter(r=>r.id.startsWith('page-')).length,actor==='staff'?65:55);
+   if(actor==='client')assert.ok(items.every(r=>r.client_visible===1));
+   assert.deepEqual(items.map(r=>r.id),[...items].sort((a,b)=>b.created_at-a.created_at||b.id.localeCompare(a.id)).map(r=>r.id));
+  }
+  for(const after of ['',"'",'9999999999999999:x','1:x:y'])assert.equal((await call(path+'?after='+encodeURIComponent(after))).status,400);
+  assert.equal((await call(path+'?includeInternal=true','client')).status,400);
+ });
+ await t.test('strict input/method/origin/actor validation and relational boundaries do not mutate comments',async()=>{
+  const before=(await DB.prepare('SELECT COUNT(*) AS n FROM task_comments').first()).n;
+  for(const body of [post(' '),post('x'.repeat(10001)),post('x',{actorId:'foreign'}),post('x',{organizationId:'b'}),post('x',{taskId:'internal'}),post('x',{requestId:'invalid'}),post('x',{clientVisible:'true'})])assert.equal((await call(path,'staff','POST',body)).status,400);
+  assert.equal((await call(path,'staff','DELETE',{})).status,405);
+  assert.equal((await call(path,'staff','POST',post('cross-origin'),env,{Origin:'https://elsewhere.invalid'})).status,403);
+  await DB.prepare("UPDATE actors SET active=0 WHERE id='staff2'").run();assert.equal((await call(path,'staff2','POST',post('inactive'))).status,403);await DB.prepare("UPDATE actors SET active=1 WHERE id='staff2'").run();
+  await assert.rejects(()=>DB.prepare('INSERT INTO task_comments(id,organization_id,task_id,actor_id,request_id,content,created_at) VALUES(?,?,?,?,?,?,?)').bind('bad-org','b','t','foreign',crypto.randomUUID(),'No',0).run());
+  assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM task_comments').first()).n,before);
+  assert.equal((await DB.prepare('SELECT content FROM task_comments WHERE id=?').bind(shared.id).first()).content,shared.content);
+ });
+ await t.test('bounded staff record export includes comment content and author references',async()=>{
+  const response=await call('/api/export');assert.equal(response.status,200);const data=await response.json();assert.ok(data.tables.task_comments.length>=65);assert.ok(data.tables.task_comments.some(r=>r.id===shared.id));assert.equal(data.tables.actors,undefined);
+  assert.equal((await call('/api/export','client')).status,403);
+ });
+});
