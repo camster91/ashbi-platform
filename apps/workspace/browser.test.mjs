@@ -1,12 +1,14 @@
 import {createServer} from 'node:http';
 import {readFile,readdir} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright';
 import {createRequire} from 'node:module';
 import {Miniflare} from 'miniflare';
 import {generateKeyPair,SignJWT} from 'jose';
 import {createWorker} from './dist/worker.js';
-const base=new URL('.',import.meta.url).pathname;
+import {runRegressions} from './browser-regressions.mjs';
+const base=fileURLToPath(new URL('.',import.meta.url));
 const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'qa'},r2Buckets:['FILES'],cf:false});
 const DB=await mf.getD1Database('DB'),FILES=await mf.getR2Bucket('FILES');
 for(const name of (await readdir(base+'/migrations')).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(base+'/migrations/'+name,'utf8');await DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));}
@@ -35,4 +37,5 @@ await page.getByRole('link',{name:'Tasks',exact:true}).click();await page.getByR
 await page.getByRole('button',{name:'Edit QA task revised',exact:true}).click();assert.equal(await page.getByRole('dialog').isVisible(),true);const modalIssues=await page.evaluate(async()=>{const r=await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}});return r.violations.map(v=>v.id);});assert.deepEqual(modalIssues,[]);await page.keyboard.press('Escape');await page.waitForFunction(()=>document.activeElement?.textContent==='Edit QA task revised');assert.equal(await page.getByRole('dialog').count(),0);
 await page.goto(origin);await page.keyboard.press('Tab');assert.equal(await page.locator(':focus').textContent(),'Skip to content');await page.keyboard.press('Enter');assert.equal(await page.locator(':focus').getAttribute('id'),'main');
 assert.deepEqual(errors,[]);console.log('Browser workflow, reload, timer, keyboard, responsive and axe checks: PASS');
+await runRegressions({browser,origin,DB});
 }finally{await browser.close();await new Promise(r=>server.close(r));await mf.dispose();}

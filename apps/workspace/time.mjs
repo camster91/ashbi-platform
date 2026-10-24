@@ -3,7 +3,11 @@ export async function timeRoute(request,db,actor,input,json){
  if(!path.startsWith('/api/time')&&!path.startsWith('/api/timer/'))return null;
  if(actor.role!=='staff')throw 403;
  if(path==='/api/time'&&request.method==='GET'){
-  const r=await db.prepare('SELECT * FROM time_entries WHERE organization_id=? AND actor_id=? ORDER BY started_at DESC,id DESC LIMIT 100').bind(actor.organization_id,actor.id).all();
+  // One snapshot: the active timer first, independently of the last 100 completed entries.
+  const r=await db.prepare(`SELECT * FROM (SELECT * FROM time_entries WHERE organization_id=? AND actor_id=? AND ended_at IS NULL
+   UNION ALL SELECT * FROM (SELECT * FROM time_entries WHERE organization_id=? AND actor_id=? AND ended_at IS NOT NULL ORDER BY started_at DESC,id DESC LIMIT 100))
+   ORDER BY ended_at IS NOT NULL,started_at DESC,id DESC`)
+   .bind(actor.organization_id,actor.id,actor.organization_id,actor.id).all();
   return json({items:r.results});
  }
  if(request.method!=='POST')throw 405;

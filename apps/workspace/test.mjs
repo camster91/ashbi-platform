@@ -79,6 +79,32 @@ test('workspace with signed identity and actual local D1 storage', async t => {
   assert.equal((await call('/api/time','client')).status,403);
   assert.equal((await call('/api/time/manual','staff','POST',{projectId:project.id,seconds:1.5})).status,400);
  });
+ await t.test('active timer survives over 100 newer entries with actor/org isolation and exactly-once stop',async()=>{
+  const start=await call('/api/timer/start','staff','POST',{projectId:project.id});assert.equal(start.status,201);const active=await start.json();
+  await DB.prepare('UPDATE time_entries SET started_at=0 WHERE id=?').bind(active.id).run();
+  await DB.batch(Array.from({length:105},(_,i)=>DB.prepare('INSERT INTO time_entries(id,organization_id,project_id,actor_id,started_at,ended_at,seconds) VALUES(?,?,?,?,?,?,?)').bind('history-'+i,'a',project.id,'staff',1000+i,61000+i,60)));
+  assert.equal((await call('/api/timer/start','staff2','POST',{projectId:project.id})).status,201);
+  const foreignClient=await (await call('/api/clients','foreign','POST',{name:'Foreign'})).json();
+  const foreignProject=await (await call('/api/projects','foreign','POST',{name:'Foreign',clientId:foreignClient.id,clientVisible:false})).json();
+  assert.equal((await call('/api/timer/start','foreign','POST',{projectId:foreignProject.id})).status,201);
+  const listed=await (await call('/api/time')).json();
+  assert.equal(listed.items.filter(r=>r.ended_at!==null).length,100);
+  assert.equal(listed.items.filter(r=>r.ended_at===null).length,1,'active timer is independent of history bound');
+  assert.equal(listed.items[0].id,active.id);
+  assert.ok(listed.items.every(r=>r.actor_id==='staff'&&r.organization_id==='a'));
+  assert.equal((await call('/api/timer/'+active.id+'/stop','foreign','POST',{})).status,404);
+  assert.equal((await call('/api/timer/'+active.id+'/stop','staff2','POST',{})).status,404);
+  const stops=await Promise.all([1,2].map(()=>call('/api/timer/'+active.id+'/stop','staff','POST',{})));
+  assert.deepEqual(stops.map(r=>r.status).sort(),[200,404]);
+  const stopped=await DB.prepare('SELECT * FROM time_entries WHERE id=?').bind(active.id).first();assert.ok(stopped.ended_at>0);assert.equal(stopped.seconds,Math.floor(stopped.ended_at/1000));
+  assert.equal((await call('/api/timer/'+active.id+'/stop','staff','POST',{})).status,404);
+  assert.deepEqual(await DB.prepare('SELECT * FROM time_entries WHERE id=?').bind(active.id).first(),stopped);
+  const restarts=await Promise.all([1,2].map(()=>call('/api/timer/start','staff','POST',{projectId:project.id})));
+  assert.deepEqual(restarts.map(r=>r.status).sort(),[201,409]);
+  const current=(await (await call('/api/time')).json()).items.find(r=>r.ended_at===null);
+  assert.ok(current);assert.notEqual(current.id,active.id);
+  assert.equal((await call('/api/time','client')).status,403);
+ });
  await t.test('lists are bounded and have continuation, output is private, export never exposes identities',async()=>{
   for(let i=0;i<55;i++) await DB.prepare('INSERT INTO clients(id,organization_id,name,revision) VALUES(?,?,?,0)').bind('page-'+String(i).padStart(3,'0'),'a','Page fixture').run();
   const r=await call('/api/clients');const first=await r.json();assert.equal(first.items.length,50);assert.ok(first.nextCursor);
