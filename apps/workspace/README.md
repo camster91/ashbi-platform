@@ -51,6 +51,10 @@ Project, status and staff-assignee filters apply to loaded records only. The cou
 
 `browser-task-board.mjs` adds List/Board/filter and pagination coverage, keyboard status-save/reload, a real local-D1 edit conflict, and 390/768/1440px Board axe/overflow checks. Set `WORKSPACE_TEST_OUTPUT_DIR` to retain synthetic Board screenshots when running the built browser suite.
 
+## Active timer recovery API (source increment)
+
+`GET /api/timer/current` returns the signed-in staff member's current timer and its project name, or an explicit null when none is running. It reads one active session independently of completed-history bounds and rejects caller-selected actors and pagination parameters. Clients cannot read timers. Existing start/stop/manual contracts, the one-running-timer constraint, actor attribution and exactly-once stop behavior remain unchanged. This endpoint is preparation for shared header/project controls; that UI and billing metadata/locks still need their own verified increments. No schema change or hosted action is included.
+
 ## Task comments (source increment)
 
 Migration `0004.sql` is additive and must precede deployment of the comment API. It creates plain-text comments with organization/task/author foreign keys and a per-author request key. A populated local D1 migration test verifies existing tasks and actors survive unchanged. This migration has not been applied to hosted D1.

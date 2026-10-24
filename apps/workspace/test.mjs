@@ -69,6 +69,24 @@ test('workspace with signed identity and actual local D1 storage', async t => {
   assert.equal((await call('/api/staff','client')).status,403);
   assert.equal((await (await call('/api/staff')).json()).items.length,2);
  });
+ await t.test('current timer recovers independently of history with project attribution and signed actor isolation',async()=>{
+  const empty=await call('/api/timer/current');assert.equal(empty.status,200);assert.deepEqual(await empty.json(),{item:null});assert.equal(empty.headers.get('cache-control'),'no-store');
+  assert.equal((await call('/api/timer/current',null)).status,401);assert.equal((await call('/api/timer/current','client')).status,403);
+  assert.equal((await call('/api/timer/current?actorId=staff2')).status,400);assert.equal((await call('/api/timer/current?after=foreign')).status,400);assert.equal((await call('/api/timer/current','staff','POST',{})).status,405);
+  const own=await (await call('/api/timer/start','staff','POST',{projectId:project.id})).json(),second=await (await call('/api/timer/start','staff2','POST',{projectId:project.id})).json();
+  const outsiderClient=await (await call('/api/clients','foreign','POST',{name:'Recovery foreign client'})).json(),outsiderProject=await (await call('/api/projects','foreign','POST',{name:'Recovery foreign project',clientId:outsiderClient.id,clientVisible:false})).json();
+  const outsider=await (await call('/api/timer/start','foreign','POST',{projectId:outsiderProject.id})).json();
+  await DB.prepare('UPDATE time_entries SET started_at=0 WHERE id=?').bind(own.id).run();
+  await DB.batch(Array.from({length:105},(_,i)=>DB.prepare('INSERT INTO time_entries(id,organization_id,project_id,actor_id,started_at,ended_at,seconds) VALUES(?,?,?,?,?,?,?)').bind('recovery-history-'+i,'a',project.id,'staff',1000+i,61000+i,60)));
+  for(const [identity,id,projectId,name] of [['staff',own.id,project.id,project.name],['staff2',second.id,project.id,project.name],['foreign',outsider.id,outsiderProject.id,'Recovery foreign project']]){
+   const r=await call('/api/timer/current',identity);assert.equal(r.status,200);const {item}=await r.json();assert.equal(item.id,id);assert.equal(item.project_id,projectId);assert.equal(item.project_name,name);assert.equal(item.actor_id,identity);assert.equal(item.ended_at,null);
+  }
+  assert.equal((await call('/api/timer/start','staff','POST',{projectId:project.id})).status,409);
+  assert.equal((await call('/api/timer/'+own.id+'/stop','staff2','POST',{})).status,404);
+  const stops=await Promise.all([1,2].map(()=>call('/api/timer/'+own.id+'/stop','staff','POST',{})));assert.deepEqual(stops.map(r=>r.status).sort(),[200,404]);
+  assert.deepEqual(await (await call('/api/timer/current')).json(),{item:null});assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM time_entries WHERE id=? AND ended_at IS NOT NULL').bind(own.id).first()).n,1);
+  for(const [identity,id] of [['staff2',second.id],['foreign',outsider.id]])assert.equal((await call('/api/timer/'+id+'/stop',identity,'POST',{})).status,200);
+ });
  await t.test('one running timer per staff, own-actor stop and exact manual seconds persist',async()=>{
   const starts=await Promise.all([1,2].map(()=>call('/api/timer/start','staff','POST',{projectId:project.id})));
   assert.deepEqual(starts.map(r=>r.status).sort(),[201,409]);

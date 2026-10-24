@@ -2,6 +2,13 @@ export async function timeRoute(request,db,actor,input,json){
  const path=new URL(request.url).pathname;
  if(!path.startsWith('/api/time')&&!path.startsWith('/api/timer/'))return null;
  if(actor.role!=='staff')throw 403;
+ if(path==='/api/timer/current'){
+  if(request.method!=='GET')throw 405;
+  if(new URL(request.url).search)throw 400;
+  const item=await db.prepare(`SELECT t.*,p.name AS project_name FROM time_entries t JOIN projects p ON p.id=t.project_id AND p.organization_id=t.organization_id
+   WHERE t.organization_id=? AND t.actor_id=? AND t.ended_at IS NULL`).bind(actor.organization_id,actor.id).first();
+  return json({item:item||null});
+ }
  if(path==='/api/time'&&request.method==='GET'){
   // One snapshot: the active timer first, independently of the last 100 completed entries.
   const r=await db.prepare(`SELECT * FROM (SELECT * FROM time_entries WHERE organization_id=? AND actor_id=? AND ended_at IS NULL
