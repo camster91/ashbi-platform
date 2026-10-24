@@ -1,4 +1,5 @@
 import {commitNote,noteColumns} from './documents.mjs';
+import {noteTreeColumns,documentScope,documentQuery,parentGuard,validateParent,validParent} from './document-tree.mjs';
 const short=value=>typeof value==='string'&&value.trim().length>0&&value.length<=200;
 const bool=value=>typeof value==='boolean';
 const date=value=>value===null||(typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value);
@@ -7,10 +8,11 @@ const descriptors={
  clients:{fields:{name:short,email:v=>typeof v==='string'&&v.length<=254&&(v===''||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)),company:v=>typeof v==='string'&&v.length<=200},create:['name']},
  projects:{fields:{name:short,clientId:short,clientVisible:bool,status:v=>['planned','active','complete'].includes(v)},create:['name','clientId','clientVisible'],parent:'clients'},
  tasks:{fields:{title:short,projectId:short,clientVisible:bool,assigneeId:v=>v===null||short(v),dueOn:date,status:v=>['todo','doing','done'].includes(v)},create:['title','projectId','clientVisible'],parent:'projects'},
- notes:{fields:{title:short,projectId:short,clientVisible:bool,text:v=>typeof v==='string'&&v.trim().length>0&&v.length<=20000},create:['title','projectId','clientVisible','text'],parent:'projects'},
+ notes:{fields:{title:short,projectId:short,clientVisible:bool,text:v=>typeof v==='string'&&v.trim().length>0&&v.length<=20000,parentId:validParent,archived:bool},create:['title','projectId','clientVisible','text'],parent:'projects'},
 };
 const columns={clientId:'client_id',projectId:'project_id',clientVisible:'client_visible',assigneeId:'assignee_id',dueOn:'due_on'};
 export function scope(table,actor){
+ if(table==='notes')return documentScope(actor);
  let clause=`${table}.organization_id=?`;const values=[actor.organization_id];
  if(actor.role==='client'){
   if(table==='clients'){clause+=' AND clients.id=?';values.push(actor.client_id);}
@@ -21,8 +23,8 @@ export function scope(table,actor){
 }
 export async function records(request,db,actor,table,id,input,json){
  const spec=descriptors[table];if(!spec)return null;
- const projection=table==='notes'?noteColumns:'*';
- const {clause,values}=scope(table,actor);
+ const projection=table==='notes'?noteTreeColumns:'*';
+ const {clause,values}=table==='notes'&&request.method==='GET'?documentQuery(request,actor,id):scope(table,actor);
  if(request.method==='GET'){
   if(id){const row=await db.prepare(`SELECT ${projection} FROM ${table} WHERE ${clause} AND id=?`).bind(...values,id).first();return row?json(row):json({error:'Not found'},404);}
   const after=new URL(request.url).searchParams.get('after')||'';if(after.length>100)throw 400;
@@ -41,9 +43,13 @@ export async function records(request,db,actor,table,id,input,json){
   const keys=Object.keys(input).filter(k=>k!=='revision');if(!keys.length)throw 400;
   if(table==='notes'){
    if(input.revision>=Number.MAX_SAFE_INTEGER)throw 400;
-   const token=crypto.randomUUID(),statement=db.prepare(`UPDATE notes SET ${keys.map(k=>`${columns[k]||k}=?`).join(',')},revision=revision+1,history_token=? WHERE organization_id=? AND id=? AND revision=? RETURNING ${noteColumns}`)
-    .bind(...keys.map(k=>sqlValue(input[k])),token,actor.organization_id,id,input.revision);
-   const row=await commitNote(db,actor,statement,token);if(row)return json(row);
+   const current=await db.prepare('SELECT project_id FROM notes WHERE id=? AND organization_id=?').bind(id,actor.organization_id).first();if(!current)throw 404;
+   await validateParent(db,actor,id,current.project_id,input.parentId);
+   const contentKeys=keys.filter(k=>!['parentId','archived'].includes(k)),guard=parentGuard(input.parentId,id,actor.organization_id,'notes.project_id');
+   const token=crypto.randomUUID(),statement=db.prepare(`UPDATE notes SET ${contentKeys.map(k=>`${columns[k]||k}=?,`).join('')}revision=revision+1,history_token=? WHERE organization_id=? AND id=? AND revision=? AND ${guard.clause} RETURNING ${noteColumns}`)
+    .bind(...contentKeys.map(k=>sqlValue(input[k])),token,actor.organization_id,id,input.revision,...guard.values);
+   const position=Object.fromEntries(keys.filter(k=>['parentId','archived'].includes(k)).map(k=>[k,input[k]]));
+   const row=await commitNote(db,actor,statement,token,null,position);if(row)return json(row);
    const exists=await db.prepare('SELECT id FROM notes WHERE organization_id=? AND id=?').bind(actor.organization_id,id).first();throw exists?409:404;
   }
   const row=await db.prepare(`UPDATE ${table} SET ${keys.map(k=>`${columns[k]||k}=?`).join(',')},revision=revision+1 WHERE organization_id=? AND id=? AND revision=? RETURNING *`)
@@ -55,9 +61,12 @@ export async function records(request,db,actor,table,id,input,json){
  if(spec.parent){const parent=input.clientId||input.projectId;const found=await db.prepare(`SELECT id FROM ${spec.parent} WHERE organization_id=? AND id=?`).bind(actor.organization_id,parent).first();if(!found)throw 404;}
  const keys=Object.keys(input),recordId=crypto.randomUUID();
  if(table==='notes'){
-  const token=crypto.randomUUID(),statement=db.prepare(`INSERT INTO notes(id,organization_id,${keys.map(k=>columns[k]||k).join(',')},history_token) VALUES(${Array(keys.length+3).fill('?').join(',')}) RETURNING ${noteColumns}`)
-   .bind(recordId,actor.organization_id,...keys.map(k=>sqlValue(input[k])),token);
-  return json(await commitNote(db,actor,statement,token),201);
+  await validateParent(db,actor,null,input.projectId,input.parentId);
+  const contentKeys=keys.filter(k=>!['parentId','archived'].includes(k)),guard=parentGuard(input.parentId,recordId,actor.organization_id,'projects.id');
+  const token=crypto.randomUUID(),statement=db.prepare(`INSERT INTO notes(id,organization_id,${contentKeys.map(k=>columns[k]||k).join(',')},history_token) SELECT ${Array(contentKeys.length+3).fill('?').join(',')} FROM projects WHERE id=? AND organization_id=? AND ${guard.clause} RETURNING ${noteColumns}`)
+   .bind(recordId,actor.organization_id,...contentKeys.map(k=>sqlValue(input[k])),token,input.projectId,actor.organization_id,...guard.values);
+  const position=Object.fromEntries(keys.filter(k=>['parentId','archived'].includes(k)).map(k=>[k,input[k]]));
+  const row=await commitNote(db,actor,statement,token,null,position);if(!row)throw 409;return json(row,201);
  }
  await db.prepare(`INSERT INTO ${table}(id,organization_id,${keys.map(k=>columns[k]||k).join(',')}) VALUES(${Array(keys.length+2).fill('?').join(',')})`)
   .bind(recordId,actor.organization_id,...keys.map(k=>sqlValue(input[k]))).run();

@@ -28,7 +28,7 @@ export async function timeRoute(request,db,actor,input,json){
 }
 export async function exportRecords(db,actor,json){
  if(actor.role!=='staff')throw 403;
- const names=['clients','projects','tasks','notes','time_entries','task_comments','note_versions'];
+ const names=['clients','projects','tasks','notes','time_entries','task_comments','note_versions','note_positions'];
  const results=await db.batch(names.map(name=>db.prepare(`SELECT * FROM ${name} WHERE organization_id=? ORDER BY id LIMIT 1001`).bind(actor.organization_id)));
  if(results.some(r=>r.results.length>1000))return json({error:'Export exceeds pilot limit; use the administrator backup procedure'},409);
  return json({version:1,createdAt:new Date().toISOString(),tables:Object.fromEntries(names.map((n,i)=>[n,results[i].results]))});

@@ -117,6 +117,88 @@ test('workspace with signed identity and actual local D1 storage', async t => {
  });
 });
 
+test('document tree, archive and literal search preserve scope and atomic history in actual D1',async t=>{
+ const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("tree fixture")}}',d1Databases:{DB:'tree'},cf:false});t.after(()=>mf.dispose());const DB=await mf.getD1Database('DB');
+ for(const name of (await readdir(new URL('./migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')&&n<'0006.sql').sort()){
+  const sql=await readFile(new URL('./migrations/'+name,import.meta.url),'utf8');await DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));
+ }
+ const tokens={};for(const [id,org,role,client]of [['staff','a','staff',null],['second','a','staff',null],['client','a','client','c'],['other','a','client','d'],['foreign','b','staff',null]]){
+  const email=id+'@example.invalid';await DB.prepare('INSERT INTO actors VALUES(?,?,?,?,?,1)').bind(id,email,org,role,client).run();tokens[id]=await new SignJWT({email}).setProtectedHeader({alg:'RS256'}).setIssuer(issuer).setAudience('tree').setSubject(id).setIssuedAt().setExpirationTime('10m').sign(privateKey);
+ }
+ await DB.batch([
+  DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('c','a','Own client'),('d','a','Other client'),('foreign-c','b','Foreign client')"),
+  DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES('p','a','c','Project',1),('q','a','c','Second project',1),('foreign-p','b','foreign-c','Foreign project',1)"),
+  DB.prepare("INSERT INTO notes(id,organization_id,project_id,title,text,revision,client_visible) VALUES('legacy-tree','a','p','Existing flat document','Existing bytes',2,0)"),
+  DB.prepare("INSERT INTO note_versions(id,note_id,organization_id,project_id,revision,title,text,client_visible) VALUES('legacy-tree-version','legacy-tree','a','p',2,'Existing flat document','Existing bytes',0)"),
+ ]);
+ const original=await DB.prepare("SELECT * FROM notes WHERE id='legacy-tree'").first();
+ const sql=await readFile(new URL('./migrations/0006.sql',import.meta.url),'utf8');await DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));
+ const worker=createWorker(publicKey),env={DB,APP_ORIGIN:origin,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'tree'};
+ const call=(path,actor='staff',method='GET',body)=>worker.fetch(new Request(origin+path,{method,headers:{...(actor?{'Cf-Access-Jwt-Assertion':tokens[actor]}:{}),...(body?{'Content-Type':'application/json',Origin:origin}: {})},body:body?JSON.stringify(body):undefined}),env);
+ const create=async(title,parentId=null,projectId='p',actor='staff')=>{const r=await call('/api/notes',actor,'POST',{title,text:title+' content',projectId,clientVisible:true,parentId});assert.equal(r.status,201);return r.json();};
+ const current=id=>DB.prepare('SELECT * FROM notes WHERE id=?').bind(id).first();
+ const patch=async(id,changes)=>call('/api/notes/'+id,'staff','PATCH',{...changes,revision:(await current(id)).revision});
+ let root,child,grand,otherRoot,cross,foreign;
+ await t.test('additive upgrade retains flat documents and versions as active roots',async()=>{
+  assert.deepEqual(await current('legacy-tree'),original);const position=await DB.prepare("SELECT * FROM note_positions WHERE id='legacy-tree'").first();assert.equal(position.parent_id,null);assert.equal(position.archived,0);
+  const version=await DB.prepare("SELECT * FROM note_versions WHERE id='legacy-tree-version'").first();assert.equal(version.text,'Existing bytes');assert.equal(version.parent_id,null);assert.equal(version.archived,0);assert.deepEqual((await DB.prepare('PRAGMA foreign_key_check').all()).results,[]);
+ });
+ await t.test('client reads and search require every ancestor and project to be shared and active',async()=>{
+  root=await create('Root internal');await patch(root.id,{clientVisible:false});child=await create('Child visible token',root.id);grand=await create('Grandchild visible token',child.id);otherRoot=await create('Other root');cross=await create('Cross-project',null,'q');foreign=await create('Foreign root',null,'foreign-p','foreign');
+  assert.equal(child.parent_id,root.id);assert.equal(child.archived,0);assert.equal((await call('/api/notes/'+grand.id,'client')).status,404);assert.equal((await (await call('/api/notes?q=visible%20token','client')).json()).items.length,0);
+  assert.equal((await patch(root.id,{clientVisible:true})).status,200);assert.equal((await call('/api/notes/'+grand.id,'client')).status,200);
+  await patch(child.id,{clientVisible:false});assert.equal((await call('/api/notes/'+grand.id,'client')).status,404);await patch(child.id,{clientVisible:true});
+  await DB.prepare("UPDATE projects SET client_visible=0 WHERE id='p'").run();assert.equal((await call('/api/notes/'+grand.id,'client')).status,404);await DB.prepare("UPDATE projects SET client_visible=1 WHERE id='p'").run();
+  assert.equal((await call('/api/notes/'+grand.id,'other')).status,404);assert.equal((await call('/api/notes/'+grand.id,'foreign')).status,404);
+ });
+ await t.test('invalid, cyclic, foreign and cross-project parents cannot mutate placement or history',async()=>{
+  const before=await current(root.id),versions=(await DB.prepare('SELECT COUNT(*) AS n FROM note_versions').first()).n;
+  assert.equal((await patch(root.id,{parentId:root.id})).status,400);assert.equal((await patch(root.id,{parentId:grand.id})).status,400);
+  for(const parentId of [foreign.id,cross.id,'missing-parent'])assert.equal((await patch(root.id,{parentId})).status,404);
+  assert.equal((await patch(root.id,{parentId:42})).status,400);assert.equal((await patch(root.id,{archived:'true'})).status,400);
+  await assert.rejects(()=>DB.prepare('UPDATE note_positions SET parent_id=? WHERE id=?').bind(cross.id,child.id).run());
+  assert.deepEqual(await current(root.id),before);assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM note_versions').first()).n,versions);
+ });
+ await t.test('simultaneous opposite moves have one winner and cannot create a cycle',async()=>{
+  const a=await current(root.id),b=await current(otherRoot.id);
+  const moves=await Promise.all([call('/api/notes/'+root.id,'staff','PATCH',{parentId:otherRoot.id,revision:a.revision}),call('/api/notes/'+otherRoot.id,'second','PATCH',{parentId:root.id,revision:b.revision})]);assert.equal(moves.filter(r=>r.status===200).length,1);assert.ok(moves.every(r=>[200,400,409].includes(r.status)));
+  const positions=(await DB.prepare("SELECT * FROM note_positions WHERE organization_id='a'").all()).results,map=new Map(positions.map(p=>[p.id,p.parent_id]));for(const p of positions){const seen=new Set();let id=p.id;while(id){assert.ok(!seen.has(id),'tree has no cycle');seen.add(id);id=map.get(id);}}
+  const winner=moves[0].status===200?root.id:otherRoot.id,position=await DB.prepare('SELECT parent_id FROM note_positions WHERE id=?').bind(winner).first(),version=await DB.prepare('SELECT parent_id,actor_id FROM note_versions WHERE note_id=? ORDER BY revision DESC LIMIT 1').bind(winner).first();assert.equal(version.parent_id,position.parent_id);assert.equal(version.actor_id,moves[0].status===200?'staff':'second');
+ });
+ await t.test('archive hides descendants without rewriting their own archive flags; restoring a parent preserves child choices',async()=>{
+  await patch(child.id,{archived:true});const childRevision=(await current(child.id)).revision;await patch(root.id,{archived:true});
+  for(const id of [root.id,child.id,grand.id]){assert.equal((await call('/api/notes/'+id)).status,404);assert.equal((await call('/api/notes/'+id+'?includeArchived=true')).status,200);assert.equal((await call('/api/notes/'+id,'client')).status,404);}
+  assert.equal((await current(child.id)).revision,childRevision);assert.equal((await call('/api/notes?includeArchived=true','client')).status,403);
+  await patch(root.id,{archived:false});assert.equal((await call('/api/notes/'+child.id)).status,404);await patch(child.id,{archived:false});assert.equal((await call('/api/notes/'+grand.id,'client')).status,200);
+ });
+ await t.test('restoring content retains current location and archive state instead of restoring old placement',async()=>{
+  assert.equal((await patch(child.id,{parentId:null,archived:true})).status,200);const now=await current(child.id);
+  const restored=await call('/api/notes/'+child.id+'/versions/0/restore','staff','POST',{revision:now.revision,clientVisible:true});assert.equal(restored.status,200);const row=await restored.json();assert.equal(row.parent_id,null);assert.equal(row.archived,1);assert.equal((await call('/api/notes/'+child.id,'client')).status,404);
+  const version=await DB.prepare('SELECT * FROM note_versions WHERE note_id=? AND revision=?').bind(child.id,row.revision).first();assert.equal(version.parent_id,null);assert.equal(version.archived,1);assert.equal(version.source_revision,0);await patch(child.id,{archived:false,parentId:root.id});
+ });
+ await t.test('placement or snapshot failure rolls back content, geometry and new documents together',async()=>{
+  for(const table of ['note_positions','note_versions']){
+   const before=await current(child.id),position=await DB.prepare('SELECT * FROM note_positions WHERE id=?').bind(child.id).first(),count=(await DB.prepare('SELECT COUNT(*) AS n FROM note_versions').first()).n;
+   await DB.prepare(`CREATE TRIGGER reject_tree BEFORE ${table==='note_positions'?'UPDATE':'INSERT'} ON ${table} BEGIN SELECT RAISE(ABORT,'fixture'); END`).run();
+   try{assert.equal((await patch(child.id,{parentId:otherRoot.id,text:'Must roll back'})).status,500);if(table==='note_versions')assert.equal((await call('/api/notes','staff','POST',{title:'Orphan forbidden',text:'No partial creation',projectId:'p',parentId:root.id,clientVisible:false})).status,500);}
+   finally{await DB.prepare('DROP TRIGGER reject_tree').run();}
+   assert.deepEqual(await current(child.id),before);assert.deepEqual(await DB.prepare('SELECT * FROM note_positions WHERE id=?').bind(child.id).first(),position);assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM note_versions').first()).n,count);assert.equal((await DB.prepare("SELECT COUNT(*) AS n FROM notes WHERE title='Orphan forbidden'").first()).n,0);
+  }
+ });
+ await t.test('literal search, parent/project filters and pagination apply scope before the 50-row bound',async()=>{
+  const statements=[];for(let i=0;i<65;i++){const id='search-'+String(i).padStart(3,'0'),token=crypto.randomUUID(),visible=i<10?0:1;statements.push(DB.prepare('INSERT INTO notes(id,organization_id,project_id,title,text,client_visible,history_token) VALUES(?,?,?,?,?,?,?)').bind(id,'a','p',"Needle %_ quoted' "+i,'Literal searchable content',visible,token),DB.prepare('INSERT INTO note_positions(id,organization_id,project_id,parent_id) VALUES(?,?,?,?)').bind(id,'a','p',root.id),DB.prepare('INSERT INTO note_versions(id,note_id,organization_id,project_id,revision,title,text,client_visible,parent_id) VALUES(?,?,?,?,?,?,?,?,?)').bind(token,id,'a','p',0,"Needle %_ quoted' "+i,'Literal searchable content',visible,root.id));}await DB.batch(statements);
+  const query='/api/notes?q='+encodeURIComponent('NEEDLE %_')+'&projectId=p&parentId='+root.id;
+  for(const [actor,total]of [['staff',65],['client',55]]){const first=await (await call(query,actor)).json();assert.equal(first.items.length,50);const next=await (await call(query+'&after='+first.nextCursor,actor)).json();assert.equal(new Set([...first.items,...next.items].map(r=>r.id)).size,total);assert.equal(next.nextCursor,null);if(actor==='client')assert.ok([...first.items,...next.items].every(r=>r.client_visible===1));}
+  assert.equal((await (await call('/api/notes?q='+encodeURIComponent("' OR 1=1 --"),'client')).json()).items.length,0);assert.equal((await (await call('/api/notes?q=Needle&parentId=','client')).json()).items.length,0);assert.equal((await (await call('/api/notes?q=Needle&projectId=q','client')).json()).items.length,0);
+  await patch(root.id,{archived:true});assert.equal((await (await call('/api/notes?q=Needle','client')).json()).items.length,0);assert.equal((await (await call('/api/notes?q=Needle')).json()).items.length,0);assert.equal((await (await call('/api/notes?q=Needle&includeArchived=true')).json()).items.length,50);await patch(root.id,{archived:false});
+  for(const query of ['?q='+('x'.repeat(201)),'?includeArchived=maybe','?parentId=%27','?unknown=true'])assert.equal((await call('/api/notes'+query)).status,400);
+ });
+ await t.test('exports preserve placement and historical geometry while clients cannot mutate or export',async()=>{
+  const data=await (await call('/api/export')).json();assert.ok(data.tables.note_positions.some(p=>p.id===grand.id&&p.parent_id===child.id));assert.ok(data.tables.note_versions.some(v=>v.note_id===child.id&&v.archived===1));assert.deepEqual((await DB.prepare('PRAGMA foreign_key_check').all()).results,[]);
+  assert.equal((await call('/api/notes/'+root.id,'client','PATCH',{parentId:null,revision:(await current(root.id)).revision})).status,403);assert.equal((await call('/api/export','client')).status,403);
+ });
+});
+
 test('document versions and restoration commit atomically in actual local D1',async t=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("document fixture")}}',d1Databases:{DB:'documents'},cf:false});t.after(()=>mf.dispose());const DB=await mf.getD1Database('DB');
  for(const name of (await readdir(new URL('./migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')&&n<'0005.sql').sort()){
@@ -140,6 +222,9 @@ test('document versions and restoration commit atomically in actual local D1',as
   const old=await DB.prepare("SELECT * FROM note_versions WHERE note_id='legacy'").first();assert.equal(old.revision,4);assert.equal(old.text,'Original existing content');assert.equal(old.actor_id,null);assert.equal(old.recorded_at,null);
   assert.deepEqual((await DB.prepare('PRAGMA foreign_key_check').all()).results,[]);
  });
+ for(const name of (await readdir(new URL('./migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')&&n>'0005.sql').sort()){
+  const later=await readFile(new URL('./migrations/'+name,import.meta.url),'utf8');await DB.batch(later.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));
+ }
  await t.test('create and concurrent saves capture exactly the successful revisions and authors',async()=>{
   const created=await call('/api/notes','staff','POST',{title:'Original title',text:'<script>literal original</script>',projectId:'p',clientVisible:false});assert.equal(created.status,201);note=await created.json();path='/api/notes/'+note.id;assert.equal(note.history_token,undefined);
   assert.equal((await call(path,'second','PATCH',{text:'Shared revision',clientVisible:true,revision:0})).status,200);
