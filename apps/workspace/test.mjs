@@ -117,6 +117,83 @@ test('workspace with signed identity and actual local D1 storage', async t => {
  });
 });
 
+test('document versions and restoration commit atomically in actual local D1',async t=>{
+ const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("document fixture")}}',d1Databases:{DB:'documents'},cf:false});t.after(()=>mf.dispose());const DB=await mf.getD1Database('DB');
+ for(const name of (await readdir(new URL('./migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')&&n<'0005.sql').sort()){
+  const sql=await readFile(new URL('./migrations/'+name,import.meta.url),'utf8');await DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));
+ }
+ const tokens={};for(const [id,org,role,client]of [['staff','a','staff',null],['second','a','staff',null],['client','a','client','c'],['other','a','client','d'],['foreign','b','staff',null]]){
+  const email=id+'@example.invalid';await DB.prepare('INSERT INTO actors VALUES(?,?,?,?,?,1)').bind(id,email,org,role,client).run();tokens[id]=await new SignJWT({email}).setProtectedHeader({alg:'RS256'}).setIssuer(issuer).setAudience('documents').setSubject(id).setIssuedAt().setExpirationTime('10m').sign(privateKey);
+ }
+ await DB.batch([
+  DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('c','a','Document client')"),
+  DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES('p','a','c','Document project',1)"),
+  DB.prepare("INSERT INTO notes(id,organization_id,project_id,title,text,revision,client_visible) VALUES('legacy','a','p','Existing document','Original existing content',4,0)"),
+ ]);
+ const before=(await DB.prepare('SELECT * FROM notes').all()).results;
+ const sql=await readFile(new URL('./migrations/0005.sql',import.meta.url),'utf8');await DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));
+ const worker=createWorker(publicKey),env={DB,APP_ORIGIN:origin,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'documents'};
+ const call=(path,actor='staff',method='GET',body,headers={})=>worker.fetch(new Request(origin+path,{method,headers:{...(actor?{'Cf-Access-Jwt-Assertion':tokens[actor]}:{}),...(body?{'Content-Type':'application/json',Origin:origin}:{}),...headers},body:body?JSON.stringify(body):undefined}),env);
+ let note,path;
+ await t.test('upgrade captures existing content without inventing its author or edit date',async()=>{
+  assert.deepEqual((await DB.prepare('SELECT id,organization_id,project_id,title,text,revision,client_visible FROM notes').all()).results,before);
+  const old=await DB.prepare("SELECT * FROM note_versions WHERE note_id='legacy'").first();assert.equal(old.revision,4);assert.equal(old.text,'Original existing content');assert.equal(old.actor_id,null);assert.equal(old.recorded_at,null);
+  assert.deepEqual((await DB.prepare('PRAGMA foreign_key_check').all()).results,[]);
+ });
+ await t.test('create and concurrent saves capture exactly the successful revisions and authors',async()=>{
+  const created=await call('/api/notes','staff','POST',{title:'Original title',text:'<script>literal original</script>',projectId:'p',clientVisible:false});assert.equal(created.status,201);note=await created.json();path='/api/notes/'+note.id;assert.equal(note.history_token,undefined);
+  assert.equal((await call(path,'second','PATCH',{text:'Shared revision',clientVisible:true,revision:0})).status,200);
+  const attempts=await Promise.all(['staff','second'].map(actor=>call(path,actor,'PATCH',{title:'Winner '+actor,revision:1})));assert.deepEqual(attempts.map(r=>r.status).sort(),[200,409]);const winner=attempts[0].status===200?'staff':'second';
+  const history=await (await call(path+'/versions')).json();assert.deepEqual(history.items.map(r=>r.revision),[2,1,0]);assert.equal(history.currentRevision,2);assert.equal(history.items[0].actor_id,winner);assert.ok(history.items[0].recorded_at>0);assert.ok(history.items.every(r=>!('text'in r)));
+  assert.equal((await (await call(path+'/versions/0')).json()).text,'<script>literal original</script>');assert.equal((await (await call(path+'/versions/1')).json()).actor_id,'second');
+  assert.equal((await (await call(path)).json()).history_token,undefined);
+  assert.equal((await (await call(path,'client')).json()).text,'Shared revision');assert.equal((await call(path+'/versions','client')).status,403);
+ });
+ await t.test('restoration creates a new version with explicit visibility and prevents replay or stale overwrite',async()=>{
+  const restored=await call(path+'/versions/0/restore','staff','POST',{revision:2,clientVisible:false});assert.equal(restored.status,200);const row=await restored.json();assert.equal(row.revision,3);assert.equal(row.title,'Original title');assert.equal(row.text,'<script>literal original</script>');assert.equal(row.client_visible,0);
+  const snapshot=await (await call(path+'/versions/3')).json();assert.equal(snapshot.source_revision,0);assert.equal(snapshot.actor_id,'staff');assert.equal((await call(path,'client')).status,404);
+  assert.equal((await call(path+'/versions/0/restore','staff','POST',{revision:2,clientVisible:false})).status,409);
+  assert.equal((await call(path+'/versions/3/restore','staff','POST',{revision:3,clientVisible:false})).status,409);
+  assert.equal((await call(path+'/versions/1/restore','second','POST',{revision:3,clientVisible:true})).status,200);
+  assert.equal((await (await call(path,'client')).json()).text,'Shared revision');assert.equal((await call(path+'/versions/0','client')).status,403);
+ });
+ await t.test('history insertion failure rolls back creation, editing and restoration',async()=>{
+  const current=await (await call(path)).json(),count=(await DB.prepare('SELECT COUNT(*) AS n FROM note_versions').first()).n;
+  await DB.prepare("CREATE TRIGGER reject_note_versions BEFORE INSERT ON note_versions BEGIN SELECT RAISE(ABORT,'fixture'); END").run();
+  try{
+   assert.equal((await call(path,'staff','PATCH',{text:'Must roll back',revision:4})).status,500);
+   assert.equal((await call('/api/notes','staff','POST',{title:'Must not exist',text:'No orphan document',projectId:'p',clientVisible:false})).status,500);
+   assert.equal((await call(path+'/versions/0/restore','staff','POST',{revision:4,clientVisible:false})).status,500);
+  }finally{await DB.prepare('DROP TRIGGER reject_note_versions').run();}
+  assert.deepEqual(await (await call(path)).json(),current);assert.equal((await DB.prepare("SELECT COUNT(*) AS n FROM notes WHERE title='Must not exist'").first()).n,0);assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM note_versions').first()).n,count);
+ });
+ await t.test('a concurrent restore and edit have one winner and one matching snapshot',async()=>{
+  const results=await Promise.all([call(path+'/versions/0/restore','staff','POST',{revision:4,clientVisible:false}),call(path,'second','PATCH',{text:'Concurrent edit',revision:4})]);assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
+  const latest=await (await call(path+'/versions/5')).json();assert.equal(latest.actor_id,results[0].status===200?'staff':'second');assert.equal(latest.source_revision,results[0].status===200?0:null);assert.equal(latest.text,results[0].status===200?'<script>literal original</script>':'Concurrent edit');
+  assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM note_versions WHERE note_id=?').bind(note.id).first()).n,6);
+ });
+ await t.test('version metadata paginates beyond 50 without exposing content or losing older versions',async()=>{
+  await DB.batch(Array.from({length:60},(_,i)=>DB.prepare('INSERT INTO note_versions(id,note_id,organization_id,project_id,revision,title,text,client_visible,actor_id,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(),note.id,'a','p',i+6,'Version '+(i+6),'Synthetic version '+(i+6),0,'staff',Date.now())));
+  await DB.prepare('UPDATE notes SET revision=65 WHERE id=?').bind(note.id).run();
+  const first=await (await call(path+'/versions')).json();assert.equal(first.items.length,50);assert.equal(first.nextCursor,'16');assert.equal(first.currentRevision,65);
+  const last=await (await call(path+'/versions?before='+first.nextCursor)).json();assert.equal(last.items.length,16);assert.equal(last.nextCursor,null);assert.deepEqual([...first.items,...last.items].map(r=>r.revision),Array.from({length:66},(_,i)=>65-i));
+  assert.ok(first.items.every(r=>!('text'in r)&&!('history_token'in r)));assert.equal((await (await call(path+'/versions/0')).json()).text,'<script>literal original</script>');
+ });
+ await t.test('strict authority, methods, fields, origin and revision validation fail closed',async()=>{
+  for(const actor of ['client','other']){assert.equal((await call(path+'/versions',actor)).status,403);assert.equal((await call(path+'/versions/0/restore',actor,'POST',{revision:65,clientVisible:true})).status,403);}
+  assert.equal((await call(path+'/versions','foreign')).status,404);assert.equal((await call(path+'/versions',null)).status,401);
+  for(const body of [{revision:65},{revision:65,clientVisible:'true'},{revision:-1,clientVisible:false},{revision:65,clientVisible:false,actorId:'foreign'},{revision:65,clientVisible:false,projectId:'other'}])assert.equal((await call(path+'/versions/0/restore','staff','POST',body)).status,400);
+  for(const before of ['',"'",'1.5','9999999999999999'])assert.equal((await call(path+'/versions?before='+encodeURIComponent(before))).status,400);
+  assert.equal((await call(path+'/versions/99')).status,404);assert.equal((await call(path+'/versions/0','staff','POST',{})).status,405);
+  assert.equal((await call(path+'/versions/0/restore','staff','POST',{revision:65,clientVisible:false},{Origin:'https://elsewhere.invalid'})).status,403);
+  assert.equal((await call(path,'staff','PATCH',{history_token:'caller-token',revision:65})).status,400);
+  await DB.prepare("UPDATE actors SET active=0 WHERE id='second'").run();assert.equal((await call(path+'/versions','second')).status,403);await DB.prepare("UPDATE actors SET active=1 WHERE id='second'").run();
+ });
+ await t.test('staff export retains document versions and restoration provenance',async()=>{
+  const exported=await (await call('/api/export')).json();assert.ok(exported.tables.note_versions.some(r=>r.note_id===note.id&&r.revision===0));assert.ok(exported.tables.note_versions.some(r=>r.source_revision===0));assert.equal(exported.tables.actors,undefined);
+ });
+});
+
 test('task comments persist with author identity, client scope and retry safety in actual D1',async t=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("comments fixture")}}',d1Databases:{DB:'comments'},cf:false});t.after(()=>mf.dispose());
  const DB=await mf.getD1Database('DB');
@@ -142,6 +219,9 @@ test('task comments persist with author identity, client scope and retry safety 
   assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM actors').first()).n,5);
   assert.deepEqual((await DB.prepare('PRAGMA foreign_key_check').all()).results,[]);
  });
+ for(const name of (await readdir(new URL('./migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')&&n>'0004.sql').sort()){
+  const sql=await readFile(new URL('./migrations/'+name,import.meta.url),'utf8');await DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));
+ }
  const worker=createWorker(publicKey),env={DB,APP_ORIGIN:origin,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'comments'};
  const path='/api/tasks/t/comments';
  const call=(url=path,actor='staff',method='GET',body,bindings=env,headers={})=>worker.fetch(new Request(origin+url,{method,headers:{...(actor?{'Cf-Access-Jwt-Assertion':tokens[actor]}:{}),...(body?{'Content-Type':'application/json',Origin:origin}:{}),...headers},body:body?JSON.stringify(body):undefined}),bindings);
