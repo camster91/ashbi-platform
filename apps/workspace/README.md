@@ -50,3 +50,15 @@ Tasks have List and Board views over the same authorized task records. The board
 Project, status and staff-assignee filters apply to loaded records only. The count explicitly says when more records are available; Load more retains the view and filters. View/filter changes preserve an unsaved create form. In-place status saves retain the view/filter options; full reload starts in List and reloads persisted task data. No schema or API change is needed for this presentation increment.
 
 `browser-task-board.mjs` adds List/Board/filter and pagination coverage, keyboard status-save/reload, a real local-D1 edit conflict, and 390/768/1440px Board axe/overflow checks. Set `WORKSPACE_TEST_OUTPUT_DIR` to retain synthetic Board screenshots when running the built browser suite.
+
+## Task comments (source increment)
+
+Migration `0004.sql` is additive and must precede deployment of the comment API. It creates plain-text comments with organization/task/author foreign keys and a per-author request key. A populated local D1 migration test verifies existing tasks and actors survive unchanged. This migration has not been applied to hosted D1.
+
+Staff can open Comments from either task view and post an internal comment or explicitly share it. Clients can read shared comments and reply only when both the owning task and project are visible to their own client. Client replies are always shared; the API rejects caller-controlled author, organization, task and timestamps. Thread reads, posts and retry responses recheck parent permissions. Timestamps display in Toronto time. Content remains literal text, up to the existing 10,000-character comment limit.
+
+The newest 50 permitted comments load first, with stable timestamp/id cursors for older pages. Paging preserves the reply draft. A failed post keeps the draft and the same request UUID for retrying unchanged text/sharing; the server returns the original record after a lost success, and simultaneous retries create one record. Editing the draft starts a new comment intent. Drafts are held only while the dialog remains open; reopening or reloading fetches persisted comments. Closing/navigation invalidates pending dialog results, loading/errors and focus updates.
+
+Comments are append-only in this source slice. Existing legacy comment editing/deletion, mentions and source history remain intact pending their verified replacements and migration mapping. Author labels currently use existing actor IDs (or You). The bounded staff record export now includes `task_comments` and author references; identity and original-file recovery still need the full backup procedure. There is no email/notification delivery in this slice.
+
+`browser-comments.mjs` adds separately signed staff/client journeys against the built Worker and actual local D1, literal-content checks, a lost-success retry, stable older pages, stale dialog/post results, keyboard focus and 390/768/1440px modal axe/overflow checks. `X-Test-Actor` selects only explicitly provisioned synthetic identities in the local test HTTP harness; deployed Worker identity handling is unchanged.

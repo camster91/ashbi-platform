@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 // Requests are held explicitly, rather than racing a timeout against navigation.
-async function hold(page,pattern){
+export async function hold(page,pattern){
  let release,arrive,done,request;
  const gate=new Promise(r=>release=r),entered=new Promise(r=>arrive=r),finished=new Promise(r=>done=r);
  await page.route(pattern,async route=>{if(request)return route.fallback();request=route.request();arrive();try{await route.fulfill(await gate);done();}catch(e){done(e);}});
