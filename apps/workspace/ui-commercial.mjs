@@ -25,11 +25,11 @@ export const commercialUiScript=String.raw`
   function lock(){if(!form)return;const blocked=savingKey!==null||pending().length>0;for(const control of form.elements)control.disabled=blocked||Boolean(control.dataset.fixed);for(const b of review.querySelectorAll('button'))b.disabled=blocked;}
   function scan(){if(!valid())return;recovery.replaceChildren();for(const key of pending()){const item=node('section',undefined,'panel');item.setAttribute('aria-label','Save recovery '+key);item.append(node('h2','Uncertain save'),node('p','Recovery key: '+key,'help'),node('p',messages.get(key)||'Check the saved result before preparing another mutation.'));const check=action('Check save result',()=>reconcile(key,false)),stop=action('Stop save attempt',()=>reconcile(key,true));check.disabled=stop.disabled=checking.has(key);item.querySelector('p:last-of-type').setAttribute('role','status');item.append(check,stop);recovery.append(item);}lock();}
   async function reconcile(key,stop=false,automatic=false){
-   if(!valid()||checking.has(key))return;checking.add(key);const enteredType=type;scan();
+   if(!valid()||checking.has(key))return;checking.add(key);const enteredType=type,enteredEditor=editorKey;scan();
    try{const result=await api('commercial/requests/'+key+(stop?'/cancel':''),stop?'POST':'GET',stop?{}:undefined);if(!valid())return;
     if(result.state==='UNKNOWN'){messages.set(key,'The save result is still unknown. Check again or stop this attempt.');return;} settled.add(key);if(savingKey===key)savingKey=null;
     try{localStorage.removeItem(prefix+key);}catch{messages.set(key,'The result is saved or stopped, but the recovery key could not be cleared. Check again.');return;}
-    messages.delete(key);notice.replaceChildren();invalidate();if(result.state==='SAVED'){await loadList();if(valid()&&type===enteredType)await details(result.record.id,result.record.kind.toLowerCase()==='template'?'templates':result.record.kind.toLowerCase()+'s',null);}else if(!automatic)notice.replaceChildren(node('p','Save attempt stopped. Review your preparation before saving again.','notice'));
+    messages.delete(key);notice.replaceChildren();invalidate();if(result.state==='SAVED'){await loadList();if(valid()&&type===enteredType&&editorKey===enteredEditor)await details(result.record.id,result.record.kind.toLowerCase()==='template'?'templates':result.record.kind.toLowerCase()+'s',null);}else if(!automatic)notice.replaceChildren(node('p','Save attempt stopped. Review your preparation before saving again.','notice'));
    }catch(e){if(valid()){if(e.status===403)fail(e);else messages.set(key,e.message);}}
    finally{checking.delete(key);if(valid())scan();}
   }
@@ -101,7 +101,7 @@ export const commercialUiScript=String.raw`
    }
    const client=state.financeClients.find(c=>c.id===(record?.clientId??body.clientId)),project=state.parents.find(p=>p.id===(record?.projectId??body.projectId));return {title:body.title,kind:type==='proposals'?'PROPOSAL':type==='templates'?'TEMPLATE':'CONTRACT',status:'DRAFT',revision:record?.revision??0,content,targets:{client,project},source:record?.source||{template:body.template,proposal:body.proposal}};
   }
-  async function saveReviewed(){const selected=reviewed;if(!selected)return;await persist('commercial/'+selected.kind+(selected.record?'/'+selected.record.id:''),selected.body,selected.record?'PATCH':'POST',async result=>{cache.delete(selected.key);if(editorKey===selected.key){editorKey=selected.kind+':new';renderEditor();}await loadList();if(valid()&&type===selected.kind)await details(result.id,selected.kind,null);});}
+  async function saveReviewed(){const selected=reviewed;if(!selected)return;await persist('commercial/'+selected.kind+(selected.record?'/'+selected.record.id:''),selected.body,selected.record?'PATCH':'POST',async result=>{const stayed=editorKey===selected.key&&type===selected.kind;cache.delete(selected.key);if(editorKey===selected.key){editorKey=selected.kind+':new';renderEditor();}const displayKey=editorKey;await loadList();if(valid()&&stayed&&editorKey===displayKey&&type===selected.kind)await details(result.id,selected.kind,null);});}
   async function loadChoices(restore=false){
    const attempt=++choiceAttempt,selectedClient=fields.client.value,selectedProject=fields.project.value,template=fields.template,proposal=fields.proposal,selections=restore?cache.get(editorKey)?.sources||{}:{};if(!template)return;
    template.replaceChildren(new Option('No template',''));proposal.replaceChildren(new Option('No proposal',''));template.disabled=proposal.disabled=true;
