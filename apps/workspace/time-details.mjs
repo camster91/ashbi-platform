@@ -23,11 +23,11 @@ function audit(db,actor,token,action){return db.prepare(`INSERT INTO time_detail
  .bind(actor.id,Date.now(),action,token,actor.organization_id);}
 
 // Only the base-row writer's random token can create/update metadata and capture its event.
-export async function commitTimeWrite(db,actor,statement,token,{sourceKind,description='',workedOn,billable=true}={}){
+export async function commitTimeWrite(db,actor,statement,token,{sourceKind,description='',workedOn,billable=true,requestId=null,fingerprint=null}={}){
  const create=sourceKind!==undefined;
- const detail=create?db.prepare(`INSERT INTO time_details(id,organization_id,project_id,actor_id,source_kind,description,worked_on,billable,created_at,audit_token)
- SELECT id,organization_id,project_id,actor_id,?,?,?,?,?,? FROM time_entries WHERE write_token=? AND organization_id=? AND actor_id=? RETURNING id`)
- .bind(sourceKind,description,workedOn??todayWorkedOn(),Number(billable),Date.now(),token,token,actor.organization_id,actor.id)
+ const detail=create?db.prepare(`INSERT INTO time_details(id,organization_id,project_id,actor_id,source_kind,description,worked_on,billable,created_at,audit_token,request_key,request_fingerprint)
+ SELECT id,organization_id,project_id,actor_id,?,?,?,?,?,?,?,? FROM time_entries WHERE write_token=? AND organization_id=? AND actor_id=? RETURNING id`)
+ .bind(sourceKind,description,workedOn??todayWorkedOn(),Number(billable),Date.now(),token,requestId,fingerprint,token,actor.organization_id,actor.id)
  :db.prepare(`INSERT INTO time_details(id,organization_id,project_id,actor_id,audit_token)
  SELECT id,organization_id,project_id,actor_id,? FROM time_entries WHERE write_token=? AND organization_id=? AND actor_id=?
  ON CONFLICT(id) DO UPDATE SET revision=time_details.revision+1,audit_token=excluded.audit_token
@@ -35,6 +35,13 @@ export async function commitTimeWrite(db,actor,statement,token,{sourceKind,descr
  .bind(token,token,actor.organization_id,actor.id);
  const results=await db.batch([statement,detail,audit(db,actor,token,create?'CREATE':'STOP')]);
  const row=results[0].results[0];if(row&&(!results[1].results.length||!results[2].results.length))throw 503;return row||null;
+}
+export async function timePeople(request,db,actor,json){
+ if(actor.role!=='staff'||!await hasFinance(db,actor))throw 403;if(request.method!=='GET')throw 405;if(new URL(request.url).search)throw 400;
+ const rows=(await db.prepare(`${viewer} SELECT a.id,a.email AS name,a.active FROM actors a CROSS JOIN viewer v WHERE a.organization_id=? AND v.finance=1
+ AND (a.role='staff' OR EXISTS(SELECT 1 FROM time_entries t WHERE t.actor_id=a.id AND t.organization_id=a.organization_id)) ORDER BY a.email LIMIT 1001`)
+ .bind(actor.id,actor.organization_id,actor.organization_id).all()).results;
+ if(!await hasFinance(db,actor))throw 403;if(rows.length>1000)throw 409;return json({items:rows});
 }
 
 export function timeExportStatement(db,actor,table){

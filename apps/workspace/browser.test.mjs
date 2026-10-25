@@ -13,6 +13,7 @@ import {runCommentTests} from './browser-comments.mjs';
 import {runDocumentTests} from './browser-documents.mjs';
 import {runDocumentTreeTests} from './browser-document-tree.mjs';
 import {runTimerTests} from './browser-timer.mjs';
+import {runTimeReviewTests} from './browser-time-review.mjs';
 const base=fileURLToPath(new URL('.',import.meta.url));
 const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'qa'},r2Buckets:['FILES'],cf:false});
 const DB=await mf.getD1Database('DB'),FILES=await mf.getR2Bucket('FILES');
@@ -49,4 +50,5 @@ await runCommentTests({browser,origin,DB,axe,addActor});
 await runDocumentTests({browser,origin,DB,axe});
 await runDocumentTreeTests({browser,origin,DB,axe});
 await runTimerTests({browser,origin,DB,axe,addActor});
+await runTimeReviewTests({browser,origin,DB,axe,addActor});
 }finally{await browser.close();await new Promise(r=>server.close(r));await mf.dispose();}

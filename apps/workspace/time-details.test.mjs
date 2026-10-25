@@ -34,6 +34,22 @@ test('time metadata, review and financial scope persist in actual local D1',asyn
   await assert.rejects(DB.prepare("INSERT INTO actor_finance_access VALUES('owner','b')").run());await DB.prepare("UPDATE actors SET active=0 WHERE id='finance'").run();assert.equal((await call('/api/time/entries?scope=team','finance')).status,403);await DB.prepare("UPDATE actors SET active=1 WHERE id='finance'").run();
  });
  let created,priced;
+ await t.test('manual save retries share one entry and audit, with payload and actor scoped keys',async()=>{
+  const key=crypto.randomUUID(),body={projectId:'pa',seconds:67,description:'Retry-safe',requestId:key};
+  const first=await call('/api/time/manual','owner','POST',body);assert.equal(first.status,201);const saved=await first.json();
+  const again=await call('/api/time/manual','owner','POST',{...body,requestId:key.toUpperCase()});assert.equal(again.status,200);assert.equal((await again.json()).id,saved.id);
+  assert.equal((await call('/api/time/manual','owner','POST',{...body,seconds:68})).status,409);
+  const other=await call('/api/time/manual','teammate','POST',body);assert.equal(other.status,201);assert.notEqual((await other.json()).id,saved.id);
+  assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM time_detail_events WHERE time_id=?').bind(saved.id).first()).n,1);
+  const concurrent={...body,requestId:crypto.randomUUID(),description:'Concurrent retry'};const responses=await Promise.all([1,2].map(()=>call('/api/time/manual','owner','POST',concurrent)));assert.deepEqual(responses.map(r=>r.status).sort(),[200,201]);const rows=await Promise.all(responses.map(r=>r.json()));assert.equal(rows[0].id,rows[1].id);assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM time_entries WHERE id=?').bind(rows[0].id).first()).n,1);
+  for(const requestId of ['bad',null,1,'a'.repeat(36)])assert.equal((await call('/api/time/manual','owner','POST',{...body,requestId})).status,400);
+ });
+ await t.test('the time owner directory is restricted to active financial staff and one organization',async()=>{
+  for(const who of ['owner','client'])assert.equal((await call('/api/time/people',who)).status,403);
+  const response=await call('/api/time/people','finance');assert.equal(response.status,200);const {items}=await response.json();assert.ok(items.some(p=>p.id==='owner'&&p.name==='owner@example.invalid'));assert.ok(items.every(p=>!['client','foreign'].includes(p.id)));
+  assert.equal((await call('/api/time/people?actorId=owner','finance')).status,400);
+  assert.deepEqual((await (await call('/api/time/people','foreign')).json()).items.map(p=>p.id),['foreign']);
+ });
  await t.test('manual and timer creation atomically record source, literal descriptions, billable flags and exact seconds',async()=>{
   created=await manual('<b>Literal work</b>','owner',{seconds:121,workedOn:'2026-09-12',billable:false});let row=await detail(created.id);assert.equal(row.source_kind,'MANUAL');assert.equal(row.description,'<b>Literal work</b>');assert.equal(row.worked_on,'2026-09-12');assert.equal(row.billable,0);assert.equal(row.seconds,121);assert.ok(row.created_at>0);assert.equal(row.currency,undefined);assert.equal(row.audit_token,undefined);assert.equal((await (await call('/api/time')).json()).items.find(r=>r.id===created.id).write_token,undefined);
   const start=await call('/api/timer/start','owner','POST',{projectId:'pa',description:'Timer source',billable:true});assert.equal(start.status,201);const timer=await start.json();assert.equal((await detail(timer.id)).source_kind,'TIMER');assert.equal((await review(timer.id,'approve',{revision:0,currency:'CAD',rateMinor:10000})).status,409);

@@ -29,16 +29,21 @@ export async function timeRoute(request,db,actor,input,json){
   const row=await commitTimeWrite(db,actor,statement,token);if(!row)throw 404;return json(row);
  }
  const manual=path==='/api/time/manual';if(!manual&&path!=='/api/timer/start')throw 404;
- if(Object.keys(input).some(k=>!(manual?['projectId','seconds','description','workedOn','billable']:['projectId','description','billable']).includes(k))||typeof input.projectId!=='string'||input.projectId.length>100)throw 400;
+ if(Object.keys(input).some(k=>!(manual?['projectId','seconds','description','workedOn','billable','requestId']:['projectId','description','billable']).includes(k))||typeof input.projectId!=='string'||input.projectId.length>100)throw 400;
+ if('requestId'in input&&(typeof input.requestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.requestId)))throw 400;
  if('workedOn'in input&&!validWorkedOn(input.workedOn))throw 400;
  if('description'in input&&(typeof input.description!=='string'||input.description.length>2000||input.description.includes('\0')))throw 400;
  if('billable'in input&&typeof input.billable!=='boolean')throw 400;
  if(manual&&(!Number.isSafeInteger(input.seconds)||input.seconds<1||input.seconds>86400))throw 400;
  const parent=await db.prepare('SELECT id FROM projects WHERE id=? AND organization_id=?').bind(input.projectId,actor.organization_id).first();if(!parent)throw 404;
+ const requestId=input.requestId?.toLowerCase()??null;let fingerprint=null;
+ if(requestId){const canonical=JSON.stringify({projectId:input.projectId,seconds:input.seconds,description:input.description??'',workedOn:input.workedOn??null,billable:input.billable??true});fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical))),b=>b.toString(16).padStart(2,'0')).join('');}
+ const replay=async()=>{if(!requestId)return null;const row=await db.prepare(`SELECT ${timeColumns.split(',').map(c=>'t.'+c).join(',')},d.request_fingerprint FROM time_entries t JOIN time_details d ON d.id=t.id AND d.organization_id=t.organization_id WHERE d.organization_id=? AND d.actor_id=? AND d.request_key=?`).bind(actor.organization_id,actor.id,requestId).first();if(!row)return null;if(row.request_fingerprint!==fingerprint)throw 409;delete row.request_fingerprint;return row;};
+ const prior=await replay();if(prior)return json(prior);
  const now=Date.now(),id=crypto.randomUUID(),token=crypto.randomUUID();
  const statement=db.prepare(`INSERT INTO time_entries(id,organization_id,project_id,actor_id,started_at,ended_at,seconds,write_token) SELECT ?,?,?,?,?,?,?,? ${manual?'':'WHERE NOT EXISTS(SELECT 1 FROM time_entries WHERE actor_id=? AND ended_at IS NULL)'} RETURNING ${timeColumns}`)
   .bind(id,actor.organization_id,input.projectId,actor.id,manual?now-input.seconds*1000:now,manual?now:null,manual?input.seconds:0,token,...(manual?[]:[actor.id]));
- const row=await commitTimeWrite(db,actor,statement,token,{sourceKind:manual?'MANUAL':'TIMER',description:input.description??'',...(manual&&'workedOn'in input?{workedOn:input.workedOn}:{}),billable:input.billable??true});
+ let row;try{row=await commitTimeWrite(db,actor,statement,token,{sourceKind:manual?'MANUAL':'TIMER',description:input.description??'',...(manual&&'workedOn'in input?{workedOn:input.workedOn}:{}),billable:input.billable??true,requestId,fingerprint});}catch(e){const saved=await replay();if(saved)return json(saved);throw e;}
  if(!row)throw 409;return json(row,201);
 }
 export async function exportRecords(db,actor,json){
