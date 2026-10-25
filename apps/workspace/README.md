@@ -6,6 +6,11 @@ This is the deployable successor to the isolated local foundation proof. It uses
 
 `npm ci`, `npm test`, `npm run build`, `npx playwright install chromium`, `npm run test:browser` from this directory. Build is a dry-run only. `auth.test.mjs` verifies real RSA signatures and claims; `test.mjs` runs the application handler with real local D1 through Miniflare. This is not a hosted identity/MFA login test. Tests inject a signing key into the exported handler factory; the deployed default handler always uses Cloudflare's JWKS. Fixture identities are never configured in the hosted Worker.
 
+For local development, `npm run dev -- --port 8787 --var APP_ORIGIN:http://127.0.0.1:8787`
+keeps the origin check aligned with the local listener. The predev hook generates
+the verified font module on a fresh checkout. This local-only override does not
+change hosted configuration; authentication remains required outside `/health`.
+
 Scope: clients, projects, tasks, plain text project documents, one timer per staff user, manual time and bounded record export. Staff records are organization scoped; clients are limited to own, deliberately shared projects and child records. Project visibility also gates children. All mutations require the same Origin and bounded input; edits require a revision. Lists paginate at 50 records; time shows the active own timer first plus the latest 100 completed own entries (at most 101 records). No destructive delete endpoint. The UI supports create/list/edit, project and task statuses, staff assignments, calendar due dates, contact email/company, task completion and time. Notes are plain text, not a full Notion block editor.
 
 Finance/contract signing are explicitly unavailable in the interface. The next stacked source increment adds private file upload/download, sharing and soft-removal/restoration; it is enabled only when a FILES R2 binding exists. R2 is disabled in the owning account and requires dashboard activation. No public bucket or alternative storage is substituted. Stripe credentials and webhook endpoint acceptance remain outstanding. No customers, invitations, charges or source imports are created by deployment.
