@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 
 // Requests are held explicitly, rather than racing a timeout against navigation.
 export async function hold(page,pattern){
- let release,arrive,done,request;
+ let release,arrive,done,request;const errors=[],pageError=e=>errors.push(e.message);page.on('pageerror',pageError);
  const gate=new Promise(r=>release=r),entered=new Promise(r=>arrive=r),finished=new Promise(r=>done=r);
  await page.route(pattern,async route=>{if(request)return route.fallback();request=route.request();arrive();try{await route.fulfill(await gate);done();}catch(e){done(e);}});
- return {entered,async release(response){release(response);const error=await finished;if(error)throw error;const received=await request.response();assert.ok(received,'held response was delivered');await received.finished();await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));}};
+ return {get entered(){return new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{page.off('pageerror',pageError);reject(Error('Held request did not arrive: '+pattern+' '+JSON.stringify({errors,url:page.url(),closed:page.isClosed()})));},30000);entered.then(()=>{clearTimeout(timeout);resolve();},reject);});},async release(response){release(response);const error=await finished;if(error)throw error;const received=await request.response();assert.ok(received,'held response was delivered');await received.finished();await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));page.off('pageerror',pageError);}};
 }
 const json=data=>({status:200,contentType:'application/json',body:JSON.stringify(data)});
 const failed={status:503,contentType:'application/json',body:JSON.stringify({error:'Synthetic delayed failure'})};

@@ -5,6 +5,7 @@ import { records } from './records.mjs';
 import { commentsRoute } from './comments.mjs';
 import { documentHistory } from './documents.mjs';
 import { timeRoute, exportRecords } from './time.mjs';
+import { timeDetailsRoute, hasFinance } from './time-details.mjs';
 const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','Strict-Transport-Security':'max-age=31536000'};
 export const json=(value,status=200)=>Response.json(value,{status,headers:security});
 export async function readBody(request){
@@ -31,8 +32,10 @@ export function createWorker(resolveKey){return {async fetch(request,env){try{
  const comment=url.pathname.match(/^\/api\/tasks\/([a-zA-Z0-9-]{1,100})\/comments$/);
  if(comment)return await commentsRoute(request,env.DB,actor,comment[1],readBody,json);
  if(url.pathname==='/api/files'||url.pathname.startsWith('/api/files/'))return await filesRoute(request,env,actor,readBody,json);
- if(url.pathname==='/api/me'&&request.method==='GET')return json({role:actor.role,id:actor.id,pilot:true,features:{files:!!env.FILES}});
+ if(url.pathname==='/api/me'&&request.method==='GET')return json({role:actor.role,id:actor.id,pilot:true,features:{files:!!env.FILES,finance:await hasFinance(env.DB,actor)}});
  if(url.pathname==='/api/export'&&request.method==='GET')return await exportRecords(env.DB,actor,json);
+ const timeDetail=url.pathname.match(/^\/api\/time\/details\/([a-zA-Z0-9-]{1,100})(?:\/(approve|reject|history))?$/);
+ if(timeDetail||url.pathname==='/api/time/entries')return await timeDetailsRoute(request,env.DB,actor,timeDetail?.[1],timeDetail?.[2],readBody,json);
  if(url.pathname.startsWith('/api/time')){const result=await timeRoute(request,env.DB,actor,request.method==='POST'?await readBody(request):{},json);if(result)return result;}
  if(url.pathname==='/api/staff'&&request.method==='GET'){if(actor.role!=='staff')throw 403;const r=await env.DB.prepare("SELECT id,id AS name FROM actors WHERE organization_id=? AND active=1 AND role='staff' ORDER BY id LIMIT 50").bind(actor.organization_id).all();return json({items:r.results});}
  const match=url.pathname.match(/^\/api\/(clients|projects|tasks|notes)(?:\/([a-zA-Z0-9-]{1,100}))?$/);

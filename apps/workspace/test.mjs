@@ -151,6 +151,9 @@ test('document tree, archive and literal search preserve scope and atomic histor
  ]);
  const original=await DB.prepare("SELECT * FROM notes WHERE id='legacy-tree'").first();
  const sql=await readFile(new URL('./migrations/0006.sql',import.meta.url),'utf8');await DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));
+ for(const name of (await readdir(new URL('./migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')&&n>'0006.sql').sort()){
+  const later=await readFile(new URL('./migrations/'+name,import.meta.url),'utf8');await DB.batch(later.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));
+ }
  const worker=createWorker(publicKey),env={DB,APP_ORIGIN:origin,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'tree'};
  const call=(path,actor='staff',method='GET',body)=>worker.fetch(new Request(origin+path,{method,headers:{...(actor?{'Cf-Access-Jwt-Assertion':tokens[actor]}:{}),...(body?{'Content-Type':'application/json',Origin:origin}: {})},body:body?JSON.stringify(body):undefined}),env);
  const create=async(title,parentId=null,projectId='p',actor='staff')=>{const r=await call('/api/notes',actor,'POST',{title,text:title+' content',projectId,clientVisible:true,parentId});assert.equal(r.status,201);return r.json();};
