@@ -82,6 +82,7 @@ async function write(db,actor,kind,draftId,action,input){
  record.contentHash=await hash({kind,title:record.title,content:record.content,targets:scope,source});
  const snapshot=JSON.stringify(record);if(snapshot.length>262144)throw 400;
  const guards=[authority,'NOT EXISTS(SELECT 1 FROM commercial_versions WHERE organization_id=? AND request_key=?)'],values=[actor.id,actor.organization_id,actor.organization_id,requestId];
+ if(old&&kind==='PROPOSAL'){guards.push("NOT EXISTS(SELECT 1 FROM proposal_reviews WHERE organization_id=? AND proposal_id=? AND status='OPEN' AND revoked_at IS NULL)");values.push(actor.organization_id,old.id);}
  guards.push('NOT EXISTS(SELECT 1 FROM cancelled_commercial_requests WHERE organization_id=? AND request_key=?)');values.push(actor.organization_id,requestId);
  if(scope.client){guards.push('EXISTS(SELECT 1 FROM clients WHERE id=? AND organization_id=? AND name=? AND revision=?)');values.push(scope.client.id,actor.organization_id,scope.client.name,scope.client.revision);}
  if(scope.project){guards.push('EXISTS(SELECT 1 FROM projects WHERE id=? AND organization_id=? AND client_id=? AND name=? AND revision=?)');values.push(scope.project.id,actor.organization_id,scope.client.id,scope.project.name,scope.project.revision);}
