@@ -48,7 +48,9 @@ async function read(db,actor,kind,draftId){return db.prepare(`${viewer} SELECT s
 async function receipt(db,actor,key,fingerprint){
  const row=await db.prepare(`${viewer} SELECT v.state_json,v.request_fingerprint,d.revision AS currentRevision FROM commercial_versions v JOIN commercial_drafts d ON d.id=v.draft_id AND d.organization_id=v.organization_id WHERE v.organization_id=? AND v.request_key=? AND ${authority}`).bind(actor.id,actor.organization_id,actor.organization_id,key).first();
  if(row&&fingerprint!==undefined&&row.request_fingerprint!==fingerprint)throw 409;
- return row?{state:'SAVED',record:JSON.parse(row.state_json),currentRevision:row.currentRevision}:{state:'UNKNOWN'};
+ if(row)return {state:'SAVED',record:JSON.parse(row.state_json),currentRevision:row.currentRevision};
+ const cancelled=await db.prepare(`${viewer} SELECT actor_id,created_at FROM cancelled_commercial_requests WHERE organization_id=? AND request_key=? AND ${authority}`).bind(actor.id,actor.organization_id,actor.organization_id,key).first();
+ return cancelled?{state:'CANCELLED',cancelledBy:cancelled.actor_id,cancelledAt:cancelled.created_at}:{state:'UNKNOWN'};
 }
 async function targets(db,actor,clientId,projectId){
  if(!clientId)return {client:null,project:null};
@@ -80,6 +82,7 @@ async function write(db,actor,kind,draftId,action,input){
  record.contentHash=await hash({kind,title:record.title,content:record.content,targets:scope,source});
  const snapshot=JSON.stringify(record);if(snapshot.length>262144)throw 400;
  const guards=[authority,'NOT EXISTS(SELECT 1 FROM commercial_versions WHERE organization_id=? AND request_key=?)'],values=[actor.id,actor.organization_id,actor.organization_id,requestId];
+ guards.push('NOT EXISTS(SELECT 1 FROM cancelled_commercial_requests WHERE organization_id=? AND request_key=?)');values.push(actor.organization_id,requestId);
  if(scope.client){guards.push('EXISTS(SELECT 1 FROM clients WHERE id=? AND organization_id=? AND name=? AND revision=?)');values.push(scope.client.id,actor.organization_id,scope.client.name,scope.client.revision);}
  if(scope.project){guards.push('EXISTS(SELECT 1 FROM projects WHERE id=? AND organization_id=? AND client_id=? AND name=? AND revision=?)');values.push(scope.project.id,actor.organization_id,scope.client.id,scope.project.name,scope.project.revision);}
  if(!old)for(const ref of Object.values(source)){guards.push("EXISTS(SELECT 1 FROM commercial_drafts WHERE id=? AND organization_id=? AND revision=? AND content_hash=? AND status='DRAFT')");values.push(ref.id,actor.organization_id,ref.revision,ref.contentHash);}
@@ -93,13 +96,17 @@ async function write(db,actor,kind,draftId,action,input){
 }
 
 function summary(record){return {id:record.id,kind:record.kind,title:record.title,status:record.status,revision:record.revision,clientId:record.clientId,projectId:record.projectId,updatedAt:record.updatedAt,...(record.kind==='PROPOSAL'?{currency:record.content.currency,totalMinor:record.content.totals.totalMinor}:{})};}
-export function commercialExportStatement(db,actor,table){const columns=table==='commercial_drafts'?'id,organization_id,kind,client_id,project_id,title,status,revision,content_hash,snapshot_json,created_at,updated_at':'id,draft_id,organization_id,actor_id,recorded_at,revision,action,reason,state_json';return db.prepare(`${viewer} SELECT ${columns} FROM ${table} WHERE organization_id=? AND ${authority} ORDER BY id LIMIT 1001`).bind(actor.id,actor.organization_id,actor.organization_id);}
+export function commercialExportStatement(db,actor,table){const columns=table==='commercial_drafts'?'id,organization_id,kind,client_id,project_id,title,status,revision,content_hash,snapshot_json,created_at,updated_at':table==='cancelled_commercial_requests'?'id,organization_id,request_key,actor_id,created_at':'id,draft_id,organization_id,actor_id,recorded_at,revision,action,reason,state_json';return db.prepare(`${viewer} SELECT ${columns} FROM ${table} WHERE organization_id=? AND ${authority} ORDER BY id LIMIT 1001`).bind(actor.id,actor.organization_id,actor.organization_id);}
 
 export async function commercialRoute(request,db,actor,readBody,json){
  if(!await hasFinance(db,actor))throw 403;
  const url=new URL(request.url),path=url.pathname;
- const key=path.match(/^\/api\/commercial\/requests\/([^/]+)$/);
- if(key){if(request.method!=='GET')throw 405;if(url.search||!uuid(key[1]))throw 400;const result=await receipt(db,actor,key[1].toLowerCase());if(!await hasFinance(db,actor))throw 403;return json(result);}
+ const key=path.match(/^\/api\/commercial\/requests\/([^/]+)(\/cancel)?$/);
+ if(key){
+  if(request.method!==(key[2]?'POST':'GET'))throw 405;if(url.search||!uuid(key[1]))throw 400;
+  if(key[2]){strict(await readBody(request),[]);await db.prepare(`${viewer} INSERT INTO cancelled_commercial_requests(id,organization_id,request_key,actor_id,created_at) SELECT ?,?,?,?,? WHERE ${authority} AND NOT EXISTS(SELECT 1 FROM commercial_versions WHERE organization_id=? AND request_key=?) ON CONFLICT(organization_id,request_key) DO NOTHING RETURNING id`).bind(actor.id,actor.organization_id,crypto.randomUUID(),actor.organization_id,key[1].toLowerCase(),actor.id,Date.now(),actor.organization_id,key[1].toLowerCase()).all();}
+  const result=await receipt(db,actor,key[1].toLowerCase());if(!await hasFinance(db,actor))throw 403;return json(result);
+ }
  const match=path.match(/^\/api\/commercial\/(proposals|templates|contracts)(?:\/([a-zA-Z0-9-]{1,100})(?:\/(history|archive|reopen)(?:\/(\d{1,16}))?)?)?$/);if(!match)throw 404;
  const kind=kinds[match[1]],draftId=match[2],operation=match[3],version=match[4];
  if(version!==undefined&&operation!=='history')throw 404;

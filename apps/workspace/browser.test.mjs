@@ -15,6 +15,7 @@ import {runDocumentTreeTests} from './browser-document-tree.mjs';
 import {runTimerTests} from './browser-timer.mjs';
 import {runTimeReviewTests} from './browser-time-review.mjs';
 import {runFinanceTests} from './browser-finance.mjs';
+import {runCommercialTests} from './browser-commercial.mjs';
 const base=fileURLToPath(new URL('.',import.meta.url));
 const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'qa'},r2Buckets:['FILES'],cf:false});
 const DB=await mf.getD1Database('DB'),FILES=await mf.getR2Bucket('FILES');
@@ -53,4 +54,5 @@ await runDocumentTreeTests({browser,origin,DB,axe});
 await runTimerTests({browser,origin,DB,axe,addActor});
 await runTimeReviewTests({browser,origin,DB,axe,addActor});
 await runFinanceTests({browser,origin,DB,axe,addActor});
+await runCommercialTests({browser,origin,DB,axe,addActor});
 }finally{await browser.close();await new Promise(r=>server.close(r));await mf.dispose();}
