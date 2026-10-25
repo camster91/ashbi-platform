@@ -15,7 +15,7 @@ const currencies=new Set(['CAD','USD','EUR','GBP']);
 export function validWorkedOn(value){if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const date=new Date(value+'T12:00:00Z');return !Number.isNaN(date.getTime())&&date.toISOString().slice(0,10)===value;}
 export function todayWorkedOn(){const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Toronto',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(Date.now())).map(p=>[p.type,p.value]));return parts.year+'-'+parts.month+'-'+parts.day;}
 export async function hasFinance(db,actor){if(actor.role!=='staff')return false;return Boolean((await db.prepare(viewer+' SELECT finance FROM viewer').bind(actor.id,actor.organization_id).first())?.finance);}
-export function publicTime(row){if(!row)return row;const result={...row};delete result.viewer_finance;if(!row.viewer_finance)for(const key of money)delete result[key];if('invoiced'in result)result.invoiced=Boolean(result.invoiced);return result;}
+export function publicTime(row){if(!row)return row;const result={...row};delete result.viewer_finance;if(!row.viewer_finance)for(const key of [...money,'billing_invoice_id'])delete result[key];if(result.billing_invoice_id===null)delete result.billing_invoice_id;if('invoiced'in result)result.invoiced=Boolean(result.invoiced);return result;}
 async function readDetail(db,actor,id){return db.prepare(`${viewer} SELECT ${readColumns} ${readFrom} WHERE ${visible} AND d.id=?`).bind(actor.id,actor.organization_id,actor.organization_id,id).first();}
 function audit(db,actor,token,action){return db.prepare(`INSERT INTO time_detail_events(id,time_id,organization_id,project_id,owner_actor_id,actor_id,recorded_at,action,${fields.join(',')},${money.join(',')},started_at,ended_at,seconds)
  SELECT d.audit_token,d.id,d.organization_id,d.project_id,d.actor_id,?,?,?,${metadata('d')},${money.map(c=>'d.'+c).join(',')},t.started_at,t.ended_at,t.seconds
@@ -45,11 +45,15 @@ export async function timePeople(request,db,actor,json){
 }
 
 export function timeExportStatement(db,actor,table){
- const events=table==='time_detail_events',identity=events?'id,time_id,organization_id,project_id,owner_actor_id,actor_id,recorded_at,action,started_at,ended_at,seconds':'id,organization_id,project_id,actor_id';
- return db.prepare(`${viewer} SELECT ${identity.split(',').map(c=>'d.'+c).join(',')},${metadata('d')},${financial('d')},v.finance AS viewer_finance
+ const events=['time_detail_events','time_billing_events'].includes(table),identity=events?'id,time_id,organization_id,project_id,owner_actor_id,actor_id,recorded_at,action,started_at,ended_at,seconds':'id,organization_id,project_id,actor_id';
+ return db.prepare(`${viewer} SELECT ${identity.split(',').map(c=>'d.'+c).join(',')},${metadata('d')},${financial('d')},v.finance AS viewer_finance ${table==='time_billing_events'?',CASE WHEN v.finance THEN d.invoice_id ELSE NULL END AS billing_invoice_id':''}
  FROM ${table} d CROSS JOIN viewer v WHERE d.organization_id=? AND (d.${events?'owner_actor_id':'actor_id'}=v.id OR v.finance) ORDER BY d.id LIMIT 1001`)
  .bind(actor.id,actor.organization_id,actor.organization_id);
 }
+export function timeBillingAudit(db,actor,prefix,invoiceId,action){return db.prepare(`INSERT INTO time_billing_events(id,time_id,organization_id,project_id,owner_actor_id,actor_id,recorded_at,action,${fields.join(',')},${money.join(',')},started_at,ended_at,seconds,invoice_id)
+ SELECT d.audit_token,d.id,d.organization_id,d.project_id,d.actor_id,?,?,?,${metadata('d')},${money.map(c=>'d.'+c).join(',')},t.started_at,t.ended_at,t.seconds,?
+ FROM time_details d JOIN time_entries t ON t.id=d.id AND t.organization_id=d.organization_id WHERE d.audit_token=?||d.id AND d.organization_id=? RETURNING id`)
+ .bind(actor.id,Date.now(),action,invoiceId,prefix,actor.organization_id);}
 function query(url,allowed){const seen=new Set();for(const key of url.searchParams.keys()){if(!allowed.includes(key)||seen.has(key))throw 400;seen.add(key);}}
 function revision(input){if(!Number.isSafeInteger(input.revision)||input.revision<0||input.revision>=Number.MAX_SAFE_INTEGER)throw 400;}
 function text(value,max,empty=true){return typeof value==='string'&&value.length<=max&&!value.includes('\0')&&(empty||value.trim().length>0);}
@@ -83,9 +87,10 @@ export async function timeDetailsRoute(request,db,actor,id,action,readBody,json)
  if(action==='history'){
   if(request.method!=='GET')throw 405;if(!await readDetail(db,actor,id))throw 404;
   const before=url.searchParams.get('before');if(before!==null&&(!/^\d{1,16}$/.test(before)||!Number.isSafeInteger(Number(before))))throw 400;
-  const rows=(await db.prepare(`${viewer} SELECT d.id,d.time_id,d.organization_id,d.project_id,d.owner_actor_id,d.actor_id,d.recorded_at,d.action,d.started_at,d.ended_at,d.seconds,${metadata('d')},${financial('d')},v.finance AS viewer_finance
-   FROM time_detail_events d CROSS JOIN viewer v WHERE d.organization_id=? AND d.time_id=? AND (d.owner_actor_id=v.id OR v.finance) ${before!==null?'AND d.revision<?':''} ORDER BY d.revision DESC LIMIT 51`)
-   .bind(actor.id,actor.organization_id,actor.organization_id,id,...(before!==null?[Number(before)]:[])).all()).results;
+  const eventColumns=['id','time_id','organization_id','project_id','owner_actor_id','actor_id','recorded_at','action','started_at','ended_at','seconds',...fields,...money].join(',');
+  const rows=(await db.prepare(`${viewer} SELECT d.id,d.time_id,d.organization_id,d.project_id,d.owner_actor_id,d.actor_id,d.recorded_at,d.action,d.started_at,d.ended_at,d.seconds,${metadata('d')},${financial('d')},v.finance AS viewer_finance,CASE WHEN v.finance THEN d.billing_invoice_id ELSE NULL END AS billing_invoice_id
+   FROM (SELECT ${eventColumns},NULL AS billing_invoice_id FROM time_detail_events WHERE organization_id=? AND time_id=? UNION ALL SELECT ${eventColumns},invoice_id AS billing_invoice_id FROM time_billing_events WHERE organization_id=? AND time_id=?) d CROSS JOIN viewer v WHERE d.organization_id=? AND d.time_id=? AND (d.owner_actor_id=v.id OR v.finance) ${before!==null?'AND d.revision<?':''} ORDER BY d.revision DESC LIMIT 51`)
+   .bind(actor.id,actor.organization_id,actor.organization_id,id,actor.organization_id,id,actor.organization_id,id,...(before!==null?[Number(before)]:[])).all()).results;
   const items=rows.slice(0,50).map(publicTime);return json({items,nextCursor:rows.length>50?String(items.at(-1).revision):null});
  }
  if(!action&&request.method==='GET'){const row=await readDetail(db,actor,id);if(!row)throw 404;return json(publicTime(row));}

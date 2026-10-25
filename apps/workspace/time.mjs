@@ -1,4 +1,5 @@
-import {timeColumns,commitTimeWrite,timeExportStatement,publicTime,validWorkedOn} from './time-details.mjs';
+import {timeColumns,commitTimeWrite,timeExportStatement,publicTime,validWorkedOn,hasFinance} from './time-details.mjs';
+import {invoiceExportStatement} from './invoices.mjs';
 export async function timeRoute(request,db,actor,input,json){
  const path=new URL(request.url).pathname;
  if(!path.startsWith('/api/time')&&!path.startsWith('/api/timer/'))return null;
@@ -48,8 +49,8 @@ export async function timeRoute(request,db,actor,input,json){
 }
 export async function exportRecords(db,actor,json){
  if(actor.role!=='staff')throw 403;
- const names=['clients','projects','tasks','notes','time_entries','task_comments','note_versions','note_positions','time_details','time_detail_events'];
- const results=await db.batch(names.map(name=>['time_details','time_detail_events'].includes(name)?timeExportStatement(db,actor,name):db.prepare(`SELECT ${name==='time_entries'?timeColumns:'*'} FROM ${name} WHERE organization_id=? ORDER BY id LIMIT 1001`).bind(actor.organization_id)));
+ const names=['clients','projects','tasks','notes','time_entries','task_comments','note_versions','note_positions','time_details','time_detail_events','time_billing_events',...(await hasFinance(db,actor)?['invoice_drafts','invoice_events']:[])];
+ const results=await db.batch(names.map(name=>['time_details','time_detail_events','time_billing_events'].includes(name)?timeExportStatement(db,actor,name):['invoice_drafts','invoice_events'].includes(name)?invoiceExportStatement(db,actor,name):db.prepare(`SELECT ${name==='time_entries'?timeColumns:'*'} FROM ${name} WHERE organization_id=? ORDER BY id LIMIT 1001`).bind(actor.organization_id)));
  if(results.some(r=>r.results.length>1000))return json({error:'Export exceeds pilot limit; use the administrator backup procedure'},409);
- return json({version:1,createdAt:new Date().toISOString(),tables:Object.fromEntries(names.map((n,i)=>[n,['time_details','time_detail_events'].includes(n)?results[i].results.map(publicTime):results[i].results]))});
+ return json({version:1,createdAt:new Date().toISOString(),tables:Object.fromEntries(names.map((n,i)=>[n,['time_details','time_detail_events','time_billing_events'].includes(n)?results[i].results.map(publicTime):results[i].results]))});
 }
