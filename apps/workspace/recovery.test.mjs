@@ -28,6 +28,9 @@ test('native local D1 SQL export restores exact schema and literal data into sep
 });
 
 import {seedRecoveryWorkspace} from './recovery-fixture.mjs';
+import {makePilotFixture} from './pilot-source-fixture.mjs';
+import {reconcilePilot} from './pilot-reconcile.mjs';
+import {applySourcePilot,readSourcePilot,readSourceObject} from './source-pilot.mjs';
 const {createWorker}=await import(process.env.WORKSPACE_TEST_BUILT_WORKER?'./dist/worker.js':'./worker.mjs');
 
 test('complete native D1 and private R2 recovery retains the joined workspace, evidence and external idempotency',async t=>{
@@ -65,7 +68,7 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  await writeFile(keyFile,JSON.stringify({active:'journey',keys:fixture.keyRing}),{mode:0o600});
  const {image,objects}=JSON.parse(await readFile(checkpoint,'utf8'));
  for(const key of Object.values(fixture.keyRing))assert.equal((await readFile(checkpoint,'utf8')).includes(key),false);
- assert.equal(Object.keys(image.tables).length,42);assert.equal(image.schema.filter(s=>s.type==='index').length,35);assert.equal(objects.length,6);
+ assert.equal(Object.keys(image.tables).length,45);assert.equal(image.schema.filter(s=>s.type==='index').length,35);assert.equal(objects.length,6);
  const sql=await exportDatabase(source);
  // External Stripe state is deliberately NOT restored with our D1/R2 image.
  const externalFinalize=provider.requests.findLast(p=>p.method==='POST'&&p.path==='/v1/invoices/'+externallyFinished.creation.stripeInvoiceId+'/finalize');
@@ -78,7 +81,7 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  const DB=target.env.DB,FILES=target.env.FILES;
  const verify=async()=>assert.deepEqual(await databaseImage(DB),image,'all schema and exact table images must match trusted checkpoint');
  const putRow=async(table,row)=>{const cols=Object.keys(row);await DB.prepare('INSERT INTO "'+table+'"('+cols.map(c=>'"'+c+'"').join(',')+') VALUES('+cols.map(()=>'?').join(',')+')').bind(...cols.map(c=>row[c])).run();};
- await t.test('all 42 tables and 35 indexes match before any restored application use',verify);
+ await t.test('all 45 tables and 35 indexes match before any restored application use',verify);
  await t.test('all paginated objects including orphans, empty data and private metadata match',()=>verifyObjects(FILES,objects));
  await t.test('own client reads exact original file and immutable signed JSON/PDF bytes',async()=>{
   for(const path of e.clientPaths)assert.equal((await restored(path,undefined,'client')).status,200,path);
@@ -146,4 +149,39 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
   const original=provider.requests.findLast(p=>p.method==='POST'&&p.path==='/v1/invoices/'+retryable.creation.stripeInvoiceId+'/finalize'),before=posts().length,result=await data(await restored(retryable.path+'/retry',{}));assert.equal(result.state,'DONE');assert.equal(posts().length,before+1);assert.equal(posts().at(-1).key,original.key);assert.equal((await DB.prepare('SELECT attempt_at FROM stripe_invoice_issuance_operations WHERE id=?').bind(retryable.row.id).first()).attempt_at,retryable.row.attempt_at);
  });
  await t.test('target fault injection and subsequent writes leave the source checkpoint unchanged',async()=>{await source.open();try{assert.deepEqual(await databaseImage(source.env.DB),image);await verifyObjects(source.env.FILES,objects);}finally{await source.dispose();}});
+});
+
+test('native isolated recovery preserves an ingested source package, original bytes and current archive permissions',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'ashbi-source-recovery-')),source=await localStore(join(root,'source'));t.after(()=>source.dispose());
+ for(const name of(await readdir(new URL('./migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort())await source.env.DB.batch((await readFile(new URL('./migrations/'+name,import.meta.url),'utf8')).split(';').map(s=>s.trim()).filter(Boolean).map(s=>source.env.DB.prepare(s)));
+ const fixture=await makePilotFixture(root),report=await reconcilePilot(fixture.root,fixture.mapping),actor={id:'cameron',organization_id:'pilot-org',role:'staff'};
+ const DB=source.env.DB;
+ for(const id of['cameron','bianca','ordinary'])await DB.prepare("INSERT INTO actors VALUES(?,?,?,'staff',NULL,1)").bind(id,id+'@example.invalid','pilot-org').run();
+ await DB.prepare("INSERT INTO actor_finance_access VALUES('cameron','pilot-org')").run();
+ await DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('canonical-client','pilot-org','Fixture Co')").run();
+ await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name) VALUES('canonical-project','pilot-org','canonical-client','Site')").run();
+ const objects=[];for(const[source,pins]of Object.entries(report.sourceFiles))for(const pin of pins)objects.push({source,path:pin.path,bytes:new Uint8Array(await readFile(join(fixture.root,source,pin.path)))});
+ const input={requestId:crypto.randomUUID(),report,objects,snapshot:{clientRevision:0,projectRevision:0}},receipt=await applySourcePilot(source.env,actor,input),before=await readSourcePilot(source.env,actor,receipt.id),image=await databaseImage(DB),objectImage=await captureObjects(source.env.FILES);
+ assert.equal(Object.keys(image.tables).length,45);assert.equal(image.schema.filter(s=>s.type==='index').length,35);
+ assert.equal(image.tables.source_pilot_records.length,19);assert.equal(image.tables.source_pilot_objects.length,objects.length);
+ const target=await importDatabase(join(root,'restored'),await exportDatabase(source));t.after(()=>target.dispose());await restoreObjects(target.env.FILES,objectImage);
+ assert.deepEqual(await databaseImage(target.env.DB),image);assert.deepEqual(await readSourcePilot(target.env,actor,receipt.id),before);
+ for(const object of objects)assert.deepEqual(await readSourceObject(target.env,actor,receipt.id,object.source,object.path),object.bytes);
+ assert.deepEqual(await applySourcePilot(target.env,actor,input),receipt);
+ const verify=async()=>assert.deepEqual(await databaseImage(target.env.DB),image);
+ await t.test('missing held provenance is rejected by full recovery and receipt reads',async()=>{
+  const row=image.tables.source_pilot_records.find(r=>JSON.stringify(r).includes('held-notion-database'));assert.ok(row);
+  await target.env.DB.prepare('DELETE FROM source_pilot_records WHERE run_id=? AND source_key=?').bind(row.run_id,row.source_key).run();
+  try{await assert.rejects(verify);await assert.rejects(()=>readSourcePilot(target.env,actor,receipt.id),e=>e===503);}finally{const cols=Object.keys(row);await target.env.DB.prepare('INSERT INTO source_pilot_records('+cols.join(',')+') VALUES('+cols.map(()=>'?').join(',')+')').bind(...cols.map(c=>row[c])).run();}
+ });
+ await t.test('restored originals are verified and not silently repaired',async()=>{
+  const object=objectImage[0];await target.env.FILES.put(object.key,'changed');
+  try{const pin=image.tables.source_pilot_objects.find(o=>o.object_key===object.key);assert.ok(pin);await assert.rejects(()=>verifyObjects(target.env.FILES,objectImage));await assert.rejects(()=>readSourceObject(target.env,actor,receipt.id,pin.source,pin.path),e=>e===503);}finally{await restoreObjects(target.env.FILES,objectImage);}
+ });
+ await t.test('current grants and project identity still govern restored archives',async()=>{
+  await assert.rejects(()=>readSourcePilot(target.env,{...actor,id:'ordinary'},receipt.id),e=>e===403);
+  await target.env.DB.prepare("DELETE FROM actor_finance_access WHERE id='cameron'").run();try{await assert.rejects(()=>readSourcePilot(target.env,actor,receipt.id),e=>e===403);}finally{await target.env.DB.prepare("INSERT INTO actor_finance_access VALUES('cameron','pilot-org')").run();}
+  await target.env.DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('replacement','pilot-org','Other')").run();await target.env.DB.prepare("UPDATE projects SET client_id='replacement' WHERE id='canonical-project'").run();try{await assert.rejects(()=>readSourcePilot(target.env,actor,receipt.id),e=>e===404);}finally{await target.env.DB.prepare("UPDATE projects SET client_id='canonical-client' WHERE id='canonical-project'").run();await target.env.DB.prepare("DELETE FROM clients WHERE id='replacement'").run();}
+  await verify();await verifyObjects(target.env.FILES,objectImage);
+ });
 });

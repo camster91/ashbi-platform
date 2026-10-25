@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "pretest": "node build-contract-fonts.mjs",
-    "test": "node --test auth.test.mjs test.mjs files.test.mjs time-details.test.mjs invoice-drafts.test.mjs invoice-recovery.test.mjs commercial.test.mjs proposal-reviews.test.mjs stripe-drafts.test.mjs stripe-org.test.mjs stripe-recovery.test.mjs stripe-lifecycle.test.mjs dashboard.test.mjs dashboard-reviews.test.mjs dashboard-invoices.test.mjs contract-publications.test.mjs contract-signatures.test.mjs contract-pdf.test.mjs stripe-issuance.test.mjs workspace-journey.test.mjs browser-groups.test.mjs pilot-source-formats.test.mjs pilot-reconcile.test.mjs",
+    "test": "node --test auth.test.mjs test.mjs files.test.mjs time-details.test.mjs invoice-drafts.test.mjs invoice-recovery.test.mjs commercial.test.mjs proposal-reviews.test.mjs stripe-drafts.test.mjs stripe-org.test.mjs stripe-recovery.test.mjs stripe-lifecycle.test.mjs dashboard.test.mjs dashboard-reviews.test.mjs dashboard-invoices.test.mjs contract-publications.test.mjs contract-signatures.test.mjs contract-pdf.test.mjs stripe-issuance.test.mjs workspace-journey.test.mjs browser-groups.test.mjs pilot-source-formats.test.mjs pilot-reconcile.test.mjs source-pilot.test.mjs",
     "prebuild": "node build-contract-fonts.mjs",
     "build": "wrangler deploy --dry-run --outdir dist",
     "predev": "node build-contract-fonts.mjs",
@@ -17,7 +17,8 @@
     "test:recovery": "node --test recovery.test.mjs",
     "pretest:recovery-built": "node build-contract-fonts.mjs",
     "test:recovery-built": "node --test recovery-built.test.mjs",
-    "test:pilot": "node --test pilot-source-formats.test.mjs pilot-reconcile.test.mjs"
+    "test:pilot": "node --test pilot-source-formats.test.mjs pilot-reconcile.test.mjs",
+    "test:source-pilot": "node --test source-pilot.test.mjs"
   },
   "dependencies": {
     "bidi-js": "1.1.0",
