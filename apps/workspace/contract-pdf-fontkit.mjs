@@ -1,0 +1,2 @@
+import*as modern from'fontkit';
+export default {create(bytes){const font=modern.create(bytes),createSubset=font.createSubset.bind(font);font.createSubset=()=>{const subset=createSubset();subset.encodeStream=()=>{const callbacks={},stream={on(event,callback){callbacks[event]=callback;return stream;}};queueMicrotask(()=>{try{callbacks.data?.(subset.encode());callbacks.end?.();}catch(error){callbacks.error?.(error);}});return stream;};return subset;};return font;}};

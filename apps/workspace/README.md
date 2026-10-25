@@ -352,7 +352,7 @@ Authenticated clients use `GET /api/portal/contracts` and `/:id` for their own P
 
 Finance-only exports retain publication images, private audit events and cancellation records without transient request keys/fingerprints or write tokens. Export now also rechecks current active staff identity and retained finance access after its batch, preventing an already-selected financial response from escaping after revocation.
 
-This API foundation is tested with signed synthetic identities and disposable local D1. It makes no real client publication, grant, invitation, deployment or provider request. The typed-signature API and Contracts workspace below build on this foundation. Final signed PDF generation remains subsequent source work. #380 still owns business/legal approval of consent, signer authority, evidence, retention, backup and representative signed-document acceptance. Proposal approval is not contract signing. Existing private preparation and the retained legacy signing workflow remain available until replacements are verified. PR #684 remains open; Coolify unchanged.
+This API foundation is tested with signed synthetic identities and disposable local D1. It makes no real client publication, grant, invitation, deployment or provider request. The typed-signature API and Contracts workspace below build on this foundation. The immutable signed PDF source below extends this foundation. #380 still owns business/legal approval of consent, signer authority, evidence, retention, backup and representative signed-document acceptance. Proposal approval is not contract signing. Existing private preparation and the retained legacy signing workflow remain available until replacements are verified. PR #684 remains open; Coolify unchanged.
 
 ## Typed contract signature and evidence API (#286, #380)
 
@@ -362,17 +362,67 @@ Authenticated clients read `GET /api/portal/contracts/:id/signing` and submit to
 
 Evidence retains authenticated attribution, typed representation, exact contract snapshot/source hash, versioned consent/authority/privacy wording, server timestamp, bounded observed IP/user agent, hashes and HMAC with an explicit key ID. `CONTRACT_EVIDENCE_KEYS` is a secret JSON map from key ID to a 32-byte base64url key; `CONTRACT_EVIDENCE_KEY_ID` selects the active key. Historical verification keys must remain available through rotation. Keys are never returned by APIs or committed in configuration. These fields record evidence; they do not establish that a participant has legal authority to bind a client.
 
-Before the D1 signed transaction, the Worker stages canonical evidence JSON in private R2 and verifies stored size and bytes. A failed upload or verification cannot create signed state. A lost response is recovered through actor-scoped `/api/portal/contracts/:id/requests/:key`, with `/cancel` fencing stopped requests. Lost races or database failures can leave private objects that have no committed record; no automatic deletion or completion claim follows. Administrators must account for those staged orphans in the separately approved retention/backup procedure.
+Before the D1 signed transaction, the Worker stages and verifies the frozen PDF, seals its digest into canonical evidence JSON, and stages and verifies that JSON in private R2. A failed upload or verification cannot create signed state. A lost response is recovered through actor-scoped `/api/portal/contracts/:id/requests/:key`, with `/cancel` fencing stopped requests. Lost races or database failures can leave private objects that have no committed record; no automatic deletion or completion claim follows. Administrators must account for those staged orphans in the separately approved retention/backup procedure.
 
 Financial staff and authorized clients read `/:id/signature` and download `/:id/signed-document` beneath their respective publication/portal prefixes. Detail and delivery verify actual R2 bytes, size, hashes, HMAC, immutable D1 bindings and SIGN journal; current actor/project access is checked again after storage I/O. Missing or corrupt objects, keys or evidence fail explicitly. Signed-list metadata uses bounded batch queries and cryptographic checks, with `documentVerification: NOT_CHECKED`; list results do not claim that R2 bytes were retrieved or available. The filtered authorized page is read again before returning metadata, so concurrent signing or revoked sharing cannot escape under an obsolete filter or scope.
 
-The downloadable signed JSON is an evidence artifact, not a generated PDF. Final signed PDF generation, drawn signatures if retained in the replacement, production-like recovery and representative human acceptance remain further work. Existing legacy signing/PDF capabilities are preserved. Finance-only export includes signature evidence and history with transient request fields redacted; this is not a complete database/R2/key backup or restore proof. #380 remains open for approved consent, signer-authority policy, legal/evidence sufficiency, privacy, storage/retention/backup rules and representative acceptance. No real signature, publication, grant, invitation, deployment, remote migration, provider action or cutover is performed here. PR #684 remains open; Coolify unchanged.
+The downloadable signed JSON remains a separate evidence artifact. The PDF workflow below preserves its response and receipt shape. Drawn signatures if retained in the replacement, production-like recovery and representative human acceptance remain further work. Existing legacy signing/PDF capabilities are preserved. Finance-only export includes signature evidence and history with transient request fields redacted; this is not a complete database/R2/key backup or restore proof. #380 remains open for approved consent, signer-authority policy, legal/evidence sufficiency, privacy, storage/retention/backup rules and representative acceptance. No real signature, publication, grant, invitation, deployment, remote migration, provider action or cutover is performed here. PR #684 remains open; Coolify unchanged.
 
 ## Contracts workspace (#286, #380)
 
 The Contracts page (`#contracts`) connects private contract preparation to frozen publication and client signing. Financial staff open publishing from the retained private editor, choose a prepared draft, review its exact content and private reason, then explicitly share it. Staff can inspect publication history and explicitly withdraw unsigned versions. Clients see their currently authorized shared contracts, read the frozen contract and consent terms, type matching names, acknowledge consent and authority separately, and confirm a reviewed signature. No acknowledgement is preselected. A signed record can be downloaded through the verified delivery endpoint.
 
 Financial staff can read signing availability and frozen policy through `GET /api/contract-publications/:id/signing`; they cannot sign for a client. Missing policy or evidence configuration produces an unavailable state. Browser recovery retains only actor-scoped opaque request/publication IDs, with explicit receipt checks and stopped-attempt fencing. The existing private preparation workflow and all retained test suites remain included. `browser-contracts.mjs` covers the private-editor-to-client-signing journey, exact downloaded evidence bytes, lost and early responses, stopped requests, current scope loss, stale operations, duplicate publication, pagination, keyboard focus, responsive overflow and axe. Hosted configuration/recovery checks and human acceptance remain required before replacing the retained signing workflow. No production policy, key, remote migration or deployment is included.
+
+## Immutable signed PDF source (#286, #380)
+
+Migration `0019.sql` adds separately authenticated PDF manifests and CREATE journals.
+New signatures render the exact frozen contract, signer, consent and verification
+references into a multipage PDF. Literal markup stays literal text. Licensed,
+checksum-pinned fonts and request-local shaping/subsets preserve the tested Latin,
+Greek, Cyrillic, Arabic, Hebrew, CJK, Korean and emoji specimens. Unsupported
+graphemes or layout bounds fail explicitly; there is no silent missing-glyph
+substitution or claim of complete Unicode coverage. Complex-script text extraction
+varies between readers and still requires representative document acceptance.
+
+Both artifacts are staged with actual R2 size/byte/hash checks before one D1
+transaction commits the signature, SIGN journal, PDF manifest and PDF journal.
+The final write fence requires both journals. The PDF uses a pre-seal input hash;
+its own digest is sealed into the JSON evidence, avoiding circular hashes. The
+PDF manifest has a domain-separated HMAC and binds tenant/publication/signature,
+source/content/policy/evidence/JSON hashes, PDF digest/size, renderer/font versions
+and separate generated timestamp. Existing JSON responses and actor-scoped
+receipts keep their shape. Old JSON-only signatures remain valid; GET never
+manufactures a PDF or silently downgrades a new missing PDF to a legacy record.
+
+`GET /:id/pdf` beneath staff publication and portal contract prefixes returns
+verified AVAILABLE metadata or legacy UNAVAILABLE. `GET /:id/signed-pdf` returns
+an authorized private PDF attachment with no-store, nosniff and sandbox headers.
+Delivery checks original JSON evidence/SIGN journal, the PDF manifest/journal and
+actual object bytes, then current records and authority after storage I/O.
+Finance export adds manifests/journals without private object keys, MACs or
+transient request fields. List metadata still performs no per-row R2 reads.
+The Contracts dialog adds a distinct verified PDF action beside the retained JSON
+action, with explicit unavailable/error recovery and route/dialog/attempt fences
+for bytes, loading, errors and focus.
+
+The build verifies font/license checksums and generates an ignored standard ESM
+asset module. Gzip packaging and bounded native decompression reduce source size
+without changing the licensed font bytes. Source and compiled API tests cover
+real PDF parsing, immutability, legacy compatibility, faults, races and current
+scope; built browser tests cover actual downloads, keyboard and stale effects.
+Local native workerd probes retain complete 20,000-character Latin/CJK records
+and separate concurrent renders. These probes do not establish peak memory,
+hosted startup/CPU compliance or Free-plan suitability. Review the target plan
+and runtime limits before any hosted activation.
+
+Activation requires an approved migration/deployment and a fence against older
+signing writers, which can create JSON-only records. Rollback must preserve
+existing artifacts and isolate incompatible writers. No hosted migration,
+policy/key configuration, real signature, publication or deployment is included.
+Legacy signing/PDF/drawn-signature capabilities remain available. #380 consent,
+authority, privacy/evidence, retention/backup/restore and human acceptance gates
+remain open; PR #684 stays open and Coolify unchanged.
 
 ## Daily Overview workflow (#461)
 

@@ -1,4 +1,6 @@
 import {readContractPublication,assertContractAuthority} from './contract-publications.mjs';
+import {readContractPdf,stageContractPdf,contractPdfStatements} from './contract-pdfs.mjs';
+import {renderContractPdf} from './contract-pdf-renderer.mjs';
 
 const encoder=new TextEncoder(),hex=bytes=>Array.from(new Uint8Array(bytes),n=>n.toString(16).padStart(2,'0')).join('');
 const canonical=value=>JSON.stringify(value);
@@ -26,6 +28,7 @@ function keyBytes(env,keyId){
  const encoded=keys[keyId];if(!encoded)throw 503;let bytes;try{bytes=Uint8Array.from(atob(encoded.replace(/-/g,'+').replace(/_/g,'/')+'='),c=>c.charCodeAt(0));}catch{throw 503;}if(bytes.length!==32)throw 503;return bytes;
 }
 async function hmac(env,keyId,value){const key=await crypto.subtle.importKey('raw',keyBytes(env,keyId),{name:'HMAC',hash:'SHA-256'},false,['sign']);return hex(await crypto.subtle.sign('HMAC',key,encoder.encode(value)));}
+async function verifyHmac(env,keyId,value,seal){const key=await crypto.subtle.importKey('raw',keyBytes(env,keyId),{name:'HMAC',hash:'SHA-256'},false,['verify']);return crypto.subtle.verify('HMAC',key,Uint8Array.from(seal.match(/../g),pair=>parseInt(pair,16)),encoder.encode(value));}
 function storage(env){if(!env.FILES||!['get','put','head'].every(k=>typeof env.FILES[k]==='function'))throw 503;}
 function activeKey(env){storage(env);if(!id(env.CONTRACT_EVIDENCE_KEY_ID))throw 503;keyBytes(env,env.CONTRACT_EVIDENCE_KEY_ID);return env.CONTRACT_EVIDENCE_KEY_ID;}
 async function bytesFor(env,row){
@@ -54,7 +57,7 @@ async function verified(env,actor,row,client){
  let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{throw 503;}if(text!==metadata.document)throw 503;
  publication=await readContractPublication(env.DB,actor,row.publication_id,client);if(publication.revision!==row.source_revision+1||publication.content_hash!==row.content_hash||publication.status!=='PENDING')throw 503;
  const result=metadata.result;
- return {result,bytes,publication};
+ return {result,bytes,publication,event};
 }
 export async function decorateSignature(env,actor,row,client){
  const signature=await env.DB.prepare('SELECT * FROM contract_signatures WHERE publication_id=? AND organization_id=?').bind(row.id,actor.organization_id).first();
@@ -95,7 +98,9 @@ async function sign(request,env,actor,publicationId,body){
  if(await env.DB.prepare('SELECT id FROM contract_signatures WHERE publication_id=? AND organization_id=?').bind(publicationId,actor.organization_id).first())throw 409;
  const signer=await env.DB.prepare("SELECT id,email FROM actors WHERE id=? AND organization_id=? AND active=1 AND role='client' AND client_id IS ?").bind(actor.id,actor.organization_id,actor.client_id).first();if(!signer)throw 403;
  const signatureId=crypto.randomUUID(),signedAt=Date.now(),signatureHash=await sha(canonical({type:'TYPED',text:body.signerName})),observed={ip:(request.headers.get('cf-connecting-ip')||'').slice(0,128),userAgent:(request.headers.get('user-agent')||'').slice(0,512)};
- const evidence={version:1,signatureId,publicationId,organizationId:actor.organization_id,contractId:publication.contract_id,contractRevision:publication.source_revision,sourceHash:publication.source_hash,clientId:publication.client_id,projectId:publication.project_id,publicationRevision:publication.revision,signedRevision:publication.revision+1,contentHash:publication.content_hash,snapshot:parse(publication.snapshot_json),policy:consent,policyHash:consent.hash,consentAccepted:true,authorityAccepted:true,signer:{name:body.signerName,actorId:signer.id,email:signer.email,type:'TYPED',text:body.signatureText},signatureHash,signedAt,observed,nonce:crypto.randomUUID()},evidenceJson=canonical(evidence),evidenceHash=await sha(evidenceJson),mac=await hmac(env,keyId,evidenceJson),document=canonical({evidence,evidenceHash,keyId,hmac:mac}),bytes=encoder.encode(document),documentHash=await sha(bytes),objectKey='contract-evidence/'+crypto.randomUUID(),result=resultFor(evidence,evidenceHash,documentHash,bytes.length);
+ const baseEvidence={version:1,signatureId,publicationId,organizationId:actor.organization_id,contractId:publication.contract_id,contractRevision:publication.source_revision,sourceHash:publication.source_hash,clientId:publication.client_id,projectId:publication.project_id,publicationRevision:publication.revision,signedRevision:publication.revision+1,contentHash:publication.content_hash,snapshot:parse(publication.snapshot_json),policy:consent,policyHash:consent.hash,consentAccepted:true,authorityAccepted:true,signer:{name:body.signerName,actorId:signer.id,email:signer.email,type:'TYPED',text:body.signatureText},signatureHash,signedAt,observed,nonce:crypto.randomUUID()};
+ const stagedPdf=await stageContractPdf(env,baseEvidence,{render:renderContractPdf,hash:sha});
+ const evidence={...baseEvidence,pdf:stagedPdf.marker},evidenceJson=canonical(evidence),evidenceHash=await sha(evidenceJson),mac=await hmac(env,keyId,evidenceJson),document=canonical({evidence,evidenceHash,keyId,hmac:mac}),bytes=encoder.encode(document),documentHash=await sha(bytes),objectKey='contract-evidence/'+crypto.randomUUID(),result=resultFor(evidence,evidenceHash,documentHash,bytes.length);
  const staged={object_key:objectKey,document_sha256:documentHash,document_size:bytes.length};
  try{if(!await env.FILES.put(objectKey,bytes,{sha256:documentHash,httpMetadata:{contentType:'application/json'}}))throw 503;await bytesFor(env,staged);}catch{throw 503;}
  // R2 is staged first. Lost races leave a private unreachable object, never a signed record.
@@ -105,17 +110,18 @@ async function sign(request,env,actor,publicationId,body){
  const publicationColumns='id,organization_id,contract_id,client_id,project_id,source_revision,source_hash,content_hash,snapshot_json,status,revision,created_by,created_at,withdrawn_at,withdrawn_by,withdrawal_reason,signing_policy_json,signing_policy_hash';
  const image=`json_object(${publicationColumns.split(',').map(c=>`'${c}',r.${c}`).join(',')})`;
  const event=env.DB.prepare(`INSERT INTO contract_signature_events(id,signature_id,publication_id,organization_id,revision,action,actor_id,actor_email,recorded_at,state_json,publication_state_json) SELECT ?,s.id,r.id,r.organization_id,r.revision,'SIGN',s.actor_id,s.actor_email,s.signed_at,s.state_json,${image} FROM contract_publications r JOIN contract_signatures s ON s.publication_id=r.id AND s.organization_id=r.organization_id WHERE r.id=? AND r.organization_id=? AND r.write_token=? AND s.id=? RETURNING id`).bind(token,publicationId,actor.organization_id,token,signatureId);
- const fence=env.DB.prepare('UPDATE contract_publications SET write_token=CASE WHEN EXISTS(SELECT 1 FROM contract_signatures s JOIN contract_signature_events e ON e.signature_id=s.id AND e.publication_id=s.publication_id AND e.organization_id=s.organization_id WHERE s.id=? AND s.publication_id=contract_publications.id AND s.organization_id=contract_publications.organization_id AND e.id=?) THEN write_token ELSE NULL END WHERE id=? AND organization_id=? AND write_token=? RETURNING id').bind(signatureId,token,publicationId,actor.organization_id,token);
- try{await env.DB.batch([statement,insert,event,fence]);}catch(error){const recovered=await receipt(env,actor,publicationId,key,fingerprint);if(recovered.state==='SAVED')return recovered.signature;throw error;}
+ const pdfStatements=await contractPdfStatements(env.DB,{actor,signatureId,publication,token,staged:stagedPdf,evidenceHash,jsonHash:documentHash,keyId,mac:(key,value)=>hmac(env,key,value)});
+ const fence=env.DB.prepare('UPDATE contract_publications SET write_token=CASE WHEN EXISTS(SELECT 1 FROM contract_signatures s JOIN contract_signature_events e ON e.signature_id=s.id AND e.publication_id=s.publication_id AND e.organization_id=s.organization_id JOIN contract_signature_pdfs p ON p.signature_id=s.id AND p.publication_id=s.publication_id AND p.organization_id=s.organization_id JOIN contract_signature_pdf_events pe ON pe.pdf_id=p.id AND pe.signature_id=s.id AND pe.publication_id=s.publication_id AND pe.organization_id=s.organization_id WHERE s.id=? AND s.publication_id=contract_publications.id AND s.organization_id=contract_publications.organization_id AND e.id=? AND p.id=? AND pe.id=?) THEN write_token ELSE NULL END WHERE id=? AND organization_id=? AND write_token=? RETURNING id').bind(signatureId,token,stagedPdf.id,token,publicationId,actor.organization_id,token);
+ try{await env.DB.batch([statement,insert,event,...pdfStatements,fence]);}catch(error){const recovered=await receipt(env,actor,publicationId,key,fingerprint);if(recovered.state==='SAVED')return recovered.signature;throw error;}
  const saved=await receipt(env,actor,publicationId,key,fingerprint);if(saved.state!=='SAVED')throw 409;return saved.signature;
 }
 export function contractSignatureExportStatement(db,actor,table){
- const fields={contract_signatures:'id,publication_id,organization_id,contract_id,client_id,project_id,source_revision,content_hash,policy_hash,actor_id,actor_email,signer_name,signed_at,signature_hash,evidence_hash,evidence_json,document_sha256,document_size,key_id,observed_ip,observed_user_agent,state_json',contract_signature_events:'id,signature_id,publication_id,organization_id,revision,action,actor_id,actor_email,recorded_at,state_json,publication_state_json',cancelled_contract_signature_requests:'id,publication_id,organization_id,actor_id,created_at'};if(!fields[table])throw 400;
+ const fields={contract_signatures:'id,publication_id,organization_id,contract_id,client_id,project_id,source_revision,content_hash,policy_hash,actor_id,actor_email,signer_name,signed_at,signature_hash,evidence_hash,evidence_json,document_sha256,document_size,key_id,observed_ip,observed_user_agent,state_json',contract_signature_events:'id,signature_id,publication_id,organization_id,revision,action,actor_id,actor_email,recorded_at,state_json,publication_state_json',cancelled_contract_signature_requests:'id,publication_id,organization_id,actor_id,created_at',contract_signature_pdfs:'id,signature_id,publication_id,organization_id,evidence_hash,json_sha256,pdf_sha256,pdf_size,renderer_version,font_version,manifest_json,key_id,created_at',contract_signature_pdf_events:'id,pdf_id,signature_id,publication_id,organization_id,action,actor_id,actor_email,recorded_at,manifest_json'};if(!fields[table])throw 400;
  return db.prepare(`${viewer(false)} SELECT ${fields[table]} FROM ${table} WHERE organization_id=? AND EXISTS(SELECT 1 FROM signature_viewer) ORDER BY id LIMIT 1001`).bind(...viewerValues(actor,false),actor.organization_id);
 }
 export async function contractSignaturesRoute(request,env,actor,readBody,json){
  const url=new URL(request.url),client=url.pathname.startsWith('/api/portal/');await assertContractAuthority(env.DB,actor,client);
- const match=url.pathname.match(/^\/api\/(?:portal\/contracts|contract-publications)\/([a-zA-Z0-9-]{1,100})\/(signing|signature|signed-document|requests\/([^/]+)(\/cancel)?)$/);if(!match||url.search)throw 404;
+ const match=url.pathname.match(/^\/api\/(?:portal\/contracts|contract-publications)\/([a-zA-Z0-9-]{1,100})\/(signing|signature|signed-document|pdf|signed-pdf|requests\/([^/]+)(\/cancel)?)$/);if(!match||url.search)throw 404;
  const publicationId=match[1],operation=match[2];if(!client&&operation.startsWith('requests/'))throw 404;
  const row=await readContractPublication(env.DB,actor,publicationId,client);
  if(operation.startsWith('requests/')){if(!uuid(match[3]))throw 400;if(request.method!==(match[4]?'POST':'GET'))throw 405;if(match[4])strict(await readBody(request),[]);return json(match[4]?await cancel(env,actor,publicationId,match[3].toLowerCase()):await receipt(env,actor,publicationId,match[3].toLowerCase()));}
@@ -129,5 +135,10 @@ export async function contractSignaturesRoute(request,env,actor,readBody,json){
   return json({state:saved?'SIGNED':fresh.status,canSign,signingAvailable,policy:consent,publicationRevision:fresh.revision,contentHash:fresh.content_hash,...(value?{signature:value.result}:{})});
  }
  if(!saved)throw 404;const value=await verified(env,actor,saved,client);if(operation==='signature')return json(value.result);
+ if(operation==='pdf'||operation==='signed-pdf'){
+  const artifact=await readContractPdf(env,actor,saved,value,client,{hash:sha,verifyMac:(keyId,text,seal)=>verifyHmac(env,keyId,text,seal),reverifyJson:()=>verified(env,actor,saved,client)});
+  if(operation==='pdf')return json(artifact.metadata);if(artifact.metadata.state!=='AVAILABLE')throw 404;
+  const headers=new Headers(json(null).headers);headers.set('Content-Type','application/pdf');headers.set('Content-Length',String(artifact.bytes.byteLength));headers.set('Content-Disposition',`attachment; filename="signed-contract-${publicationId}.pdf"`);headers.set('Content-Security-Policy',"default-src 'none'; sandbox");return new Response(artifact.bytes,{headers});
+ }
  const response=json(null);return new Response(value.bytes,{headers:{...Object.fromEntries(response.headers),'Content-Type':'application/json; charset=utf-8','Content-Length':String(value.bytes.byteLength),'Content-Disposition':`attachment; filename="signed-contract-${publicationId}.json"`,'Content-Security-Policy':"default-src 'none'; sandbox"}});
 }

@@ -3,18 +3,26 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test auth.test.mjs test.mjs files.test.mjs time-details.test.mjs invoice-drafts.test.mjs invoice-recovery.test.mjs commercial.test.mjs proposal-reviews.test.mjs stripe-drafts.test.mjs stripe-org.test.mjs stripe-recovery.test.mjs stripe-lifecycle.test.mjs dashboard.test.mjs dashboard-reviews.test.mjs dashboard-invoices.test.mjs contract-publications.test.mjs contract-signatures.test.mjs",
+    "pretest": "node build-contract-fonts.mjs",
+    "test": "node --test auth.test.mjs test.mjs files.test.mjs time-details.test.mjs invoice-drafts.test.mjs invoice-recovery.test.mjs commercial.test.mjs proposal-reviews.test.mjs stripe-drafts.test.mjs stripe-org.test.mjs stripe-recovery.test.mjs stripe-lifecycle.test.mjs dashboard.test.mjs dashboard-reviews.test.mjs dashboard-invoices.test.mjs contract-publications.test.mjs contract-signatures.test.mjs contract-pdf.test.mjs",
+    "prebuild": "node build-contract-fonts.mjs",
     "build": "wrangler deploy --dry-run --outdir dist",
     "dev": "wrangler dev --local --ip 127.0.0.1",
+    "pretest:browser": "node build-contract-fonts.mjs",
     "test:browser": "node browser.test.mjs",
-    "test:invoice-built": "node --test invoice-drafts-built.test.mjs invoice-recovery-built.test.mjs commercial-built.test.mjs proposal-reviews-built.test.mjs stripe-drafts-built.test.mjs stripe-org-built.test.mjs stripe-recovery-built.test.mjs stripe-lifecycle-built.test.mjs dashboard-built.test.mjs dashboard-reviews-built.test.mjs dashboard-invoices-built.test.mjs contract-publications-built.test.mjs contract-signatures-built.test.mjs"
+    "pretest:invoice-built": "node build-contract-fonts.mjs",
+    "test:invoice-built": "node --test invoice-drafts-built.test.mjs invoice-recovery-built.test.mjs commercial-built.test.mjs proposal-reviews-built.test.mjs stripe-drafts-built.test.mjs stripe-org-built.test.mjs stripe-recovery-built.test.mjs stripe-lifecycle-built.test.mjs dashboard-built.test.mjs dashboard-reviews-built.test.mjs dashboard-invoices-built.test.mjs contract-publications-built.test.mjs contract-signatures-built.test.mjs contract-pdf-built.test.mjs"
   },
   "dependencies": {
+    "bidi-js": "1.1.0",
+    "fontkit": "2.0.4",
+    "pdf-lib": "1.17.1",
     "jose": "6.2.12"
   },
   "devDependencies": {
     "axe-core": "4.14.0",
     "miniflare": "4.20260730.0",
+    "pdfjs-dist": "6.4.299",
     "playwright": "1.58.2",
     "wrangler": "4.152.0"
   }
