@@ -7,6 +7,7 @@ import { documentHistory } from './documents.mjs';
 import { timeRoute, exportRecords } from './time.mjs';
 import { timeDetailsRoute, timePeople, hasFinance } from './time-details.mjs';
 import { invoicesRoute } from './invoices.mjs';
+import { commercialRoute } from './commercial.mjs';
 const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','Strict-Transport-Security':'max-age=31536000'};
 export const json=(value,status=200)=>Response.json(value,{status,headers:security});
 export async function readBody(request){
@@ -36,6 +37,7 @@ export function createWorker(resolveKey){return {async fetch(request,env){try{
  if(url.pathname==='/api/me'&&request.method==='GET')return json({role:actor.role,id:actor.id,pilot:true,features:{files:!!env.FILES,finance:await hasFinance(env.DB,actor)}});
  if(url.pathname==='/api/export'&&request.method==='GET')return await exportRecords(env.DB,actor,json);
  if(url.pathname==='/api/invoices'||url.pathname.startsWith('/api/invoices/'))return await invoicesRoute(request,env.DB,actor,readBody,json);
+ if(url.pathname==='/api/commercial'||url.pathname.startsWith('/api/commercial/'))return await commercialRoute(request,env.DB,actor,readBody,json);
  const timeDetail=url.pathname.match(/^\/api\/time\/details\/([a-zA-Z0-9-]{1,100})(?:\/(approve|reject|history))?$/);
  if(url.pathname==='/api/time/people')return await timePeople(request,env.DB,actor,json);
  if(timeDetail||url.pathname==='/api/time/entries')return await timeDetailsRoute(request,env.DB,actor,timeDetail?.[1],timeDetail?.[2],readBody,json);
