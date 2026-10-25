@@ -81,15 +81,43 @@ jobs:
           BROWSER_GROUPS_RESULT: ${{ needs.browser_groups.result }}
         run: '[[ "$BROWSER_GROUPS_RESULT" == success ]]'
 
+  recovery:
+    name: Isolated native D1 and private R2 recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CI: true
+      WRANGLER_SEND_METRICS: 'false'
+    defaults:
+      run:
+        working-directory: apps/workspace
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+          package-manager-cache: false
+      - name: Install locked workspace dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Rehearse native local database and private-object recovery
+        run: npm run test:recovery
+      - name: Build without publishing
+        run: npm run build
+      - name: Rehearse recovery through compiled application routes
+        run: npm run test:recovery-built
+
   workspace:
     name: Local Worker and D1 integration
-    needs: [api, browser]
+    needs: [api, browser, recovery]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 1
     steps:
-      - name: Require both validation jobs to succeed
+      - name: Require API, browser and recovery validation to succeed
         env:
           API_RESULT: ${{ needs.api.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
-        run: '[[ "$API_RESULT" == success && "$BROWSER_RESULT" == success ]]'
+          RECOVERY_RESULT: ${{ needs.recovery.result }}
+        run: '[[ "$API_RESULT" == success && "$BROWSER_RESULT" == success && "$RECOVERY_RESULT" == success ]]'
