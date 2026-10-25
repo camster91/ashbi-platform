@@ -1,7 +1,8 @@
 import {hasFinance} from './time-details.mjs';
 import {invoiceClaimGuard} from './invoices.mjs';
 import {allocateInstallments} from './stripe-installments.mjs';
-import {stripeSchedulesRoute} from './stripe-schedules.mjs';
+import {stripeSchedulesRoute,loadSchedulePart,scheduleSourceGuard,scheduleProof} from './stripe-schedules.mjs';
+import {stripePartDraftsRoute} from './stripe-part-drafts.mjs';
 
 // Persist stage attempts before POST; never refresh a stage timestamp or key on retry.
 const version='2026-09-30.endive',retryWindow=23*3600000,leaseTime=300000;
@@ -127,8 +128,22 @@ async function cancelRequest(db,actor,kind,key,invoiceId){
  await db.prepare(`INSERT INTO ${cancelled}(id,organization_id,${invoiceId?'invoice_id,':''}request_key,actor_id,created_at) SELECT ?,?,${invoiceId?'?,':''}?,?,? WHERE ${authority} AND NOT EXISTS(SELECT 1 FROM ${table} WHERE organization_id=? AND request_key=?) ON CONFLICT(organization_id,request_key) DO NOTHING RETURNING id`).bind(crypto.randomUUID(),actor.organization_id,...(invoiceId?[invoiceId]:[]),key,actor.id,Date.now(),actor.id,actor.organization_id,actor.organization_id,key).first();return requestReceipt(db,actor,kind,key,invoiceId);
 }
 export function stripeExportStatement(db,actor,table){const fields=table.startsWith('cancelled_stripe_')?'id,organization_id,'+(table==='cancelled_stripe_invoice_requests'?'invoice_id,':'')+'request_key,actor_id,created_at':table==='stripe_customer_links'?'id,organization_id,client_id,account_id,customer_id,client_revision,customer_json,actor_id,reason,created_at':table==='stripe_invoice_operations'?'id,organization_id,invoice_id,mapping_id,account_id,customer_id,actor_id,reason,plan_json,state,stage,stripe_invoice_id,create_attempt_at,lines_attempt_at,last_error,revision,created_at,updated_at':'id,organization_id,invoice_id,operation_id,actor_id,recorded_at,revision,action,state_json';return db.prepare(`SELECT ${fields} FROM ${table} WHERE organization_id=? AND ${authority} ORDER BY id LIMIT 1001`).bind(actor.organization_id,actor.id,actor.organization_id);}
+function partServices(fetcher){
+ const metadata=(op)=>({'metadata[ashbi_schedule]':op.schedule_id,'metadata[ashbi_part]':op.part_id});
+ return {
+  configuration,loadSchedule:loadSchedulePart,sourceGuard:scheduleSourceGuard,proof:scheduleProof,
+  customer:(env,customerId)=>customer(env,fetcher,customerId),
+  read:(env,path)=>provider(env,fetcher,path),lines:(env,invoiceId,limit)=>providerLines(env,fetcher,invoiceId,limit),
+  create:(env,op,plan,key)=>provider(env,fetcher,'invoices',{...createParams(op,plan),...metadata(op)},key),
+  addLines:(env,op,plan,key)=>{const params=lineParams(op,plan);for(const line of plan.lines){const p='lines['+line.index+'][metadata]';params[p+'[ashbi_invoice]']=op.invoice_id;params[p+'[ashbi_plan]']=plan.fingerprint;params[p+'[ashbi_schedule]']=op.schedule_id;params[p+'[ashbi_part]']=op.part_id;}return provider(env,fetcher,'invoices/'+op.stripe_invoice_id+'/add_lines',params,key);},
+  baseMatches:(value,op,plan)=>{baseMatches(value,op,plan);if(value.metadata?.ashbi_schedule!==op.schedule_id||value.metadata?.ashbi_part!==op.part_id)mismatch();},
+  exact:(value,rows,op,plan)=>exact(value,rows,op,plan)&&rows.every(row=>row.metadata?.ashbi_invoice===op.invoice_id&&row.metadata?.ashbi_plan===plan.fingerprint&&row.metadata?.ashbi_schedule===op.schedule_id&&row.metadata?.ashbi_part===op.part_id),
+  error:code=>new ProviderError(code)
+ };
+}
 export async function stripeDraftsRoute(request,env,actor,readBody,json,fetcher=fetch){
  if(!await hasFinance(env.DB,actor))throw 403;const url=new URL(request.url),path=url.pathname,db=env.DB;const respond=async(value,status=200)=>{if(!await hasFinance(db,actor))throw 403;return json(value,status);};
+ if(/^\/api\/stripe\/schedules\/[^/]+\/parts\//.test(path)){try{return await stripePartDraftsRoute(request,env,actor,readBody,json,partServices(fetcher));}catch(e){if(e instanceof ProviderError)throw e.code==='PROVIDER_UNAVAILABLE'?503:409;throw e;}}
  if(path.startsWith('/api/stripe/schedules/'))return stripeSchedulesRoute(request,env,actor,readBody,json,async invoiceId=>schedulePreview(env,actor,await invoice(db,actor,invoiceId),fetcher));
  const receipt=path.match(/^\/api\/stripe\/customers\/requests\/([^/]+)(\/cancel)?$/)||path.match(/^\/api\/invoices\/([a-zA-Z0-9-]{1,100})\/stripe\/requests\/([^/]+)(\/cancel)?$/);
  if(receipt){query(url);const customerRequest=path.startsWith('/api/stripe/customers/'),key=receipt[customerRequest?1:2],stop=receipt[customerRequest?2:3],invoiceId=customerRequest?null:receipt[1];if(!uuid(key))throw 400;if(invoiceId)await invoice(db,actor,invoiceId);if(stop){if(request.method!=='POST')throw 405;strict(await readBody(request),[]);return respond(await cancelRequest(db,actor,customerRequest?'customer':'invoice',key.toLowerCase(),invoiceId));}if(request.method!=='GET')throw 405;return respond(await requestReceipt(db,actor,customerRequest?'customer':'invoice',key.toLowerCase(),invoiceId));}

@@ -71,6 +71,17 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  const cancelledScheduleInput=await scheduleInvoice('Cancelled late schedule request'),cancelledSchedule=await data(await call(cancelledScheduleInput.path+'/requests/'+cancelledScheduleInput.body.requestId+'/cancel',{}));assert.equal(cancelledSchedule.state,'CANCELLED');
  const abandonedInput=await scheduleInvoice('Abandoned schedule history'),abandonedInitial=await data(await call(abandonedInput.path,abandonedInput.body),201),abandoned=await data(await call(abandonedInput.path+'/'+abandonedInitial.id+'/abandon',{revision:abandonedInitial.revision,reason:'Reviewed before provider activation'}));assert.equal(abandoned.state,'ABANDONED');
 
+ // External child drafts survive independently of the database checkpoint.
+ const childInput=await scheduleInvoice('Child drafts checkpoint',{withTime:true}),childSchedule=await data(await call(childInput.path,childInput.body),201);
+ const childPath=part=>childInput.path+'/parts/'+part.id+'/draft',childBody=part=>({requestId:crypto.randomUUID(),revision:childSchedule.revision,fingerprint:part.plan.fingerprint,reason:'Synthetic part draft'});
+ const depositBody=childBody(childSchedule.parts[0]),depositPath=childPath(childSchedule.parts[0]),deposit=await data(await call(depositPath,depositBody),201),balancePath=childPath(childSchedule.parts[1]),cancelledPartBody=childBody(childSchedule.parts[1]);
+ await data(await call(balancePath+'/requests/'+cancelledPartBody.requestId+'/cancel',{}));
+ const balanceBody=childBody(childSchedule.parts[1]);provider.loseCreate=true;const balance=await data(await call(balancePath,balanceBody),202);assert.equal(balance.state,'UNKNOWN');
+ const balanceRow=await source.env.DB.prepare('SELECT * FROM stripe_part_operations WHERE id=?').bind(balance.id).first();
+ const leasedChildInput=await scheduleInvoice('Child lease checkpoint'),leasedChildSchedule=await data(await call(leasedChildInput.path,leasedChildInput.body),201),leasedChildPath=leasedChildInput.path+'/parts/'+leasedChildSchedule.parts[0].id+'/draft',leasedChildBody={requestId:crypto.randomUUID(),revision:leasedChildSchedule.revision,fingerprint:leasedChildSchedule.parts[0].plan.fingerprint,reason:'Original child lease'};
+ provider.loseCreate=true;const leasedChild=await data(await call(leasedChildPath,leasedChildBody),202);assert.equal(leasedChild.state,'UNKNOWN');const childLeaseUntil=Date.now()+300000;
+ await source.env.DB.prepare('UPDATE stripe_part_operations SET lease_token=?,lease_until=? WHERE id=?').bind('synthetic-child-lease',childLeaseUntil,leasedChild.id).run();const leasedChildRow=await source.env.DB.prepare('SELECT * FROM stripe_part_operations WHERE id=?').bind(leasedChild.id).first();
+
  // Inventory staged orphans and zero-length objects too, not only ready DB rows.
  await source.env.FILES.put('unreferenced/café; staged.bin',new Uint8Array([0,17,255]),{httpMetadata:{contentType:'application/octet-stream',contentDisposition:'attachment; filename="staged.bin"',cacheControl:'private, no-store',cacheExpiry:new Date('2030-01-02T00:00:00Z')},customMetadata:{owner:'synthetic',literal:'café; "quoted"'}});
  await source.env.FILES.put('unreferenced/empty',new Uint8Array(),{customMetadata:{state:'pending'}});
@@ -81,7 +92,7 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  await writeFile(keyFile,JSON.stringify({active:'journey',keys:fixture.keyRing}),{mode:0o600});
  const {image,objects}=JSON.parse(await readFile(checkpoint,'utf8'));
  for(const key of Object.values(fixture.keyRing))assert.equal((await readFile(checkpoint,'utf8')).includes(key),false);
- assert.equal(Object.keys(image.tables).length,49);assert.equal(image.schema.filter(s=>s.type==='index').length,37);assert.equal(objects.length,6);
+ assert.equal(Object.keys(image.tables).length,52);assert.equal(image.schema.filter(s=>s.type==='index').length,39);assert.equal(objects.length,6);
  const sql=await exportDatabase(source);
  // External Stripe state is deliberately NOT restored with our D1/R2 image.
  const externalFinalize=provider.requests.findLast(p=>p.method==='POST'&&p.path==='/v1/invoices/'+externallyFinished.creation.stripeInvoiceId+'/finalize');
@@ -94,7 +105,7 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  const DB=target.env.DB,FILES=target.env.FILES;
  const verify=async()=>assert.deepEqual(await databaseImage(DB),image,'all schema and exact table images must match trusted checkpoint');
  const putRow=async(table,row)=>{const cols=Object.keys(row);await DB.prepare('INSERT INTO "'+table+'"('+cols.map(c=>'"'+c+'"').join(',')+') VALUES('+cols.map(()=>'?').join(',')+')').bind(...cols.map(c=>row[c])).run();};
- await t.test('all 49 tables and 37 indexes match before any restored application use',verify);
+ await t.test('all 52 tables and 39 indexes match before any restored application use',verify);
  await t.test('all paginated objects including orphans, empty data and private metadata match',()=>verifyObjects(FILES,objects));
 
  await t.test('restored frozen schedule keeps distinct identities, original receipts and exact source reservations',async()=>{
@@ -108,6 +119,20 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  });
  await t.test('missing restored schedule part or journal rejects the receipt without repair or provider calls',async()=>{
   for(const table of ['stripe_installment_parts','stripe_installment_events']){const row=image.tables[table].find(row=>row.schedule_id===reserved.id);assert.ok(row,table);await DB.prepare('DELETE FROM '+table+' WHERE id=?').bind(row.id).run();try{await assert.rejects(verify);const before=provider.requests.length;assert.equal((await restored(reservedInput.path)).status,503);assert.equal((await restored(reservedInput.path,reservedInput.body)).status,503);assert.equal(provider.requests.length,before);}finally{await putRow(table,row);}}await verify();
+ });
+
+ await t.test('restored child receipts retain native identities without configured provider access',async()=>{
+  const before=provider.requests.length,disabled={STRIPE_MODE:undefined,STRIPE_SECRET_KEY:undefined};
+  assert.deepEqual(await data(await restored(depositPath,undefined,'finance','GET',disabled)),deposit);assert.deepEqual((await data(await restored(depositPath+'/requests/'+depositBody.requestId,undefined,'finance','GET',disabled))).operation,deposit);assert.deepEqual(await data(await restored(depositPath,depositBody,'finance','POST',disabled)),deposit);
+  assert.equal((await data(await restored(balancePath,undefined,'finance','GET',disabled))).id,balance.id);assert.equal((await restored(balancePath,cancelledPartBody)).status,409);assert.equal(provider.requests.length,before);
+  assert.equal((await DB.prepare('SELECT create_attempt_at FROM stripe_part_operations WHERE id=?').bind(balance.id).first()).create_attempt_at,balanceRow.create_attempt_at);assert.equal((await DB.prepare('SELECT invoice_ref FROM time_details WHERE id=?').bind(childInput.approved.id).first()).invoice_ref,'workspace:'+childInput.invoice.id);await verify();
+ });
+ await t.test('restored child activation and journal continue to hold the parent and its sources',async()=>{
+  const before=posts().length,invoice=await data(await restored('invoices/'+childInput.invoice.id));assert.equal((await restored(childInput.path+'/'+childSchedule.id+'/abandon',{revision:childSchedule.revision,reason:'Cannot abandon external child'})).status,409);assert.equal((await restored('invoices/'+invoice.id+'/void',{revision:invoice.revision,reason:'Cannot release external child'})).status,409);
+  const events=image.tables.stripe_part_events.filter(row=>row.operation_id===balance.id).sort((a,b)=>a.revision-b.revision);for(const row of [events[0],events.at(-1)]){await DB.prepare('DELETE FROM stripe_part_events WHERE id=?').bind(row.id).run();try{assert.equal((await restored(balancePath)).status,503);assert.ok((await restored(balancePath+'/retry',{})).status>=400);}finally{await putRow('stripe_part_events',row);}}assert.equal(posts().length,before);await verify();
+ });
+ await t.test('restored active child lease blocks retry without changing its expiration',async()=>{
+  const before=posts().length;assert.equal((await restored(leasedChildPath+'/retry',{})).status,202);assert.equal(posts().length,before);assert.deepEqual(await DB.prepare('SELECT lease_token,lease_until FROM stripe_part_operations WHERE id=?').bind(leasedChild.id).first(),{lease_token:'synthetic-child-lease',lease_until:childLeaseUntil});await verify();
  });
 
  await t.test('own client reads exact original file and immutable signed JSON/PDF bytes',async()=>{
@@ -169,6 +194,9 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
   await DB.prepare('UPDATE projects SET client_visible=0 WHERE id=?').bind(r.project.id).run();try{for(const path of e.clientPaths)assert.equal((await restored(path,undefined,'client')).status,404,path);}finally{await DB.prepare('UPDATE projects SET client_visible=1 WHERE id=?').bind(r.project.id).run();}
   assert.equal(posts().length,before);await verify();
  });
+ await t.test('restored unknown children retry their original intents against already-created external drafts',async()=>{
+  for(const entry of [{path:balancePath,op:balance,row:balanceRow},{path:leasedChildPath,op:leasedChild,row:leasedChildRow}]){if(entry.op.id===leasedChild.id)await DB.prepare('UPDATE stripe_part_operations SET lease_token=NULL,lease_until=0 WHERE id=?').bind(entry.op.id).run();const original=provider.requests.find(r=>r.method==='POST'&&r.path==='/v1/invoices'&&r.params['metadata[ashbi_operation]']===entry.op.id),before=posts().length,nativeCount=provider.invoices.size;assert.ok(original);const result=await data(await restored(entry.path+'/retry',{}));assert.equal(result.state,'DONE');assert.equal(provider.invoices.size,nativeCount);const repeated=posts().slice(before).find(r=>r.path==='/v1/invoices');assert.ok(repeated);assert.equal(repeated.key,original.key);assert.deepEqual(repeated.params,original.params);assert.equal((await DB.prepare('SELECT create_attempt_at FROM stripe_part_operations WHERE id=?').bind(entry.op.id).first()).create_attempt_at,entry.row.create_attempt_at);}
+ });
  await t.test('provider state newer than checkpoint reconciles by GET without duplicate finalization',async()=>{
   const before=posts().length,result=await data(await restored(externallyFinished.path+'/reconcile',{}));assert.equal(result.state,'DONE');assert.equal(posts().length,before);assert.equal(provider.invoices.get(externallyFinished.creation.stripeInvoiceId).status,'open');
  });
@@ -189,7 +217,7 @@ test('native isolated recovery preserves an ingested source package, original by
  await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name) VALUES('canonical-project','pilot-org','canonical-client','Site')").run();
  const objects=[];for(const[source,pins]of Object.entries(report.sourceFiles))for(const pin of pins)objects.push({source,path:pin.path,bytes:new Uint8Array(await readFile(join(fixture.root,source,pin.path)))});
  const input={requestId:crypto.randomUUID(),report,objects,snapshot:{clientRevision:0,projectRevision:0}},receipt=await applySourcePilot(source.env,actor,input),before=await readSourcePilot(source.env,actor,receipt.id),image=await databaseImage(DB),objectImage=await captureObjects(source.env.FILES);
- assert.equal(Object.keys(image.tables).length,49);assert.equal(image.schema.filter(s=>s.type==='index').length,37);
+ assert.equal(Object.keys(image.tables).length,52);assert.equal(image.schema.filter(s=>s.type==='index').length,39);
  assert.equal(image.tables.source_pilot_records.length,19);assert.equal(image.tables.source_pilot_objects.length,objects.length);
  const target=await importDatabase(join(root,'restored'),await exportDatabase(source));t.after(()=>target.dispose());await restoreObjects(target.env.FILES,objectImage);
  assert.deepEqual(await databaseImage(target.env.DB),image);assert.deepEqual(await readSourcePilot(target.env,actor,receipt.id),before);

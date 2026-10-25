@@ -43,6 +43,33 @@ jobs:
       - name: Exercise compiled invoice persistence and financial contracts
         run: npm run test:invoice-built
 
+  api_parts:
+    name: Installment native provider draft contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CI: true
+      WRANGLER_SEND_METRICS: 'false'
+    defaults:
+      run:
+        working-directory: apps/workspace
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+          package-manager-cache: false
+      - name: Install locked workspace dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Exercise independent part drafts and recovery through source routes
+        run: npm run test:parts
+      - name: Build without publishing
+        run: npm run build
+      - name: Exercise independent part drafts through compiled routes
+        run: npm run test:parts-built
+
   browser_groups:
     name: Built UI, keyboard and responsive accessibility (${{ matrix.group }})
     runs-on: ubuntu-24.04
@@ -116,14 +143,15 @@ jobs:
 
   workspace:
     name: Local Worker and D1 integration
-    needs: [api, browser, recovery]
+    needs: [api, api_parts, browser, recovery]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 1
     steps:
-      - name: Require API, browser and recovery validation to succeed
+      - name: Require API, installment, browser and recovery validation to succeed
         env:
           API_RESULT: ${{ needs.api.result }}
+          PARTS_RESULT: ${{ needs.api_parts.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
           RECOVERY_RESULT: ${{ needs.recovery.result }}
-        run: '[[ "$API_RESULT" == success && "$BROWSER_RESULT" == success && "$RECOVERY_RESULT" == success ]]'
+        run: '[[ "$API_RESULT" == success && "$PARTS_RESULT" == success && "$BROWSER_RESULT" == success && "$RECOVERY_RESULT" == success ]]'

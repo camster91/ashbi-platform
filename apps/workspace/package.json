@@ -18,7 +18,13 @@
     "pretest:recovery-built": "node build-contract-fonts.mjs",
     "test:recovery-built": "node --test recovery-built.test.mjs",
     "test:pilot": "node --test pilot-source-formats.test.mjs pilot-reconcile.test.mjs",
-    "test:source-pilot": "node --test source-pilot.test.mjs"
+    "test:source-pilot": "node --test source-pilot.test.mjs",
+    "pretest:parts": "node build-contract-fonts.mjs",
+    "test:parts": "node --test stripe-part-drafts.test.mjs",
+    "pretest:parts-built": "node build-contract-fonts.mjs",
+    "test:parts-built": "node --test stripe-part-drafts-built.test.mjs",
+    "test:all": "npm test && npm run test:parts",
+    "test:invoice-all": "npm run test:invoice-built && npm run test:parts-built"
   },
   "dependencies": {
     "bidi-js": "1.1.0",
