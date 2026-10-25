@@ -159,3 +159,78 @@ export async function readSourceObject(env,actor,id,source,path){
  const saved=await inventory(env.DB,run),object=saved.objects.find(o=>o.source===source&&o.path===path);if(!object)throw 404;
  const bytes=await original(env,object);await authorize(env.DB,actor,target);return bytes;
 }
+
+function historyQuery(url,allowed){
+ const seen=new Set();for(const key of url.searchParams.keys()){if(!allowed.includes(key)||seen.has(key))throw 400;seen.add(key);}
+ const value=url.searchParams.get('limit');if(value!==null&&(!/^[1-9]\d?$/.test(value)||Number(value)>50))throw 400;
+ return {params:url.searchParams,limit:value===null?20:Number(value)};
+}
+const historyTarget=run=>({organizationId:run.organization_id,clientId:run.client_id,projectId:run.project_id});
+async function visibleHistoryRun(db,actor,key){
+ const run=await runRow(db,key);if(!run||run.organization_id!==actor.organization_id||run.state!=='DONE')throw 404;
+ await authorize(db,actor,historyTarget(run));return run;
+}
+async function historyNames(db,actor,run){
+ const row=await db.prepare(`SELECT c.name AS client_name,p.name AS project_name FROM projects p
+ JOIN clients c ON c.id=p.client_id AND c.organization_id=p.organization_id
+ WHERE p.id=? AND p.organization_id=? AND p.client_id=?`).bind(run.project_id,actor.organization_id,run.client_id).first();
+ if(!row)throw 404;return row;
+}
+function historyCounts(value){
+ const counts=JSON.parse(value);if(!counts||Object.keys(counts).sort().join(',')!=='held,mapped,sourceRecords'||!Object.values(counts).every(v=>Number.isSafeInteger(v)&&v>=0)||counts.sourceRecords!==counts.mapped+counts.held)throw 503;return counts;
+}
+async function historyList(db,actor,url){
+ const {params,limit}=historyQuery(url,['after','clientId','projectId','limit']),after=params.get('after');
+ if(after!==null&&!id(after))throw 400;
+ const clauses=["r.organization_id=? AND r.state='DONE' AND p.client_id=r.client_id"],values=[actor.organization_id];
+ for(const [key,column,table]of[['clientId','r.client_id','clients'],['projectId','r.project_id','projects']])if(params.has(key)){
+  const value=params.get(key);if(!id(value))throw 400;
+  if(!await db.prepare('SELECT id FROM '+table+' WHERE id=? AND organization_id=?').bind(value,actor.organization_id).first())throw 404;
+  clauses.push(column+'=?');values.push(value);
+ }
+ if(after){clauses.push('r.id>?');values.push(after);}
+ // Summaries extract only counts; never load fifty 1 MiB report images into
+ // a Worker just to draw a list. Every row still requires current linkage.
+ const query=`SELECT r.id,r.client_id,r.project_id,r.created_at,r.fingerprint,
+ json_extract(r.report_json,'$.counts') AS counts_json,c.name AS client_name,p.name AS project_name
+ FROM source_pilot_runs r JOIN projects p ON p.id=r.project_id AND p.organization_id=r.organization_id
+ JOIN clients c ON c.id=r.client_id AND c.organization_id=r.organization_id
+ WHERE ${clauses.join(' AND ')} ORDER BY r.id LIMIT ?`;
+ const read=async()=> (await db.prepare(query).bind(...values,limit+1).all()).results;
+ const rows=await read(),again=await read();if(!await hasFinance(db,actor))throw 403;
+ if(stable(rows)!==stable(again))throw 409;
+ const items=rows.slice(0,limit).map(r=>({id:r.id,clientId:r.client_id,projectId:r.project_id,clientName:r.client_name,projectName:r.project_name,createdAt:r.created_at,fingerprint:r.fingerprint,counts:historyCounts(r.counts_json)}));
+ return {items,nextCursor:rows.length>limit?items.at(-1).id:null};
+}
+
+// This is an authenticated read surface only. Neither reports nor mapping
+// decisions supplied over HTTP can reach applySourcePilot's trusted boundary.
+export async function sourceHistoryRoute(request,env,actor,json){
+ try{
+  if(!await hasFinance(env.DB,actor))throw 403;
+  if(request.method!=='GET')throw 405;
+  const url=new URL(request.url),match=url.pathname.match(/^\/api\/source-history(?:\/([a-zA-Z0-9-]{1,100})(?:\/(records)|\/objects\/([a-f0-9]{64})\/download)?)?$/);
+  if(!match)throw 404;
+  const key=match[1];if(!key)return json(await historyList(env.DB,actor,url));
+  const run=await visibleHistoryRun(env.DB,actor,key),target=historyTarget(run);
+  if(match[3]){
+   historyQuery(url,[]);if(!env.FILES)throw 503;
+   const saved=await inventory(env.DB,run),object=saved.objects.find(o=>o.object_key.endsWith('/'+match[3]));if(!object)throw 404;
+   const bytes=await readSourceObject(env,actor,key,object.source,object.path);
+   await authorize(env.DB,actor,target);
+   const name=object.path.split('/').at(-1),filename=encodeURIComponent(name).replace(/['()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase());
+   return new Response(bytes,{headers:{'Content-Type':'application/octet-stream','Content-Length':String(bytes.length),'Content-Disposition':"attachment; filename*=UTF-8''"+filename,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox",'Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','X-Robots-Tag':'noindex, nofollow'}});
+  }
+  const query=historyQuery(url,match[2]?['after','limit']:[]);if(!env.FILES)throw 503;
+  const saved=await readSourcePilot(env,actor,key);
+  if(match[2]){
+   const after=query.params.get('after');let start=0;
+   if(after!==null){if(!after||after.length>1200)throw 400;const index=saved.records.findIndex(r=>r.key===after);if(index<0)throw 400;start=index+1;}
+   const items=saved.records.slice(start,start+query.limit),more=start+query.limit<saved.records.length;
+   await authorize(env.DB,actor,target);return json({items,nextCursor:more?items.at(-1).key:null});
+  }
+  const sourceFiles=Object.fromEntries(await Promise.all(Object.entries(saved.sourceFiles).map(async([source,files])=>[source,await Promise.all(files.map(async file=>({...file,id:await hashText(source+':'+file.path)})))])));
+  const names=await historyNames(env.DB,actor,run);await authorize(env.DB,actor,target);
+  return json({run:{...saved.run,clientId:run.client_id,projectId:run.project_id,clientName:names.client_name,projectName:names.project_name,createdAt:run.created_at},totals:saved.totals,coverage:saved.coverage,sourceFiles});
+ }catch(e){if(Number.isInteger(e))throw e;throw 503;}
+}

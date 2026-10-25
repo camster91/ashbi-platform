@@ -15,6 +15,7 @@ import { readSigningPolicy,decorateSignature,decorateSignatures,contractSignatur
 import { proposalReviewsRoute, dashboardReviews } from './proposal-reviews.mjs';
 import { stripeDraftsRoute } from './stripe-drafts.mjs';
 import {stripeIssuanceRoute} from './stripe-issuance.mjs';
+import {sourceHistoryRoute} from './source-pilot.mjs';
 import { stripeWebhook, stripeLifecycleRoute, drainStripeEvents } from './stripe-lifecycle.mjs';
 const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','Strict-Transport-Security':'max-age=31536000'};
 export const json=(value,status=200)=>Response.json(value,{status,headers:security});
@@ -44,6 +45,7 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  if(comment)return await commentsRoute(request,env.DB,actor,comment[1],readBody,json);
  if(url.pathname==='/api/files'||url.pathname.startsWith('/api/files/'))return await filesRoute(request,env,actor,readBody,json);
  if(url.pathname==='/api/me'&&request.method==='GET')return json({role:actor.role,id:actor.id,pilot:true,features:{files:!!env.FILES,finance:await hasFinance(env.DB,actor)}});
+ if(url.pathname==='/api/source-history'||url.pathname.startsWith('/api/source-history/'))return await sourceHistoryRoute(request,env,actor,json);
  if(url.pathname==='/api/export'&&request.method==='GET')return await exportRecords(env.DB,actor,json);
  if(url.pathname==='/api/dashboard/tasks')return await dashboardTasks(request,env.DB,actor,json);
  if(url.pathname==='/api/dashboard/invoices')return await dashboardInvoices(request,env,actor,json);
