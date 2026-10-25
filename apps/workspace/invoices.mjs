@@ -52,7 +52,17 @@ async function preview(db,actor,input){
 }
 function publicInvoice(row){if(!row)return row;const result={...row,snapshot:JSON.parse(row.snapshot_json)};for(const key of ['snapshot_json','request_key','request_fingerprint','write_token'])delete result[key];return result;}
 async function readInvoice(db,actor,invoiceId){return db.prepare(`${viewer} SELECT ${invoiceFields} FROM invoice_drafts WHERE organization_id=? AND id=? AND ${authority}`).bind(actor.id,actor.organization_id,actor.organization_id,invoiceId).first();}
-async function readRequest(db,actor,key,fingerprint){const row=await db.prepare(`${viewer} SELECT ${invoiceFields},request_fingerprint FROM invoice_drafts WHERE organization_id=? AND request_key=? AND ${authority}`).bind(actor.id,actor.organization_id,actor.organization_id,key).first();if(row&&row.request_fingerprint!==fingerprint)throw 409;return row;}
+async function readRequest(db,actor,key,fingerprint){const row=await db.prepare(`${viewer} SELECT ${invoiceFields},request_fingerprint FROM invoice_drafts WHERE organization_id=? AND request_key=? AND ${authority}`).bind(actor.id,actor.organization_id,actor.organization_id,key).first();if(row&&fingerprint!==undefined&&row.request_fingerprint!==fingerprint)throw 409;return row;}
+async function requestReceipt(db,actor,key){
+ const invoice=await readRequest(db,actor,key);if(!await hasFinance(db,actor))throw 403;if(invoice)return {state:'SAVED',invoice:publicInvoice(invoice)};
+ const cancelled=await db.prepare(`${viewer} SELECT actor_id,created_at FROM cancelled_invoice_requests WHERE organization_id=? AND request_key=? AND ${authority}`).bind(actor.id,actor.organization_id,actor.organization_id,key).first();if(!await hasFinance(db,actor))throw 403;
+ return cancelled?{state:'CANCELLED',cancelledBy:cancelled.actor_id,cancelledAt:cancelled.created_at}:{state:'UNKNOWN'};
+}
+async function cancelRequest(db,actor,key){
+ await db.prepare(`${viewer} INSERT INTO cancelled_invoice_requests(id,organization_id,request_key,actor_id,created_at) SELECT ?,?,?,?,? WHERE ${authority} AND NOT EXISTS(SELECT 1 FROM invoice_drafts WHERE organization_id=? AND request_key=?) ON CONFLICT(organization_id,request_key) DO NOTHING RETURNING id`)
+ .bind(actor.id,actor.organization_id,crypto.randomUUID(),actor.organization_id,key,actor.id,Date.now(),actor.organization_id,key).all();
+ return requestReceipt(db,actor,key);
+}
 
 // Match the exact reviewed source image, not only its public revision counter.
 const sourceColumn={id:'d.id',revision:'d.revision',projectId:'d.project_id',projectName:'p.name',projectRevision:'p.revision',actorId:'d.actor_id',actorEmail:'u.email',seconds:'t.seconds',startedAt:'t.started_at',endedAt:'t.ended_at',description:'d.description',workedOn:'d.worked_on',sourceKind:'d.source_kind',billable:'d.billable',reviewStatus:'d.review_status',reviewedBy:'d.reviewed_by',reviewedAt:'d.reviewed_at',currency:'d.currency',rateMinor:'d.rate_minor',rateReference:'d.rate_reference'};
@@ -76,11 +86,11 @@ async function create(db,actor,body){
  try{
   const p=await preview(db,actor,input);if(p.fingerprint!==fingerprint)throw 409;const invoiceId=crypto.randomUUID(),token=crypto.randomUUID(),prefix=token+':',rows=p.lines.filter(line=>line.kind==='TIME').map(line=>line.source);
   const first=db.prepare(`${viewer} INSERT INTO invoice_drafts(id,organization_id,client_id,project_id,created_by,title,currency,subtotal_minor,tax_minor,total_minor,snapshot_json,request_key,request_fingerprint,preview_fingerprint,created_at,write_token)
-   SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${authority}
+   SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${authority} AND NOT EXISTS(SELECT 1 FROM cancelled_invoice_requests WHERE organization_id=? AND request_key=?)
    AND EXISTS(SELECT 1 FROM clients WHERE id=? AND organization_id=? AND name=? AND revision=?)
    ${p.project?'AND EXISTS(SELECT 1 FROM projects WHERE id=? AND organization_id=? AND client_id=? AND name=? AND revision=?)':''}
    AND ${selectionGuard()} RETURNING id`)
-   .bind(actor.id,actor.organization_id,invoiceId,actor.organization_id,input.clientId,input.projectId??null,actor.id,input.title,input.currency,p.subtotalMinor,p.taxMinor,p.totalMinor,JSON.stringify(p),key,requestFingerprint,fingerprint,Date.now(),token,input.clientId,actor.organization_id,p.client.name,p.client.revision,...(p.project?[p.project.id,actor.organization_id,input.clientId,p.project.name,p.project.revision]:[]),...selectionValues(rows,actor,input.clientId));
+   .bind(actor.id,actor.organization_id,invoiceId,actor.organization_id,input.clientId,input.projectId??null,actor.id,input.title,input.currency,p.subtotalMinor,p.taxMinor,p.totalMinor,JSON.stringify(p),key,requestFingerprint,fingerprint,Date.now(),token,actor.organization_id,key,input.clientId,actor.organization_id,p.client.name,p.client.revision,...(p.project?[p.project.id,actor.organization_id,input.clientId,p.project.name,p.project.revision]:[]),...selectionValues(rows,actor,input.clientId));
   const claim=db.prepare(`UPDATE time_details SET invoice_ref=?,revision=revision+1,audit_token=?||id WHERE organization_id=? AND id IN(SELECT json_extract(value,'$.id') FROM json_each(?)) AND invoice_ref IS NULL AND review_status='APPROVED' AND EXISTS(SELECT 1 FROM invoice_drafts WHERE id=? AND organization_id=? AND write_token=?) RETURNING id`)
    .bind('workspace:'+invoiceId,prefix,actor.organization_id,JSON.stringify(rows),invoiceId,actor.organization_id,token);
   const result=await db.batch([first,claim,timeBillingAudit(db,actor,prefix,invoiceId,'CLAIM'),invoiceAudit(db,actor,invoiceId,token,prefix,'CREATE',rows.length),commitFence(db,actor,invoiceId,token)]);
@@ -125,9 +135,10 @@ async function list(db,actor,url){
  const rows=(await db.prepare(`${viewer} SELECT ${summaryFields},json_extract(snapshot_json,'$.client.name') AS client_name,json_extract(snapshot_json,'$.project.name') AS project_name,json_extract(snapshot_json,'$.dueOn') AS due_on FROM invoice_drafts WHERE ${conditions.join(' AND ')} ORDER BY id LIMIT 51`).bind(...values).all()).results;
  if(!await hasFinance(db,actor))throw 403;const items=rows.slice(0,50);return {items,nextCursor:rows.length>50?items.at(-1).id:null};
 }
-export function invoiceExportStatement(db,actor,table){const columns=table==='invoice_drafts'?invoiceFields:'id,invoice_id,organization_id,actor_id,recorded_at,revision,action,state_json';return db.prepare(`${viewer} SELECT ${columns} FROM ${table} WHERE organization_id=? AND ${authority} ORDER BY id LIMIT 1001`).bind(actor.id,actor.organization_id,actor.organization_id);}
+export function invoiceExportStatement(db,actor,table){const columns=table==='invoice_drafts'?invoiceFields:table==='cancelled_invoice_requests'?'id,organization_id,request_key,actor_id,created_at':'id,invoice_id,organization_id,actor_id,recorded_at,revision,action,state_json';return db.prepare(`${viewer} SELECT ${columns} FROM ${table} WHERE organization_id=? AND ${authority} ORDER BY id LIMIT 1001`).bind(actor.id,actor.organization_id,actor.organization_id);}
 export async function invoicesRoute(request,db,actor,readBody,json){
  if(!await hasFinance(db,actor))throw 403;const url=new URL(request.url),path=url.pathname;
+ if(path.startsWith('/api/invoices/requests/')){query(url,[]);const match=path.match(/^\/api\/invoices\/requests\/([^/]+)(\/cancel)?$/);if(!match)throw 404;if(!uuid(match[1]))throw 400;const key=match[1].toLowerCase();if(match[2]){if(request.method!=='POST')throw 405;strict(await readBody(request),[]);return json(await cancelRequest(db,actor,key));}if(request.method!=='GET')throw 405;return json(await requestReceipt(db,actor,key));}
  if(path==='/api/invoices/candidates'){if(request.method!=='GET')throw 405;return json(await candidates(db,actor,url));}
  if(path==='/api/invoices/preview'){query(url,[]);if(request.method!=='POST')throw 405;return json(await preview(db,actor,intent(await readBody(request))));}
  if(path==='/api/invoices'){if(request.method==='GET')return json(await list(db,actor,url));query(url,[]);if(request.method!=='POST')throw 405;const result=await create(db,actor,await readBody(request));return json(publicInvoice(result.row),result.status);}

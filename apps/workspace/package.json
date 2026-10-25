@@ -3,11 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test auth.test.mjs test.mjs files.test.mjs time-details.test.mjs invoice-drafts.test.mjs",
+    "test": "node --test auth.test.mjs test.mjs files.test.mjs time-details.test.mjs invoice-drafts.test.mjs invoice-recovery.test.mjs",
     "build": "wrangler deploy --dry-run --outdir dist",
     "dev": "wrangler dev --local --ip 127.0.0.1",
     "test:browser": "node browser.test.mjs",
-    "test:invoice-built": "node --test invoice-drafts-built.test.mjs"
+    "test:invoice-built": "node --test invoice-drafts-built.test.mjs invoice-recovery-built.test.mjs"
   },
   "dependencies": {
     "jose": "6.2.12"
