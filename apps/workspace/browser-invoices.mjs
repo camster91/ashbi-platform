@@ -5,7 +5,7 @@ import {hold} from './browser-regressions.mjs';
 export const billingSigningSecret=['whsec','synthetic_browser_lifecycle_only_20261025'].join('_');
 const failed={status:503,contentType:'application/json',body:JSON.stringify({error:'Synthetic invoice response failure'})},denied={status:403,contentType:'application/json',body:JSON.stringify({error:'Forbidden'})},json=data=>({status:200,contentType:'application/json',body:JSON.stringify(data)});
 async function call(page,path,body){return page.evaluate(async({path,body})=>{const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()};},{path,body});}
-export async function runInvoiceTests({browser,origin,DB,axe,addActor,stripe}){
+export async function runInvoiceTests({browser,origin,DB,FILES,axe,addActor,stripe}){
  stripe.enabled=true;let sequence=0;for(const id of ['bill-fin','bill-fin2']){await addActor(id,id+'@example.invalid','staff',null);await DB.prepare('INSERT INTO actor_finance_access VALUES(?,?)').bind(id,'qa-org').run();}
  const money=(currency,n)=>currency+' '+(n/100).toFixed(2),future=days=>new Date(Date.now()+days*86400000).toISOString().slice(0,10);
  async function open(t,who='bill-fin',path='#invoices'){const page=await browser.newPage({extraHTTPHeaders:{'X-Test-Actor':who}}),errors=[];page.on('pageerror',e=>errors.push(e.message));t.after(async()=>{await page.close();assert.deepEqual(errors,[]);});await page.goto(origin+'/'+path);await page.locator('main[aria-busy]').waitFor({state:'detached'});assert.equal(await page.locator('h1').textContent(),'Invoices');if(who!=='staff')assert.equal(await page.locator('[data-billing-list]').count(),1);await idle(page);return page;}
@@ -58,4 +58,178 @@ export async function runInvoiceTests({browser,origin,DB,axe,addActor,stripe}){
  await test('keyboard sync receipt pagination returns focus to the next enabled receipt control',async t=>{const page=await open(t),p=await seed(page);for(let n=0;n<3;n++)await webhook(page,p);await page.route('**/api/stripe/events?*',async route=>{const url=new URL(route.request().url());url.searchParams.set('limit','2');await route.fulfill({response:await route.fetch({url:url.href})});});await refresh(page);const more=page.getByRole('button',{name:'Load more sync receipts',exact:true}),response=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/stripe/events'&&new URL(r.url()).searchParams.has('cursor'));await more.focus();await page.keyboard.press('Enter');await response;await page.locator('[data-billing-events][aria-busy]').waitFor({state:'detached'});assert.equal(await page.evaluate(()=>document.activeElement?.hasAttribute('data-billing-events-more')||document.activeElement?.textContent==='Refresh invoices'),true);});
  await test('keyboard sync receipt retry returns focus after its button is replaced by an applied receipt',async t=>{const page=await open(t),p=await seed(page);state(p,'paid');const id=await webhook(page,p,'invoice.paid');await refresh(page);const retry=page.locator('[data-billing-event="'+id+'"]').getByRole('button',{name:'Retry sync',exact:true});await retry.focus();const response=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/stripe/events/'+id+'/retry');await page.keyboard.press('Enter');await response;await page.locator('[data-billing-event="'+id+'"]').getByText('Applied',{exact:true}).waitFor();await page.locator('[data-billing-events][aria-busy]').waitFor({state:'detached'});assert.equal(await page.evaluate(()=>document.activeElement?.textContent==='Refresh invoices'),true);});
  await test('Invoice screens retain keyboard skip and responsive axe checks for staff and clients',async t=>{const fin=await open(t),p=await seed(fin,{status:'paid'});for(const who of ['bill-fin',p.clientActor]){const page=who==='bill-fin'?fin:await open(t,who);for(const width of [390,768,1440]){await page.setViewportSize({width,height:1000});await page.reload();await page.locator('main[aria-busy]').waitFor({state:'detached'});await idle(page);await page.keyboard.press('Tab');assert.equal(await page.locator(':focus').textContent(),'Skip to content');await page.keyboard.press('Enter');assert.equal(new URL(page.url()).hash,'#invoices');assert.equal(await page.locator(':focus').getAttribute('id'),'main');const d=await details(page,p);await page.evaluate(axe);assert.deepEqual(await page.evaluate(async()=>(await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}})).violations.map(v=>v.id)),[]);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:fileURLToPath(new URL('../../../outputs/invoices-'+(who==='bill-fin'?'staff':'client')+'-'+width+'.png',import.meta.url)),fullPage:false});await d.getByRole('button',{name:'Close invoice status',exact:true}).click();}}});
+ await runSourceHistoryTests({browser,origin,DB,FILES,axe,addActor,stripe});
+}
+
+// This fixture is constructed by the real offline reader and applied through
+// the existing internal adapter. The browser reads the compiled Worker only.
+export async function runSourceHistoryTests({browser,origin,DB,FILES,axe,addActor,stripe}){
+ const {mkdtemp,readFile,writeFile}=await import('node:fs/promises');
+ const {tmpdir}=await import('node:os'),{join}=await import('node:path');
+ const {makePilotFixture}=await import('./pilot-source-fixture.mjs');
+ const {reconcilePilot}=await import('./pilot-reconcile.mjs');
+ const {applySourcePilot}=await import('./source-pilot.mjs');
+ assert.ok(FILES,'Source history fixture requires the actual shared R2 binding');
+ await addActor('source-screen-bianca','source-screen-bianca@example.invalid','staff',null);
+ await addActor('source-screen-staff','source-screen-staff@example.invalid','staff',null);
+ const actor={id:'bill-fin',organization_id:'qa-org',role:'staff'},runs=[];
+ const literal='<img src=x onerror="window.sourceHistoryExecuted=true"> Retained source café';
+ for(let number=1;number<=2;number++){
+  const fixture=await makePilotFixture(await mkdtemp(join(tmpdir(),'ashbi-source-screen-')));
+  const clientId=crypto.randomUUID(),projectId=crypto.randomUUID(),name='Source history client '+number,projectName='Source history project '+number;
+  await DB.prepare('INSERT INTO clients(id,organization_id,name) VALUES(?,?,?)').bind(clientId,'qa-org',name).run();
+  await DB.prepare('INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES(?,?,?,?,0)').bind(projectId,'qa-org',clientId,projectName).run();
+  fixture.mapping.target={organizationId:'qa-org',clientId,projectId};
+  fixture.mapping.actors={'legacy:legacy-staff':'source-screen-bianca','bonsai:Fixture Staff':'source-screen-bianca'};
+  for(const record of fixture.mapping.records){record.canonicalId=record.canonicalId==='canonical-client'?clientId:record.canonicalId==='canonical-project'?projectId:'source-screen-'+number+'-'+record.canonicalId;record.authorActorId='source-screen-bianca';}
+  if(number===2){const path=join(fixture.root,'bonsai','invoices.csv'),csv=await readFile(path,'utf8');assert.ok(csv.includes('"113","13","13","0","CAD"')&&csv.includes('"20","0","0","20","USD"'));await writeFile(path,csv.replace('"113","13","13","0","CAD"','"90071992547409.90","0","0","0","CAD"').replace('"20","0","0","20","USD"','"90071992547409.91","0","0","90071992547409.91","USD"'));}
+  await writeFile(join(fixture.root,'notion','Handbook.md'),'# Original source '+number+'\n\n'+literal+'\n');
+  await fixture.repin({decisions:true});
+  const report=await reconcilePilot(fixture.root,fixture.mapping),objects=[];
+  for(const[source,entries]of Object.entries(report.sourceFiles))for(const entry of entries)objects.push({source,path:entry.path,bytes:new Uint8Array(await readFile(join(fixture.root,source,entry.path)))});
+  const receipt=await applySourcePilot({DB,FILES},actor,{requestId:crypto.randomUUID(),report,objects,snapshot:{clientRevision:0,projectRevision:0}});
+  runs.push({id:receipt.id,clientId,projectId,name,projectName,report,objects});
+ }
+ await addActor('source-screen-client','source-screen-client@example.invalid','client',runs[0].clientId);
+ const providerCount=stripe.requests.length;
+ const list=page=>page.getByRole('region',{name:'Source history list',exact:true});
+ const detail=page=>page.locator('[data-source-detail]');
+ const records=page=>page.getByRole('region',{name:'Source records',exact:true});
+ const refresh=page=>page.getByRole('button',{name:'Refresh source history',exact:true});
+ async function idle(page){await page.waitForFunction(()=>!document.querySelector('main[aria-busy],[data-source-list][aria-busy],[data-source-detail][aria-busy]'));}
+ async function open(t,who='bill-fin'){
+  const page=await browser.newPage({extraHTTPHeaders:{'X-Test-Actor':who}}),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));t.after(async()=>{await page.close();assert.deepEqual(errors,[]);});
+  await page.goto(origin+'/#source-history');await page.getByRole('heading',{name:'Source history',exact:true}).waitFor();await idle(page);
+  if(who==='bill-fin')await list(page).waitFor();return page;
+ }
+ async function data(page,path){const r=await call(page,path);assert.equal(r.status,200,JSON.stringify(r));return r.data;}
+ async function select(page,run){await page.locator('[data-source-run="'+run.id+'"]').getByRole('button',{name:'Open source run',exact:true}).click();await detail(page).waitFor();await records(page).locator('[data-source-record]').first().waitFor();await idle(page);}
+ async function forcePages(page){
+  await page.route(/\/api\/source-history(?:[/?]|$)/,async route=>{const url=new URL(route.request().url());if(url.pathname==='/api/source-history'||url.pathname.endsWith('/records')){url.searchParams.set('limit','1');return route.fulfill({response:await route.fetch({url:url.href})});}return route.fallback();});
+ }
+ async function showRun(page,run){
+  for(let n=0;n<5;n++){if(await page.locator('[data-source-run="'+run.id+'"]').count())return;await page.getByRole('button',{name:'Load more source runs',exact:true}).click();await idle(page);}throw Error('Missing source run in complete pagination');
+ }
+ const currentKeys=page=>records(page).locator('[data-source-record]').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-source-record')));
+
+ await test('source history financial staff open retained runs without provider reads or mutation controls',async t=>{
+  const page=await open(t);assert.equal(await page.getByRole('link',{name:'Source history',exact:true}).count(),1);
+  for(const run of runs)assert.equal(await list(page).locator('[data-source-run="'+run.id+'"]').count(),1);
+  assert.equal(stripe.requests.length,providerCount);assert.equal(await page.getByRole('button',{name:/Import|Apply source packet|Publish|Charge|Send invoice/}).count(),0);
+ });
+ for(const who of['source-screen-staff','source-screen-client'])await test('source history '+who+' has no archive navigation or dataset requests',async t=>{
+  const page=await browser.newPage({extraHTTPHeaders:{'X-Test-Actor':who}}),paths=[];t.after(()=>page.close());page.on('request',r=>{const p=new URL(r.url()).pathname;if(p.startsWith('/api/source-history')||['/api/clients','/api/projects'].includes(p))paths.push(p);});
+  await page.goto(origin+'/#source-history');await page.getByRole('heading',{name:'Source history',exact:true}).waitFor();await page.getByRole('alert').waitFor();await idle(page);
+  assert.equal(await page.getByRole('link',{name:'Source history',exact:true}).count(),0);assert.deepEqual(paths,[]);assert.equal(await page.locator('[data-source-run],[data-source-detail],[data-source-object]').count(),0);
+  for(const path of['source-history','source-history/'+runs[0].id,'source-history/'+runs[0].id+'/records'])assert.equal((await call(page,path)).status,403);
+ });
+ await test('source history separates source currency ledgers and retains held records and literal raw evidence',async t=>{
+  const page=await open(t);await select(page,runs[0]);
+  for(const[key,amount]of[['bonsai:CAD','CAD 113.00'],['bonsai:USD','USD 20.00'],['legacy:CAD','CAD 113.00']])assert.ok((await detail(page).locator('[data-source-currency="'+key+'"]').textContent()).includes(amount));
+  for(const key of runs[0].report.coverage.excludedFinancialRecords||[])assert.equal(runs[0].report.records.find(r=>r.key===key).disposition,'HELD');
+  assert.ok((await records(page).locator('[data-source-record="notion:database.csv"]').textContent()).includes('HELD'));
+  assert.ok((await records(page).locator('[data-source-raw]').allTextContents()).some(text=>text.includes(literal)));
+  assert.equal(await detail(page).locator('img,script').count(),0);assert.equal(await page.evaluate(()=>window.sourceHistoryExecuted),undefined);
+ });
+ await test('source history downloads exact archived original bytes with no provider or write request',async t=>{
+  const page=await open(t);await select(page,runs[0]);const requests=[];page.on('request',r=>{if(new URL(r.url()).pathname.startsWith('/api/source-history'))requests.push(r.method());});
+  for(const[source,path]of[['notion','Handbook.md'],['legacy','files/attachments/legacy-attachment/original.bin']]){
+   const original=runs[0].objects.find(o=>o.source===source&&o.path===path),download=page.waitForEvent('download');
+   await detail(page).getByRole('button',{name:'Download original '+path,exact:true}).click();const saved=await download;assert.deepEqual(new Uint8Array(await readFile(await saved.path())),original.bytes);
+  }
+  assert.ok(requests.length>=2);assert.ok(requests.every(method=>method==='GET'));assert.equal(stripe.requests.length,providerCount);
+ });
+ await test('source history real bounded run and record pagination respect client project filters',async t=>{
+  const page=await open(t);await forcePages(page);await refresh(page).click();await idle(page);assert.equal(await list(page).locator('[data-source-run]').count(),1);
+  await page.getByRole('button',{name:'Load more source runs',exact:true}).click();await idle(page);assert.equal(await list(page).locator('[data-source-run]').count(),2);
+  await page.getByLabel('Filter source client',{exact:true}).selectOption(runs[0].clientId);await page.getByLabel('Filter source project',{exact:true}).selectOption(runs[0].projectId);await page.getByRole('button',{name:'Apply source filters',exact:true}).click();await idle(page);
+  assert.deepEqual(await list(page).locator('[data-source-run]').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-source-run'))),[runs[0].id]);await select(page,runs[0]);
+  const expected=runs[0].report.records.map(r=>r.key).sort();assert.equal((await currentKeys(page)).length,1);assert.equal(await page.getByRole('button',{name:'Load more source records',exact:true}).count(),1);for(let n=0;n<expected.length&&await currentKeys(page).then(keys=>keys.length<expected.length);n++){await page.getByRole('button',{name:'Load more source records',exact:true}).click();await idle(page);}
+  assert.deepEqual((await currentKeys(page)).sort(),expected);assert.equal(new Set(await currentKeys(page)).size,expected.length);
+ });
+ for(const failure of[false,true])await test('source history stale list '+(failure?'failure':'success')+' cannot replace Tasks or focus',async t=>{
+  const page=await open(t),image=await data(page,'source-history'),old=await hold(page,/\/api\/source-history(?:\?.*)?$/);await refresh(page).click();await old.entered;
+  await page.getByRole('link',{name:'Tasks',exact:true}).click();await page.getByLabel('Name',{exact:true}).focus();await old.release(failure?failed:json(image));
+  assert.equal(new URL(page.url()).hash,'#tasks');assert.equal(await page.locator('[data-source-run],[data-source-detail]').count(),0);assert.equal(await page.getByRole('alert').count(),0);assert.equal(await page.locator(':focus').getAttribute('name'),'title');
+ });
+ for(const failure of[false,true])await test('source history stale run page '+(failure?'failure':'success')+' cannot append after filters change',async t=>{
+  const page=await open(t);await forcePages(page);await refresh(page).click();await idle(page);
+  const first=await data(page,'source-history?limit=1'),image=await data(page,'source-history?limit=1&after='+encodeURIComponent(first.nextCursor)),old=await hold(page,/\/api\/source-history\?[^#]*[?&]?after=/);
+  await page.getByRole('button',{name:'Load more source runs',exact:true}).click();await old.entered;
+  await page.getByLabel('Filter source client',{exact:true}).selectOption(runs[0].clientId);await page.getByLabel('Filter source project',{exact:true}).selectOption(runs[0].projectId);await page.getByRole('button',{name:'Apply source filters',exact:true}).click();await idle(page);
+  const filter=page.getByLabel('Filter source client',{exact:true});await filter.focus();await old.release(failure?failed:json(image));
+  assert.deepEqual(await list(page).locator('[data-source-run]').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-source-run'))),[runs[0].id]);assert.equal(await filter.evaluate(el=>document.activeElement===el),true);assert.equal(await page.getByRole('alert').count(),0);assert.equal(await list(page).getAttribute('aria-busy'),null);
+ });
+ for(const failure of[false,true])await test('source history superseded detail '+(failure?'failure':'success')+' cannot replace a newer receipt or its focus',async t=>{
+  const page=await open(t),image=await data(page,'source-history/'+runs[0].id),old=await hold(page,'**/api/source-history/'+runs[0].id);await page.locator('[data-source-run="'+runs[0].id+'"]').getByRole('button',{name:'Open source run',exact:true}).click();await old.entered;
+  await select(page,runs[1]);const close=page.getByRole('button',{name:'Close source run',exact:true});await close.focus();await old.release(failure?failed:json(image));
+  assert.ok((await detail(page).textContent()).includes(runs[1].projectName));assert.ok(!(await detail(page).textContent()).includes(runs[0].projectName));assert.equal(await close.evaluate(el=>document.activeElement===el),true);assert.equal(await page.getByRole('alert').count(),0);
+ });
+ for(const failure of[false,true])await test('source history stale record page '+(failure?'failure':'success')+' cannot append to another selected run',async t=>{
+  const page=await open(t);await forcePages(page);await refresh(page).click();await idle(page);await showRun(page,runs[0]);await showRun(page,runs[1]);await select(page,runs[0]);
+  const first=await data(page,'source-history/'+runs[0].id+'/records?limit=1'),image=await data(page,'source-history/'+runs[0].id+'/records?limit=1&after='+encodeURIComponent(first.nextCursor)),old=await hold(page,'**/api/source-history/'+runs[0].id+'/records?*after=*');
+  await page.getByRole('button',{name:'Load more source records',exact:true}).click();await old.entered;await select(page,runs[1]);const before=await currentKeys(page),close=page.getByRole('button',{name:'Close source run',exact:true});await close.focus();await old.release(failure?failed:json(image));
+  assert.deepEqual(await currentKeys(page),before);assert.equal(await close.evaluate(el=>document.activeElement===el),true);assert.equal(await page.getByRole('alert').count(),0);
+ });
+ await test('source history superseded list failure preserves newer loading state and focused filter',async t=>{
+  const page=await open(t),image=await data(page,'source-history'),old=await hold(page,/\/api\/source-history(?:\?.*)?$/);await refresh(page).click();await old.entered;const current=await hold(page,/\/api\/source-history(?:\?.*)?$/);await refresh(page).click();await current.entered;
+  const filter=page.getByLabel('Filter source client',{exact:true});await filter.focus();await old.release(failed);assert.equal(await list(page).getAttribute('aria-busy'),'true');await current.release(json(image));await idle(page);assert.equal(await filter.evaluate(el=>document.activeElement===el),true);assert.equal(await page.getByRole('alert').count(),0);
+ });
+ await test('source history current finance revocation clears cached prices raw records and download controls',async t=>{
+  const page=await open(t);await select(page,runs[0]);await DB.prepare("DELETE FROM actor_finance_access WHERE id='bill-fin'").run();try{await refresh(page).click();await page.getByRole('alert').waitFor();await idle(page);assert.equal(await page.locator('[data-source-run],[data-source-detail],[data-source-currency],[data-source-object],[data-source-raw]').count(),0);}finally{await DB.prepare("INSERT OR IGNORE INTO actor_finance_access VALUES('bill-fin','qa-org')").run();}
+ });
+ await test('source history delayed download authentication failure clears the current archive and controls',async t=>{
+  const page=await open(t);await select(page,runs[0]);const old=await hold(page,'**/api/source-history/'+runs[0].id+'/objects/*/download');await detail(page).getByRole('button',{name:'Download original Handbook.md',exact:true}).click();await old.entered;
+  await old.release({status:401,contentType:'application/json',body:JSON.stringify({error:'Sign in required'})});await page.getByRole('alert').waitFor();assert.equal(await page.locator('[data-source-run],[data-source-detail],[data-source-currency],[data-source-object],[data-source-raw]').count(),0);
+ });
+ await test('source history revoked access keeps archive navigation hidden on Tasks',async t=>{
+  const page=await open(t);await select(page,runs[0]);await DB.prepare("DELETE FROM actor_finance_access WHERE id='bill-fin'").run();try{
+   await refresh(page).click();await page.getByRole('alert').waitFor();await idle(page);await page.getByRole('link',{name:'Tasks',exact:true}).click();await page.getByRole('heading',{name:'Tasks',exact:true}).waitFor();await idle(page);assert.equal(await page.getByRole('link',{name:'Source history',exact:true}).count(),0);
+  }finally{await DB.prepare("INSERT OR IGNORE INTO actor_finance_access VALUES('bill-fin','qa-org')").run();}
+ });
+ await test('source history redirected original session clears retained evidence and controls',async t=>{
+  const page=await open(t);await select(page,runs[0]);const image=await data(page,'source-history/'+runs[0].id),file=image.sourceFiles.notion.find(f=>f.path==='Handbook.md');
+  await page.route('**/api/source-history/'+runs[0].id+'/objects/'+file.id+'/download',route=>route.fulfill({status:200,contentType:'text/html',body:'<html><body>Sign in</body></html>'}));await detail(page).getByRole('button',{name:'Download original Handbook.md',exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(await page.locator('[data-source-run],[data-source-detail],[data-source-currency],[data-source-object],[data-source-raw]').count(),0);
+ });
+ await test('source history delayed original cannot download after navigation to Tasks',async t=>{
+  const page=await open(t);await select(page,runs[0]);const image=await data(page,'source-history/'+runs[0].id),file=image.sourceFiles.notion.find(f=>f.path==='Handbook.md'),old=await hold(page,'**/api/source-history/'+runs[0].id+'/objects/'+file.id+'/download'),downloads=[];page.on('download',d=>downloads.push(d));
+  await detail(page).getByRole('button',{name:'Download original Handbook.md',exact:true}).click();await old.entered;await page.getByRole('link',{name:'Tasks',exact:true}).click();await page.getByLabel('Name',{exact:true}).focus();await old.release({status:200,contentType:'application/octet-stream',body:Buffer.from(runs[0].objects.find(o=>o.source==='notion'&&o.path==='Handbook.md').bytes)});
+  assert.equal(downloads.length,0);assert.equal(new URL(page.url()).hash,'#tasks');assert.equal(await page.locator(':focus').getAttribute('name'),'title');assert.equal(await page.getByRole('alert').count(),0);
+ });
+ await test('source history concurrent original downloads settle independently and restore both controls',async t=>{
+  const page=await open(t);await select(page,runs[0]);const image=await data(page,'source-history/'+runs[0].id),file=image.sourceFiles.notion.find(f=>f.path==='Handbook.md'),old=await hold(page,'**/api/source-history/'+runs[0].id+'/objects/'+file.id+'/download'),downloads=[];page.on('download',d=>downloads.push(d));
+  const first=detail(page).getByRole('button',{name:'Download original Handbook.md',exact:true});await first.click();await old.entered;const secondDownload=page.waitForEvent('download');await detail(page).getByRole('button',{name:'Download original files/attachments/legacy-attachment/original.bin',exact:true}).click();await secondDownload;
+  await Promise.all([page.waitForEvent('download'),old.release({status:200,contentType:'application/octet-stream',body:Buffer.from(runs[0].objects.find(o=>o.source==='notion'&&o.path==='Handbook.md').bytes)})]);await page.waitForFunction(()=>[...document.querySelectorAll('[data-source-object]')].every(b=>!b.disabled));assert.equal(downloads.length,2);assert.equal(await page.getByRole('alert').count(),0);
+ });
+ for(const kind of['detail','records','download'])await test('source history superseded '+kind+' denial rechecks current finance and clears a newer receipt',async t=>{
+  const page=await open(t);let old;
+  if(kind==='download'){await select(page,runs[0]);const image=await data(page,'source-history/'+runs[0].id),file=image.sourceFiles.notion.find(f=>f.path==='Handbook.md');old=await hold(page,'**/api/source-history/'+runs[0].id+'/objects/'+file.id+'/download');await detail(page).getByRole('button',{name:'Download original Handbook.md',exact:true}).click();}
+  else{old=await hold(page,kind==='detail'?'**/api/source-history/'+runs[0].id:'**/api/source-history/'+runs[0].id+'/records?*');await page.locator('[data-source-run="'+runs[0].id+'"]').getByRole('button',{name:'Open source run',exact:true}).click();}
+  await old.entered;await select(page,runs[1]);await DB.prepare("DELETE FROM actor_finance_access WHERE id='bill-fin'").run();try{
+   await old.release(kind==='download'?{status:200,contentType:'text/html',body:'<html>Sign in</html>'}:denied);await page.getByRole('alert').waitFor();assert.equal(await page.locator('[data-source-run],[data-source-detail],[data-source-currency],[data-source-object],[data-source-raw]').count(),0);
+  }finally{await DB.prepare("INSERT OR IGNORE INTO actor_finance_access VALUES('bill-fin','qa-org')").run();}
+ });
+ await test('source history superseded denial cannot clear a newer currently authorized receipt',async t=>{
+  const page=await open(t),old=await hold(page,'**/api/source-history/'+runs[0].id);await page.locator('[data-source-run="'+runs[0].id+'"]').getByRole('button',{name:'Open source run',exact:true}).click();await old.entered;await select(page,runs[1]);const close=page.getByRole('button',{name:'Close source run',exact:true});await close.focus();
+  await Promise.all([page.waitForResponse(r=>new URL(r.url()).pathname==='/api/me'),old.release(denied)]);await idle(page);assert.ok((await detail(page).textContent()).includes(runs[1].projectName));assert.equal(await page.getByRole('alert').count(),0);assert.equal(await close.evaluate(el=>document.activeElement===el),true);
+ });
+ await test('source history maximum safe minor units retain distinct adjacent cents',async t=>{
+  const page=await open(t);await select(page,runs[1]);assert.equal(runs[1].report.totals.bonsai.CAD.invoiceTotalMinor,9007199254740990);assert.equal(runs[1].report.totals.bonsai.USD.invoiceTotalMinor,Number.MAX_SAFE_INTEGER);
+  assert.ok((await detail(page).locator('[data-source-currency="bonsai:CAD"]').textContent()).includes('CAD 90,071,992,547,409.90'));assert.ok((await detail(page).locator('[data-source-currency="bonsai:USD"]').textContent()).includes('USD 90,071,992,547,409.91'));
+ });
+ await test('source history current client project reassignment withdraws cached receipt evidence',async t=>{
+  const page=await open(t);await select(page,runs[0]);await DB.prepare('UPDATE projects SET client_id=? WHERE id=?').bind(runs[1].clientId,runs[0].projectId).run();try{
+   await page.getByRole('button',{name:'Close source run',exact:true}).click();await page.locator('[data-source-run="'+runs[0].id+'"]').getByRole('button',{name:'Open source run',exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(await page.locator('[data-source-detail] [data-source-raw],[data-source-object]').count(),0);
+  }finally{await DB.prepare('UPDATE projects SET client_id=? WHERE id=?').bind(runs[0].clientId,runs[0].projectId).run();}
+ });
+ await test('source history keyboard skip and final pagination keep route and enabled focus',async t=>{
+  const page=await open(t);await page.keyboard.press('Tab');assert.equal(await page.locator(':focus').textContent(),'Skip to content');await page.keyboard.press('Enter');assert.equal(new URL(page.url()).hash,'#source-history');assert.equal(await page.locator(':focus').getAttribute('id'),'main');
+  await page.route('**/api/source-history/'+runs[0].id+'/records*',async route=>{const url=new URL(route.request().url());url.searchParams.set('limit','18');await route.fulfill({response:await route.fetch({url:url.href})});});await select(page,runs[0]);
+  const more=page.getByRole('button',{name:'Load more source records',exact:true});await more.focus();await page.keyboard.press('Enter');await idle(page);assert.equal((await currentKeys(page)).length,runs[0].report.records.length);assert.equal(await refresh(page).evaluate(el=>document.activeElement===el&&!el.disabled),true);
+ });
+ await test('source history retained evidence remains readable responsive and accessible at three widths',async t=>{
+  const page=await open(t);for(const width of[390,768,1440]){await page.setViewportSize({width,height:1000});await page.reload();await idle(page);await select(page,runs[0]);await page.evaluate(axe);assert.deepEqual(await page.evaluate(async()=>(await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}})).violations.map(v=>v.id)),[]);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:fileURLToPath(new URL('../../../outputs/source-history-'+width+'.png',import.meta.url)),fullPage:true});}
+  assert.equal(stripe.requests.length,providerCount);
+ });
 }

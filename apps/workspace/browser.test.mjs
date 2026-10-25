@@ -70,7 +70,7 @@ if(selectedSuites.has('runFinanceTests')){await runFinanceTests({browser,origin,
 if(selectedSuites.has('runCommercialTests')){await runCommercialTests({browser,origin,DB,axe,addActor});executedSuites.push('runCommercialTests');}
 if(selectedSuites.has('runProposalReviewTests')){await runProposalReviewTests({browser,origin,DB,axe,addActor});executedSuites.push('runProposalReviewTests');}
 if(selectedSuites.has('runStripeTests')){await runStripeTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runStripeTests');}
-if(selectedSuites.has('runInvoiceTests')){await runInvoiceTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runInvoiceTests');}
+if(selectedSuites.has('runInvoiceTests')){await runInvoiceTests({browser,origin,DB,FILES,axe,addActor,stripe});executedSuites.push('runInvoiceTests');}
 if(selectedSuites.has('runRecordLinkTests')){await runRecordLinkTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runRecordLinkTests');}
 if(selectedSuites.has('runDashboardTests')){await runDashboardTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runDashboardTests');}
 if(selectedSuites.has('runContractTests')){await runContractTests({browser,origin,DB,FILES,axe,addActor,contractSigning});executedSuites.push('runContractTests');}
