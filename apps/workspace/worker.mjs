@@ -10,6 +10,7 @@ import { invoicesRoute } from './invoices.mjs';
 import { commercialRoute } from './commercial.mjs';
 import { proposalReviewsRoute } from './proposal-reviews.mjs';
 import { stripeDraftsRoute } from './stripe-drafts.mjs';
+import { stripeWebhook, stripeLifecycleRoute, drainStripeEvents } from './stripe-lifecycle.mjs';
 const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','Strict-Transport-Security':'max-age=31536000'};
 export const json=(value,status=200)=>Response.json(value,{status,headers:security});
 export async function readBody(request){
@@ -21,9 +22,10 @@ export async function readBody(request){
  let input;try{input=JSON.parse(new TextDecoder().decode(bytes));}catch{throw 400;}
  if(!input||typeof input!=='object'||Array.isArray(input))throw 400;return input;
 }
-export function createWorker(resolveKey,providers={}){return {async fetch(request,env){try{
+export function createWorker(resolveKey,providers={}){return {async scheduled(event,env,ctx){await drainStripeEvents(env,providers.stripeFetch,ctx);},async fetch(request,env,ctx){try{
  const url=new URL(request.url);if(url.origin!==env.APP_ORIGIN)throw 404;
  if(url.pathname==='/health')return json({status:'ok',release:env.RELEASE||'unversioned'});
+ if(url.pathname==='/api/stripe/webhook')return await stripeWebhook(request,env,json,providers.stripeFetch,ctx);
  let identity;try{identity=await authenticate(request,env,resolveKey);}catch{throw 401;}
  const actor=await env.DB.prepare('SELECT id,organization_id,role,client_id FROM actors WHERE email=? AND active=1').bind(identity.email).first();if(!actor)throw 403;
  if(request.method==='GET'&&['/','/app.js','/app.css'].includes(url.pathname)){
@@ -38,6 +40,7 @@ export function createWorker(resolveKey,providers={}){return {async fetch(reques
  if(url.pathname==='/api/files'||url.pathname.startsWith('/api/files/'))return await filesRoute(request,env,actor,readBody,json);
  if(url.pathname==='/api/me'&&request.method==='GET')return json({role:actor.role,id:actor.id,pilot:true,features:{files:!!env.FILES,finance:await hasFinance(env.DB,actor)}});
  if(url.pathname==='/api/export'&&request.method==='GET')return await exportRecords(env.DB,actor,json);
+ if(url.pathname.startsWith('/api/stripe/events')||/^\/api\/invoices\/[^/]+\/billing(?:\/reconcile)?$/.test(url.pathname)||['/api/billing/invoices','/api/billing/summary'].includes(url.pathname)||url.pathname==='/api/portal/invoices'||url.pathname.startsWith('/api/portal/invoices/'))return await stripeLifecycleRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(url.pathname.startsWith('/api/stripe/')||/^\/api\/invoices\/[^/]+\/stripe(?:-preview|\/reconcile|\/requests\/[^/]+(?:\/cancel)?)?$/.test(url.pathname))return await stripeDraftsRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(url.pathname==='/api/invoices'||url.pathname.startsWith('/api/invoices/'))return await invoicesRoute(request,env.DB,actor,readBody,json);
  if(url.pathname==='/api/commercial'||url.pathname.startsWith('/api/commercial/'))return await commercialRoute(request,env.DB,actor,readBody,json);
