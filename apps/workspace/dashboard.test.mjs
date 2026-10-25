@@ -49,4 +49,17 @@ test('dashboard tasks project canonical records through current signed identity 
  await t.test('an assignment without an authorized staff match stays unknown rather than falsely inactive',async()=>{
   await seed('unknown-owner',{owner:'foreign'});const row=(await get('?ownerId=foreign')).items[0];assert.deepEqual(row.owner,{id:'foreign',state:'UNAVAILABLE'});
  });
+ await t.test('UTC due filters distinguish today, prior days and completed work',async()=>{
+  const today=new Date().toISOString().slice(0,10);await seed('utc-today',{due:today});await seed('utc-past',{due:'2000-01-01'});await seed('utc-done',{due:'2000-01-01',status:'done'});
+  const midnight=Date.parse(today+'T00:00:00Z'),originalNow=Date.now;let data;try{Date.now=()=>midnight;data=await get('?due=today');}finally{Date.now=originalNow;}assert.equal(data.observedAt,midnight);assert.equal(data.dateBasis,'UTC');assert.equal(new Date(data.observedAt).toISOString().slice(0,10),today);assert.deepEqual(data.items.map(r=>r.id),['utc-today']);assert.equal(data.items[0].overdue,false);
+  const overdue=await get('?due=overdue&status=all');assert.deepEqual(overdue.items.map(r=>r.id),['utc-past']);assert.ok(overdue.items.every(r=>r.overdue));
+ });
+ await t.test('sharing revoked between client reads cannot leave earlier task data in the response',async()=>{
+  let reads=0;const wrapped={prepare(sql){const statement=DB.prepare(sql);if(!sql.startsWith('SELECT tasks.'))return statement;return {bind(...args){const bound=statement.bind(...args);return {async all(){const r=await bound.all();if(++reads===1)await DB.prepare("UPDATE projects SET client_visible=0 WHERE id='pa'").run();return r;}};}};}};
+  assert.deepEqual((await get('','client',{...env,DB:wrapped})).items,[]);assert.equal(reads,2);await DB.prepare("UPDATE projects SET client_visible=1 WHERE id='pa'").run();
+ });
+ await t.test('client remapping during the read denies the entire stale projection',async()=>{
+  let reads=0;const wrapped={prepare(sql){const statement=DB.prepare(sql);if(!sql.startsWith('SELECT tasks.'))return statement;return {bind(...args){const bound=statement.bind(...args);return {async all(){const r=await bound.all();if(++reads===1)await DB.prepare("UPDATE actors SET client_id='co' WHERE id='client'").run();return r;}};}};}};
+  assert.equal((await call('','client',{...env,DB:wrapped})).status,403);await DB.prepare("UPDATE actors SET client_id='ca' WHERE id='client'").run();
+ });
 });

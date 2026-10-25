@@ -14,6 +14,7 @@ export async function dashboardTasks(request,db,actor,json){
  if(owner==='mine'){where.push('tasks.assignee_id=?');bindings.push(actor.id);}else if(owner==='unassigned')where.push('tasks.assignee_id IS NULL');
  const observedAt=Date.now(),today=new Date(observedAt).toISOString().slice(0,10);
  if(due==='none')where.push('tasks.due_on IS NULL');else if(due!=='all'){where.push('tasks.due_on'+(due==='overdue'?'< ?':'= ?'));bindings.push(today);}
+ if(due==='overdue')where.push("tasks.status!='done'");
  // Current identity is part of the query, not just the initial authentication.
  where.push('EXISTS(SELECT 1 FROM actors viewer WHERE viewer.id=? AND viewer.organization_id=tasks.organization_id AND viewer.active=1 AND viewer.role=? AND viewer.client_id IS ?)');bindings.push(actor.id,actor.role,actor.client_id);
  const sql=`SELECT tasks.id,tasks.title,tasks.status,tasks.revision,tasks.assignee_id,tasks.due_on,p.id AS project_id,p.name AS project_name,c.id AS client_id,c.name AS client_name,a.active AS owner_active
