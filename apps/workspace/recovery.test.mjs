@@ -58,6 +58,19 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  }
  const externallyFinished=await uncertainInvoice('Provider advances after checkpoint'),retryable=await uncertainInvoice('Same original retry key'),leased=await uncertainInvoice('Lease survives recovery');
  const leaseUntil=Date.now()+300000;await source.env.DB.prepare('UPDATE stripe_invoice_issuance_operations SET lease_token=?,lease_until=? WHERE id=?').bind('synthetic-active-lease',leaseUntil,leased.row.id).run();
+
+ // New schedule reservations are application records; native restore must retain
+ // their separate identities, frozen review images, keys and source locks too.
+ const scheduleFuture=days=>new Date(Date.now()+days*86400000).toISOString().slice(0,10);
+ async function scheduleInvoice(title,{withTime=false}={}){
+  let approved=null;if(withTime){const time=await data(await call('time/manual',{projectId:r.project.id,seconds:1800,workedOn:'2026-10-24',billable:true,description:'Reserved installment work'}),201);approved=await data(await call('time/details/'+time.id+'/approve',{revision:0,currency:'CAD',rateMinor:1000}));}
+  const body={clientId:r.client.id,projectId:r.project.id,title,currency:'CAD',tax:{type:'HST',rateBps:1300},dueOn:scheduleFuture(30),times:approved?[{id:approved.id,revision:approved.revision}]:[],charges:[{description:'Frozen installment work',quantity:1,unitMinor:1300}],deposit:{amountMinor:700,dueOn:scheduleFuture(7)}},preview=await data(await call('invoices/preview',body)),invoice=await data(await call('invoices',{...body,requestId:crypto.randomUUID(),fingerprint:preview.fingerprint}),201),plan=await data(await call('invoices/'+invoice.id+'/stripe-schedule-preview',{}));
+  return {invoice,approved,path:'stripe/schedules/'+invoice.id,body:{requestId:crypto.randomUUID(),revision:invoice.revision,fingerprint:plan.fingerprint,reason:'Synthetic recovery schedule review'}};
+ }
+ const reservedInput=await scheduleInvoice('Frozen reservation survives recovery',{withTime:true}),reserved=await data(await call(reservedInput.path,reservedInput.body),201);
+ const cancelledScheduleInput=await scheduleInvoice('Cancelled late schedule request'),cancelledSchedule=await data(await call(cancelledScheduleInput.path+'/requests/'+cancelledScheduleInput.body.requestId+'/cancel',{}));assert.equal(cancelledSchedule.state,'CANCELLED');
+ const abandonedInput=await scheduleInvoice('Abandoned schedule history'),abandonedInitial=await data(await call(abandonedInput.path,abandonedInput.body),201),abandoned=await data(await call(abandonedInput.path+'/'+abandonedInitial.id+'/abandon',{revision:abandonedInitial.revision,reason:'Reviewed before provider activation'}));assert.equal(abandoned.state,'ABANDONED');
+
  // Inventory staged orphans and zero-length objects too, not only ready DB rows.
  await source.env.FILES.put('unreferenced/café; staged.bin',new Uint8Array([0,17,255]),{httpMetadata:{contentType:'application/octet-stream',contentDisposition:'attachment; filename="staged.bin"',cacheControl:'private, no-store',cacheExpiry:new Date('2030-01-02T00:00:00Z')},customMetadata:{owner:'synthetic',literal:'café; "quoted"'}});
  await source.env.FILES.put('unreferenced/empty',new Uint8Array(),{customMetadata:{state:'pending'}});
@@ -68,7 +81,7 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  await writeFile(keyFile,JSON.stringify({active:'journey',keys:fixture.keyRing}),{mode:0o600});
  const {image,objects}=JSON.parse(await readFile(checkpoint,'utf8'));
  for(const key of Object.values(fixture.keyRing))assert.equal((await readFile(checkpoint,'utf8')).includes(key),false);
- assert.equal(Object.keys(image.tables).length,45);assert.equal(image.schema.filter(s=>s.type==='index').length,35);assert.equal(objects.length,6);
+ assert.equal(Object.keys(image.tables).length,49);assert.equal(image.schema.filter(s=>s.type==='index').length,37);assert.equal(objects.length,6);
  const sql=await exportDatabase(source);
  // External Stripe state is deliberately NOT restored with our D1/R2 image.
  const externalFinalize=provider.requests.findLast(p=>p.method==='POST'&&p.path==='/v1/invoices/'+externallyFinished.creation.stripeInvoiceId+'/finalize');
@@ -81,8 +94,22 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  const DB=target.env.DB,FILES=target.env.FILES;
  const verify=async()=>assert.deepEqual(await databaseImage(DB),image,'all schema and exact table images must match trusted checkpoint');
  const putRow=async(table,row)=>{const cols=Object.keys(row);await DB.prepare('INSERT INTO "'+table+'"('+cols.map(c=>'"'+c+'"').join(',')+') VALUES('+cols.map(()=>'?').join(',')+')').bind(...cols.map(c=>row[c])).run();};
- await t.test('all 45 tables and 35 indexes match before any restored application use',verify);
+ await t.test('all 49 tables and 37 indexes match before any restored application use',verify);
  await t.test('all paginated objects including orphans, empty data and private metadata match',()=>verifyObjects(FILES,objects));
+
+ await t.test('restored frozen schedule keeps distinct identities, original receipts and exact source reservations',async()=>{
+  const before=provider.requests.length;assert.deepEqual(await data(await restored(reservedInput.path)),reserved);assert.deepEqual((await data(await restored(reservedInput.path+'/requests/'+reservedInput.body.requestId))).schedule,reserved);assert.deepEqual(await data(await restored(reservedInput.path,reservedInput.body)),reserved);assert.equal(provider.requests.length,before,'receipt recovery cannot invoke the provider');assert.equal((await DB.prepare('SELECT invoice_ref FROM time_details WHERE id=?').bind(reservedInput.approved.id).first()).invoice_ref,'workspace:'+reservedInput.invoice.id);assert.notEqual(reserved.parts[0].id,reserved.parts[1].id);await verify();
+ });
+ await t.test('restored cancelled keys and abandoned history cannot become new schedules',async()=>{
+  const before=provider.requests.length;assert.deepEqual(await data(await restored(cancelledScheduleInput.path+'/requests/'+cancelledScheduleInput.body.requestId)),cancelledSchedule);assert.equal((await restored(cancelledScheduleInput.path,cancelledScheduleInput.body)).status,409);assert.deepEqual(await data(await restored(abandonedInput.path)),abandoned);assert.deepEqual(await data(await restored(abandonedInput.path,abandonedInput.body)),abandoned);assert.equal(provider.requests.length,before);await verify();
+ });
+ await t.test('restored active schedule continues to block parent void and source-time reuse',async()=>{
+  const invoice=await data(await restored('invoices/'+reservedInput.invoice.id)),before=provider.requests.length;assert.equal((await restored('invoices/'+invoice.id+'/void',{revision:invoice.revision,reason:'Cannot release frozen obligations'})).status,409);assert.equal((await DB.prepare('SELECT invoice_ref FROM time_details WHERE id=?').bind(reservedInput.approved.id).first()).invoice_ref,'workspace:'+invoice.id);assert.equal(provider.requests.length,before);await verify();
+ });
+ await t.test('missing restored schedule part or journal rejects the receipt without repair or provider calls',async()=>{
+  for(const table of ['stripe_installment_parts','stripe_installment_events']){const row=image.tables[table].find(row=>row.schedule_id===reserved.id);assert.ok(row,table);await DB.prepare('DELETE FROM '+table+' WHERE id=?').bind(row.id).run();try{await assert.rejects(verify);const before=provider.requests.length;assert.equal((await restored(reservedInput.path)).status,503);assert.equal((await restored(reservedInput.path,reservedInput.body)).status,503);assert.equal(provider.requests.length,before);}finally{await putRow(table,row);}}await verify();
+ });
+
  await t.test('own client reads exact original file and immutable signed JSON/PDF bytes',async()=>{
   for(const path of e.clientPaths)assert.equal((await restored(path,undefined,'client')).status,200,path);
   for(const[path,bytes]of[['files/'+r.file.id+'/download',e.fileBytes],[r.contractPath+'/signed-document',e.jsonBytes],[r.contractPath+'/signed-pdf',e.pdfBytes]])assert.deepEqual(new Uint8Array(await(await restored(path,undefined,'client')).arrayBuffer()),bytes);
@@ -162,7 +189,7 @@ test('native isolated recovery preserves an ingested source package, original by
  await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name) VALUES('canonical-project','pilot-org','canonical-client','Site')").run();
  const objects=[];for(const[source,pins]of Object.entries(report.sourceFiles))for(const pin of pins)objects.push({source,path:pin.path,bytes:new Uint8Array(await readFile(join(fixture.root,source,pin.path)))});
  const input={requestId:crypto.randomUUID(),report,objects,snapshot:{clientRevision:0,projectRevision:0}},receipt=await applySourcePilot(source.env,actor,input),before=await readSourcePilot(source.env,actor,receipt.id),image=await databaseImage(DB),objectImage=await captureObjects(source.env.FILES);
- assert.equal(Object.keys(image.tables).length,45);assert.equal(image.schema.filter(s=>s.type==='index').length,35);
+ assert.equal(Object.keys(image.tables).length,49);assert.equal(image.schema.filter(s=>s.type==='index').length,37);
  assert.equal(image.tables.source_pilot_records.length,19);assert.equal(image.tables.source_pilot_objects.length,objects.length);
  const target=await importDatabase(join(root,'restored'),await exportDatabase(source));t.after(()=>target.dispose());await restoreObjects(target.env.FILES,objectImage);
  assert.deepEqual(await databaseImage(target.env.DB),image);assert.deepEqual(await readSourcePilot(target.env,actor,receipt.id),before);

@@ -69,15 +69,27 @@ const sourceColumn={id:'d.id',revision:'d.revision',projectId:'d.project_id',pro
 function matches(ref){return Object.entries(sourceColumn).map(([key,column])=>`${column} IS json_extract(${ref},'$.${key}')`).join(' AND ');}
 // Issuance retains the exact reservation, including its post-claim revision and
 // immutable billing audit. Alias must come from source code, never user input.
-export function invoiceClaimGuard(alias='i'){
+// Local receipt/abandonment may retain historical names while checking the same
+// current IDs, ownership, exact money/time and immutable billing audit. Provider
+// review and issuance keep strict metadata checks by default.
+export function invoiceClaimGuard(alias='i',{strictMetadata=true}={}){
  if(!/^[a-z]+$/.test(alias))throw 500;
- const ref="json_extract(line.value,'$.source')",entries=Object.entries(sourceColumn),same=`(${entries.map(([,column])=>column).join(',')}) IS (${entries.map(([key])=>`json_extract(${ref},'$.${key}')`+(key==='revision'?'+1':'')).join(',')})`;
+ const ref="json_extract(line.value,'$.source')",entries=Object.entries(sourceColumn).filter(([key])=>strictMetadata||!['projectName','projectRevision','actorEmail'].includes(key)),same=`(${entries.map(([,column])=>column).join(',')}) IS (${entries.map(([key])=>`json_extract(${ref},'$.${key}')`+(key==='revision'?'+1':'')).join(',')})`;
  const fields=['source_kind','description','worked_on','billable','review_status','reviewed_by','reviewed_at','rejection_reason','revision','created_at','currency','rate_minor','rate_reference','invoice_ref'],audit=`(${fields.map(c=>'b.'+c).join(',')}) IS (${fields.map(c=>'d.'+c).join(',')})`;
  return `(SELECT COUNT(*) FROM time_details claimed WHERE claimed.organization_id=${alias}.organization_id AND claimed.invoice_ref='workspace:'||${alias}.id)=(SELECT COUNT(*) FROM json_each(${alias}.snapshot_json,'$.lines') line WHERE json_extract(line.value,'$.kind')='TIME') AND NOT EXISTS(SELECT 1 FROM json_each(${alias}.snapshot_json,'$.lines') line WHERE json_extract(line.value,'$.kind')='TIME' AND NOT EXISTS(SELECT 1 ${sourceFrom} JOIN time_billing_events b ON b.time_id=d.id AND b.organization_id=d.organization_id AND b.invoice_id=${alias}.id AND b.action='CLAIM' WHERE d.organization_id=${alias}.organization_id AND d.invoice_ref='workspace:'||${alias}.id AND p.client_id=${alias}.client_id AND ${same} AND b.project_id=d.project_id AND b.owner_actor_id=d.actor_id AND b.id=d.audit_token AND ${audit} AND b.started_at=t.started_at AND b.ended_at IS t.ended_at AND b.seconds=t.seconds)) AND (SELECT COUNT(*) FROM time_billing_events b WHERE b.organization_id=${alias}.organization_id AND b.invoice_id=${alias}.id AND b.action='CLAIM')=(SELECT COUNT(*) FROM json_each(${alias}.snapshot_json,'$.lines') line WHERE json_extract(line.value,'$.kind')='TIME')`;
 }
+// Abandoned schedules retain their original claim evidence even after a
+// legitimate release lets the current time record change. Names and current
+// invoice_ref belong to the live record; the original CLAIM journal stays exact.
+export function invoiceHistoricalClaimGuard(alias='i'){
+ if(!/^[a-z]+$/.test(alias))throw 500;
+ const fields={id:'time_id',revision:'revision',projectId:'project_id',actorId:'owner_actor_id',seconds:'seconds',startedAt:'started_at',endedAt:'ended_at',description:'description',workedOn:'worked_on',sourceKind:'source_kind',billable:'billable',reviewStatus:'review_status',reviewedBy:'reviewed_by',reviewedAt:'reviewed_at',currency:'currency',rateMinor:'rate_minor',rateReference:'rate_reference'},entries=Object.entries(fields),ref="json_extract(line.value,'$.source')";
+ const same=`(${entries.map(([,column])=>'b.'+column).join(',')},b.invoice_ref,b.actor_id) IS (${entries.map(([key])=>`json_extract(${ref},'$.${key}')`+(key==='revision'?'+1':'')).join(',')},'workspace:'||${alias}.id,${alias}.created_by)`;
+ return `(SELECT COUNT(*) FROM time_billing_events b WHERE b.organization_id=${alias}.organization_id AND b.invoice_id=${alias}.id AND b.action='CLAIM')=(SELECT COUNT(*) FROM json_each(${alias}.snapshot_json,'$.lines') line WHERE json_extract(line.value,'$.kind')='TIME') AND NOT EXISTS(SELECT 1 FROM json_each(${alias}.snapshot_json,'$.lines') line WHERE json_extract(line.value,'$.kind')='TIME' AND NOT EXISTS(SELECT 1 FROM time_billing_events b WHERE b.organization_id=${alias}.organization_id AND b.invoice_id=${alias}.id AND b.action='CLAIM' AND ${same}))`;
+}
 function selectionGuard(claimed=false){return `(SELECT COUNT(*) ${sourceFrom} JOIN json_each(?) selected ON d.id=json_extract(selected.value,'$.id') WHERE d.organization_id=? AND p.client_id=? AND ${matches('selected.value')} AND d.invoice_ref ${claimed?'=?':'IS NULL'})=?`;}
 function selectionValues(rows,actor,clientId,invoiceId){return [JSON.stringify(rows),actor.organization_id,clientId,...(invoiceId?['workspace:'+invoiceId]:[]),rows.length];}
-function safeExternal(){return `provider_state='NOT_CONNECTED' AND stripe_invoice_id IS NULL AND paid_minor=0`;}
+function safeExternal(){return `provider_state='NOT_CONNECTED' AND stripe_invoice_id IS NULL AND paid_minor=0 AND NOT EXISTS(SELECT 1 FROM stripe_installment_schedules s WHERE s.organization_id=invoice_drafts.organization_id AND s.invoice_id=invoice_drafts.id AND s.state='FROZEN')`;}
 // A successful no-op journal is also a failure: make the database roll back the batch.
 function commitFence(db,actor,invoiceId,token){return db.prepare(`UPDATE invoice_drafts SET write_token=CASE WHEN EXISTS(SELECT 1 FROM invoice_events e WHERE e.id=? AND e.invoice_id=invoice_drafts.id AND e.organization_id=invoice_drafts.organization_id) THEN write_token ELSE NULL END WHERE id=? AND organization_id=? AND write_token=? RETURNING id`).bind(token,invoiceId,actor.organization_id,token);}
 function invoiceAudit(db,actor,invoiceId,token,prefix,action,count){
@@ -109,6 +121,7 @@ async function create(db,actor,body){
 
 async function releasePreview(db,actor,row){
  if(row.status!=='VOID'||row.released_at!==null||row.provider_state!=='NOT_CONNECTED'||row.stripe_invoice_id!==null||row.paid_minor!==0||Date.now()-row.voided_at<10000)throw 409;
+ if(await db.prepare("SELECT 1 FROM stripe_installment_schedules WHERE organization_id=? AND invoice_id=? AND state='FROZEN'").bind(actor.organization_id,row.id).first())throw 409;
  const snapshot=JSON.parse(row.snapshot_json),original=snapshot.lines.filter(line=>line.kind==='TIME').map(line=>line.source);
  const rows=(await db.prepare(`${viewer} SELECT ${sourceSelect} ${sourceFrom} WHERE ${authority} AND d.organization_id=? AND d.invoice_ref=? AND p.client_id=? ORDER BY d.id`).bind(actor.id,actor.organization_id,actor.organization_id,'workspace:'+row.id,row.client_id).all()).results;
  if(rows.length!==original.length)throw 409;const byId=new Map(rows.map(r=>[r.id,source(r)]));for(const expected of original){const actual=byId.get(expected.id);if(!actual||Object.keys(expected).filter(key=>!['projectName','projectRevision','actorEmail'].includes(key)).some(key=>actual[key] !== (key==='revision'?expected[key]+1:expected[key])))throw 409;}

@@ -1,6 +1,7 @@
 import {hasFinance} from './time-details.mjs';
 import {invoiceClaimGuard} from './invoices.mjs';
 import {allocateInstallments} from './stripe-installments.mjs';
+import {stripeSchedulesRoute} from './stripe-schedules.mjs';
 
 // Persist stage attempts before POST; never refresh a stage timestamp or key on retry.
 const version='2026-09-30.endive',retryWindow=23*3600000,leaseTime=300000;
@@ -128,6 +129,7 @@ async function cancelRequest(db,actor,kind,key,invoiceId){
 export function stripeExportStatement(db,actor,table){const fields=table.startsWith('cancelled_stripe_')?'id,organization_id,'+(table==='cancelled_stripe_invoice_requests'?'invoice_id,':'')+'request_key,actor_id,created_at':table==='stripe_customer_links'?'id,organization_id,client_id,account_id,customer_id,client_revision,customer_json,actor_id,reason,created_at':table==='stripe_invoice_operations'?'id,organization_id,invoice_id,mapping_id,account_id,customer_id,actor_id,reason,plan_json,state,stage,stripe_invoice_id,create_attempt_at,lines_attempt_at,last_error,revision,created_at,updated_at':'id,organization_id,invoice_id,operation_id,actor_id,recorded_at,revision,action,state_json';return db.prepare(`SELECT ${fields} FROM ${table} WHERE organization_id=? AND ${authority} ORDER BY id LIMIT 1001`).bind(actor.organization_id,actor.id,actor.organization_id);}
 export async function stripeDraftsRoute(request,env,actor,readBody,json,fetcher=fetch){
  if(!await hasFinance(env.DB,actor))throw 403;const url=new URL(request.url),path=url.pathname,db=env.DB;const respond=async(value,status=200)=>{if(!await hasFinance(db,actor))throw 403;return json(value,status);};
+ if(path.startsWith('/api/stripe/schedules/'))return stripeSchedulesRoute(request,env,actor,readBody,json,async invoiceId=>schedulePreview(env,actor,await invoice(db,actor,invoiceId),fetcher));
  const receipt=path.match(/^\/api\/stripe\/customers\/requests\/([^/]+)(\/cancel)?$/)||path.match(/^\/api\/invoices\/([a-zA-Z0-9-]{1,100})\/stripe\/requests\/([^/]+)(\/cancel)?$/);
  if(receipt){query(url);const customerRequest=path.startsWith('/api/stripe/customers/'),key=receipt[customerRequest?1:2],stop=receipt[customerRequest?2:3],invoiceId=customerRequest?null:receipt[1];if(!uuid(key))throw 400;if(invoiceId)await invoice(db,actor,invoiceId);if(stop){if(request.method!=='POST')throw 405;strict(await readBody(request),[]);return respond(await cancelRequest(db,actor,customerRequest?'customer':'invoice',key.toLowerCase(),invoiceId));}if(request.method!=='GET')throw 405;return respond(await requestReceipt(db,actor,customerRequest?'customer':'invoice',key.toLowerCase(),invoiceId));}
  if(path==='/api/stripe/status'){query(url);if(request.method!=='GET')throw 405;if(id(env.STRIPE_ORGANIZATION_ID)&&actor.organization_id!==env.STRIPE_ORGANIZATION_ID)throw 404;let configured=false;try{configuration(env);configured=id(env.STRIPE_ORGANIZATION_ID)&&actor.organization_id===env.STRIPE_ORGANIZATION_ID;}catch(e){if(e!==503)throw e;}return respond(configured?{configured:true,mode:'test',accountId:env.STRIPE_ACCOUNT_ID}:{configured:false,mode:'test'});}
