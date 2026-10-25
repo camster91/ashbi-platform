@@ -120,9 +120,9 @@ test('run fingerprints and target identity must remain bound to the immutable re
 });
 
 test('declared archive budget is rejected before cloning or hashing oversized shared source buffers',async t=>{
- const f=await setup(t),input=structuredClone(f.input),shared=new Uint8Array(5*1024*1024),sha256=Buffer.from(await crypto.subtle.digest('SHA-256',shared)).toString('hex');let clones=0;shared.slice=()=>{clones++;throw Error('cloned before declared limit');};
- for(let i=0;i<4;i++){const path='extra-large-'+i+'.bin';input.report.sourceFiles.notion.push({path,bytes:shared.length,sha256});input.objects.push({source:'notion',path,bytes:shared});}
- await rejected(()=>f.apply(input),413);assert.equal(clones,0);await noPublished(f.DB);assert.equal(await count(f.DB,'source_pilot_runs'),0);
+ const f=await setup(t),input=structuredClone(f.input);let reads=0;
+ for(let i=0;i<4;i++){const path='extra-large-'+i+'.bin';input.report.sourceFiles.notion.push({path,bytes:5*1024*1024,sha256:'0'.repeat(64)});input.objects.push({source:'notion',path,get bytes(){reads++;throw Error('buffer accessed before declared limit');}});}
+ await rejected(()=>f.apply(input),413);assert.equal(reads,0);await noPublished(f.DB);assert.equal(await count(f.DB,'source_pilot_runs'),0);
 });
 test('malformed canonical target field names fail input validation before any D1 binding or write',async t=>{
  const f=await setup(t),input=structuredClone(f.input);input.report.target={organizationId:'pilot-org',clientId:'canonical-client',wrongProjectField:'canonical-project'};await rejected(()=>f.apply(input),400);await noPublished(f.DB);assert.equal(await count(f.DB,'source_pilot_runs'),0);
@@ -130,4 +130,10 @@ test('malformed canonical target field names fail input validation before any D1
 
 test('concurrent identical source-pilot submissions return one stable receipt and canonical work exactly once',async t=>{
  const f=await setup(t),receipts=await Promise.all([f.apply(),f.apply()]);assert.deepEqual(receipts[0],receipts[1]);assert.equal(receipts[0].state,'DONE');assert.deepEqual(await f.apply(),receipts[0]);assert.equal(await count(f.DB,'source_pilot_runs'),1);assert.equal(await count(f.DB,'source_pilot_records'),19);assert.equal(await count(f.DB,'source_pilot_objects'),f.input.objects.length);assert.equal(await count(f.DB,'notes'),3);assert.equal(await count(f.DB,'note_versions'),3);assert.equal(await count(f.DB,'tasks'),1);assert.equal(await count(f.DB,'files'),1);
+});
+
+test('accepted original snapshots copy Node Buffer inputs before asynchronous storage work',async t=>{
+ const f=await setup(t),object=f.input.objects[0],expected=object.bytes.slice();object.bytes=Buffer.from(object.bytes);let changed=false;
+ const bindings={...f.env,FILES:{put:(...a)=>f.FILES.put(...a),async get(key){if(!changed){changed=true;object.bytes[0]^=1;}return f.FILES.get(key);}}};
+ const result=await f.apply(f.input,f.actor,bindings);assert.equal(result.state,'DONE');assert.equal(changed,true);assert.deepEqual(await readSourceObject(f.env,f.actor,result.id,object.source,object.path),expected);
 });

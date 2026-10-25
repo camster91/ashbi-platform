@@ -52,7 +52,8 @@ async function prepare(input){
   const matches=input.objects.filter(o=>o.source===source&&o.path===pin.path);if(matches.length!==1||!(matches[0].bytes instanceof Uint8Array))throw 400;
   if(matches[0].bytes.length!==pin.bytes)throw 409;
   total+=matches[0].bytes.length;if(total>16*1024*1024)throw 413;
-  const bytes=matches[0].bytes.slice();if(await digest(bytes)!==pin.sha256)throw 409;
+  // Uint8Array#slice copies, but Node Buffer#slice returns a shared view.
+  const bytes=new Uint8Array(matches[0].bytes);if(await digest(bytes)!==pin.sha256)throw 409;
   objects.push({source,path:pin.path,size:pin.bytes,sha256:pin.sha256,bytes,object_key:'source-pilots/'+input.requestId+'/'+await hashText(key)});
  }}
  if(objects.length!==input.objects.length)throw 400;
