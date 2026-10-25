@@ -196,4 +196,31 @@ test('authenticated source history routes preserve scoped provenance and exact p
  await t.test('cached list scope is rechecked after a canonical project changes client',async()=>{
   let fired=false;const wrap=(statement,sql)=>new Proxy(statement,{get(target,key){if(key==='bind')return(...values)=>wrap(target.bind(...values),sql);if(key==='all')return async(...args)=>{const result=await target.all(...args);if(!fired&&/FROM\s+source_pilot_runs\b/i.test(sql)){fired=true;await f.DB.prepare("UPDATE projects SET client_id='other-client' WHERE id='canonical-project'").run();}return result;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const bindings={...env,DB:{prepare:sql=>wrap(f.DB.prepare(sql),sql),batch:statements=>f.DB.batch(statements)}};try{const response=await call('','cameron',bindings);assert.equal(fired,true);assert.ok([200,409].includes(response.status));if(response.status===200)assert.equal((await response.json()).items.some(item=>item.id===first.id),false);}finally{await f.DB.prepare("UPDATE projects SET client_id='canonical-client' WHERE id='canonical-project'").run();}
  });
+ await t.test('final list snapshot cannot return scope revoked during its last finance read',async()=>{
+  let selections=0,fired=false;
+  const change=async()=>{if(!fired){fired=true;await f.DB.prepare("UPDATE projects SET client_id='other-client' WHERE id='canonical-project'").run();}};
+  const wrap=(statement,sql)=>new Proxy(statement,{get(target,key){
+   if(key==='bind')return(...values)=>wrap(target.bind(...values),sql);
+   if(key==='all')return async(...args)=>{const result=await target.all(...args);if(/FROM\s+source_pilot_runs\b/i.test(sql))selections++;return result;};
+   if(key==='first')return async(...args)=>{if(selections>=2&&/SELECT\s+finance\s+FROM\s+viewer/i.test(sql))await change();return target.first(...args);};
+   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+  }});
+  const bindings={...env,DB:{prepare:sql=>wrap(f.DB.prepare(sql),sql),async batch(statements){if(selections>=1)await change();return f.DB.batch(statements);}}};
+  try{const response=await call('','cameron',bindings);assert.equal(fired,true,'The project must change during the final authority/scope snapshot.');assert.ok([200,409].includes(response.status));if(response.status===200)assert.equal((await response.json()).items.some(item=>item.id===first.id),false,'A stale run must not escape the final snapshot.');}finally{await f.DB.prepare("UPDATE projects SET client_id='canonical-client' WHERE id='canonical-project'").run();}
+ });
+
+ await t.test('download final authority snapshot rejects finance revoked during its last scope read',async()=>{
+  const original=f.input.objects[0],path='/'+first.id+'/objects/'+await opaque(original.source,original.path)+'/download';let storageRead=false,scopeReads=0,fired=false;
+  const change=async()=>{if(!fired){fired=true;await f.DB.prepare("DELETE FROM actor_finance_access WHERE id='cameron'").run();}};
+  const scopeSql=sql=>/FROM\s+projects\s+p\s+JOIN\s+clients\s+c/i.test(sql);
+  const sqlFor=new WeakMap();
+  const wrap=(statement,sql)=>{const proxy=new Proxy(statement,{get(target,key){
+   if(key==='bind')return(...values)=>wrap(target.bind(...values),sql);
+   if(key==='first')return async(...args)=>{if(storageRead&&scopeSql(sql)){if(scopeReads>=1)await change();scopeReads++;}return target.first(...args);};
+   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+  }});sqlFor.set(proxy,sql);return proxy;};
+  const bindings={...env,DB:{prepare:sql=>wrap(f.DB.prepare(sql),sql),async batch(statements){const authority=storageRead&&statements.some(statement=>scopeSql(sqlFor.get(statement)??''));if(authority){if(scopeReads>=1)await change();scopeReads++;}return f.DB.batch(statements);}},FILES:{get:async key=>{const object=await f.FILES.get(key);storageRead=true;return object;},put:(...args)=>f.FILES.put(...args),head:(...args)=>f.FILES.head(...args)}};
+  try{const response=await call(path,'cameron',bindings);assert.equal(fired,true,'Finance must change during the final post-storage authority snapshot.');assert.equal(response.status,403);assert.notDeepEqual(new Uint8Array(await response.arrayBuffer()),original.bytes);}finally{await f.DB.prepare("INSERT OR IGNORE INTO actor_finance_access VALUES('cameron','pilot-org')").run();}
+ });
+
 });

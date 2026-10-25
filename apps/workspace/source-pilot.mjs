@@ -8,11 +8,16 @@ const hashText=s=>digest(new TextEncoder().encode(s));
 const pathOK=p=>typeof p==='string'&&p.length>0&&p.length<=1000&&!/[\\:\p{Cc}\p{Cf}]/u.test(p)&&p.split('/').every(v=>v&&v!=='.'&&v!=='..');
 const text=(v,max)=>typeof v==='string'&&v.trim().length>0&&v.length<=max&&!v.includes('\0');
 const receipt=run=>({id:run.id,state:run.state,fingerprint:run.fingerprint,counts:JSON.parse(run.report_json).counts});
+const financeStatement=(db,actor)=>db.prepare(`SELECT EXISTS(SELECT 1 FROM actors a JOIN actor_finance_access f ON f.id=a.id AND f.organization_id=a.organization_id WHERE a.id=? AND a.organization_id=? AND a.active=1 AND a.role='staff') AS finance`).bind(actor.id,actor.organization_id);
 async function authorize(db,actor,target){
- if(!await hasFinance(db,actor))throw 403;
+ if(actor.role!=='staff')throw 403;
+ // Permission and canonical scope must describe the same D1 snapshot.
+ const [permission,scope]=await db.batch([financeStatement(db,actor),
+  db.prepare('SELECT c.revision AS client_revision,p.revision AS project_revision FROM projects p JOIN clients c ON c.id=p.client_id AND c.organization_id=p.organization_id WHERE p.id=? AND p.organization_id=? AND p.client_id=?').bind(target.projectId,target.organizationId,target.clientId)
+ ]);
+ if(!permission.results[0]?.finance)throw 403;
  if(target.organizationId!==actor.organization_id)throw 404;
- const row=await db.prepare('SELECT c.revision AS client_revision,p.revision AS project_revision FROM projects p JOIN clients c ON c.id=p.client_id AND c.organization_id=p.organization_id WHERE p.id=? AND p.organization_id=? AND p.client_id=?').bind(target.projectId,target.organizationId,target.clientId).first();
- if(!row)throw 404;return row;
+ const row=scope.results[0];if(!row)throw 404;return row;
 }
 function guard(db,actor,run,token){
  // CHECK failure rolls the entire batch back. A zero-row permission SELECT
@@ -196,8 +201,14 @@ async function historyList(db,actor,url){
  FROM source_pilot_runs r JOIN projects p ON p.id=r.project_id AND p.organization_id=r.organization_id
  JOIN clients c ON c.id=r.client_id AND c.organization_id=r.organization_id
  WHERE ${clauses.join(' AND ')} ORDER BY r.id LIMIT ?`;
- const read=async()=> (await db.prepare(query).bind(...values,limit+1).all()).results;
- const rows=await read(),again=await read();if(!await hasFinance(db,actor))throw 403;
+ const statement=()=>db.prepare(query).bind(...values,limit+1),rows=(await statement().all()).results;
+ // The final finance decision and current scoped rows share one D1 transaction.
+ // An awaited authority query after the scope read would reopen a stale-data gap.
+ const [permission,current]=await db.batch([
+  financeStatement(db,actor),
+  statement()
+ ]);
+ if(!permission.results[0]?.finance)throw 403;const again=current.results;
  if(stable(rows)!==stable(again))throw 409;
  const items=rows.slice(0,limit).map(r=>({id:r.id,clientId:r.client_id,projectId:r.project_id,clientName:r.client_name,projectName:r.project_name,createdAt:r.created_at,fingerprint:r.fingerprint,counts:historyCounts(r.counts_json)}));
  return {items,nextCursor:rows.length>limit?items.at(-1).id:null};
