@@ -4,6 +4,12 @@ on:
   pull_request:
     paths:
       - 'apps/workspace/**'
+      - 'scripts/inventory-migration-source.mjs'
+      - 'src/services/notion-markdown-import.service.js'
+      - 'src/services/workspace-export.service.js'
+      - 'src/utils/stored-upload.js'
+      - 'src/utils/send-file.js'
+      - 'src/security/file-upload-policy.js'
       - '.github/workflows/cloudflare-workspace.yml'
 
 permissions:
