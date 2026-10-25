@@ -11,6 +11,7 @@ import {parsePilotCsv,minorUnits,clockSeconds,sourceDate,parseLegacyRow} from '.
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const id=v=>typeof v==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(v);
 const sha=v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
+const comparePath=(a,b)=>a.path<b.path?-1:a.path>b.path?1:0;
 const sources=['notion','bonsai','legacy'];
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 const stable=value=>JSON.stringify(value,(_k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v);
@@ -41,10 +42,10 @@ function validateMapping(m){
 async function scan(root){
  const stat=await lstat(root);if(stat.isSymbolicLink())fail('SOURCE_LINK_REFUSED');if(!stat.isDirectory())fail('SOURCE_DIRECTORY_REQUIRED');
  const files=[];let bytes=0,entries=0;async function walk(dir,depth){if(depth>16)fail('SOURCE_LIMIT');for(const entry of(await readdir(dir)).sort()){if(++entries>128)fail('SOURCE_LIMIT');const path=join(dir,entry),name=relative(root,path).split(sep).join('/');if(!pathOK(name))fail('SOURCE_PATH_INVALID');const s=await lstat(path);if(s.isSymbolicLink())fail('SOURCE_LINK_REFUSED');if(s.isDirectory())await walk(path,depth+1);else if(s.isFile()){bytes+=s.size;if(s.size>16*1024*1024||bytes>64*1024*1024)fail('SOURCE_LIMIT');const data=await readFile(path);if(data.length!==s.size)fail('SOURCE_CHANGED');files.push({path:name,bytes:data.length,sha256:hash(data),data});}else fail('SOURCE_SPECIAL_FILE');}}
- await walk(root,0);return files.sort((a,b)=>a.path.localeCompare(b.path,'en'));
+ await walk(root,0);return files.sort(comparePath);
 }
 const pins=files=>files.map(({path,bytes,sha256})=>({path,bytes,sha256}));
-const pinImage=files=>stable([...files].sort((a,b)=>a.path.localeCompare(b.path,'en')));
+const pinImage=files=>stable([...files].sort(comparePath));
 const text=bytes=>{try{return new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);}catch{fail('SOURCE_ENCODING_INVALID');}};
 function csvRecords(file){let rows;try{rows=parsePilotCsv(text(file.data));}catch{fail('CSV_INVALID');}if(!rows.length||stable(rows[0].values)!==stable(pilotHeaders[file.path]))fail('CSV_HEADER_INVALID');return rows.slice(1).map(r=>{if(r.values.length!==rows[0].values.length)fail('CSV_ROW_INVALID');return {key:'bonsai:'+file.path+':'+r.line,source:'bonsai',kind:csvKinds[file.path],file,raw:Object.fromEntries(rows[0].values.map((h,i)=>[h,r.values[i]]))};});}
 

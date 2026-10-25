@@ -159,6 +159,12 @@ test('historical task assignee may differ from the author while each source iden
  const f=await fixture(),user={...f.expected.legacyRows.users[0],id:'legacy-cameron',name:'Fixture Cameron',email:'cameron@example.invalid'};await writeFile(join(f.root,'legacy/data/users.jsonl'),(await readFile(join(f.root,'legacy/data/users.jsonl'),'utf8'))+JSON.stringify(user)+'\n');await change(f,'legacy/data/tasks.jsonl','"assigneeId":"legacy-staff"','"assigneeId":"legacy-cameron"');f.mapping.actors['legacy:legacy-cameron']='cameron';await f.repin({decisions:true});const r=await reconcilePilot(f.root,f.mapping),row=get(r,'legacy:tasks:legacy-task');assert.equal(row.disposition,'MAPPED');assert.equal(row.normalized.assigneeActorId,'cameron');assert.equal(row.normalized.mappingMetadata.authorActorId,'bianca');assert.equal(row.raw.assigneeId,'legacy-cameron');
 });
 
+test('unchanged source fingerprints and report order do not depend on locale collation',async()=>{
+ const f=await fixture(),before=await reconcilePilot(f.root,f.mapping),nativeCompare=String.prototype.localeCompare;
+ String.prototype.localeCompare=function(...args){return -nativeCompare.apply(this,args);};
+ try{assert.deepEqual(await reconcilePilot(f.root,f.mapping),before);}finally{String.prototype.localeCompare=nativeCompare;}
+});
+
 test('CLI writes a private exclusive report, prints only aggregate evidence and refuses output inside sources',async()=>{
  const f=await fixture(),parent=await mkdtemp(join(tmpdir(),'ashbi-pilot-report-')),mapping=join(parent,'mapping.json'),output=join(parent,'report.json');await writeFile(mapping,JSON.stringify(f.mapping));let printed='';const io={write:s=>{printed+=s;}};
  const result=await runPilotReconciliation(['--input',f.root,'--mapping',mapping,'--report',output],io);assert.equal(result.held,2);assert.ok(!printed.includes('Fixture Co'));assert.ok(!printed.includes('café'));assert.equal(JSON.parse(await readFile(output,'utf8')).targetWrites,0);
