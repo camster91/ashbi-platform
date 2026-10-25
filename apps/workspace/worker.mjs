@@ -52,7 +52,7 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  if(url.pathname==='/api/dashboard/reviews')return await dashboardReviews(request,env.DB,actor,json);
  if(url.pathname.startsWith('/api/stripe/events')||/^\/api\/invoices\/[^/]+\/billing(?:\/reconcile)?$/.test(url.pathname)||['/api/billing/invoices','/api/billing/summary'].includes(url.pathname)||url.pathname==='/api/portal/invoices'||url.pathname.startsWith('/api/portal/invoices/'))return await stripeLifecycleRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(/^\/api\/invoices\/[^/]+\/stripe\/finalize/.test(url.pathname))return await stripeIssuanceRoute(request,env,actor,readBody,json,providers.stripeFetch);
- if(url.pathname.startsWith('/api/stripe/')||/^\/api\/invoices\/[^/]+\/stripe(?:-preview|\/reconcile|\/requests\/[^/]+(?:\/cancel)?)?$/.test(url.pathname))return await stripeDraftsRoute(request,env,actor,readBody,json,providers.stripeFetch);
+ if(url.pathname.startsWith('/api/stripe/')||/^\/api\/invoices\/[^/]+\/stripe(?:-preview|-schedule-preview|\/reconcile|\/requests\/[^/]+(?:\/cancel)?)?$/.test(url.pathname))return await stripeDraftsRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(url.pathname==='/api/invoices'||url.pathname.startsWith('/api/invoices/'))return await invoicesRoute(request,env.DB,actor,readBody,json);
  if(url.pathname==='/api/commercial'||url.pathname.startsWith('/api/commercial/'))return await commercialRoute(request,env.DB,actor,readBody,json);
  if(url.pathname==='/api/proposal-reviews'||url.pathname.startsWith('/api/proposal-reviews/')||url.pathname==='/api/portal/proposals'||url.pathname.startsWith('/api/portal/proposals/'))return await proposalReviewsRoute(request,env.DB,actor,readBody,json);

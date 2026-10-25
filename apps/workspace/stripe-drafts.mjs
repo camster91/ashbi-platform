@@ -1,4 +1,6 @@
 import {hasFinance} from './time-details.mjs';
+import {invoiceClaimGuard} from './invoices.mjs';
+import {allocateInstallments} from './stripe-installments.mjs';
 
 // Persist stage attempts before POST; never refresh a stage timestamp or key on retry.
 const version='2026-09-30.endive',retryWindow=23*3600000,leaseTime=300000;
@@ -37,6 +39,35 @@ async function draftPreview(env,actor,row,fetcher){
  if(Number(cumulative)!==row.subtotal_minor||Number(previousTax)!==row.tax_minor||row.total_minor!==row.subtotal_minor+row.tax_minor)throw 409;
  const plan={version:1,apiVersion:version,invoiceId:row.id,invoiceRevision:row.revision,sourceFingerprint:row.preview_fingerprint,mappingId:mapping.id,accountId:config.accountId,client:party,customer:c,title:row.title,currency:row.currency,dueAt,tax:snapshot.tax,lines,subtotalMinor:row.subtotal_minor,taxMinor:row.tax_minor,totalMinor:row.total_minor,autoAdvance:false,sendsMessage:false,chargesPayment:false};plan.fingerprint=await sha(plan);if(!await hasFinance(db,actor))throw 403;return plan;
 }
+// A schedule preview is read-only. Its fingerprints are review images, never
+// provider idempotency keys; child identities must be durably reserved first.
+async function schedulePreview(env,actor,row,fetcher){
+ const db=env.DB,config=configuration(env);
+ if(row.status!=='DRAFT'||row.provider_state!=='NOT_CONNECTED'||row.stripe_invoice_id!==null||row.paid_minor!==0||row.released_at!==null)throw 409;
+ let snapshot;try{snapshot=JSON.parse(row.snapshot_json);}catch{throw 409;}
+ if(!snapshot||typeof snapshot!=='object'||Array.isArray(snapshot))throw 409;
+ const {fingerprint,...image}=snapshot;
+ if(fingerprint!==row.preview_fingerprint||await sha(image)!==fingerprint||snapshot.clientId!==row.client_id||snapshot.client?.id!==row.client_id||snapshot.projectId!==row.project_id||(snapshot.project?.id??null)!==row.project_id||snapshot.title!==row.title||snapshot.currency!==row.currency||!['CAD','USD','EUR','GBP'].includes(row.currency)||snapshot.subtotalMinor!==row.subtotal_minor||snapshot.taxMinor!==row.tax_minor||snapshot.totalMinor!==row.total_minor)throw 409;
+ const allocation=allocateInstallments(snapshot);
+ if(allocation.holds.length||allocation.installments.length!==2||allocation.installments.some(p=>p.totalMinor>99999999||p.lines.length>100||p.lines.some(l=>l.amountMinor>99999999||l.taxMinor>99999999)||Date.parse(p.dueOn+'T00:00:00Z')<=Date.now()))throw 409;
+ const party=await client(db,actor,row.client_id);
+ if(party.name!==snapshot.client.name||party.revision!==snapshot.client.revision)throw 409;
+ const mapping=await db.prepare('SELECT * FROM stripe_customer_links WHERE organization_id=? AND client_id=? AND account_id=?').bind(actor.organization_id,row.client_id,config.accountId).first();if(!mapping)throw 409;
+ // Authority, canonical scope, frozen source claims and mapping are read in one
+ // transaction both before provider reads and before returning private evidence.
+ const verify=async()=>{
+  const results=await db.batch([
+   db.prepare(`SELECT i.* FROM invoice_drafts i JOIN clients c ON c.id=i.client_id AND c.organization_id=i.organization_id WHERE i.id=? AND i.organization_id=? AND c.name=? AND c.revision=? AND (i.project_id IS NULL OR EXISTS(SELECT 1 FROM projects p WHERE p.id=i.project_id AND p.organization_id=i.organization_id AND p.client_id=i.client_id AND p.name=json_extract(i.snapshot_json,'$.project.name') AND p.revision=json_extract(i.snapshot_json,'$.project.revision'))) AND ${invoiceClaimGuard('i')} AND ${authority}`).bind(row.id,actor.organization_id,party.name,party.revision,actor.id,actor.organization_id),
+   db.prepare('SELECT * FROM stripe_customer_links WHERE id=? AND organization_id=?').bind(mapping.id,actor.organization_id)
+  ]),current=results[0].results[0],link=results[1].results[0];
+  if(!current||!link||Object.keys(row).some(k=>current[k]!==row[k])||Object.keys(mapping).some(k=>link[k]!==mapping[k])){if(!await hasFinance(db,actor))throw 403;throw 409;}
+ };
+ await verify();const c=await customer(env,fetcher,mapping.customer_id);
+ const common={version:1,apiVersion:version,invoiceId:row.id,invoiceRevision:row.revision,sourceFingerprint:row.preview_fingerprint,mappingId:mapping.id,accountId:config.accountId,client:party,project:snapshot.project,customer:c,currency:row.currency,autoAdvance:false,sendsMessage:false,chargesPayment:false};
+ const installments=[];for(const part of allocation.installments){const child={...common,...part,title:row.title+' - '+(part.kind==='DEPOSIT'?'Deposit':'Balance'),tax:snapshot.tax,dueAt:Date.parse(part.dueOn+'T00:00:00Z')/1000};child.fingerprint=await sha(child);installments.push(child);}
+ const plan={...common,representation:'SEPARATE_INVOICES',title:row.title,tax:snapshot.tax,subtotalMinor:row.subtotal_minor,taxMinor:row.tax_minor,totalMinor:row.total_minor,installments};plan.fingerprint=await sha(plan);await verify();if(!id(env.STRIPE_ORGANIZATION_ID))throw 503;if(env.STRIPE_ORGANIZATION_ID!==actor.organization_id)throw 404;const currentConfig=configuration(env);if(currentConfig.accountId!==config.accountId||currentConfig.key!==config.key)throw 409;return plan;
+}
+
 function journal(db,actor,opId,token,action,eventReason=null){return db.prepare(`INSERT INTO stripe_invoice_events(id,organization_id,invoice_id,operation_id,actor_id,recorded_at,revision,action,state_json) SELECT ?,organization_id,invoice_id,id,?,?,revision,?,json_object('state',state,'stage',stage,'stripeInvoiceId',stripe_invoice_id,'lastError',last_error,'createAttemptAt',create_attempt_at,'linesAttemptAt',lines_attempt_at,'reason',COALESCE(?,reason)) FROM stripe_invoice_operations WHERE id=? AND organization_id=? AND write_token=? RETURNING id`).bind(token,actor.id,Date.now(),action,eventReason,opId,actor.organization_id,token);}
 // Roll back successful no-op journals or projections, not just thrown SQL errors.
 function fence(db,actor,opId,token){return db.prepare(`UPDATE stripe_invoice_operations SET write_token=CASE WHEN EXISTS(SELECT 1 FROM stripe_invoice_events WHERE id=? AND operation_id=stripe_invoice_operations.id AND organization_id=stripe_invoice_operations.organization_id) AND EXISTS(SELECT 1 FROM invoice_drafts i WHERE i.id=stripe_invoice_operations.invoice_id AND i.organization_id=stripe_invoice_operations.organization_id AND i.status='DRAFT' AND i.released_at IS NULL AND i.paid_minor=0 AND ((stripe_invoice_operations.state='DONE' AND i.provider_state='DRAFT' AND i.stripe_invoice_id=stripe_invoice_operations.stripe_invoice_id) OR (stripe_invoice_operations.state!='DONE' AND i.provider_state IN ('PENDING','UNKNOWN')))) THEN write_token ELSE NULL END WHERE id=? AND organization_id=? AND write_token=? RETURNING id`).bind(token,opId,actor.organization_id,token);}
@@ -105,7 +136,8 @@ export async function stripeDraftsRoute(request,env,actor,readBody,json,fetcher=
  try{
   if(path==='/api/stripe/customers/preview'){query(url);if(request.method!=='POST')throw 405;return respond(await customerPreview(env,actor,await readBody(request),fetcher));}
   if(path==='/api/stripe/customers'){if(request.method==='GET'){query(url,['clientId']);const clientId=url.searchParams.get('clientId');if(!id(clientId))throw 400;await client(db,actor,clientId);const config=configuration(env),link=await db.prepare('SELECT * FROM stripe_customer_links WHERE client_id=? AND organization_id=? AND account_id=?').bind(clientId,actor.organization_id,config.accountId).first();if(!link)throw 404;return respond(linkDto(link));}query(url);if(request.method!=='POST')throw 405;const r=await linkCustomer(env,actor,await readBody(request),fetcher);return respond(linkDto(r.row),r.status);}
-  query(url);const match=path.match(/^\/api\/invoices\/([a-zA-Z0-9-]{1,100})\/stripe(-preview|\/reconcile)?$/);if(!match)throw 404;const row=await invoice(db,actor,match[1]),action=match[2];
+  query(url);const match=path.match(/^\/api\/invoices\/([a-zA-Z0-9-]{1,100})\/stripe(-preview|-schedule-preview|\/reconcile)?$/);if(!match)throw 404;const row=await invoice(db,actor,match[1]),action=match[2];
+  if(action==='-schedule-preview'){if(request.method!=='POST')throw 405;strict(await readBody(request),[]);return json(await schedulePreview(env,actor,row,fetcher));}
   if(action==='-preview'){if(request.method!=='POST')throw 405;strict(await readBody(request),[]);return respond(await draftPreview(env,actor,row,fetcher));}
   if(request.method==='GET'&&!action){const op=await operation(db,actor,row.id);if(!op)throw 404;return respond(operationDto(op));}
   if(request.method!=='POST')throw 405;const body=await readBody(request);let op,status=200,adoption;
