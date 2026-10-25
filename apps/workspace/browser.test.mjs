@@ -17,6 +17,8 @@ import {runTimeReviewTests} from './browser-time-review.mjs';
 import {runFinanceTests} from './browser-finance.mjs';
 import {runCommercialTests} from './browser-commercial.mjs';
 import {runProposalReviewTests} from './browser-proposal-reviews.mjs';
+import {runStripeTests} from './browser-stripe.mjs';
+import {stripeTestProvider} from './stripe-test-provider.mjs';
 const base=fileURLToPath(new URL('.',import.meta.url));
 const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'qa'},r2Buckets:['FILES'],cf:false});
 const DB=await mf.getD1Database('DB'),FILES=await mf.getR2Bucket('FILES');
@@ -26,9 +28,9 @@ const {publicKey,privateKey}=await generateKeyPair('RS256');
 const issuer='https://identity.cloudflareaccess.com';
 // Synthetic fixture lifetime covers the expanded Windows suite; production auth limits are unchanged.
 const token=await new SignJWT({email:'qa@example.invalid'}).setProtectedHeader({alg:'RS256'}).setIssuer(issuer).setAudience('qa').setSubject('qa').setIssuedAt().setExpirationTime('30m').sign(privateKey);
-const worker=createWorker(publicKey);let origin;const fixtureActors=new Map([['staff',token]]);
+const stripe=stripeTestProvider();const worker=createWorker(publicKey,{stripeFetch:stripe.fetch});let origin;const fixtureActors=new Map([['staff',token]]);
 async function addActor(id,email,role,clientId){await DB.prepare('INSERT INTO actors VALUES(?,?,?,?,?,1)').bind(id,email,'qa-org',role,clientId).run();fixtureActors.set(id,await new SignJWT({email}).setProtectedHeader({alg:'RS256'}).setIssuer(issuer).setAudience('qa').setSubject(id).setIssuedAt().setExpirationTime('30m').sign(privateKey));}
-const server=createServer(async(req,res)=>{try{let chunks=[];for await(const c of req)chunks.push(c);const headers=new Headers(req.headers);const assertion=fixtureActors.get(headers.get('x-test-actor')||'staff');if(!assertion){res.writeHead(403);res.end();return;}headers.delete('x-test-actor');headers.set('cf-access-jwt-assertion',assertion);const body=Buffer.concat(chunks);const response=await worker.fetch(new Request(origin+req.url,{method:req.method,headers,...(body.length?{body}: {})}),{DB,FILES,APP_ORIGIN:origin,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'qa'});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));}catch{res.writeHead(500);res.end();}});
+const server=createServer(async(req,res)=>{try{let chunks=[];for await(const c of req)chunks.push(c);const headers=new Headers(req.headers);const assertion=fixtureActors.get(headers.get('x-test-actor')||'staff');if(!assertion){res.writeHead(403);res.end();return;}headers.delete('x-test-actor');headers.set('cf-access-jwt-assertion',assertion);const body=Buffer.concat(chunks);const response=await worker.fetch(new Request(origin+req.url,{method:req.method,headers,...(body.length?{body}: {})}),{DB,FILES,APP_ORIGIN:origin,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'qa',...stripe.bindings});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));}catch{res.writeHead(500);res.end();}});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));origin='http://127.0.0.1:'+server.address().port;
 const browser=await chromium.launch({headless:true,...(process.env.WORKSPACE_TEST_CHROMIUM?{executablePath:process.env.WORKSPACE_TEST_CHROMIUM,args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu']}:{})});
 try{
@@ -58,4 +60,5 @@ await runTimeReviewTests({browser,origin,DB,axe,addActor});
 await runFinanceTests({browser,origin,DB,axe,addActor});
 await runCommercialTests({browser,origin,DB,axe,addActor});
 await runProposalReviewTests({browser,origin,DB,axe,addActor});
+await runStripeTests({browser,origin,DB,axe,addActor,stripe});
 }finally{await browser.close();await new Promise(r=>server.close(r));await mf.dispose();}

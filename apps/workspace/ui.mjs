@@ -1,4 +1,5 @@
 import {financeUiScript} from './ui-finance.mjs';
+import {stripeUiScript} from './ui-stripe.mjs';
 import {commercialUiScript} from './ui-commercial.mjs';
 import {proposalReviewUiScript} from './ui-proposal-reviews.mjs';
 import {timeUiScript} from './ui-time.mjs';
@@ -132,6 +133,7 @@ export const clientScript=String.raw`(function uiMain(){
  }
 ${timeUiScript}
 ${financeUiScript}
+${stripeUiScript}
 ${commercialUiScript}
 ${proposalReviewUiScript}
  function recordItem(record,state){const {page}=state;const item=node('article',undefined,'item'),line=node('div',undefined,'row');line.append(node('strong',record.name||record.title||'Time entry'));if(record.status)line.append(node('span',record.status,'badge'));if(record.client_visible!==undefined)line.append(node('span',record.client_visible?'Shared with client':'Internal','badge'));item.append(line);if(record.text)item.append(node('p',record.text));if(record.email)item.append(node('p',record.email));if(record.due_on)item.append(node('p','Due '+record.due_on));if(record.assignee_id)item.append(node('p','Assigned to '+record.assignee_id));if(actor.role==='staff'&&['clients','projects','tasks','notes'].includes(page)){const edit=button('Edit '+(record.name||record.title),opener=>editRecord(record,opener,state),true,state);if(page==='tasks'&&state.taskOptions.layout==='board'){edit.textContent='Edit task';edit.setAttribute('aria-label','Edit '+record.title);}item.append(edit);}
