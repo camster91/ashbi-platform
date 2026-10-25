@@ -316,3 +316,14 @@ Task links open current details, with the existing staff editor/status controls 
 ## Commercial state-change readiness (#730)
 
 Archive/reopen reason fields and state-change buttons share the existing durable save/recovery lock. A successful mutation can redraw its next state before its follow-up list read finishes; the new controls stay disabled until that owned save settles. An unresolved recovery key also keeps mutation controls locked. History and close controls remain available. The controlled browser regressions hold each archive/reopen list refresh, verify both locked mutation controls and available read/close controls, release the actual scoped list response, and verify that the next explicit change records the expected canonical revision and state. The original archive/reopen workflow, assertions and time limits remain retained.
+
+
+## Daily dashboard task projection (#461)
+
+`GET /api/dashboard/tasks` reads canonical tasks with scoped client/project names, actual assignment state, status, due date and a structured task source link. It defaults to open work (`todo`/`doing`); no separate task state, guessed priority, actor email or provider call is introduced. An unassigned task stays unassigned and an inactive owner stays explicit.
+
+Filters are applied before the fixed 50-row ID-keyset page: `status=open|all|todo|doing|done`, `owner=mine|unassigned` or `ownerId`, `clientId`, `projectId`, and `due=all|overdue|today|none`. Due comparisons use the returned UTC date basis and observation timestamp; overdue markers exclude completed work. `after` advances the same filtered query; clients must reset it when filters change. `complete` describes the current page boundary, not an organization-wide count or a durable snapshot. New edits between pages can change membership. Unknown, duplicate, conflicting and malformed filters fail explicitly.
+
+All joins retain organization scope; client work additionally requires a shared task in a shared same-client project. The read checks the current actor again before returning, and client sharing is re-read. Source/database failures remain failed responses rather than empty healthy sections. Source and compiled contracts use signed identities and disposable actual D1, including more than 50 matching tasks and identity revocation during a read.
+
+This increment supplies the task read projection only. The daily Overview UI, independent section recovery, review projection and per-currency outstanding invoice projection remain to be implemented and verified. It changes no schema, deployment, Coolify setting, provider record, real data or access grant. Existing Overview, exports, source workflows and all retained tests remain in place.
