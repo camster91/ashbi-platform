@@ -205,6 +205,70 @@ test('durable installment schedules freeze exact reviewed parts without provider
   }
   for(const result of results){assert.equal(result.denied,true,result.kind);assert.equal(result.state,'FROZEN',JSON.stringify(result));assert.equal(result.revision,0,result.kind);assert.equal(result.parentRevision,result.expectedParentRevision,result.kind);assert.equal(result.claim,result.expectedClaim,result.kind);}
  });
+ const exportTables=['stripe_installment_schedules','stripe_installment_parts','stripe_installment_events','cancelled_stripe_schedule_requests'];let exportFixture;
+ async function exportPrepared(){
+  if(exportFixture)return exportFixture;
+  const p=await prepared(),frozen=await data(await call(p.path,p.body),201),q=await prepared(),initial=await data(await call(q.path,q.body),201),abandoned=await data(await call(abandonPath(initial),{revision:initial.revision,reason:'Preserve export abandonment audit'})),cancel=await prepared();await data(await call(receiptPath(cancel)+'/cancel',{}));
+  return exportFixture={p,frozen,q,abandoned,cancel};
+ }
+ function assertNoRetrySecrets(value){
+  if(typeof value==='string'){try{assertNoRetrySecrets(JSON.parse(value));}catch(error){if(error instanceof SyntaxError)return;throw error;}return;}
+  if(!value||typeof value!=='object')return;
+  for(const [key,nested]of Object.entries(value)){assert.ok(!['source_image_json','request_key','request_fingerprint','write_token','__export_overflow'].includes(key),key);assertNoRetrySecrets(nested);}
+ }
+ await t.test('installment export retains frozen abandoned parts events and tombstones without nested retry secrets',async()=>{
+  const f=await exportPrepared(),before=requests.length,disabled={...env,STRIPE_MODE:undefined,STRIPE_SECRET_KEY:undefined},exported=await data(await call('export',undefined,'fin','GET',disabled));assert.equal(requests.length,before);
+  for(const name of exportTables){assert.ok(Array.isArray(exported.tables[name]),name);assertNoRetrySecrets(exported.tables[name]);}
+  for(const saved of [f.frozen,f.abandoned]){
+   const row=exported.tables.stripe_installment_schedules.find(r=>r.id===saved.id);assert.ok(row,saved.id);assert.equal(row.state,saved.state);assert.equal(row.invoice_id,saved.invoiceId);assert.equal(row.reason,saved.reason);assert.deepEqual(JSON.parse(row.plan_json),saved.plan);assert.match(row.plan_hash,/^[a-f0-9]{64}$/);assert.match(row.source_hash,/^[a-f0-9]{64}$/);
+   const parts=exported.tables.stripe_installment_parts.filter(r=>r.schedule_id===saved.id).sort((a,b)=>a.ordinal-b.ordinal);assert.deepEqual(parts.map(r=>r.id),saved.parts.map(r=>r.id));assert.deepEqual(parts.map(r=>JSON.parse(r.plan_json)),saved.parts.map(r=>r.plan));
+   const events=exported.tables.stripe_installment_events.filter(r=>r.schedule_id===saved.id).sort((a,b)=>a.revision-b.revision);assert.deepEqual(events.map(r=>r.action),saved.state==='FROZEN'?['FREEZE']:['FREEZE','ABANDON']);for(const event of events){assert.ok(event.id);assert.equal(event.actor_id,'fin');assert.ok(event.recorded_at>0);assert.equal(JSON.parse(event.state_json).id,saved.id);}
+  }
+  const stopped=await DB.prepare('SELECT * FROM cancelled_stripe_schedule_requests WHERE request_key=?').bind(f.cancel.body.requestId).first(),row=exported.tables.cancelled_stripe_schedule_requests.find(r=>r.id===stopped.id);assert.ok(row);assert.equal(row.invoice_id,f.cancel.invoice.id);assert.equal(row.actor_id,'fin');assert.equal(row.created_at,stopped.created_at);
+ });
+ await t.test('installment export requires current finance and excludes all four tables from ordinary staff',async()=>{
+  await exportPrepared();const ordinary=await data(await call('export',undefined,'staff'));for(const name of exportTables)assert.equal(ordinary.tables[name],undefined,name);assert.equal((await call('export',undefined,'client')).status,403);
+ });
+ await t.test('installment export excludes native rows belonging to a foreign organization',async()=>{
+  const f=await exportPrepared();await DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('export-foreign-client','b','Foreign export fixture')").run();
+  async function copy(table,row,changes){const image={...row,...changes},keys=Object.keys(image);await DB.prepare('INSERT INTO '+table+'('+keys.join(',')+') VALUES('+keys.map(()=>'?').join(',')+')').bind(...keys.map(k=>image[k])).run();}
+  const invoice=await DB.prepare('SELECT * FROM invoice_drafts WHERE id=?').bind(f.p.invoice.id).first();await copy('invoice_drafts',invoice,{id:'export-foreign-invoice',organization_id:'b',client_id:'export-foreign-client',project_id:null,created_by:'foreign',write_token:crypto.randomUUID()});
+  const schedule=await DB.prepare('SELECT * FROM stripe_installment_schedules WHERE id=?').bind(f.frozen.id).first();await copy('stripe_installment_schedules',schedule,{id:'export-foreign-schedule',organization_id:'b',invoice_id:'export-foreign-invoice',client_id:'export-foreign-client',project_id:null,actor_id:'foreign',write_token:crypto.randomUUID()});
+  const part=await DB.prepare('SELECT * FROM stripe_installment_parts WHERE schedule_id=? LIMIT 1').bind(f.frozen.id).first();await copy('stripe_installment_parts',part,{id:'export-foreign-part',organization_id:'b',schedule_id:'export-foreign-schedule'});
+  const event=await DB.prepare('SELECT * FROM stripe_installment_events WHERE schedule_id=? LIMIT 1').bind(f.frozen.id).first();await copy('stripe_installment_events',event,{id:'export-foreign-event',organization_id:'b',schedule_id:'export-foreign-schedule',invoice_id:'export-foreign-invoice',actor_id:'foreign'});
+  const cancelled=await DB.prepare('SELECT * FROM cancelled_stripe_schedule_requests WHERE request_key=?').bind(f.cancel.body.requestId).first();await copy('cancelled_stripe_schedule_requests',cancelled,{id:'export-foreign-cancelled',organization_id:'b',invoice_id:'export-foreign-invoice',actor_id:'foreign'});
+  const own=await data(await call('export')),foreign=await data(await call('export',undefined,'foreign'));for(const name of exportTables){assert.ok(Array.isArray(own.tables[name]),name);assert.ok(own.tables[name].every(r=>r.organization_id==='a'),name);assert.ok(foreign.tables[name].length>0,name);assert.ok(foreign.tables[name].every(r=>r.organization_id==='b'),name);assertNoRetrySecrets(foreign.tables[name]);}
+ });
+ await t.test('installment export discards cached financial rows after batch authority changes',async()=>{
+  await exportPrepared();for(const change of ['finance','inactive','role']){
+   let fired=false;const bindings={...env,DB:{prepare:sql=>DB.prepare(sql),async batch(statements){const result=await DB.batch(statements);if(!fired){fired=true;if(change==='finance')await DB.prepare("DELETE FROM actor_finance_access WHERE id='fin'").run();if(change==='inactive')await DB.prepare("UPDATE actors SET active=0 WHERE id='fin'").run();if(change==='role')await DB.prepare("UPDATE actors SET role='client',client_id='ca' WHERE id='fin'").run();}return result;}}};
+   try{const response=await call('export',undefined,'fin','GET',bindings);assert.equal(fired,true,change);assert.equal(response.status,403,change);assert.doesNotMatch(await response.text(),/plan_json|stripe_installment|Durable schedule/);}finally{await DB.prepare("UPDATE actors SET active=1,role='staff',client_id=NULL WHERE id='fin'").run();await DB.prepare("INSERT OR IGNORE INTO actor_finance_access VALUES('fin','a')").run();}
+  }
+ });
+ await t.test('installment export refuses a 1001-row table instead of silently truncating financial history',async()=>{
+  const f=await exportPrepared();await DB.prepare("WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<1001) INSERT INTO cancelled_stripe_schedule_requests(id,organization_id,invoice_id,request_key,actor_id,created_at) SELECT 'installment-export-overflow-'||x,'a',?,printf('00000000-0000-4000-8000-%012d',x),'fin',? FROM n").bind(f.p.invoice.id,Date.now()).run();
+  try{const before=requests.length,response=await call('export');assert.equal(response.status,409);assert.doesNotMatch(await response.text(),/plan_json|request_key/);assert.equal(requests.length,before);}finally{await DB.prepare("DELETE FROM cancelled_stripe_schedule_requests WHERE organization_id='a' AND id LIKE 'installment-export-overflow-%'").run();}
+ });
+ await t.test('installment export rejects more than two MiB in each variable JSON table below the row limit',async()=>{
+  const f=await exportPrepared(),source=await DB.prepare('SELECT * FROM stripe_installment_schedules WHERE id=?').bind(f.abandoned.id).first(),parts=(await DB.prepare('SELECT * FROM stripe_installment_parts WHERE schedule_id=? ORDER BY ordinal').bind(source.id).all()).results,events=(await DB.prepare('SELECT * FROM stripe_installment_events WHERE schedule_id=? ORDER BY revision').bind(source.id).all()).results;
+  async function insert(table,row){const fields=Object.keys(row);await DB.prepare('INSERT INTO '+table+'('+fields.join(',')+') VALUES('+fields.map(()=>'?').join(',')+')').bind(...fields.map(k=>row[k])).run();}
+  const results=[];
+  for(const target of ['stripe_installment_schedules','stripe_installment_parts','stripe_installment_events']){
+   const ids=[];
+   try{
+    for(let i=0;i<6;i++){
+     const id='installment-byte-budget-'+i;ids.push(id);const plan=JSON.parse(source.plan_json);if(target==='stripe_installment_schedules')plan.padding='"\\'.repeat(60000);
+     await insert('stripe_installment_schedules',{...source,id,request_key:crypto.randomUUID(),write_token:crypto.randomUUID(),plan_json:JSON.stringify(plan)});
+     for(const part of parts){const plan=JSON.parse(part.plan_json);if(target==='stripe_installment_parts')plan.padding='x'.repeat(230000);await insert('stripe_installment_parts',{...part,id:id+'-part-'+part.ordinal,schedule_id:id,plan_json:JSON.stringify(plan)});}
+     for(const event of events){const state=JSON.parse(event.state_json);if(target==='stripe_installment_events'&&i<2)state.padding='x'.repeat(900000);await insert('stripe_installment_events',{...event,id:id+'-event-'+event.revision,schedule_id:id,state_json:JSON.stringify(state)});}
+    }
+    const column=target==='stripe_installment_events'?'state_json':'plan_json',size=await DB.prepare("SELECT COUNT(*) n,SUM(length(CAST("+column+" AS BLOB))) bytes,SUM(length(CAST(json_object('payload',"+column+") AS BLOB))) encodedBytes FROM "+target+' WHERE organization_id=?').bind('a').first();assert.ok(size.n<1001,target);assert.ok(size.encodedBytes>2*1024*1024,target);if(target==='stripe_installment_schedules')assert.ok(size.bytes<2*1024*1024,'escaped JSON must exceed the byte budget even when raw column text does not');
+    const sqls=new WeakMap();let captured=[];const bindings={...env,DB:{prepare(sql){const statement=DB.prepare(sql);sqls.set(statement,sql);return new Proxy(statement,{get(row,key){if(key==='bind')return(...values)=>{const bound=row.bind(...values);sqls.set(bound,sql);return bound;};const value=row[key];return typeof value==='function'?value.bind(row):value;}});},async batch(statements){const result=await DB.batch(statements);captured=result.filter((_,i)=>(sqls.get(statements[i])||'').includes(target)).flatMap(r=>r.results);return result;}}};
+    const before=requests.length,response=await call('export',undefined,'fin','GET',bindings),body=await response.text();assert.equal(requests.length,before);results.push({table:target,status:response.status,rows:captured.length,onlyMarker:captured.length===1&&captured[0].__export_overflow===1,noPayload:captured.every(row=>row.plan_json==null&&row.state_json==null&&Object.values(row).every(v=>typeof v!=='string'||v.length<1000))});if(response.status===409){assert.ok(body.length<2000);assert.doesNotMatch(body,/plan_json|state_json|padding|xxxxxxxxxxxxxxxxxxxxxxxx/);}
+   }finally{for(const id of ids){await DB.prepare('DELETE FROM stripe_installment_events WHERE schedule_id=?').bind(id).run();await DB.prepare('DELETE FROM stripe_installment_parts WHERE schedule_id=?').bind(id).run();await DB.prepare('DELETE FROM stripe_installment_schedules WHERE id=?').bind(id).run();}}
+  }
+  assert.deepEqual(results.map(r=>r.status),[409,409,409],JSON.stringify(results));assert.ok(results.every(r=>r.onlyMarker&&r.noPayload),JSON.stringify(results));
+ });
 });
 test('deposit uses cumulative gross allocation and exact residual balance',async()=>{
  const allocate=await load(),s=fixture([101,202],1300,100),r=allocate(s);conservation(s,r);

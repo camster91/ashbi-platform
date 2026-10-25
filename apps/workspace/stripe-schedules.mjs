@@ -86,3 +86,31 @@ export async function stripeSchedulesRoute(request,env,actor,readBody,json,previ
  if(request.method==='GET'){const row=await db.prepare("SELECT * FROM stripe_installment_schedules WHERE invoice_id=? AND organization_id=? ORDER BY parent_revision DESC LIMIT 1").bind(invoiceId,actor.organization_id).first();return json(await present(db,actor,row));}
  if(request.method!=='POST')throw 405;const result=await freeze(env,actor,invoiceId,await readBody(request),preview);return json(result.value,result.status);
 }
+
+// Ordinary finance exports retain business plans and audit history, not replay
+// credentials. source_hash identifies the private original image retained by the
+// native backup; the original invoice snapshot is exported via invoice_drafts.
+export function scheduleExport(db,actor,table){
+ const fields={
+  stripe_installment_schedules:'id,organization_id,invoice_id,client_id,project_id,plan_json,plan_hash,source_hash,actor_id,reason,state,revision,parent_revision,activated_at,created_at,updated_at,abandoned_at,abandoned_by,abandonment_reason',
+  stripe_installment_parts:'id,organization_id,schedule_id,kind,ordinal,plan_json,plan_hash,created_at',
+  stripe_installment_events:'id,organization_id,schedule_id,invoice_id,actor_id,revision,action,state_json,recorded_at',
+  cancelled_stripe_schedule_requests:'id,organization_id,invoice_id,actor_id,created_at'
+ }[table];
+ if(!fields)throw 500;
+ // Measure the serialized whitelist, including UTF-8 and JSON string escaping,
+ // before returning large values to the Worker. The CTE carries byte counts,
+ // not an aggregate of JSON images. Budget and data gate share one SQL snapshot.
+ const encoded='json_object('+fields.split(',').map(field=>"'"+field+"',"+field).join(',')+')';
+ return db.prepare(`WITH export_budget AS (
+  SELECT COALESCE(SUM(row_bytes+1),0)+2 AS bytes FROM (
+   SELECT length(CAST(${encoded} AS BLOB)) AS row_bytes FROM ${table}
+   WHERE organization_id=? AND ${authority} ORDER BY id LIMIT 1001
+  )
+ ), export_rows AS (
+  SELECT ${fields},0 AS __export_overflow FROM ${table}
+  WHERE organization_id=? AND ${authority} AND (SELECT bytes FROM export_budget)<=2097152 ORDER BY id LIMIT 1001
+ ) SELECT * FROM export_rows UNION ALL
+ SELECT ${fields.split(',').map(()=>'NULL').join(',')},1 AS __export_overflow WHERE (SELECT bytes FROM export_budget)>2097152`)
+ .bind(actor.organization_id,actor.id,actor.organization_id,actor.organization_id,actor.id,actor.organization_id);
+}
