@@ -13,9 +13,9 @@ const bindings=(actor,client)=>[actor.id,actor.organization_id,...(client?[actor
 const authority='EXISTS(SELECT 1 FROM publication_viewer)';
 // Publication content is deliberately independent of subsequent private draft edits.
 const portalScope=`${authority} AND r.status='PENDING' AND EXISTS(SELECT 1 FROM publication_viewer v WHERE v.client_id=r.client_id) AND EXISTS(SELECT 1 FROM clients c WHERE c.id=r.client_id AND c.organization_id=r.organization_id) AND (r.project_id IS NULL OR EXISTS(SELECT 1 FROM projects p WHERE p.id=r.project_id AND p.organization_id=r.organization_id AND p.client_id=r.client_id AND p.client_visible=1))`;
-const columns='id,organization_id,contract_id,client_id,project_id,source_revision,source_hash,content_hash,snapshot_json,status,revision,created_by,created_at,withdrawn_at,withdrawn_by,withdrawal_reason';
+const columns='id,organization_id,contract_id,client_id,project_id,source_revision,source_hash,content_hash,snapshot_json,status,revision,created_by,created_at,withdrawn_at,withdrawn_by,withdrawal_reason,signing_policy_json,signing_policy_hash';
 const stateJson=alias=>`json_object(${columns.split(',').map(c=>`'${c}',${alias}.${c}`).join(',')})`;
-function view(row,client){const result={id:row.id,contractId:row.contract_id,contractRevision:row.source_revision,revision:row.revision,state:row.status,snapshot:JSON.parse(row.snapshot_json),contentHash:row.content_hash,createdAt:row.created_at,withdrawnAt:row.withdrawn_at};if(!client)Object.assign(result,{clientId:row.client_id,projectId:row.project_id,sourceHash:row.source_hash,createdBy:row.created_by,withdrawnBy:row.withdrawn_by,withdrawalReason:row.withdrawal_reason});return result;}
+function view(row,client){const result={id:row.id,contractId:row.contract_id,contractRevision:row.source_revision,revision:row.revision,state:row.state_override??row.status,snapshot:JSON.parse(row.snapshot_json),contentHash:row.content_hash,createdAt:row.created_at,withdrawnAt:row.withdrawn_at};if(!client)Object.assign(result,{clientId:row.client_id,projectId:row.project_id,sourceHash:row.source_hash,createdBy:row.created_by,withdrawnBy:row.withdrawn_by,withdrawalReason:row.withdrawal_reason});if(row.signature_public)result.signature=row.signature_public;return result;}
 async function allowed(db,actor,client){
  if(client){if(actor.role!=='client'||!await db.prepare("SELECT id FROM actors WHERE id=? AND organization_id=? AND active=1 AND role='client' AND client_id IS ?").bind(actor.id,actor.organization_id,actor.client_id).first())throw 403;}
  else if(!await hasFinance(db,actor))throw 403;
@@ -40,9 +40,10 @@ async function commit(db,actor,statement,publicationId,token,action,why,key,fing
  let results;try{results=await db.batch([statement,event(db,actor,publicationId,token,action,why,key,fingerprint),fence(db,actor,publicationId,token)]);}catch(error){const saved=await receipt(db,actor,key,fingerprint);if(saved.state==='SAVED')return {...saved,replayed:true};throw error;}
  const saved=await receipt(db,actor,key,fingerprint);if(saved.state!=='SAVED')throw 409;return {...saved,replayed:results[0].results.length===0};
 }
-async function publish(db,actor,body){
+async function publish(db,actor,body,options){
  strict(body,['requestId','contractId','contractRevision','contractHash','reason']);if(!uuid(body.requestId)||!id(body.contractId)||!revision(body.contractRevision)||!digest(body.contractHash)||!reason(body.reason))throw 400;
  const key=body.requestId.toLowerCase(),why=body.reason.trim(),fingerprint=await hash({action:'PUBLISH',contractId:body.contractId,contractRevision:body.contractRevision,contractHash:body.contractHash,reason:why}),prior=await receipt(db,actor,key,fingerprint);if(prior.state==='SAVED')return {...prior,replayed:true};
+ const policy=await options.policy?.()??null;
  const draft=await db.prepare(`${viewer(false)} SELECT d.* FROM commercial_drafts d WHERE d.id=? AND d.organization_id=? AND d.kind='CONTRACT' AND ${authority}`).bind(...bindings(actor,false),body.contractId,actor.organization_id).first();if(!draft){await allowed(db,actor,false);throw 404;}
  if(draft.status!=='DRAFT'||draft.revision!==body.contractRevision||draft.content_hash!==body.contractHash)throw 409;
  const source=JSON.parse(draft.snapshot_json),client=await db.prepare('SELECT id,name,revision FROM clients WHERE id=? AND organization_id=?').bind(draft.client_id,actor.organization_id).first(),project=draft.project_id?await db.prepare('SELECT id,name,revision,client_id,client_visible FROM projects WHERE id=? AND organization_id=?').bind(draft.project_id,actor.organization_id).first():null;
@@ -54,14 +55,14 @@ async function publish(db,actor,body){
  const guards=[authority,requestGuard,"NOT EXISTS(SELECT 1 FROM contract_publications WHERE organization_id=? AND contract_id=? AND status='PENDING')","EXISTS(SELECT 1 FROM commercial_drafts d WHERE d.id=? AND d.organization_id=? AND d.kind='CONTRACT' AND d.status='DRAFT' AND d.revision=? AND d.content_hash=? AND d.snapshot_json=? AND d.client_id=? AND d.project_id IS ?)",'EXISTS(SELECT 1 FROM commercial_versions WHERE draft_id=? AND organization_id=? AND revision=? AND state_json=?)','EXISTS(SELECT 1 FROM clients WHERE id=? AND organization_id=? AND name=? AND revision=?)'];
  const values=[...requestValues(actor,key),actor.organization_id,draft.id,draft.id,actor.organization_id,draft.revision,draft.content_hash,draft.snapshot_json,draft.client_id,draft.project_id,draft.id,actor.organization_id,draft.revision,draft.snapshot_json,client.id,actor.organization_id,client.name,client.revision];
  if(project){guards.push('EXISTS(SELECT 1 FROM projects WHERE id=? AND organization_id=? AND client_id=? AND name=? AND revision=? AND client_visible=1)');values.push(project.id,actor.organization_id,client.id,project.name,project.revision);}
- const statement=db.prepare(`${viewer(false)} INSERT INTO contract_publications(id,organization_id,contract_id,client_id,project_id,source_revision,source_hash,content_hash,snapshot_json,status,revision,created_by,created_at,write_token) SELECT ?,?,?,?,?,?,?,?,?,'PENDING',0,?,?,? WHERE ${guards.join(' AND ')} RETURNING id`).bind(...bindings(actor,false),publicationId,actor.organization_id,draft.id,client.id,project?.id??null,draft.revision,draft.content_hash,contentHash,JSON.stringify(snapshot),actor.id,now,token,...values);
+ const statement=db.prepare(`${viewer(false)} INSERT INTO contract_publications(id,organization_id,contract_id,client_id,project_id,source_revision,source_hash,content_hash,snapshot_json,status,revision,created_by,created_at,write_token,signing_policy_json,signing_policy_hash) SELECT ?,?,?,?,?,?,?,?,?,'PENDING',0,?,?,?,?,? WHERE ${guards.join(' AND ')} RETURNING id`).bind(...bindings(actor,false),publicationId,actor.organization_id,draft.id,client.id,project?.id??null,draft.revision,draft.content_hash,contentHash,JSON.stringify(snapshot),actor.id,now,token,policy?JSON.stringify(policy):null,policy?.hash??null,...values);
  return commit(db,actor,statement,publicationId,token,'PUBLISH',why,key,fingerprint);
 }
 async function withdraw(db,actor,publicationId,body){
  strict(body,['requestId','revision','reason']);if(!uuid(body.requestId)||!revision(body.revision)||!reason(body.reason))throw 400;
  const key=body.requestId.toLowerCase(),why=body.reason.trim(),fingerprint=await hash({action:'WITHDRAW',publicationId,revision:body.revision,reason:why}),prior=await receipt(db,actor,key,fingerprint);if(prior.state==='SAVED')return {...prior,replayed:true};
  await read(db,actor,publicationId,false);const token=crypto.randomUUID();
- const statement=db.prepare(`${viewer(false)} UPDATE contract_publications SET status='WITHDRAWN',withdrawn_at=?,withdrawn_by=?,withdrawal_reason=?,revision=revision+1,write_token=? WHERE id=? AND organization_id=? AND revision=? AND status='PENDING' AND ${authority} AND ${requestGuard} RETURNING id`).bind(...bindings(actor,false),Date.now(),actor.id,why,token,publicationId,actor.organization_id,body.revision,...requestValues(actor,key));
+ const statement=db.prepare(`${viewer(false)} UPDATE contract_publications SET status='WITHDRAWN',withdrawn_at=?,withdrawn_by=?,withdrawal_reason=?,revision=revision+1,write_token=? WHERE id=? AND organization_id=? AND revision=? AND status='PENDING' AND NOT EXISTS(SELECT 1 FROM contract_signatures signed WHERE signed.organization_id=contract_publications.organization_id AND signed.publication_id=contract_publications.id) AND ${authority} AND ${requestGuard} RETURNING id`).bind(...bindings(actor,false),Date.now(),actor.id,why,token,publicationId,actor.organization_id,body.revision,...requestValues(actor,key));
  return commit(db,actor,statement,publicationId,token,'WITHDRAW',why,key,fingerprint);
 }
 async function cancel(db,actor,key){
@@ -70,7 +71,7 @@ async function cancel(db,actor,key){
 }
 export function contractPublicationExportStatement(db,actor,table){const selection=table==='contract_publications'?columns:table==='contract_publication_events'?'id,publication_id,organization_id,actor_id,actor_email,recorded_at,revision,action,reason,state_json':'id,organization_id,actor_id,created_at';return db.prepare(`${viewer(false)} SELECT ${selection} FROM ${table} WHERE organization_id=? AND ${authority} ORDER BY id LIMIT 1001`).bind(...bindings(actor,false),actor.organization_id);}
 
-export async function contractPublicationsRoute(request,db,actor,readBody,json){
+export async function contractPublicationsRoute(request,db,actor,readBody,json,options={}){
  const url=new URL(request.url),client=url.pathname.startsWith('/api/portal/'),prefix=client?'/api/portal/contracts':'/api/contract-publications',rest=url.pathname.slice(prefix.length);await allowed(db,actor,client);
  const keyMatch=!client&&rest.match(/^\/requests\/([^/]+)(\/cancel)?$/);
  if(keyMatch){if(!uuid(keyMatch[1])||url.search)throw 400;if(request.method!==(keyMatch[2]?'POST':'GET'))throw 405;if(keyMatch[2])strict(await readBody(request),[]);return json(keyMatch[2]?await cancel(db,actor,keyMatch[1].toLowerCase()):await receipt(db,actor,keyMatch[1].toLowerCase()));}
@@ -80,22 +81,26 @@ export async function contractPublicationsRoute(request,db,actor,readBody,json){
   if(operation==='withdraw')throw 405;
   if(!publicationId){
    query(url,['contractId','clientId','projectId','after','state']);if(client&&url.searchParams.has('clientId'))throw 400;
-   const state=url.searchParams.get('state');if(state!==null&&!['PENDING','WITHDRAWN'].includes(state)||client&&state==='WITHDRAWN')throw 400;
+   const state=url.searchParams.get('state');if(state!==null&&!['PENDING','WITHDRAWN','SIGNED'].includes(state)||client&&state==='WITHDRAWN')throw 400;
    const conditions=['r.organization_id=?',client?portalScope:authority],values=[...bindings(actor,client),actor.organization_id];
    for(const [key,column]of [['contractId','contract_id'],['clientId','client_id'],['projectId','project_id'],['after','id']])if(url.searchParams.has(key)){const value=url.searchParams.get(key);if(!id(value))throw 400;conditions.push('r.'+column+(key==='after'?'>?':'=?'));values.push(value);}
-   if(state){conditions.push('r.status=?');values.push(state);}
+   if(state==='SIGNED')conditions.push("r.status='PENDING' AND EXISTS(SELECT 1 FROM contract_signatures signed WHERE signed.organization_id=r.organization_id AND signed.publication_id=r.id)");else if(state==='PENDING')conditions.push("r.status='PENDING' AND NOT EXISTS(SELECT 1 FROM contract_signatures signed WHERE signed.organization_id=r.organization_id AND signed.publication_id=r.id)");else if(state){conditions.push('r.status=?');values.push(state);}
    const select=()=>db.prepare(`${viewer(client)} SELECT r.* FROM contract_publications r WHERE ${conditions.join(' AND ')} ORDER BY r.id LIMIT 51`).bind(...values).all();let result=await select();if(client)result=await select();await allowed(db,actor,client);
-   const items=result.results.slice(0,50).map(row=>({id:row.id,contractId:row.contract_id,contractRevision:row.source_revision,title:JSON.parse(row.snapshot_json).title,state:row.status,revision:row.revision,createdAt:row.created_at,withdrawnAt:row.withdrawn_at}));return json({items,nextCursor:result.results.length>50?items.at(-1).id:null});
+   const selected=result.results.slice(0,50),decorated=options.decorateMany?await options.decorateMany(selected,client):await Promise.all(selected.map(row=>options.decorate?options.decorate(row,client):row));
+   const current=await select();await allowed(db,actor,client);if(JSON.stringify(current.results)!==JSON.stringify(result.results))throw 409;
+   const items=decorated.map(row=>({id:row.id,contractId:row.contract_id,contractRevision:row.source_revision,title:JSON.parse(row.snapshot_json).title,state:row.state_override??row.status,revision:row.revision,createdAt:row.created_at,withdrawnAt:row.withdrawn_at,...(row.document_verification?{documentVerification:row.document_verification}:{})}));return json({items,nextCursor:result.results.length>50?items.at(-1).id:null});
   }
-  const row=await read(db,actor,publicationId,client);
+  let row=await read(db,actor,publicationId,client);if(options.decorate)row=await options.decorate(row,client);
   if(!operation){if(url.search)throw 400;return json(view(row,client));}
   if(operation==='document'){if(url.search)throw 400;const response=json({version:1,publicationId:row.id,contentHash:row.content_hash,snapshot:JSON.parse(row.snapshot_json)});response.headers.set('Content-Disposition',`attachment; filename="contract-${row.id}.json"`);return response;}
   query(url,['before']);const before=url.searchParams.get('before');if(before!==null&&(!/^\d{1,16}$/.test(before)||!revision(Number(before))))throw 400;
-  const result=(await db.prepare(`${viewer(false)} SELECT * FROM contract_publication_events WHERE organization_id=? AND publication_id=? AND ${authority} ${before===null?'':'AND revision<?'} ORDER BY revision DESC LIMIT 51`).bind(...bindings(actor,false),actor.organization_id,publicationId,...(before===null?[]:[Number(before)])).all()).results;await allowed(db,actor,false);
-  const items=result.slice(0,50).map(e=>({revision:e.revision,action:e.action,reason:e.reason,actorId:e.actor_id,actorEmail:e.actor_email,recordedAt:e.recorded_at,state:view(JSON.parse(e.state_json),false)}));return json({items,currentRevision:row.revision,nextCursor:result.length>50?String(items.at(-1).revision):null});
+  const result=(await db.prepare(`${viewer(false)},history AS (SELECT revision,action,reason,actor_id,actor_email,recorded_at,state_json,NULL AS signature_json,organization_id,publication_id FROM contract_publication_events UNION ALL SELECT revision,action,NULL AS reason,actor_id,actor_email,recorded_at,publication_state_json AS state_json,state_json AS signature_json,organization_id,publication_id FROM contract_signature_events) SELECT * FROM history WHERE organization_id=? AND publication_id=? AND ${authority} ${before===null?'':'AND revision<?'} ORDER BY revision DESC LIMIT 51`).bind(...bindings(actor,false),actor.organization_id,publicationId,...(before===null?[]:[Number(before)])).all()).results;await allowed(db,actor,false);
+  const items=result.slice(0,50).map(e=>({revision:e.revision,action:e.action,reason:e.reason,actorId:e.actor_id,actorEmail:e.actor_email,recordedAt:e.recorded_at,state:view({...JSON.parse(e.state_json),...(e.action==='SIGN'?{state_override:'SIGNED',signature_public:JSON.parse(e.signature_json)}:{})},false)}));return json({items,currentRevision:row.revision,nextCursor:result.length>50?String(items.at(-1).revision):null});
  }
  if(url.search)throw 400;if(request.method!=='POST')throw 405;
- if(!client&&!publicationId){const result=await publish(db,actor,await readBody(request));return json(result.publication,result.replayed?200:201);}
+ if(!client&&!publicationId){const result=await publish(db,actor,await readBody(request),options);return json(result.publication,result.replayed?200:201);}
  if(!client&&operation==='withdraw')return json((await withdraw(db,actor,publicationId,await readBody(request))).publication);
  throw 405;
 }
+
+export {read as readContractPublication,allowed as assertContractAuthority,view as publicationView};

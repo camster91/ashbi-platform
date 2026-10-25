@@ -11,6 +11,7 @@ import { timeDetailsRoute, timePeople, hasFinance } from './time-details.mjs';
 import { invoicesRoute } from './invoices.mjs';
 import { commercialRoute } from './commercial.mjs';
 import { contractPublicationsRoute } from './contract-publications.mjs';
+import { readSigningPolicy,decorateSignature,decorateSignatures,contractSignaturesRoute } from './contract-signatures.mjs';
 import { proposalReviewsRoute, dashboardReviews } from './proposal-reviews.mjs';
 import { stripeDraftsRoute } from './stripe-drafts.mjs';
 import { stripeWebhook, stripeLifecycleRoute, drainStripeEvents } from './stripe-lifecycle.mjs';
@@ -51,7 +52,8 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  if(url.pathname==='/api/invoices'||url.pathname.startsWith('/api/invoices/'))return await invoicesRoute(request,env.DB,actor,readBody,json);
  if(url.pathname==='/api/commercial'||url.pathname.startsWith('/api/commercial/'))return await commercialRoute(request,env.DB,actor,readBody,json);
  if(url.pathname==='/api/proposal-reviews'||url.pathname.startsWith('/api/proposal-reviews/')||url.pathname==='/api/portal/proposals'||url.pathname.startsWith('/api/portal/proposals/'))return await proposalReviewsRoute(request,env.DB,actor,readBody,json);
- if(url.pathname==='/api/contract-publications'||url.pathname.startsWith('/api/contract-publications/')||url.pathname==='/api/portal/contracts'||url.pathname.startsWith('/api/portal/contracts/'))return await contractPublicationsRoute(request,env.DB,actor,readBody,json);
+ if(/^\/api\/(?:portal\/contracts|contract-publications)\/[^/]+\/(?:signing|signature|signed-document|requests)(?:\/[^/]+(?:\/cancel)?)?$/.test(url.pathname))return await contractSignaturesRoute(request,env,actor,readBody,json);
+ if(url.pathname==='/api/contract-publications'||url.pathname.startsWith('/api/contract-publications/')||url.pathname==='/api/portal/contracts'||url.pathname.startsWith('/api/portal/contracts/'))return await contractPublicationsRoute(request,env.DB,actor,readBody,json,{policy:()=>readSigningPolicy(env),decorate:(row,client)=>decorateSignature(env,actor,row,client),decorateMany:(rows,client)=>decorateSignatures(env,actor,rows,client)});
  const timeDetail=url.pathname.match(/^\/api\/time\/details\/([a-zA-Z0-9-]{1,100})(?:\/(approve|reject|history))?$/);
  if(url.pathname==='/api/time/people')return await timePeople(request,env.DB,actor,json);
  if(timeDetail||url.pathname==='/api/time/entries')return await timeDetailsRoute(request,env.DB,actor,timeDetail?.[1],timeDetail?.[2],readBody,json);
