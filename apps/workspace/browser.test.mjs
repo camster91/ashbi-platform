@@ -20,6 +20,7 @@ import {runProposalReviewTests} from './browser-proposal-reviews.mjs';
 import {runStripeTests} from './browser-stripe.mjs';
 import {stripeLifecycleProvider} from './stripe-lifecycle-provider.mjs';
 import {runInvoiceTests,billingSigningSecret} from './browser-invoices.mjs';
+import {runRecordLinkTests} from './browser-links.mjs';
 const base=fileURLToPath(new URL('.',import.meta.url));
 const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'qa'},r2Buckets:['FILES'],cf:false});
 const DB=await mf.getD1Database('DB'),FILES=await mf.getR2Bucket('FILES');
@@ -63,4 +64,5 @@ await runCommercialTests({browser,origin,DB,axe,addActor});
 await runProposalReviewTests({browser,origin,DB,axe,addActor});
 await runStripeTests({browser,origin,DB,axe,addActor,stripe});
 await runInvoiceTests({browser,origin,DB,axe,addActor,stripe});
+await runRecordLinkTests({browser,origin,DB,axe,addActor,stripe});
 }finally{await browser.close();await new Promise(r=>server.close(r));await mf.dispose();}
