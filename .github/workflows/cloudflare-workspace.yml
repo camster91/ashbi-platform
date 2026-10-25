@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  workspace:
-    name: Local Worker and D1 integration
+  api:
+    name: Signed identity and compiled Worker contracts
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
@@ -36,7 +36,43 @@ jobs:
         run: npm run build
       - name: Exercise compiled invoice persistence and financial contracts
         run: npm run test:invoice-built
+
+  browser:
+    name: Built UI, keyboard and responsive accessibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CI: true
+      WRANGLER_SEND_METRICS: 'false'
+    defaults:
+      run:
+        working-directory: apps/workspace
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+          package-manager-cache: false
+      - name: Install locked workspace dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build without publishing
+        run: npm run build
       - name: Install browser for built-artifact checks
         run: npx playwright install --with-deps chromium
       - name: Exercise built UI, keyboard and responsive accessibility
         run: npm run test:browser
+
+  workspace:
+    name: Local Worker and D1 integration
+    needs: [api, browser]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Require both validation jobs to succeed
+        env:
+          API_RESULT: ${{ needs.api.result }}
+          BROWSER_RESULT: ${{ needs.browser.result }}
+        run: '[[ "$API_RESULT" == success && "$BROWSER_RESULT" == success ]]'
