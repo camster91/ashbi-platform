@@ -1,12 +1,12 @@
 export const recordLinkUiScript=String.raw`
  function recordLink(page,id,label,accessibleLabel=label){
-  if(!['tasks','reviews','invoices'].includes(page)||typeof id!=='string'||!/^[a-zA-Z0-9-]{1,100}$/.test(id))return node('span','Record link unavailable.','help');
+  if(!['tasks','reviews','invoices','contracts'].includes(page)||typeof id!=='string'||!/^[a-zA-Z0-9-]{1,100}$/.test(id))return node('span','Record link unavailable.','help');
   const context=view,link=node('a',label);link.href='#'+page+'/'+id;link.setAttribute('aria-label',accessibleLabel);link.onclick=e=>{if(!current(context)||!link.isConnected){e.preventDefault();return;}if(e.button===0&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!e.altKey&&link.hash===location.hash){e.preventDefault();load(true);}};return link;
  }
  function denyLinkedRecord(state,kind,missing=false){
   if(!current(state))return;state.linkDenied=true;
-  const name=kind==='tasks'?'task':kind==='reviews'?'review':'invoice';
-  main.replaceChildren(node('h1',labels[state.page]),node('p',missing?'This '+name+' is unavailable. Reload '+labels[state.page]+' to check your access.':'Record access changed. Reload the page to check your access.','notice'));
+  const name=kind==='tasks'?'task':kind==='reviews'?'review':kind==='contracts'?'contract':'invoice';
+  const notice=node('p',missing?'This '+name+' is unavailable. Reload '+labels[state.page]+' to check your access.':'Record access changed. Reload the page to check your access.','notice');notice.setAttribute('role','alert');main.replaceChildren(node('h1',labels[state.page]),notice);
   main.removeAttribute('aria-busy');const reload=node('button','Reload page');reload.type='button';reload.onclick=()=>{if(location.hash===state.routeKey)load(true);};
   const list=node('a','Open '+labels[state.page]);list.href='#'+state.page;main.append(reload,document.createTextNode(' '),list);if(document.activeElement===document.body)reload.focus();
  }

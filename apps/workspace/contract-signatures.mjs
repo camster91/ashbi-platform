@@ -116,17 +116,17 @@ export function contractSignatureExportStatement(db,actor,table){
 export async function contractSignaturesRoute(request,env,actor,readBody,json){
  const url=new URL(request.url),client=url.pathname.startsWith('/api/portal/');await assertContractAuthority(env.DB,actor,client);
  const match=url.pathname.match(/^\/api\/(?:portal\/contracts|contract-publications)\/([a-zA-Z0-9-]{1,100})\/(signing|signature|signed-document|requests\/([^/]+)(\/cancel)?)$/);if(!match||url.search)throw 404;
- const publicationId=match[1],operation=match[2];if(!client&&(operation==='signing'||operation.startsWith('requests/')))throw 404;
+ const publicationId=match[1],operation=match[2];if(!client&&operation.startsWith('requests/'))throw 404;
  const row=await readContractPublication(env.DB,actor,publicationId,client);
  if(operation.startsWith('requests/')){if(!uuid(match[3]))throw 400;if(request.method!==(match[4]?'POST':'GET'))throw 405;if(match[4])strict(await readBody(request),[]);return json(match[4]?await cancel(env,actor,publicationId,match[3].toLowerCase()):await receipt(env,actor,publicationId,match[3].toLowerCase()));}
- if(operation==='signing'&&request.method==='POST')return json(await sign(request,env,actor,publicationId,await readBody(request)));
+ if(operation==='signing'&&request.method==='POST'){if(!client)throw 403;return json(await sign(request,env,actor,publicationId,await readBody(request)));}
  if(request.method!=='GET')throw 405;
  const saved=await env.DB.prepare('SELECT * FROM contract_signatures WHERE publication_id=? AND organization_id=?').bind(publicationId,actor.organization_id).first();
  if(operation==='signing'){
-  const consent=await frozenPolicy(row);let canSign=false;if(!saved&&consent){try{activeKey(env);canSign=true;}catch{}}
+  const consent=await frozenPolicy(row);let signingAvailable=false;if(!saved&&consent&&row.status==='PENDING'){try{activeKey(env);signingAvailable=true;}catch{}}const canSign=client&&signingAvailable;
   const value=saved?await verified(env,actor,saved,client):null,fresh=await readContractPublication(env.DB,actor,publicationId,client);
   if(!saved&&fresh.revision!==row.revision)throw 409;
-  return json({state:saved?'SIGNED':'PENDING',canSign,policy:consent,publicationRevision:fresh.revision,contentHash:fresh.content_hash,...(value?{signature:value.result}:{})});
+  return json({state:saved?'SIGNED':fresh.status,canSign,signingAvailable,policy:consent,publicationRevision:fresh.revision,contentHash:fresh.content_hash,...(value?{signature:value.result}:{})});
  }
  if(!saved)throw 404;const value=await verified(env,actor,saved,client);if(operation==='signature')return json(value.result);
  const response=json(null);return new Response(value.bytes,{headers:{...Object.fromEntries(response.headers),'Content-Type':'application/json; charset=utf-8','Content-Length':String(value.bytes.byteLength),'Content-Disposition':`attachment; filename="signed-contract-${publicationId}.json"`,'Content-Security-Policy':"default-src 'none'; sandbox"}});
