@@ -82,6 +82,18 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  provider.loseCreate=true;const leasedChild=await data(await call(leasedChildPath,leasedChildBody),202);assert.equal(leasedChild.state,'UNKNOWN');const childLeaseUntil=Date.now()+300000;
  await source.env.DB.prepare('UPDATE stripe_part_operations SET lease_token=?,lease_until=? WHERE id=?').bind('synthetic-child-lease',childLeaseUntil,leasedChild.id).run();const leasedChildRow=await source.env.DB.prepare('SELECT * FROM stripe_part_operations WHERE id=?').bind(leasedChild.id).first();
 
+ // Independent issuance effects must survive the same native checkpoint.
+ const finalPath=(input,part)=>input.path+'/parts/'+part.id+'/finalize';
+ async function finalIntent(path){const plan=await data(await call(path+'-preview',{}));return {requestId:crypto.randomUUID(),revision:plan.creationRevision,fingerprint:plan.fingerprint,reason:'Synthetic child issuance review'};}
+ const issuedPath=finalPath(childInput,childSchedule.parts[0]),issuedBody=await finalIntent(issuedPath),issuedPart=await data(await call(issuedPath,issuedBody),201);
+ const issuanceInput=await scheduleInvoice('Uncertain child issuance checkpoint',{withTime:true}),issuanceSchedule=await data(await call(issuanceInput.path,issuanceInput.body),201),issuanceDrafts=[];
+ for(const part of issuanceSchedule.parts)issuanceDrafts.push(await data(await call(issuanceInput.path+'/parts/'+part.id+'/draft',{requestId:crypto.randomUUID(),revision:issuanceSchedule.revision,fingerprint:part.plan.fingerprint,reason:'Prepare recoverable issuance source'}),201));
+ const lostIssuancePath=finalPath(issuanceInput,issuanceSchedule.parts[0]),cancelledIssuanceBody=await finalIntent(lostIssuancePath);await data(await call(lostIssuancePath+'/requests/'+cancelledIssuanceBody.requestId+'/cancel',{}));
+ const lostIssuanceBody=await finalIntent(lostIssuancePath);provider.loseFinalize=true;const lostIssuance=await data(await call(lostIssuancePath,lostIssuanceBody),202);assert.equal(lostIssuance.state,'UNKNOWN');
+ const lostIssuanceRow=await source.env.DB.prepare('SELECT * FROM stripe_part_issuance_operations WHERE id=?').bind(lostIssuance.id).first();
+ const leasedIssuancePath=finalPath(issuanceInput,issuanceSchedule.parts[1]),leasedIssuanceBody=await finalIntent(leasedIssuancePath);provider.failFinalizeBefore=true;const leasedIssuance=await data(await call(leasedIssuancePath,leasedIssuanceBody),202);assert.equal(leasedIssuance.state,'UNKNOWN');
+ const issuanceLeaseUntil=Date.now()+300000;await source.env.DB.prepare('UPDATE stripe_part_issuance_operations SET lease_token=?,lease_until=? WHERE id=?').bind('synthetic-issuance-lease',issuanceLeaseUntil,leasedIssuance.id).run();const leasedIssuanceRow=await source.env.DB.prepare('SELECT * FROM stripe_part_issuance_operations WHERE id=?').bind(leasedIssuance.id).first();
+
  // Inventory staged orphans and zero-length objects too, not only ready DB rows.
  await source.env.FILES.put('unreferenced/café; staged.bin',new Uint8Array([0,17,255]),{httpMetadata:{contentType:'application/octet-stream',contentDisposition:'attachment; filename="staged.bin"',cacheControl:'private, no-store',cacheExpiry:new Date('2030-01-02T00:00:00Z')},customMetadata:{owner:'synthetic',literal:'café; "quoted"'}});
  await source.env.FILES.put('unreferenced/empty',new Uint8Array(),{customMetadata:{state:'pending'}});
@@ -92,7 +104,7 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  await writeFile(keyFile,JSON.stringify({active:'journey',keys:fixture.keyRing}),{mode:0o600});
  const {image,objects}=JSON.parse(await readFile(checkpoint,'utf8'));
  for(const key of Object.values(fixture.keyRing))assert.equal((await readFile(checkpoint,'utf8')).includes(key),false);
- assert.equal(Object.keys(image.tables).length,52);assert.equal(image.schema.filter(s=>s.type==='index').length,39);assert.equal(objects.length,6);
+ assert.equal(Object.keys(image.tables).length,55);assert.equal(image.schema.filter(s=>s.type==='index').length,41);assert.equal(objects.length,6);
  const sql=await exportDatabase(source);
  // External Stripe state is deliberately NOT restored with our D1/R2 image.
  const externalFinalize=provider.requests.findLast(p=>p.method==='POST'&&p.path==='/v1/invoices/'+externallyFinished.creation.stripeInvoiceId+'/finalize');
@@ -105,7 +117,7 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  const DB=target.env.DB,FILES=target.env.FILES;
  const verify=async()=>assert.deepEqual(await databaseImage(DB),image,'all schema and exact table images must match trusted checkpoint');
  const putRow=async(table,row)=>{const cols=Object.keys(row);await DB.prepare('INSERT INTO "'+table+'"('+cols.map(c=>'"'+c+'"').join(',')+') VALUES('+cols.map(()=>'?').join(',')+')').bind(...cols.map(c=>row[c])).run();};
- await t.test('all 52 tables and 39 indexes match before any restored application use',verify);
+ await t.test('all 55 tables and 41 indexes match before any restored application use',verify);
  await t.test('all paginated objects including orphans, empty data and private metadata match',()=>verifyObjects(FILES,objects));
 
  await t.test('restored frozen schedule keeps distinct identities, original receipts and exact source reservations',async()=>{
@@ -133,6 +145,15 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  });
  await t.test('restored active child lease blocks retry without changing its expiration',async()=>{
   const before=posts().length;assert.equal((await restored(leasedChildPath+'/retry',{})).status,202);assert.equal(posts().length,before);assert.deepEqual(await DB.prepare('SELECT lease_token,lease_until FROM stripe_part_operations WHERE id=?').bind(leasedChild.id).first(),{lease_token:'synthetic-child-lease',lease_until:childLeaseUntil});await verify();
+ });
+
+ await t.test('restored child issuance receipts retain finalized effects and cancelled original keys without provider access',async()=>{
+  const before=provider.requests.length,disabled={STRIPE_MODE:undefined,STRIPE_SECRET_KEY:undefined};assert.deepEqual(await data(await restored(issuedPath,undefined,'finance','GET',disabled)),issuedPart);assert.deepEqual((await data(await restored(issuedPath+'/requests/'+issuedBody.requestId,undefined,'finance','GET',disabled))).operation,issuedPart);assert.deepEqual(await data(await restored(issuedPath,issuedBody,'finance','POST',disabled)),issuedPart);
+  assert.equal((await data(await restored(lostIssuancePath,undefined,'finance','GET',disabled))).id,lostIssuance.id);assert.equal((await restored(lostIssuancePath,cancelledIssuanceBody)).status,409);assert.equal(provider.requests.length,before);assert.equal((await DB.prepare('SELECT attempt_at FROM stripe_part_issuance_operations WHERE id=?').bind(lostIssuance.id).first()).attempt_at,lostIssuanceRow.attempt_at);await verify();
+ });
+ await t.test('restored issuance lease and original journal prevent another effect or silent repair',async()=>{
+  const before=posts().length;assert.equal((await restored(leasedIssuancePath+'/retry',{})).status,202);assert.equal(posts().length,before);assert.deepEqual(await DB.prepare('SELECT lease_token,lease_until FROM stripe_part_issuance_operations WHERE id=?').bind(leasedIssuance.id).first(),{lease_token:'synthetic-issuance-lease',lease_until:issuanceLeaseUntil});
+  const events=image.tables.stripe_part_issuance_events.filter(row=>row.operation_id===lostIssuance.id).sort((a,b)=>a.revision-b.revision);for(const row of [events[0],events.at(-1)]){await DB.prepare('DELETE FROM stripe_part_issuance_events WHERE id=?').bind(row.id).run();try{assert.equal((await restored(lostIssuancePath)).status,503);assert.ok((await restored(lostIssuancePath+'/retry',{})).status>=400);}finally{await putRow('stripe_part_issuance_events',row);}}assert.equal(posts().length,before);await verify();
  });
 
  await t.test('own client reads exact original file and immutable signed JSON/PDF bytes',async()=>{
@@ -197,6 +218,12 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  await t.test('restored unknown children retry their original intents against already-created external drafts',async()=>{
   for(const entry of [{path:balancePath,op:balance,row:balanceRow},{path:leasedChildPath,op:leasedChild,row:leasedChildRow}]){if(entry.op.id===leasedChild.id)await DB.prepare('UPDATE stripe_part_operations SET lease_token=NULL,lease_until=0 WHERE id=?').bind(entry.op.id).run();const original=provider.requests.find(r=>r.method==='POST'&&r.path==='/v1/invoices'&&r.params['metadata[ashbi_operation]']===entry.op.id),before=posts().length,nativeCount=provider.invoices.size;assert.ok(original);const result=await data(await restored(entry.path+'/retry',{}));assert.equal(result.state,'DONE');assert.equal(provider.invoices.size,nativeCount);const repeated=posts().slice(before).find(r=>r.path==='/v1/invoices');assert.ok(repeated);assert.equal(repeated.key,original.key);assert.deepEqual(repeated.params,original.params);assert.equal((await DB.prepare('SELECT create_attempt_at FROM stripe_part_operations WHERE id=?').bind(entry.op.id).first()).create_attempt_at,entry.row.create_attempt_at);}
  });
+ await t.test('restored child finalization lost after its effect reconciles by GET with the original timestamp',async()=>{
+  const before=posts().length,result=await data(await restored(lostIssuancePath+'/reconcile',{}));assert.equal(result.state,'DONE');assert.equal(result.id,lostIssuance.id);assert.equal(posts().length,before);assert.equal(provider.invoices.get(issuanceDrafts[0].stripeInvoiceId).status,'open');assert.equal((await DB.prepare('SELECT attempt_at FROM stripe_part_issuance_operations WHERE id=?').bind(lostIssuance.id).first()).attempt_at,lostIssuanceRow.attempt_at);
+ });
+ await t.test('restored unexecuted child finalization retries the same original path parameters and key',async()=>{
+  await DB.prepare('UPDATE stripe_part_issuance_operations SET lease_token=NULL,lease_until=0 WHERE id=?').bind(leasedIssuance.id).run();const original=provider.requests.find(r=>r.method==='POST'&&r.path==='/v1/invoices/'+issuanceDrafts[1].stripeInvoiceId+'/finalize'),before=posts().length;assert.ok(original);const result=await data(await restored(leasedIssuancePath+'/retry',{}));assert.equal(result.state,'DONE');assert.equal(result.id,leasedIssuance.id);assert.equal(posts().length,before+1);const repeated=posts().at(-1);assert.equal(repeated.key,original.key);assert.equal(repeated.path,original.path);assert.deepEqual(repeated.params,original.params);assert.equal((await DB.prepare('SELECT attempt_at FROM stripe_part_issuance_operations WHERE id=?').bind(leasedIssuance.id).first()).attempt_at,leasedIssuanceRow.attempt_at);
+ });
  await t.test('provider state newer than checkpoint reconciles by GET without duplicate finalization',async()=>{
   const before=posts().length,result=await data(await restored(externallyFinished.path+'/reconcile',{}));assert.equal(result.state,'DONE');assert.equal(posts().length,before);assert.equal(provider.invoices.get(externallyFinished.creation.stripeInvoiceId).status,'open');
  });
@@ -217,7 +244,7 @@ test('native isolated recovery preserves an ingested source package, original by
  await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name) VALUES('canonical-project','pilot-org','canonical-client','Site')").run();
  const objects=[];for(const[source,pins]of Object.entries(report.sourceFiles))for(const pin of pins)objects.push({source,path:pin.path,bytes:new Uint8Array(await readFile(join(fixture.root,source,pin.path)))});
  const input={requestId:crypto.randomUUID(),report,objects,snapshot:{clientRevision:0,projectRevision:0}},receipt=await applySourcePilot(source.env,actor,input),before=await readSourcePilot(source.env,actor,receipt.id),image=await databaseImage(DB),objectImage=await captureObjects(source.env.FILES);
- assert.equal(Object.keys(image.tables).length,52);assert.equal(image.schema.filter(s=>s.type==='index').length,39);
+ assert.equal(Object.keys(image.tables).length,55);assert.equal(image.schema.filter(s=>s.type==='index').length,41);
  assert.equal(image.tables.source_pilot_records.length,19);assert.equal(image.tables.source_pilot_objects.length,objects.length);
  const target=await importDatabase(join(root,'restored'),await exportDatabase(source));t.after(()=>target.dispose());await restoreObjects(target.env.FILES,objectImage);
  assert.deepEqual(await databaseImage(target.env.DB),image);assert.deepEqual(await readSourcePilot(target.env,actor,receipt.id),before);

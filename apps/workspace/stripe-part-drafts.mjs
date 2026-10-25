@@ -174,3 +174,6 @@ export async function stripePartDraftsRoute(request,env,actor,readBody,respond,s
  }else{const prepared=await prepare(env,actor,invoiceId,partId,body,services);op=prepared.op;status=prepared.status;if(status===200)return respond(await present(db,actor,invoiceId,partId,services));}
  await execute(env,actor,op,services,{adoption,eventReason});const value=await present(db,actor,invoiceId,partId,services);return respond(value,value.state==='DONE'?status:202);
 }
+
+// Shared local proof primitives; no provider transport or effects are exported.
+export {load as loadPartDraft,currentGuard as partDraftGuard,mappingGuard as partDraftMappingGuard};

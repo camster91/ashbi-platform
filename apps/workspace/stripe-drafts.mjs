@@ -3,6 +3,8 @@ import {invoiceClaimGuard} from './invoices.mjs';
 import {allocateInstallments} from './stripe-installments.mjs';
 import {stripeSchedulesRoute,loadSchedulePart,scheduleSourceGuard,scheduleProof} from './stripe-schedules.mjs';
 import {stripePartDraftsRoute} from './stripe-part-drafts.mjs';
+import {stripePartIssuanceRoute} from './stripe-part-issuance.mjs';
+import {stripeInvoiceIdentity} from './stripe-lifecycle.mjs';
 
 // Persist stage attempts before POST; never refresh a stage timestamp or key on retry.
 const version='2026-09-30.endive',retryWindow=23*3600000,leaseTime=300000;
@@ -138,12 +140,15 @@ function partServices(fetcher){
   addLines:(env,op,plan,key)=>{const params=lineParams(op,plan);for(const line of plan.lines){const p='lines['+line.index+'][metadata]';params[p+'[ashbi_invoice]']=op.invoice_id;params[p+'[ashbi_plan]']=plan.fingerprint;params[p+'[ashbi_schedule]']=op.schedule_id;params[p+'[ashbi_part]']=op.part_id;}return provider(env,fetcher,'invoices/'+op.stripe_invoice_id+'/add_lines',params,key);},
   baseMatches:(value,op,plan)=>{baseMatches(value,op,plan);if(value.metadata?.ashbi_schedule!==op.schedule_id||value.metadata?.ashbi_part!==op.part_id)mismatch();},
   exact:(value,rows,op,plan)=>exact(value,rows,op,plan)&&rows.every(row=>row.metadata?.ashbi_invoice===op.invoice_id&&row.metadata?.ashbi_plan===plan.fingerprint&&row.metadata?.ashbi_schedule===op.schedule_id&&row.metadata?.ashbi_part===op.part_id),
+  finalize:(env,invoiceId,key)=>stripeFinalizeInvoice(env,fetcher,invoiceId,key),
+  finalIdentity:(value,op,plan)=>{stripeInvoiceIdentity(value,op,plan);if(value.auto_advance!==false||value.metadata?.ashbi_schedule!==op.schedule_id||value.metadata?.ashbi_part!==op.part_id)mismatch();},
+  finalExact:(value,rows,op,plan)=>exact({...value,amount_due:plan.totalMinor,amount_remaining:plan.totalMinor,amount_overpaid:0},rows,op,plan)&&rows.every(row=>row.metadata?.ashbi_invoice===op.invoice_id&&row.metadata?.ashbi_plan===plan.fingerprint&&row.metadata?.ashbi_schedule===op.schedule_id&&row.metadata?.ashbi_part===op.part_id),
   error:code=>new ProviderError(code)
  };
 }
 export async function stripeDraftsRoute(request,env,actor,readBody,json,fetcher=fetch){
  if(!await hasFinance(env.DB,actor))throw 403;const url=new URL(request.url),path=url.pathname,db=env.DB;const respond=async(value,status=200)=>{if(!await hasFinance(db,actor))throw 403;return json(value,status);};
- if(/^\/api\/stripe\/schedules\/[^/]+\/parts\//.test(path)){try{return await stripePartDraftsRoute(request,env,actor,readBody,json,partServices(fetcher));}catch(e){if(e instanceof ProviderError)throw e.code==='PROVIDER_UNAVAILABLE'?503:409;throw e;}}
+ if(/^\/api\/stripe\/schedules\/[^/]+\/parts\//.test(path)){try{const route=/\/finalize(?:-|\/|$)/.test(path)?stripePartIssuanceRoute:stripePartDraftsRoute;return await route(request,env,actor,readBody,json,partServices(fetcher));}catch(e){if(e instanceof ProviderError)throw e.code==='PROVIDER_UNAVAILABLE'?503:409;throw e;}}
  if(path.startsWith('/api/stripe/schedules/'))return stripeSchedulesRoute(request,env,actor,readBody,json,async invoiceId=>schedulePreview(env,actor,await invoice(db,actor,invoiceId),fetcher));
  const receipt=path.match(/^\/api\/stripe\/customers\/requests\/([^/]+)(\/cancel)?$/)||path.match(/^\/api\/invoices\/([a-zA-Z0-9-]{1,100})\/stripe\/requests\/([^/]+)(\/cancel)?$/);
  if(receipt){query(url);const customerRequest=path.startsWith('/api/stripe/customers/'),key=receipt[customerRequest?1:2],stop=receipt[customerRequest?2:3],invoiceId=customerRequest?null:receipt[1];if(!uuid(key))throw 400;if(invoiceId)await invoice(db,actor,invoiceId);if(stop){if(request.method!=='POST')throw 405;strict(await readBody(request),[]);return respond(await cancelRequest(db,actor,customerRequest?'customer':'invoice',key.toLowerCase(),invoiceId));}if(request.method!=='GET')throw 405;return respond(await requestReceipt(db,actor,customerRequest?'customer':'invoice',key.toLowerCase(),invoiceId));}

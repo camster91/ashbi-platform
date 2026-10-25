@@ -101,7 +101,10 @@ export function scheduleExport(db,actor,table){
   cancelled_stripe_schedule_requests:'id,organization_id,invoice_id,actor_id,created_at',
   stripe_part_operations:'id,organization_id,invoice_id,schedule_id,part_id,kind,mapping_id,account_id,customer_id,actor_id,reason,plan_json,plan_hash,activation_at,state,stage,stripe_invoice_id,create_attempt_at,lines_attempt_at,last_error,revision,created_at,updated_at',
   stripe_part_events:'id,organization_id,invoice_id,schedule_id,part_id,operation_id,actor_id,recorded_at,revision,action,reason,state_json',
-  cancelled_stripe_part_requests:'id,organization_id,invoice_id,part_id,actor_id,created_at'
+  cancelled_stripe_part_requests:'id,organization_id,invoice_id,part_id,actor_id,created_at',
+  stripe_part_issuance_operations:'id,organization_id,invoice_id,schedule_id,part_id,kind,creation_operation_id,creation_revision,account_id,customer_id,stripe_invoice_id,actor_id,reason,plan_json,plan_hash,state,stage,finalized_at,finalized_status,verified_at,attempt_at,last_error,revision,created_at,updated_at',
+  stripe_part_issuance_events:'id,organization_id,invoice_id,schedule_id,part_id,operation_id,actor_id,recorded_at,revision,action,reason,state_json',
+  cancelled_stripe_part_issuance_requests:'id,organization_id,invoice_id,part_id,actor_id,created_at'
  }[table];
  if(!fields)throw 500;
  // Measure the serialized whitelist, including UTF-8 and JSON string escaping,
