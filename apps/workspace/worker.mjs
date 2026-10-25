@@ -9,6 +9,7 @@ import { timeDetailsRoute, timePeople, hasFinance } from './time-details.mjs';
 import { invoicesRoute } from './invoices.mjs';
 import { commercialRoute } from './commercial.mjs';
 import { proposalReviewsRoute } from './proposal-reviews.mjs';
+import { stripeDraftsRoute } from './stripe-drafts.mjs';
 const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','Strict-Transport-Security':'max-age=31536000'};
 export const json=(value,status=200)=>Response.json(value,{status,headers:security});
 export async function readBody(request){
@@ -20,7 +21,7 @@ export async function readBody(request){
  let input;try{input=JSON.parse(new TextDecoder().decode(bytes));}catch{throw 400;}
  if(!input||typeof input!=='object'||Array.isArray(input))throw 400;return input;
 }
-export function createWorker(resolveKey){return {async fetch(request,env){try{
+export function createWorker(resolveKey,providers={}){return {async fetch(request,env){try{
  const url=new URL(request.url);if(url.origin!==env.APP_ORIGIN)throw 404;
  if(url.pathname==='/health')return json({status:'ok',release:env.RELEASE||'unversioned'});
  let identity;try{identity=await authenticate(request,env,resolveKey);}catch{throw 401;}
@@ -37,6 +38,7 @@ export function createWorker(resolveKey){return {async fetch(request,env){try{
  if(url.pathname==='/api/files'||url.pathname.startsWith('/api/files/'))return await filesRoute(request,env,actor,readBody,json);
  if(url.pathname==='/api/me'&&request.method==='GET')return json({role:actor.role,id:actor.id,pilot:true,features:{files:!!env.FILES,finance:await hasFinance(env.DB,actor)}});
  if(url.pathname==='/api/export'&&request.method==='GET')return await exportRecords(env.DB,actor,json);
+ if(url.pathname.startsWith('/api/stripe/')||/^\/api\/invoices\/[^/]+\/stripe(?:-preview|\/reconcile)?$/.test(url.pathname))return await stripeDraftsRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(url.pathname==='/api/invoices'||url.pathname.startsWith('/api/invoices/'))return await invoicesRoute(request,env.DB,actor,readBody,json);
  if(url.pathname==='/api/commercial'||url.pathname.startsWith('/api/commercial/'))return await commercialRoute(request,env.DB,actor,readBody,json);
  if(url.pathname==='/api/proposal-reviews'||url.pathname.startsWith('/api/proposal-reviews/')||url.pathname==='/api/portal/proposals'||url.pathname.startsWith('/api/portal/proposals/'))return await proposalReviewsRoute(request,env.DB,actor,readBody,json);
