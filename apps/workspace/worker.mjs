@@ -14,6 +14,7 @@ import { contractPublicationsRoute } from './contract-publications.mjs';
 import { readSigningPolicy,decorateSignature,decorateSignatures,contractSignaturesRoute } from './contract-signatures.mjs';
 import { proposalReviewsRoute, dashboardReviews } from './proposal-reviews.mjs';
 import { stripeDraftsRoute } from './stripe-drafts.mjs';
+import {stripeIssuanceRoute} from './stripe-issuance.mjs';
 import { stripeWebhook, stripeLifecycleRoute, drainStripeEvents } from './stripe-lifecycle.mjs';
 const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','Strict-Transport-Security':'max-age=31536000'};
 export const json=(value,status=200)=>Response.json(value,{status,headers:security});
@@ -48,6 +49,7 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  if(url.pathname==='/api/dashboard/invoices')return await dashboardInvoices(request,env,actor,json);
  if(url.pathname==='/api/dashboard/reviews')return await dashboardReviews(request,env.DB,actor,json);
  if(url.pathname.startsWith('/api/stripe/events')||/^\/api\/invoices\/[^/]+\/billing(?:\/reconcile)?$/.test(url.pathname)||['/api/billing/invoices','/api/billing/summary'].includes(url.pathname)||url.pathname==='/api/portal/invoices'||url.pathname.startsWith('/api/portal/invoices/'))return await stripeLifecycleRoute(request,env,actor,readBody,json,providers.stripeFetch);
+ if(/^\/api\/invoices\/[^/]+\/stripe\/finalize/.test(url.pathname))return await stripeIssuanceRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(url.pathname.startsWith('/api/stripe/')||/^\/api\/invoices\/[^/]+\/stripe(?:-preview|\/reconcile|\/requests\/[^/]+(?:\/cancel)?)?$/.test(url.pathname))return await stripeDraftsRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(url.pathname==='/api/invoices'||url.pathname.startsWith('/api/invoices/'))return await invoicesRoute(request,env.DB,actor,readBody,json);
  if(url.pathname==='/api/commercial'||url.pathname.startsWith('/api/commercial/'))return await commercialRoute(request,env.DB,actor,readBody,json);
