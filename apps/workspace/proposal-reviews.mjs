@@ -31,6 +31,25 @@ async function allowed(db,actor,client,reviewId){
  if(client){if(actor.role!=='client')throw 403;const live=await db.prepare("SELECT id FROM actors WHERE id=? AND organization_id=? AND role='client' AND active=1").bind(actor.id,actor.organization_id).first();if(!live)throw 403;if(reviewId&&!await read(db,actor,reviewId,true))throw 404;}
  else if(!await hasFinance(db,actor))throw 403;
 }
+// Read-only daily projection shares the review's authority, live-source and view rules.
+export async function dashboardReviews(request,db,actor,json){
+ if(request.method!=='GET')throw 405;
+ const url=new URL(request.url);query(url,['state','clientId','projectId','after']);
+ const state=url.searchParams.get('state')??'attention';if(!['attention','all','OPEN','APPROVED','DECLINED','CHANGES_REQUESTED','SUPERSEDED','REVOKED','EXPIRED','STALE'].includes(state))throw 400;
+ const client=actor.role==='client';await allowed(db,actor,client);
+ const params=[actor.id,actor.organization_id,actor.organization_id],conditions=['r.organization_id=?',client?portalScope:authority];
+ if(client){conditions.push('EXISTS(SELECT 1 FROM review_viewer v WHERE v.client_id=?)');params.push(actor.client_id);}
+ for(const [key,column]of [['clientId','client_id'],['projectId','project_id'],['after','id']])if(url.searchParams.has(key)){const value=url.searchParams.get(key);if(!id(value))throw 400;conditions.push('r.'+column+(key==='after'?'>?':'=?'));params.push(value);}
+ const observedAt=Date.now();params.push(observedAt);
+ const derived="CASE WHEN revoked_at IS NOT NULL THEN 'REVOKED' WHEN status='OPEN' THEN CASE WHEN source_live=0 THEN 'STALE' WHEN expires_at<=? THEN 'EXPIRED' ELSE 'OPEN' END ELSE status END";
+ const filter=state==='attention'?"is_latest=1 AND dashboard_state IN ('OPEN','CHANGES_REQUESTED','EXPIRED','STALE')":state==='all'?'1':'dashboard_state=?';if(!['attention','all'].includes(state))params.push(state);
+ const sql=`${viewer(client)},dashboard_scoped AS (SELECT r.*,${latest} AS is_latest,${sourceLive} AS source_live FROM proposal_reviews r WHERE ${conditions.join(' AND ')}),dashboard_derived AS (SELECT dashboard_scoped.*,${derived} AS dashboard_state FROM dashboard_scoped) SELECT * FROM dashboard_derived WHERE ${filter} ORDER BY id LIMIT 51`;
+ const read=()=>db.prepare(sql).bind(...params).all();let result=await read();if(client)result=await read();
+ await allowed(db,actor,client);
+ if(client&&!await db.prepare("SELECT id FROM actors WHERE id=? AND organization_id=? AND role='client' AND active=1 AND client_id=?").bind(actor.id,actor.organization_id,actor.client_id).first())throw 403;
+ const items=result.results.slice(0,50).map(row=>{const full=view(row,actor,client,false,observedAt),snapshot=full.snapshot;return {id:full.id,proposalId:full.proposalId,title:snapshot.title,source:{kind:'reviews',id:full.id},client:{id:snapshot.client.id,name:snapshot.client.name},project:snapshot.project?{id:snapshot.project.id,name:snapshot.project.name}:null,owner:{id:null,state:'UNASSIGNED'},responsibility:!full.isLatest?null:full.state==='OPEN'?'CLIENT_TEAM':['CHANGES_REQUESTED','EXPIRED','STALE'].includes(full.state)?'STAFF_TEAM':null,nextAction:!full.isLatest?'Open review details':full.state==='OPEN'?(full.canRespond?'Review proposal':'Await client review'):full.state==='CHANGES_REQUESTED'?(client?'Await revised proposal':'Review requested changes'):'Open review details',state:full.state,revision:full.revision,isLatest:full.isLatest,canRespond:full.canRespond,createdAt:full.createdAt,expiresAt:full.expiresAt};});
+ return json({items,nextCursor:result.results.length>50?items.at(-1).id:null,complete:result.results.length<=50,limit:50,observedAt});
+}
 async function get(db,actor,reviewId,client){const row=await read(db,actor,reviewId,client);if(!row){await allowed(db,actor,client);throw 404;}return row;}
 async function receipt(db,actor,key,client,reviewId,fingerprint){
  await allowed(db,actor,client,reviewId);const scope=keyScope(actor,client);
