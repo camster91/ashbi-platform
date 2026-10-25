@@ -1,3 +1,4 @@
+import {selectBrowserSuites} from './browser-groups.mjs';
 import {createServer} from 'node:http';
 import {readFile,readdir} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
@@ -25,6 +26,7 @@ import {runDashboardTests} from './browser-dashboard.mjs';
 import {runContractTests,contractSigningFixture} from './browser-contracts.mjs';
 import {runContractPdfTests} from './browser-contract-pdf-tests.mjs';
 import {runStripeIssuanceTests} from './browser-stripe-issuance.mjs';
+const selectedSuites=new Set(selectBrowserSuites(process.env.WORKSPACE_BROWSER_GROUP)),executedSuites=[];
 const base=fileURLToPath(new URL('.',import.meta.url));
 const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'qa'},r2Buckets:['FILES'],cf:false});
 const DB=await mf.getD1Database('DB'),FILES=await mf.getR2Bucket('FILES');
@@ -57,21 +59,22 @@ await page.getByRole('link',{name:'Tasks',exact:true}).click();await page.getByR
 await page.getByRole('button',{name:'Edit QA task revised',exact:true}).click();assert.equal(await page.getByRole('dialog').isVisible(),true);const modalIssues=await page.evaluate(async()=>{const r=await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}});return r.violations.map(v=>v.id);});assert.deepEqual(modalIssues,[]);await page.keyboard.press('Escape');await page.waitForFunction(()=>document.activeElement?.textContent==='Edit QA task revised');assert.equal(await page.getByRole('dialog').count(),0);
 await page.goto(origin);await page.keyboard.press('Tab');assert.equal(await page.locator(':focus').textContent(),'Skip to content');await page.keyboard.press('Enter');assert.equal(await page.locator(':focus').getAttribute('id'),'main');
 assert.deepEqual(errors,[]);console.log('Browser workflow, reload, timer, keyboard, responsive and axe checks: PASS');
-await runRegressions({browser,origin,DB});
-await runTaskBoardTests({browser,origin,DB,axe});
-await runCommentTests({browser,origin,DB,axe,addActor});
-await runDocumentTests({browser,origin,DB,axe});
-await runDocumentTreeTests({browser,origin,DB,axe});
-await runTimerTests({browser,origin,DB,axe,addActor});
-await runTimeReviewTests({browser,origin,DB,axe,addActor});
-await runFinanceTests({browser,origin,DB,axe,addActor});
-await runCommercialTests({browser,origin,DB,axe,addActor});
-await runProposalReviewTests({browser,origin,DB,axe,addActor});
-await runStripeTests({browser,origin,DB,axe,addActor,stripe});
-await runInvoiceTests({browser,origin,DB,axe,addActor,stripe});
-await runRecordLinkTests({browser,origin,DB,axe,addActor,stripe});
-await runDashboardTests({browser,origin,DB,axe,addActor,stripe});
-await runContractTests({browser,origin,DB,FILES,axe,addActor,contractSigning});
-await runContractPdfTests({browser,origin,DB,FILES,addActor,contractSigning});
-await runStripeIssuanceTests({browser,origin,DB,axe,addActor,stripe});
+if(selectedSuites.has('runRegressions')){await runRegressions({browser,origin,DB});executedSuites.push('runRegressions');}
+if(selectedSuites.has('runTaskBoardTests')){await runTaskBoardTests({browser,origin,DB,axe});executedSuites.push('runTaskBoardTests');}
+if(selectedSuites.has('runCommentTests')){await runCommentTests({browser,origin,DB,axe,addActor});executedSuites.push('runCommentTests');}
+if(selectedSuites.has('runDocumentTests')){await runDocumentTests({browser,origin,DB,axe});executedSuites.push('runDocumentTests');}
+if(selectedSuites.has('runDocumentTreeTests')){await runDocumentTreeTests({browser,origin,DB,axe});executedSuites.push('runDocumentTreeTests');}
+if(selectedSuites.has('runTimerTests')){await runTimerTests({browser,origin,DB,axe,addActor});executedSuites.push('runTimerTests');}
+if(selectedSuites.has('runTimeReviewTests')){await runTimeReviewTests({browser,origin,DB,axe,addActor});executedSuites.push('runTimeReviewTests');}
+if(selectedSuites.has('runFinanceTests')){await runFinanceTests({browser,origin,DB,axe,addActor});executedSuites.push('runFinanceTests');}
+if(selectedSuites.has('runCommercialTests')){await runCommercialTests({browser,origin,DB,axe,addActor});executedSuites.push('runCommercialTests');}
+if(selectedSuites.has('runProposalReviewTests')){await runProposalReviewTests({browser,origin,DB,axe,addActor});executedSuites.push('runProposalReviewTests');}
+if(selectedSuites.has('runStripeTests')){await runStripeTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runStripeTests');}
+if(selectedSuites.has('runInvoiceTests')){await runInvoiceTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runInvoiceTests');}
+if(selectedSuites.has('runRecordLinkTests')){await runRecordLinkTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runRecordLinkTests');}
+if(selectedSuites.has('runDashboardTests')){await runDashboardTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runDashboardTests');}
+if(selectedSuites.has('runContractTests')){await runContractTests({browser,origin,DB,FILES,axe,addActor,contractSigning});executedSuites.push('runContractTests');}
+if(selectedSuites.has('runContractPdfTests')){await runContractPdfTests({browser,origin,DB,FILES,addActor,contractSigning});executedSuites.push('runContractPdfTests');}
+if(selectedSuites.has('runStripeIssuanceTests')){await runStripeIssuanceTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runStripeIssuanceTests');}
+assert.deepEqual(executedSuites,[...selectedSuites],'Every selected browser suite must finish exactly once.');
 }finally{await browser.close();await new Promise(r=>server.close(r));await mf.dispose();}

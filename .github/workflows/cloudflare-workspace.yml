@@ -37,13 +37,18 @@ jobs:
       - name: Exercise compiled invoice persistence and financial contracts
         run: npm run test:invoice-built
 
-  browser:
-    name: Built UI, keyboard and responsive accessibility
+  browser_groups:
+    name: Built UI, keyboard and responsive accessibility (${{ matrix.group }})
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [core, commerce, contracts]
     env:
       CI: true
       WRANGLER_SEND_METRICS: 'false'
+      WORKSPACE_BROWSER_GROUP: ${{ matrix.group }}
     defaults:
       run:
         working-directory: apps/workspace
@@ -63,6 +68,18 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Exercise built UI, keyboard and responsive accessibility
         run: npm run test:browser
+
+  browser:
+    name: Built UI, keyboard and responsive accessibility
+    needs: [browser_groups]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Require every browser group to succeed
+        env:
+          BROWSER_GROUPS_RESULT: ${{ needs.browser_groups.result }}
+        run: '[[ "$BROWSER_GROUPS_RESULT" == success ]]'
 
   workspace:
     name: Local Worker and D1 integration
