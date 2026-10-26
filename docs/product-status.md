@@ -2,7 +2,15 @@
 
 > **Planning direction — 23 October 2026:** The two-person Bonsai/Notion replacement is now scoped in [tasks/plan.md](../tasks/plan.md) and [GitHub #565](https://github.com/camster91/ashbi-platform/issues/565). The Cloudflare target is unverified; the runtime/deployment evidence below remains historical evidence for the existing application. No production cutover or release-setting change is authorized by this planning update.
 
-## Current checkpoint — October 17, 2026, 03:18 UTC
+## Current Cloudflare source checkpoint — 26 October 2026
+
+The current scope is Cameron and Bianca's simple workspace in [tasks/plan.md](../tasks/plan.md), with execution and exact evidence in [#565](https://github.com/camster91/ashbi-platform/issues/565). [The current readiness matrix](replacement-readiness-matrix.md#current-two-person-workspace-acceptance--26-october-2026) separates source tests from hosted, provider, data and human acceptance. Older Slack/calls/AI and legacy runtime sections below retain their historical attribution; they do not expand the current replacement scope.
+
+Draft [#758](https://github.com/camster91/ashbi-platform/pull/758), head `b25aab79f79a55184a39781f365834c15ec22eee`, extends [#757](https://github.com/camster91/ashbi-platform/pull/757) with the integrated built-browser journey across shared work, approved time, client proposal/contract/PDF, split invoices, lost Send acknowledgement and signed partial settlement. Its final local run passed 3/3; exact-head [CI 40267513211](https://github.com/camster91/ashbi-platform/actions/runs/40267513211), attempt 1, passed all 12 checks: 612 source API, 463 compiled API, 521 built-browser and 45 source plus 45 compiled recovery tests, zero failures/cancellations/skips. Tree `57ebf962007cd0aa58f2bd04f579e8a922e78d48` matches synthetic merge `0a741642c55974fdbe21bfe5a28de499c12776a3`. These are stacked source candidates, not a release.
+
+Private originals/signing require an approved private FILES binding. Hosted activation/configuration, approved Stripe sandbox evidence, later Live-mode source support, signing/retention policy, company-package reconciliation, hosted recovery and actual two-person daily use remain unfinished. The internal source writer and history reads already exist; [their synthetic boundary and next gate](../apps/workspace/SOURCE_RECONCILIATION.md) must not be confused with a company import. The existing application and source systems remain available. No new deployment, real data, provider action or access grant is established by this checkpoint. #684 remains open; Coolify settings are unchanged.
+
+## Historical legacy checkpoint — October 17, 2026, 03:18 UTC
 
 [Issue #565](https://github.com/camster91/ashbi-platform/issues/565) is the single active execution checklist; [current release evidence](launch-status.md) records deployed **2a6061e**, bounded ADMIN/TEAM normal API smoke (**29 checks**), and merged **26a9981** diagnostics whose exact-main CI remains **pending at this checkpoint**. Positive live owned-run/acknowledgement, real provider/company and manual acceptance remain open; public **degraded:true** retains the operational-alert owner/destination gate, and sources remain primary through reviewed input/cutover.
 

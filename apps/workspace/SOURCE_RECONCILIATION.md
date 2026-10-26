@@ -1,6 +1,6 @@
 # Bounded source reconciliation pilot
 
-This offline tool prepares **one proposed client/project mapping** across pinned source files. It does not import records, validate current D1 ownership, create users/grants, upload files, reconstruct missing history or invoke Stripe. Every report has `migrationReady:false`, `targetWrites:0` and no external effects. #414 remains Preparation; this is a necessary input-reconciliation step before a separately verified D1/R2 writer, not a completed migration or cutover.
+This offline tool prepares **one proposed client/project mapping** across pinned source files. It does not import records, validate current D1 ownership, create users/grants, upload files, reconstruct missing history or invoke Stripe. Every offline report has `migrationReady:false`, `targetWrites:0` and no external effects. The separate internal D1/R2 writer described below now exists and has synthetic coverage; neither the report nor that coverage proves a company migration or cutover. #414 remains Preparation.
 
 Run the synthetic contracts from `apps/workspace`:
 
@@ -44,8 +44,14 @@ Historical invoice/payment/expense values are evidence only: `HISTORICAL_ONLY`, 
 
 Totals include **mapped valid reported rows only**, separately by source and CAD/USD. Held financial record keys remain explicit in coverage. Overlapping Bonsai and legacy ledgers are never summed into a combined balance. Zero cannot stand in for an unexported subtotal. Current fixtures deliberately prove the same CAD history can appear in both sources without being billed or aggregated twice.
 
+## Implemented internal write and history boundary
+
+[`applySourcePilot`](source-pilot.mjs) consumes trusted, pinned input separately from the offline CLI. Migration [`0021.sql`](migrations/0021.sql) stores immutable run, record and object provenance. The writer checks current financial authority and canonical client/project revisions, reserves a durable run, verifies private original bytes, and commits bounded canonical work and retained source history. Identical retries return the original receipt; conflicting input or target state is rejected. Historical financial and signing facts remain history rather than new time approvals, invoices, signatures or provider operations.
+
+`npm run test:source-pilot` exercises the actual disposable D1/R2 writer, interruptions, retries, conflicts, authority changes, source fidelity and exact originals. [`source-pilot.test.mjs`](source-pilot.test.mjs) also exercises authenticated `/api/source-history` list, record and original-download reads. These are financial-staff reads under current canonical scope; there is no HTTP report-upload or apply endpoint. A client cannot read this staff source history. The compiled wrapper [`source-history-built.test.mjs`](source-history-built.test.mjs) and [`recovery.test.mjs`](recovery.test.mjs) cover built-handler reads and isolated restoration of the committed history and originals. See [RECOVERY.md](RECOVERY.md) for the complete recovery boundary.
+
 ## Next gate
 
-Before writing even a company staging import, retain the reviewed source package and independent pins, resolve held records and original metadata/ACL gaps, reconcile aliases and historical money, and verify the exact target state/identities. Implement a bounded D1/R2 write path with original source provenance, retained history, idempotent retries/delta and conflict handling, then prove authenticated reads and full isolated recovery. The current reconciliation report is not that writer or acceptance evidence.
+Before writing even a company staging import, retain the reviewed source package and independent pins, resolve held records and original metadata/ACL gaps, reconcile aliases and historical money, and verify the exact target state/identities. Review the bounded invocation of the existing internal writer for that exact package; do not expose its trusted-input boundary as an untrusted apply endpoint. Rehearse source deltas, conflicts, authenticated reads, original-byte recovery and reconciliation against the selected target before an approved company run. Synthetic coverage is not approval of real mappings, complete vendor-export coverage or hosted recovery.
 
 Company source access/export, remote migration, new grants/invitations/messages, real signatures/provider actions, deployment, source cancellation and final cutover require their existing separate approvals. PR #684 stays open and Coolify stays unchanged.
