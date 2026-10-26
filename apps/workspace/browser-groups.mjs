@@ -4,7 +4,8 @@ export const browserGroups=Object.freeze({
  commerce:Object.freeze(['runCommercialTests','runProposalReviewTests','runStripeTests','runInvoiceTests','runRecordLinkTests']),
  contracts:Object.freeze(['runDashboardTests','runContractTests','runContractPdfTests','runStripeIssuanceTests']),
  delivery:Object.freeze(['runStripeDeliveryTests']),
- overview_parts:Object.freeze(['runOverviewPartTests'])
+ overview_parts:Object.freeze(['runOverviewPartTests']),
+ journey:Object.freeze(['runWorkspaceJourneyTests'])
 });
 const all=Object.freeze(Object.values(browserGroups).flat());
 export function selectBrowserSuites(group){

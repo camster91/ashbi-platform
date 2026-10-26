@@ -23,6 +23,7 @@ import {stripeDeliveryProvider} from './stripe-delivery-provider.mjs';
 import {runInvoiceTests,billingSigningSecret} from './browser-invoices.mjs';
 import {runRecordLinkTests} from './browser-links.mjs';
 import {runOverviewPartTests} from './browser-overview-parts.mjs';
+import {runWorkspaceJourneyTests} from './browser-workspace-journey.mjs';
 import {runDashboardTests} from './browser-dashboard.mjs';
 import {runContractTests,contractSigningFixture} from './browser-contracts.mjs';
 import {runContractPdfTests} from './browser-contract-pdf-tests.mjs';
@@ -80,5 +81,6 @@ if(selectedSuites.has('runContractPdfTests')){await runContractPdfTests({browser
 if(selectedSuites.has('runStripeIssuanceTests')){await runStripeIssuanceTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runStripeIssuanceTests');}
 if(selectedSuites.has('runStripeDeliveryTests')){await runStripeDeliveryTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runStripeDeliveryTests');}
 if(selectedSuites.has('runOverviewPartTests')){await runOverviewPartTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runOverviewPartTests');}
+if(selectedSuites.has('runWorkspaceJourneyTests')){await runWorkspaceJourneyTests({browser,origin,DB,FILES,axe,addActor,stripe,contractSigning,billingSigningSecret});executedSuites.push('runWorkspaceJourneyTests');}
 assert.deepEqual(executedSuites,[...selectedSuites],'Every selected browser suite must finish exactly once.');
 }finally{await browser.close();await new Promise(r=>server.close(r));await mf.dispose();}
