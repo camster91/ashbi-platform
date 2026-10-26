@@ -11,7 +11,7 @@ export function stripeLifecycleProvider(organizationId='life-a'){
   if(p.failPath&&path.includes(p.failPath))throw Error('Synthetic provider interruption');
   const custom=path==='/v1/invoice_payments'||path==='/v1/credit_notes'||path==='/v1/refunds'||/^\/v1\/(invoice_payments|payment_intents|charges|refunds|credit_notes)\//.test(path)||path.includes('/balance_transactions/');
   if(!custom)return original(url,options);
-  assert.equal(u.origin,'https://api.stripe.com');assert.equal(method,'GET');assert.equal(options.redirect,'error');assert.equal(new Headers(options.headers).get('Stripe-Version'),'2026-09-30.endive');assert.equal(new Headers(options.headers).get('Authorization'),'Bearer '+p.bindings.STRIPE_SECRET_KEY);
+  assert.equal(u.origin,'https://api.stripe.com');assert.equal(method,'GET');assert.equal(options.redirect,'manual');assert.equal(new Headers(options.headers).get('Stripe-Version'),'2026-09-30.endive');assert.equal(new Headers(options.headers).get('Authorization'),'Bearer '+p.bindings.STRIPE_SECRET_KEY);
   p.requests.push({method,path,params:Object.fromEntries(u.searchParams)});await p.pause?.({method,path});
   if(path==='/v1/invoice_payments'){
    const invoice=u.searchParams.get('invoice'),intent=u.searchParams.get('payment[payment_intent]');

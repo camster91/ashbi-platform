@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile,readdir,mkdtemp} from 'node:fs/promises';
+import {readFile,readdir,mkdtemp,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {Miniflare} from 'miniflare';
@@ -32,6 +32,14 @@ async function noLiveFinance(DB){for(const table of['time_entries','time_details
 const dbHook=(env,before,after)=>({...env,DB:{prepare:sql=>env.DB.prepare(sql),async batch(statements){await before?.();const result=await env.DB.batch(statements);await after?.();return result;}}});
 
 if(!process.env.WORKSPACE_TEST_BUILT_WORKER){
+
+test('source pilot preserves explicit waiting status from pinned original task bytes',async t=>{
+ const f=await setup(t),fixture=await makePilotFixture(await mkdtemp(join(tmpdir(),'source-waiting-test-'))),path=join(fixture.root,'legacy/data/tasks.jsonl'),task=JSON.parse(await readFile(path,'utf8'));
+ task.status='WAITING';await writeFile(path,JSON.stringify(task)+'\n');await fixture.repin({decisions:true});
+ const report=await reconcilePilot(fixture.root,fixture.mapping),objects=[];for(const[source,entries]of Object.entries(report.sourceFiles))for(const entry of entries)objects.push({source,path:entry.path,bytes:new Uint8Array(await readFile(join(fixture.root,source,entry.path)))});
+ await f.apply({...f.input,report,objects});assert.equal((await f.DB.prepare("SELECT status FROM tasks WHERE id='canonical-legacy-task'").first()).status,'waiting');
+ const saved=await readSourcePilot(f.env,f.actor,f.input.requestId);assert.equal(saved.records.find(r=>r.kind==='task').normalized.sourceStatus,'WAITING');
+});
 test('source pilot applies exact private documents, hierarchy, pending task and verified original against existing targets',async t=>{
  const f=await setup(t),beforeClient=await f.DB.prepare("SELECT * FROM clients WHERE id='canonical-client'").first(),beforeProject=await f.DB.prepare("SELECT * FROM projects WHERE id='canonical-project'").first(),receipt=await f.apply();
  assert.equal(receipt.id,f.input.requestId);assert.equal(receipt.state,'DONE');assert.equal(receipt.fingerprint,f.input.report.fingerprint);assert.deepEqual(receipt.counts,{sourceRecords:19,mapped:17,held:2});

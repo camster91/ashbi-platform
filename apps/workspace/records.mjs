@@ -6,8 +6,8 @@ const date=value=>value===null||(typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.
 const sqlValue=value=>typeof value==='boolean'?Number(value):typeof value==='string'?value.trim():value;
 const descriptors={
  clients:{fields:{name:short,email:v=>typeof v==='string'&&v.length<=254&&(v===''||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)),company:v=>typeof v==='string'&&v.length<=200},create:['name']},
- projects:{fields:{name:short,clientId:short,clientVisible:bool,status:v=>['planned','active','complete'].includes(v)},create:['name','clientId','clientVisible'],parent:'clients'},
- tasks:{fields:{title:short,projectId:short,clientVisible:bool,assigneeId:v=>v===null||short(v),dueOn:date,status:v=>['todo','doing','done'].includes(v)},create:['title','projectId','clientVisible'],parent:'projects'},
+ projects:{fields:{name:short,clientId:short,clientVisible:bool,status:v=>['planned','active','waiting','complete','canceled'].includes(v)},create:['name','clientId','clientVisible'],parent:'clients'},
+ tasks:{fields:{title:short,projectId:short,clientVisible:bool,assigneeId:v=>v===null||short(v),dueOn:date,status:v=>['todo','doing','review','waiting','later','done','retired','archived'].includes(v)},create:['title','projectId','clientVisible'],parent:'projects'},
  notes:{fields:{title:short,projectId:short,clientVisible:bool,text:v=>typeof v==='string'&&v.trim().length>0&&v.length<=20000,parentId:validParent,archived:bool},create:['title','projectId','clientVisible','text'],parent:'projects'},
 };
 const columns={clientId:'client_id',projectId:'project_id',clientVisible:'client_visible',assigneeId:'assignee_id',dueOn:'due_on'};

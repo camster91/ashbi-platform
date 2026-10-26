@@ -77,4 +77,17 @@ export async function runTaskBoardTests({browser,origin,DB,axe}){
    console.log(JSON.stringify({taskBoardWidth:width,overflow:false,axeViolations:0}));
   }
  });
+ await test('imported task states retain their own board columns and terminal tasks have no completion shortcut',async t=>{
+  const page=await browser.newPage();t.after(()=>page.close());
+  const states={review:'Review',waiting:'Waiting',later:'Later',retired:'Retired',archived:'Archived'};
+  await page.route('**/api/tasks',route=>route.fulfill({json:{items:Object.keys(states).map(status=>({id:'import-'+status,title:'Imported '+status,status,project_id:project.id,revision:0,client_visible:0})),nextCursor:null}}));
+  await page.goto(origin+'/#tasks');await page.getByText('Imported waiting',{exact:true}).waitFor();await page.getByRole('button',{name:'Board',exact:true}).click();
+  for(const [status,label]of Object.entries(states)){
+   await page.getByLabel('Status filter',{exact:true}).selectOption('');
+   const column=page.getByRole('region',{name:label,exact:true});assert.equal(await column.getByText('Imported '+status,{exact:true}).count(),1);
+   await page.getByLabel('Status filter',{exact:true}).selectOption(status);assert.equal(await page.getByRole('region',{name:'Tasks board',exact:true}).locator('article').count(),1);
+   assert.equal(await column.getByRole('button',{name:'Complete task',exact:true}).count(),['retired','archived'].includes(status)?0:1);
+  }
+  await page.getByRole('link',{name:'Skip to content',exact:true}).focus();await page.keyboard.press('Enter');assert.equal(new URL(page.url()).hash,'#tasks');assert.equal(await page.locator(':focus').getAttribute('id'),'main');
+ });
 }

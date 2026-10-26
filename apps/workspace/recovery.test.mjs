@@ -138,7 +138,7 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  const sql=await exportDatabase(source);
  // External Stripe state is deliberately NOT restored with our D1/R2 image.
  const externalFinalize=provider.requests.findLast(p=>p.method==='POST'&&p.path==='/v1/invoices/'+externallyFinished.creation.stripeInvoiceId+'/finalize');
- await provider.fetch('https://api.stripe.com'+externalFinalize.path,{method:'POST',redirect:'error',headers:{Authorization:'Bearer '+provider.bindings.STRIPE_SECRET_KEY,'Stripe-Version':'2026-09-30.endive','Idempotency-Key':externalFinalize.key},body:new URLSearchParams({auto_advance:'false'})});
+ await provider.fetch('https://api.stripe.com'+externalFinalize.path,{method:'POST',redirect:'manual',headers:{Authorization:'Bearer '+provider.bindings.STRIPE_SECRET_KEY,'Stripe-Version':'2026-09-30.endive','Idempotency-Key':externalFinalize.key},body:new URLSearchParams({auto_advance:'false'})});
  Object.assign(childNative,{amount_paid:300,amount_remaining:childNative.total-300});childPayment(100,'newer');
  const target=await importDatabase(join(root,'target'),sql);t.after(()=>target.dispose());
  await restoreObjects(target.env.FILES,objects);

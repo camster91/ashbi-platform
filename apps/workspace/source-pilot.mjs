@@ -74,7 +74,7 @@ async function prepare(input){
    plan.push({record:r,kind:'document',id:r.canonicalId,title,text:n.text,parent:n.parentCanonicalId??null,version:crypto.randomUUID()});
   }
   if(r.kind==='task'){
-   const status=({PENDING:'todo',IN_PROGRESS:'doing',COMPLETED:'done'})[n.sourceStatus],due=r.raw?.dueDate??null;
+   const status=({PENDING:'todo',IN_PROGRESS:'doing',REVIEW:'review',WAITING:'waiting',LATER:'later',COMPLETED:'done',RETIRED:'retired',ARCHIVED:'archived'})[n.sourceStatus],due=r.raw?.dueDate??null;
    const date=due===null?null:new Date(due+'T12:00:00Z');
    if(!status||!text(r.raw?.title,200)||due!==null&&(!/^\d{4}-\d{2}-\d{2}$/.test(due)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==due))throw 409;
    plan.push({record:r,kind:'task',id:r.canonicalId,title:r.raw.title,status,assignee:n.assigneeActorId??null,due});
