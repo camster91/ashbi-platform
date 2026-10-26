@@ -6,7 +6,8 @@ import {browserGroups,selectBrowserSuites} from './browser-groups.mjs';
 const expected={
  core:['runRegressions','runTaskBoardTests','runCommentTests','runDocumentTests','runDocumentTreeTests','runTimerTests','runTimeReviewTests','runFinanceTests'],
  commerce:['runCommercialTests','runProposalReviewTests','runStripeTests','runInvoiceTests','runRecordLinkTests'],
- contracts:['runDashboardTests','runContractTests','runContractPdfTests','runStripeIssuanceTests']
+ contracts:['runDashboardTests','runContractTests','runContractPdfTests','runStripeIssuanceTests'],
+ delivery:['runStripeDeliveryTests']
 };
 const all=Object.values(expected).flat();
 
@@ -18,6 +19,10 @@ test('browser groups preserve every registered coordinator suite exactly once in
  const grouped=Object.values(browserGroups).flat();
  assert.equal(grouped.length,new Set(grouped).size,'A suite must not run in more than one CI group.');
  assert.deepEqual(grouped,registered);
+ const workflow=await readFile(new URL('../../.github/workflows/cloudflare-workspace.yml',import.meta.url),'utf8');
+ const matrix=workflow.match(/group:\s*\[([^\]]+)\]/);
+ assert.ok(matrix,'CI must select explicit browser groups.');
+ assert.deepEqual(matrix[1].split(',').map(name=>name.trim()),Object.keys(expected),'Every browser group must run in CI; the final browser gate must not omit a suite.');
 });
 
 test('default and all selection retain the full ordered browser suite',()=>{

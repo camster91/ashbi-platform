@@ -19,13 +19,14 @@ import {runFinanceTests} from './browser-finance.mjs';
 import {runCommercialTests} from './browser-commercial.mjs';
 import {runProposalReviewTests} from './browser-proposal-reviews.mjs';
 import {runStripeTests} from './browser-stripe.mjs';
-import {stripeLifecycleProvider} from './stripe-lifecycle-provider.mjs';
+import {stripeDeliveryProvider} from './stripe-delivery-provider.mjs';
 import {runInvoiceTests,billingSigningSecret} from './browser-invoices.mjs';
 import {runRecordLinkTests} from './browser-links.mjs';
 import {runDashboardTests} from './browser-dashboard.mjs';
 import {runContractTests,contractSigningFixture} from './browser-contracts.mjs';
 import {runContractPdfTests} from './browser-contract-pdf-tests.mjs';
 import {runStripeIssuanceTests} from './browser-stripe-issuance.mjs';
+import {runStripeDeliveryTests} from './browser-stripe-delivery.mjs';
 const selectedSuites=new Set(selectBrowserSuites(process.env.WORKSPACE_BROWSER_GROUP)),executedSuites=[];
 const base=fileURLToPath(new URL('.',import.meta.url));
 const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'qa'},r2Buckets:['FILES'],cf:false});
@@ -37,7 +38,7 @@ const issuer='https://identity.cloudflareaccess.com';
 // Synthetic fixture lifetime covers the expanded Windows suite; production auth limits are unchanged.
 const token=await new SignJWT({email:'qa@example.invalid'}).setProtectedHeader({alg:'RS256'}).setIssuer(issuer).setAudience('qa').setSubject('qa').setIssuedAt().setExpirationTime('30m').sign(privateKey);
 const contractSigning=contractSigningFixture();
-const stripe=stripeLifecycleProvider('qa-org');stripe.enabled=false;const worker=createWorker(publicKey,{stripeFetch:stripe.fetch});let origin;const fixtureActors=new Map([['staff',token]]);
+const stripe=stripeDeliveryProvider('qa-org');stripe.enabled=false;const worker=createWorker(publicKey,{stripeFetch:stripe.fetch});let origin;const fixtureActors=new Map([['staff',token]]);
 async function addActor(id,email,role,clientId){await DB.prepare('INSERT INTO actors VALUES(?,?,?,?,?,1)').bind(id,email,'qa-org',role,clientId).run();fixtureActors.set(id,await new SignJWT({email}).setProtectedHeader({alg:'RS256'}).setIssuer(issuer).setAudience('qa').setSubject(id).setIssuedAt().setExpirationTime('30m').sign(privateKey));}
 const server=createServer(async(req,res)=>{try{let chunks=[];for await(const c of req)chunks.push(c);const headers=new Headers(req.headers);const assertion=fixtureActors.get(headers.get('x-test-actor')||'staff');if(!assertion){res.writeHead(403);res.end();return;}headers.delete('x-test-actor');headers.set('cf-access-jwt-assertion',assertion);const body=Buffer.concat(chunks);const response=await worker.fetch(new Request(origin+req.url,{method:req.method,headers,...(body.length?{body}: {})}),{DB,FILES,APP_ORIGIN:origin,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'qa',...stripe.bindings,...(contractSigning.enabled?{CONTRACT_SIGNING_POLICY:contractSigning.policy,CONTRACT_EVIDENCE_KEYS:contractSigning.keys,CONTRACT_EVIDENCE_KEY_ID:contractSigning.keyId}:{}),...(stripe.enabled?{STRIPE_WEBHOOK_SECRET:billingSigningSecret}:{})});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));}catch{res.writeHead(500);res.end();}});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));origin='http://127.0.0.1:'+server.address().port;
@@ -76,5 +77,6 @@ if(selectedSuites.has('runDashboardTests')){await runDashboardTests({browser,ori
 if(selectedSuites.has('runContractTests')){await runContractTests({browser,origin,DB,FILES,axe,addActor,contractSigning});executedSuites.push('runContractTests');}
 if(selectedSuites.has('runContractPdfTests')){await runContractPdfTests({browser,origin,DB,FILES,addActor,contractSigning});executedSuites.push('runContractPdfTests');}
 if(selectedSuites.has('runStripeIssuanceTests')){await runStripeIssuanceTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runStripeIssuanceTests');}
+if(selectedSuites.has('runStripeDeliveryTests')){await runStripeDeliveryTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runStripeDeliveryTests');}
 assert.deepEqual(executedSuites,[...selectedSuites],'Every selected browser suite must finish exactly once.');
 }finally{await browser.close();await new Promise(r=>server.close(r));await mf.dispose();}
