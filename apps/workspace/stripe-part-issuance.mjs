@@ -140,3 +140,6 @@ export async function stripePartIssuanceRoute(request,env,actor,readBody,respond
  let op,status=200;if(action){strict(body,[]);const loaded=await load(env.DB,actor,invoiceId,partId,services);if(!loaded.saved)throw 404;op=loaded.saved.row;}else{const prepared=await begin(env,actor,invoiceId,partId,body,services);op=prepared.op;status=prepared.status;if(status===200)return respond(await present(env.DB,actor,invoiceId,partId,services));}
  await execute(env,actor,op,services,action!=='/reconcile');const value=await present(env.DB,actor,invoiceId,partId,services);return respond(value,value.state==='DONE'||action==='/reconcile'?status:202);
 }
+
+// Reuses immutable issuance/creation validation without provider calls.
+export {load as loadPartIssuance};

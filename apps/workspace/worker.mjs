@@ -17,6 +17,7 @@ import { stripeDraftsRoute } from './stripe-drafts.mjs';
 import {stripeIssuanceRoute} from './stripe-issuance.mjs';
 import {sourceHistoryRoute} from './source-pilot.mjs';
 import { stripeWebhook, stripeLifecycleRoute, drainStripeEvents } from './stripe-lifecycle.mjs';
+import { stripePartLifecycleRoute } from './stripe-part-lifecycle.mjs';
 const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','Strict-Transport-Security':'max-age=31536000'};
 export const json=(value,status=200)=>Response.json(value,{status,headers:security});
 export async function readBody(request){
@@ -50,6 +51,7 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  if(url.pathname==='/api/dashboard/tasks')return await dashboardTasks(request,env.DB,actor,json);
  if(url.pathname==='/api/dashboard/invoices')return await dashboardInvoices(request,env,actor,json);
  if(url.pathname==='/api/dashboard/reviews')return await dashboardReviews(request,env.DB,actor,json);
+ if(['/api/billing/parts','/api/billing/parts/summary','/api/portal/invoice-parts','/api/portal/invoice-parts/summary'].includes(url.pathname)||url.pathname.startsWith('/api/portal/invoice-parts/')||/^\/api\/invoices\/[^/]+\/parts\/[^/]+\/billing(?:\/reconcile)?$/.test(url.pathname))return await stripePartLifecycleRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(url.pathname.startsWith('/api/stripe/events')||/^\/api\/invoices\/[^/]+\/billing(?:\/reconcile)?$/.test(url.pathname)||['/api/billing/invoices','/api/billing/summary'].includes(url.pathname)||url.pathname==='/api/portal/invoices'||url.pathname.startsWith('/api/portal/invoices/'))return await stripeLifecycleRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(/^\/api\/invoices\/[^/]+\/stripe\/finalize/.test(url.pathname))return await stripeIssuanceRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(url.pathname.startsWith('/api/stripe/')||/^\/api\/invoices\/[^/]+\/stripe(?:-preview|-schedule-preview|\/reconcile|\/requests\/[^/]+(?:\/cancel)?)?$/.test(url.pathname))return await stripeDraftsRoute(request,env,actor,readBody,json,providers.stripeFetch);

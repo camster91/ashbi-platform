@@ -20,9 +20,9 @@
     "test:pilot": "node --test pilot-source-formats.test.mjs pilot-reconcile.test.mjs",
     "test:source-pilot": "node --test source-pilot.test.mjs",
     "pretest:parts": "node build-contract-fonts.mjs",
-    "test:parts": "node --test stripe-part-drafts.test.mjs stripe-part-issuance.test.mjs",
+    "test:parts": "node --test stripe-part-drafts.test.mjs stripe-part-issuance.test.mjs stripe-part-lifecycle.test.mjs",
     "pretest:parts-built": "node build-contract-fonts.mjs",
-    "test:parts-built": "node --test stripe-part-drafts-built.test.mjs stripe-part-issuance-built.test.mjs",
+    "test:parts-built": "node --test stripe-part-drafts-built.test.mjs stripe-part-issuance-built.test.mjs stripe-part-lifecycle-built.test.mjs",
     "test:all": "npm test && npm run test:parts",
     "test:invoice-all": "npm run test:invoice-built && npm run test:parts-built"
   },
