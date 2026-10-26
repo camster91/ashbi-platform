@@ -6,7 +6,7 @@ const date=value=>value===null||(typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.
 const sqlValue=value=>typeof value==='boolean'?Number(value):typeof value==='string'?value.trim():value;
 const descriptors={
  clients:{fields:{name:short,email:v=>typeof v==='string'&&v.length<=254&&(v===''||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)),company:v=>typeof v==='string'&&v.length<=200},create:['name']},
- projects:{fields:{name:short,clientId:short,clientVisible:bool,status:v=>['planned','active','waiting','complete','canceled'].includes(v)},create:['name','clientId','clientVisible'],parent:'clients'},
+ projects:{fields:{name:short,clientId:short,clientVisible:bool,status:v=>['planned','active','waiting','complete','canceled'].includes(v),archived:bool},create:['name','clientId','clientVisible'],parent:'clients'},
  tasks:{fields:{title:short,projectId:short,clientVisible:bool,assigneeId:v=>v===null||short(v),dueOn:date,status:v=>['todo','doing','review','waiting','later','done','retired','archived'].includes(v)},create:['title','projectId','clientVisible'],parent:'projects'},
  notes:{fields:{title:short,projectId:short,clientVisible:bool,text:v=>typeof v==='string'&&v.trim().length>0&&v.length<=20000,parentId:validParent,archived:bool},create:['title','projectId','clientVisible','text'],parent:'projects'},
 };
@@ -24,8 +24,10 @@ export function scope(table,actor){
 export async function records(request,db,actor,table,id,input,json){
  const spec=descriptors[table];if(!spec)return null;
  const projection=table==='notes'?noteTreeColumns:'*';
- const {clause,values}=table==='notes'&&request.method==='GET'?documentQuery(request,actor,id):scope(table,actor);
+ let {clause,values}=table==='notes'&&request.method==='GET'?documentQuery(request,actor,id):scope(table,actor);
  if(request.method==='GET'){
+  if(table==='projects'){const params=new URL(request.url).searchParams,archive=params.get('archived');if(params.getAll('archived').length>1||archive!==null&&!['all','active','archived'].includes(archive))throw 400;if(archive&&archive!=='all'){clause+=' AND projects.archived=?';values.push(Number(archive==='archived'));}}
+  if(table==='tasks'){const params=new URL(request.url).searchParams,include=params.get('includeArchivedProjects');if(params.getAll('includeArchivedProjects').length>1||include!==null&&!['true','false'].includes(include))throw 400;if(!id&&include!=='true')clause+=' AND EXISTS(SELECT 1 FROM projects archive_project WHERE archive_project.id=tasks.project_id AND archive_project.organization_id=tasks.organization_id AND archive_project.archived=0)';}
   if(id){const row=await db.prepare(`SELECT ${projection} FROM ${table} WHERE ${clause} AND id=?`).bind(...values,id).first();return row?json(row):json({error:'Not found'},404);}
   const after=new URL(request.url).searchParams.get('after')||'';if(after.length>100)throw 400;
   const result=await db.prepare(`SELECT ${projection} FROM ${table} WHERE ${clause} AND id>? ORDER BY id LIMIT 51`).bind(...values,after).all();

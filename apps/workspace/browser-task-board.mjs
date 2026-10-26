@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
+import {runProjectArchiveTests} from './browser-project-archive.mjs';
 
 const reviewTitle='QA board review: '+('a long project handoff title to wrap on small screens ').repeat(3).trim();
 async function tasks(page,origin){await page.goto(origin+'/#tasks');await page.getByRole('button',{name:'Edit QA task revised',exact:true}).waitFor();}
 export async function runTaskBoardTests({browser,origin,DB,axe}){
+ await runProjectArchiveTests({browser,origin,DB});
  const project=await DB.prepare("SELECT id FROM projects WHERE name='QA project'").first();
  await DB.batch([
   DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('board-client','qa-org','QA board client')"),

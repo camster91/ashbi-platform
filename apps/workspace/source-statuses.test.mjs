@@ -18,6 +18,7 @@ test('status migration retains existing records and references, and source state
  const beforeProject=await DB.prepare('SELECT * FROM projects').first(),beforeTask=await DB.prepare('SELECT * FROM tasks').first();
  await migrate('0027.sql');
  assert.deepEqual(await DB.prepare('SELECT * FROM projects').first(),beforeProject);assert.deepEqual(await DB.prepare('SELECT * FROM tasks').first(),beforeTask);assert.equal((await DB.prepare('SELECT * FROM task_comments').first()).content,'Retained comment');assert.equal((await DB.prepare('SELECT * FROM notes').first()).text,'Retained bytes');assert.deepEqual((await DB.prepare('PRAGMA foreign_key_check').all()).results,[]);
+ await migrate('0028.sql');
  const actor={id:'staff',organization_id:'a',role:'staff',client_id:null},json=(data,status=200)=>({data,status}),request=(path,method='GET')=>new Request('https://workspace.invalid/api/'+path,{method});
  for(const status of ['review','waiting','later','retired','archived']){
   const created=await records(request('tasks','POST'),DB,actor,'tasks',null,{title:status,projectId:'project',clientVisible:false,status,dueOn:'2000-01-01'},json);assert.equal(created.status,201);assert.equal(created.data.status,status);

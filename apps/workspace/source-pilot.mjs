@@ -1,7 +1,10 @@
 // Internal adapter for a trusted reconcilePilot result and its pinned originals.
 // Not an HTTP JSON import boundary. No Node imports, provider clients or grants.
 import {hasFinance} from './time-details.mjs';
-const sources=['notion','bonsai','legacy'],id=v=>typeof v==='string'&&/^[A-Za-z0-9-]{1,100}$/.test(v),sha=v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
+const legacySources=['notion','bonsai','legacy'],id=v=>typeof v==='string'&&/^[A-Za-z0-9-]{1,100}$/.test(v),sha=v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
+// Old receipts are immutable. Their three-key source image must continue to
+// validate and replay byte-for-byte when a new source is introduced.
+function reportSources(report){const keys=Object.keys(report.sourceFiles??{}),image=[...keys].sort().join(',');if(image!==[...legacySources].sort().join(',')&&image!==[...legacySources,'fluentboards'].sort().join(','))throw 400;return keys;}
 const stable=v=>JSON.stringify(v,(_k,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.keys(x).sort().map(k=>[k,x[k]])):x);
 const digest=async b=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b)),n=>n.toString(16).padStart(2,'0')).join('');
 const hashText=s=>digest(new TextEncoder().encode(s));
@@ -35,7 +38,7 @@ async function prepare(input){
  let report,image;try{image=stable(input.report);report=JSON.parse(image);}catch{throw 400;}
  if(!image||new TextEncoder().encode(image).length>1024*1024)throw 413;
  if(report.version!==1||report.mode!=='offline-pilot-reconciliation'||!sha(report.fingerprint)||report.migrationReady!==false||report.targetWrites!==0||!Array.isArray(report.externalEffects)||report.externalEffects.length||!report.target||Object.keys(report.target).sort().join(',')!=='clientId,organizationId,projectId'||!Object.values(report.target).every(id)||!Array.isArray(report.records)||report.records.length<1||report.records.length>40||!Array.isArray(report.candidates))throw 400;
- const records=report.records,keys=new Set(),canonical=new Set();
+ const sources=reportSources(report),records=report.records,keys=new Set(),canonical=new Set();
  for(const r of records){if(!sources.includes(r.source)||typeof r.key!=='string'||!r.key.startsWith(r.source+':')||r.key.length>1200||keys.has(r.key)||!['MAPPED','HELD'].includes(r.disposition)||!r.provenance||!sha(r.provenance.fileSha256)||!sha(r.provenance.recordSha256)||!pathOK(r.provenance.path)||!r.normalized)throw 400;keys.add(r.key);
   if(r.disposition==='MAPPED'){
    if(!id(r.canonicalId)||r.normalized.proposedClientVisible!==false)throw 409;
@@ -46,7 +49,7 @@ async function prepare(input){
  }
  if(stable(report.counts)!==stable({sourceRecords:records.length,mapped:records.filter(r=>r.disposition==='MAPPED').length,held:records.filter(r=>r.disposition==='HELD').length}))throw 400;
  const objects=[],seen=new Set();let total=0;
- if(!Array.isArray(input.objects)||!report.sourceFiles||Object.keys(report.sourceFiles).sort().join(',')!==[...sources].sort().join(','))throw 400;
+ if(!Array.isArray(input.objects))throw 400;
  // Reject declared oversized images before copying/hash work can exceed a
  // Worker memory budget. Callers may share a buffer across many input rows.
  let declaredBytes=0,declaredCount=0;
@@ -96,6 +99,7 @@ async function prepare(input){
 async function runRow(db,id){return db.prepare('SELECT * FROM source_pilot_runs WHERE id=?').bind(id).first();}
 async function inventory(db,run){
  const report=JSON.parse(run.report_json);if(await hashText(stable(report))!==run.image_sha256||report.fingerprint!==run.fingerprint||report.target.organizationId!==run.organization_id||report.target.clientId!==run.client_id||report.target.projectId!==run.project_id)throw 503;
+ let sources;try{sources=reportSources(report);}catch{throw 503;}
  const records=(await db.prepare('SELECT * FROM source_pilot_records WHERE run_id=? ORDER BY source_key').bind(run.id).all()).results;
  if(records.length!==report.records.length||records.some(row=>row.organization_id!==run.organization_id||row.project_id!==run.project_id||row.image_json!==stable(report.records.find(r=>r.key===row.source_key))))throw 503;
  const objects=(await db.prepare('SELECT * FROM source_pilot_objects WHERE run_id=? ORDER BY source,path').bind(run.id).all()).results,pins=sources.flatMap(source=>report.sourceFiles[source].map(p=>({...p,source})));

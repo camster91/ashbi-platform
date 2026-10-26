@@ -18,7 +18,15 @@ export async function filesRoute(request,env,actor,readBody,json){
   if(download){
    const row=await db.prepare('SELECT f.*'+join+' WHERE '+scope+' AND f.id=? AND f.deleted=0').bind(...scopeArgs,id).first();if(!row)throw 404;
    const object=await env.FILES.get(row.object_key);if(!object||object.size!==row.size)throw 503;
-   const bytes=await object.arrayBuffer();if(hex(await crypto.subtle.digest('SHA-256',bytes))!==row.sha256)throw 503;
+   let bytes;
+   if(row.size>limit){
+    // Only the trusted administrative importer can create these larger rows.
+    // R2 validates put({sha256}) and exposes that native checksum on reads;
+    // custom metadata is not an integrity proof. Keep the ordinary upload cap.
+    const checksum=object.checksums?.sha256;
+    if(!checksum||new Uint8Array(checksum).length!==32||hex(checksum)!==row.sha256||!object.body)throw 503;
+    bytes=object.body;
+   }else{bytes=await object.arrayBuffer();if(hex(await crypto.subtle.digest('SHA-256',bytes))!==row.sha256)throw 503;}
    return new Response(bytes,{headers:{'Content-Type':'application/octet-stream','Content-Length':String(row.size),'Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(row.name).replace(/['()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase()),'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox",'Referrer-Policy':'no-referrer','X-Frame-Options':'DENY'}});
   }
   if(id)throw 404;

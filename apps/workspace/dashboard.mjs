@@ -3,12 +3,13 @@ import {scope} from './records.mjs';
 // A read projection of canonical tasks. No copied state, inferred priority or writes.
 export async function dashboardTasks(request,db,actor,json){
  if(request.method!=='GET')throw 405;
- const params=new URL(request.url).searchParams,allowed=['owner','ownerId','clientId','projectId','status','due','after'];
+ const params=new URL(request.url).searchParams,allowed=['owner','ownerId','clientId','projectId','status','due','after','includeArchivedProjects'];
  for(const key of params.keys())if(!allowed.includes(key)||params.getAll(key).length!==1)throw 400;
  const status=params.get('status')??'open',due=params.get('due')??'all',owner=params.get('owner');
  if(!['open','all','todo','doing','review','waiting','later','done','retired','archived'].includes(status)||!['all','overdue','today','none'].includes(due)||owner!==null&&!['mine','unassigned'].includes(owner)||owner&&params.has('ownerId'))throw 400;
  for(const key of ['ownerId','clientId','projectId','after'])if(params.has(key)&&!/^[a-zA-Z0-9-]{1,100}$/.test(params.get(key)))throw 400;
- const {clause,values}=scope('tasks',actor),where=[clause],bindings=[...values];
+ const archive=params.get('includeArchivedProjects');if(archive!==null&&!['true','false'].includes(archive))throw 400;
+ const {clause,values}=scope('tasks',actor),where=[clause],bindings=[...values];if(archive!=='true')where.push('p.archived=0');
  if(status==='open')where.push("tasks.status IN ('todo','doing','review','waiting','later')");else if(status!=='all'){where.push('tasks.status=?');bindings.push(status);}
  for(const [key,column] of [['ownerId','tasks.assignee_id'],['clientId','p.client_id'],['projectId','tasks.project_id'],['after','tasks.id']])if(params.has(key)){where.push(column+(key==='after'?'>?':'=?'));bindings.push(params.get(key));}
  if(owner==='mine'){where.push('tasks.assignee_id=?');bindings.push(actor.id);}else if(owner==='unassigned')where.push('tasks.assignee_id IS NULL');
