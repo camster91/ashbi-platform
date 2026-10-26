@@ -1,7 +1,16 @@
 export const recordLinkUiScript=String.raw`
  function recordLink(page,id,label,accessibleLabel=label){
   if(!['tasks','reviews','invoices','contracts'].includes(page)||typeof id!=='string'||!/^[a-zA-Z0-9-]{1,100}$/.test(id))return node('span','Record link unavailable.','help');
-  const context=view,link=node('a',label);link.href='#'+page+'/'+id;link.setAttribute('aria-label',accessibleLabel);link.onclick=e=>{if(!current(context)||!link.isConnected){e.preventDefault();return;}if(e.button===0&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!e.altKey&&link.hash===location.hash){e.preventDefault();load(true);}};return link;
+  return recordRouteLink('#'+page+'/'+id,label,accessibleLabel);
+ }
+ function recordSourceLink(source,label,accessibleLabel=label){
+  const id=value=>typeof value==='string'&&/^[a-zA-Z0-9-]{1,100}$/.test(value);
+  if(source?.kind==='invoices'&&id(source.id))return recordLink('invoices',source.id,label,accessibleLabel);
+  if(source?.kind==='invoice-parts'&&id(source.id)&&id(source.invoiceId)&&id(source.scheduleId)&&['DEPOSIT','BALANCE'].includes(source.partKind))return recordRouteLink('#invoices/'+source.invoiceId+'/parts/'+source.id,label,accessibleLabel);
+  return node('span','Record link unavailable.','help');
+ }
+ function recordRouteLink(route,label,accessibleLabel){
+  const context=view,link=node('a',label);link.href=route;link.setAttribute('aria-label',accessibleLabel);link.onclick=e=>{if(!current(context)||!link.isConnected){e.preventDefault();return;}if(e.button===0&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!e.altKey&&link.hash===location.hash){e.preventDefault();load(true);}};return link;
  }
  function denyLinkedRecord(state,kind,missing=false){
   if(!current(state))return;state.linkDenied=true;

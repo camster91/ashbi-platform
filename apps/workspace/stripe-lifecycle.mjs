@@ -184,12 +184,45 @@ const readIntegrity="p.snapshot_json IS NOT NULL AND o.state='DONE' AND o.accoun
 const clientScope=`EXISTS(SELECT 1 FROM actors a WHERE a.id=? AND a.organization_id=p.organization_id AND a.active=1 AND a.role='client' AND a.client_id=i.client_id) AND json_extract(p.snapshot_json,'$.status') IN ('open','paid','void','uncollectible') AND json_extract(p.snapshot_json,'$.finalizedAt') IS NOT NULL AND (i.project_id IS NULL OR EXISTS(SELECT 1 FROM projects pr WHERE pr.id=i.project_id AND pr.organization_id=i.organization_id AND pr.client_id=i.client_id AND pr.client_visible=1))`;
 const selectFields='p.invoice_id,p.organization_id,p.account_id,p.stripe_invoice_id,p.revision,p.snapshot_json,p.observed_at,p.last_error,p.last_attempt_at';
 function dto(row,client=false){const image=JSON.parse(row.snapshot_json);if(client&&!image.refundAllocationComplete)image.refunds=[];return {...image,revision:row.revision,observedAt:row.observed_at,syncState:row.last_error?(['PROVIDER_UNAVAILABLE','PERSISTENCE','CONFLICT','CREATION_INCOMPLETE'].includes(row.last_error)?'RETRY':'REVIEW_REQUIRED'):row.pending_sync?'SYNC_PENDING':'OBSERVED',overdue:image.status==='open'&&image.remainingMinor>0&&image.dueAt*1000<Date.now(),...(!client?{accountId:row.account_id,lastError:row.last_error,lastAttemptAt:row.last_attempt_at}:{})};}
-async function readRows(env,actor,{client=false,invoiceId=null,limit=25,cursor=null,status=null,currency=null,dashboard=null}={}){
+function readStatement(env,actor,{client=false,invoiceId=null,limit=25,cursor=null,status=null,currency=null,dashboard=null,identities=false,byteGate=null}={}){
  const scope=client?clientScope:authority,values=client?[actor.id]:[actor.id,actor.organization_id],filters=[readIntegrity,'p.organization_id=?',scope],args=[actor.organization_id,...values];if(invoiceId){filters.push('p.invoice_id=?');args.push(invoiceId);}if(cursor){filters.push('p.invoice_id>?');args.push(cursor);}if(status){filters.push("json_extract(p.snapshot_json,'$.status')=?");args.push(status);}if(currency){filters.push("json_extract(p.snapshot_json,'$.currency')=?");args.push(currency);}args.push(limit);
  if(dashboard){args.pop();filters.push("json_extract(p.snapshot_json,'$.remainingMinor')>0");for(const [key,column]of [['clientId','i.client_id'],['projectId','i.project_id']])if(dashboard[key]){filters.push(column+'=?');args.push(dashboard[key]);}if(dashboard.due==='overdue'){filters.push("json_extract(p.snapshot_json,'$.dueAt') IS NOT NULL AND json_extract(p.snapshot_json,'$.dueAt')*1000<?");args.push(dashboard.now);}args.push(limit);}
  const pending=`(p.lease_until>${clock} OR EXISTS(SELECT 1 FROM stripe_event_inbox pending WHERE pending.organization_id=p.organization_id AND pending.account_id=p.account_id AND (pending.invoice_id=p.invoice_id OR (pending.target_kind='invoice' AND pending.target_id=p.stripe_invoice_id)) AND pending.state IN ('PENDING','PROCESSING','RETRY','REVIEW_REQUIRED'))) AS pending_sync`;
  const metadata=dashboard?",json_extract(i.snapshot_json,'$.project') AS dashboard_project":'';
- const statement=env.DB.prepare(`SELECT ${selectFields}${metadata},${pending} ${readFrom} WHERE ${filters.join(' AND ')} ORDER BY p.invoice_id LIMIT ?`).bind(...args);let rows=await statement.all();if(client)rows=await statement.all();return rows.results;
+ // A final proof returning no rows does not stop later batch statements.
+ // Gate the canonical payload itself in the same SQL snapshot, including its
+ // final repeated read, and never load identities outside the measured set.
+ if(byteGate)filters.push('p.invoice_id IN (SELECT invoice_id FROM chosen) AND (SELECT bytes FROM read_budget)<=2097152');
+ return env.DB.prepare(`${byteGate?.sql??''}SELECT ${identities?'p.invoice_id':selectFields+metadata+','+pending} ${readFrom} WHERE ${filters.join(' AND ')} ORDER BY p.invoice_id LIMIT ?`).bind(...(byteGate?.args??[]),...args);
+}
+async function readRows(env,actor,options={}){const statement=readStatement(env,actor,options);let rows=await statement.all();if(options.client)rows=await statement.all();return rows.results;}
+// The combined dashboard defers every proof to its single final batch. Keep
+// these identities light so its complete bound precedes loading any history.
+export function invoiceDashboardAuthority(db,actor){return actor.role==='client'?db.prepare("SELECT 1 AS valid FROM actors WHERE id=? AND organization_id=? AND role='client' AND active=1 AND client_id=?").bind(actor.id,actor.organization_id,actor.client_id):db.prepare('SELECT 1 AS valid WHERE '+authority).bind(actor.id,actor.organization_id);}
+export function fullDashboardSelection(db,actor,filters,now){return {statement:()=>readStatement({DB:db},actor,{client:actor.role==='client',status:'open',currency:filters.currency,limit:1001,dashboard:{...filters,now},identities:true}),rows:null};}
+const dashboardTables=['invoice_drafts','stripe_invoice_operations','stripe_customer_links','stripe_invoice_projection','stripe_lifecycle_events'];
+// Retain precisely the FULL reader's source and projection dependencies. Its
+// legacy read semantics do not require private creation plans or credentials.
+const dashboardFields=[
+ 'id,organization_id,client_id,project_id,currency,total_minor,status,released_at,stripe_invoice_id,revision,write_token',
+ 'id,organization_id,invoice_id,mapping_id,account_id,customer_id,state,stripe_invoice_id,revision,write_token',
+ 'id,organization_id,client_id,account_id,customer_id',
+ 'invoice_id,organization_id,operation_id,account_id,stripe_invoice_id,revision,snapshot_json,observed_at,last_error,last_attempt_at,lease_token,lease_until,write_token',
+ 'id,organization_id,invoice_id,account_id,inbox_id,actor_id,revision,observed_at,source,snapshot_json'
+].map(columns=>columns.split(',').map(name=>({name,sql:'e.'+name})));
+ dashboardFields[0].push({name:'snapshot_client_id',sql:"json_extract(e.snapshot_json,'$.client.id')"},{name:'snapshot_project',sql:"json_extract(e.snapshot_json,'$.project')"});
+export async function fullDashboardSnapshot(env,actor,selected,filters,now){
+ if(!selected.rows.length)return {values:[],proofs:[]};
+ const db=env.DB,org=actor.organization_id,chosen=JSON.stringify(selected.rows),cte="WITH chosen AS (SELECT json_extract(value,'$.invoice_id') AS invoice_id FROM json_each(?)), mappings AS (SELECT mapping_id FROM stripe_invoice_operations WHERE organization_id=? AND invoice_id IN (SELECT invoice_id FROM chosen)) ",args=[chosen,org],scopes=dashboardTables.map((table,i)=>i===0?'e.id IN (SELECT invoice_id FROM chosen)':i===2?'e.id IN (SELECT mapping_id FROM mappings)':'e.invoice_id IN (SELECT invoice_id FROM chosen)');
+ const budgetBody='SELECT (10+'+dashboardTables.map((table,i)=>{const overhead=2+dashboardFields[i].reduce((sum,field)=>sum+JSON.stringify(field.name).length+2,0),bytes=dashboardFields[i].map(field=>"length(CAST(json_quote("+(field.sql.startsWith('json_extract(')?'('+field.sql+")||''":field.sql)+") AS BLOB))").join('+');return '(SELECT COALESCE(SUM('+overhead+'+'+bytes+'),0) FROM '+table+' e WHERE e.organization_id=? AND '+scopes[i]+')';}).join('+')+') AS bytes',budgetArgs=[...args,...dashboardTables.map(()=>org)],budget=await db.prepare(cte+budgetBody).bind(...budgetArgs).first();
+ const bounded=value=>Number.isSafeInteger(value)&&value>=0&&value<=2097152;if(!budget||!bounded(budget.bytes))throw {code:'DASHBOARD_INVOICE_READ_LIMIT',status:409};
+ const scoped=cte.trimEnd()+', read_budget AS ('+budgetBody+') ',loaded=await db.batch([db.prepare(cte+budgetBody).bind(...budgetArgs),...dashboardTables.map((table,i)=>db.prepare(scoped+'SELECT '+dashboardFields[i].map(field=>field.sql+' AS '+field.name).join(',')+' FROM '+table+' e WHERE e.organization_id=? AND '+scopes[i]+' AND (SELECT bytes FROM read_budget)<=2097152 ORDER BY e.'+(i===3?'invoice_id':'id')).bind(...budgetArgs,org))]);
+ if(!loaded[0].results[0]||!bounded(loaded[0].results[0].bytes))throw {code:'DASHBOARD_INVOICE_READ_LIMIT',status:409};
+ const proofs=dashboardTables.map((table,i)=>{const rows=loaded[i+1].results,fields=dashboardFields[i],sql=cte+'SELECT 1 AS valid WHERE (SELECT COUNT(*) FROM '+table+' e WHERE e.organization_id=? AND '+scopes[i]+')=? AND NOT EXISTS(SELECT 1 FROM json_each(?) expected WHERE NOT EXISTS(SELECT 1 FROM '+table+' e WHERE ('+fields.map(field=>field.sql).join(',')+') IS ('+fields.map(field=>"json_extract(expected.value,'$."+field.name+"')").join(',')+')))';return {statement:db.prepare(sql).bind(...args,org,rows.length,JSON.stringify(rows)),rows:[{valid:1}]};});
+ const statement=()=>readStatement(env,actor,{client:actor.role==='client',status:'open',currency:filters.currency,limit:1001,dashboard:{...filters,now},byteGate:{sql:scoped,args:budgetArgs}}),rows=(await statement().all()).results;
+ if(JSON.stringify(rows.map(row=>({invoice_id:row.invoice_id})))!==JSON.stringify(selected.rows)){await currentReader(db,actor,actor.role==='client');throw 409;}
+ proofs.push({statement:statement(),rows});
+ return {values:rows.map(row=>({...dto(row,actor.role==='client'),project:row.dashboard_project?JSON.parse(row.dashboard_project):null})),proofs};
 }
 // Dashboard shares the lifecycle's current authority, integrity and client redaction.
 // The bound is for complete totals, not a page size; never call a provider here.

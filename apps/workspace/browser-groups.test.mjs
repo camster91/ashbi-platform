@@ -7,7 +7,8 @@ const expected={
  core:['runRegressions','runTaskBoardTests','runCommentTests','runDocumentTests','runDocumentTreeTests','runTimerTests','runTimeReviewTests','runFinanceTests'],
  commerce:['runCommercialTests','runProposalReviewTests','runStripeTests','runInvoiceTests','runRecordLinkTests'],
  contracts:['runDashboardTests','runContractTests','runContractPdfTests','runStripeIssuanceTests'],
- delivery:['runStripeDeliveryTests']
+ delivery:['runStripeDeliveryTests'],
+ overview_parts:['runOverviewPartTests']
 };
 const all=Object.values(expected).flat();
 

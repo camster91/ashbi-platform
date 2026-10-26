@@ -77,7 +77,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [core, commerce, contracts, delivery]
+        group: [core, commerce, contracts, delivery, overview_parts]
     env:
       CI: true
       WRANGLER_SEND_METRICS: 'false'
