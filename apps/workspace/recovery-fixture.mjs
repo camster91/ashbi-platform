@@ -4,8 +4,8 @@ import {generateKeyPair,SignJWT} from 'jose';
 import {stripeLifecycleProvider} from './stripe-lifecycle-provider.mjs';
 
 // DB and FILES must already be migrated, empty isolated bindings.
-export async function seedRecoveryWorkspace({DB,FILES,createWorker}) {
- const org='journey-a',origin='https://journey.example.invalid',issuer='https://identity.cloudflareaccess.com',audience='journey',tokens={},provider=stripeLifecycleProvider(org),{publicKey,privateKey}=await generateKeyPair('RS256');
+export async function seedRecoveryWorkspace({DB,FILES,createWorker,stripeProvider}) {
+ const org='journey-a',origin='https://journey.example.invalid',issuer='https://identity.cloudflareaccess.com',audience='journey',tokens={},provider=stripeProvider??stripeLifecycleProvider(org),{publicKey,privateKey}=await generateKeyPair('RS256');
  const policy={version:'journey-v1',consentText:'I consent to this exact electronic agreement.',authorityText:'I am authorized to sign for this client.',privacyText:'This signed agreement and evidence will be retained.'};
  const keyRing={journey:Buffer.from(new Uint8Array(32).fill(79)).toString('base64url')};
  const env={DB,FILES,APP_ORIGIN:origin,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:audience,...provider.bindings,CONTRACT_SIGNING_POLICY:JSON.stringify(policy),CONTRACT_EVIDENCE_KEYS:JSON.stringify(keyRing),CONTRACT_EVIDENCE_KEY_ID:'journey'},worker=createWorker(publicKey,{stripeFetch:provider.fetch});

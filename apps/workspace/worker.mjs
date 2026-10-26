@@ -15,6 +15,7 @@ import { readSigningPolicy,decorateSignature,decorateSignatures,contractSignatur
 import { proposalReviewsRoute, dashboardReviews } from './proposal-reviews.mjs';
 import { stripeDraftsRoute } from './stripe-drafts.mjs';
 import {stripeIssuanceRoute} from './stripe-issuance.mjs';
+import {stripeDeliveryRoute} from './stripe-delivery.mjs';
 import {sourceHistoryRoute} from './source-pilot.mjs';
 import { stripeWebhook, stripeLifecycleRoute, drainStripeEvents } from './stripe-lifecycle.mjs';
 import { stripePartLifecycleRoute } from './stripe-part-lifecycle.mjs';
@@ -53,6 +54,7 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  if(url.pathname==='/api/dashboard/reviews')return await dashboardReviews(request,env.DB,actor,json);
  if(['/api/billing/parts','/api/billing/parts/summary','/api/portal/invoice-parts','/api/portal/invoice-parts/summary'].includes(url.pathname)||url.pathname.startsWith('/api/portal/invoice-parts/')||/^\/api\/invoices\/[^/]+\/parts\/[^/]+\/billing(?:\/reconcile)?$/.test(url.pathname))return await stripePartLifecycleRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(url.pathname.startsWith('/api/stripe/events')||/^\/api\/invoices\/[^/]+\/billing(?:\/reconcile)?$/.test(url.pathname)||['/api/billing/invoices','/api/billing/summary'].includes(url.pathname)||url.pathname==='/api/portal/invoices'||url.pathname.startsWith('/api/portal/invoices/'))return await stripeLifecycleRoute(request,env,actor,readBody,json,providers.stripeFetch);
+ if(/^\/api\/invoices\/[^/]+\/stripe\/send(?:-|\/|$)/.test(url.pathname)||/^\/api\/stripe\/schedules\/[^/]+\/parts\/[^/]+\/send(?:-|\/|$)/.test(url.pathname))return await stripeDeliveryRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(/^\/api\/invoices\/[^/]+\/stripe\/finalize/.test(url.pathname))return await stripeIssuanceRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(url.pathname.startsWith('/api/stripe/')||/^\/api\/invoices\/[^/]+\/stripe(?:-preview|-schedule-preview|\/reconcile|\/requests\/[^/]+(?:\/cancel)?)?$/.test(url.pathname))return await stripeDraftsRoute(request,env,actor,readBody,json,providers.stripeFetch);
  if(url.pathname==='/api/invoices'||url.pathname.startsWith('/api/invoices/'))return await invoicesRoute(request,env.DB,actor,readBody,json);

@@ -130,7 +130,7 @@ async function cancelRequest(db,actor,kind,key,invoiceId){
  await db.prepare(`INSERT INTO ${cancelled}(id,organization_id,${invoiceId?'invoice_id,':''}request_key,actor_id,created_at) SELECT ?,?,${invoiceId?'?,':''}?,?,? WHERE ${authority} AND NOT EXISTS(SELECT 1 FROM ${table} WHERE organization_id=? AND request_key=?) ON CONFLICT(organization_id,request_key) DO NOTHING RETURNING id`).bind(crypto.randomUUID(),actor.organization_id,...(invoiceId?[invoiceId]:[]),key,actor.id,Date.now(),actor.id,actor.organization_id,actor.organization_id,key).first();return requestReceipt(db,actor,kind,key,invoiceId);
 }
 export function stripeExportStatement(db,actor,table){const fields=table.startsWith('cancelled_stripe_')?'id,organization_id,'+(table==='cancelled_stripe_invoice_requests'?'invoice_id,':'')+'request_key,actor_id,created_at':table==='stripe_customer_links'?'id,organization_id,client_id,account_id,customer_id,client_revision,customer_json,actor_id,reason,created_at':table==='stripe_invoice_operations'?'id,organization_id,invoice_id,mapping_id,account_id,customer_id,actor_id,reason,plan_json,state,stage,stripe_invoice_id,create_attempt_at,lines_attempt_at,last_error,revision,created_at,updated_at':'id,organization_id,invoice_id,operation_id,actor_id,recorded_at,revision,action,state_json';return db.prepare(`SELECT ${fields} FROM ${table} WHERE organization_id=? AND ${authority} ORDER BY id LIMIT 1001`).bind(actor.organization_id,actor.id,actor.organization_id);}
-function partServices(fetcher){
+export function partServices(fetcher){
  const metadata=(op)=>({'metadata[ashbi_schedule]':op.schedule_id,'metadata[ashbi_part]':op.part_id});
  return {
   configuration,loadSchedule:loadSchedulePart,sourceGuard:scheduleSourceGuard,proof:scheduleProof,

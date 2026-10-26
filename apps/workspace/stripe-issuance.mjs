@@ -98,3 +98,6 @@ export async function stripeIssuanceRoute(request,env,actor,readBody,json,fetche
  if(action==='/reconcile'||action==='/retry'){strict(await readBody(request),[]);const op=await read(env.DB,actor,invoiceId);if(!op)throw 404;const result=await execute(env,actor,op,fetcher,action==='/retry');return send(dto(result),result.state==='DONE'||action==='/reconcile'?200:202);}
  const result=await begin(env,actor,invoiceId,await readBody(request),fetcher);if(result.replayed)return send(dto(result.row));const op=await execute(env,actor,result.row,fetcher,true);return send(dto(op),op.state==='DONE'?201:202);
 }
+
+// Local immutable issuance validation for reviewed delivery; no provider call.
+export {validateSaved as validateInvoiceIssuance};

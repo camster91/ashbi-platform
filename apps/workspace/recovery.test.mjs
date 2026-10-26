@@ -28,6 +28,7 @@ test('native local D1 SQL export restores exact schema and literal data into sep
 });
 
 import {seedRecoveryWorkspace} from './recovery-fixture.mjs';
+import {stripeDeliveryProvider} from './stripe-delivery-provider.mjs';
 import {makePilotFixture} from './pilot-source-fixture.mjs';
 import {reconcilePilot} from './pilot-reconcile.mjs';
 import {applySourcePilot,readSourcePilot,readSourceObject} from './source-pilot.mjs';
@@ -42,7 +43,7 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
   const sql=await readFile(new URL('./migrations/'+name,import.meta.url),'utf8');
   await source.env.DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>source.env.DB.prepare(s)));
  }
- const fixture=await seedRecoveryWorkspace({...source.env,createWorker}),{call,records:r,expected:e,provider}=fixture;
+ const fixture=await seedRecoveryWorkspace({...source.env,createWorker,stripeProvider:stripeDeliveryProvider('journey-a')}),{call,records:r,expected:e,provider}=fixture;
  const data=async(response,status=200)=>{assert.equal(response.status,status,await response.clone().text());return response.json();};
  const posts=()=>provider.requests.filter(p=>p.method==='POST');
  async function uncertainInvoice(title){
@@ -94,6 +95,23 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  const leasedIssuancePath=finalPath(issuanceInput,issuanceSchedule.parts[1]),leasedIssuanceBody=await finalIntent(leasedIssuancePath);provider.failFinalizeBefore=true;const leasedIssuance=await data(await call(leasedIssuancePath,leasedIssuanceBody),202);assert.equal(leasedIssuance.state,'UNKNOWN');
  const issuanceLeaseUntil=Date.now()+300000;await source.env.DB.prepare('UPDATE stripe_part_issuance_operations SET lease_token=?,lease_until=? WHERE id=?').bind('synthetic-issuance-lease',issuanceLeaseUntil,leasedIssuance.id).run();const leasedIssuanceRow=await source.env.DB.prepare('SELECT * FROM stripe_part_issuance_operations WHERE id=?').bind(leasedIssuance.id).first();
 
+ // Native delivery receipts and pending signed evidence are application state;
+ // a provider GET cannot recover a lost Send acknowledgement by itself.
+ const fullSendPath='invoices/'+r.invoice.id+'/stripe/send',childSendPath=childInput.path+'/parts/'+childSchedule.parts[0].id+'/send';
+ async function deliveryIntent(path){const plan=await data(await call(path+'-preview',{}));return {requestId:crypto.randomUUID(),revision:plan.issuanceRevision,fingerprint:plan.fingerprint,reason:'Reviewed synthetic recovery delivery'};}
+ const fullSendBody=await deliveryIntent(fullSendPath),fullSend=await data(await call(fullSendPath,fullSendBody),201);
+ const childSendBody=await deliveryIntent(childSendPath);provider.loseSend=true;const childSend=await data(await call(childSendPath,childSendBody),202);assert.equal(childSend.state,'UNKNOWN');
+ const childSendRow=await source.env.DB.prepare('SELECT * FROM stripe_invoice_delivery_operations WHERE id=?').bind(childSend.id).first(),childSendEffect=provider.sendEffects.at(-1);
+ const deliveryLeaseInput=await uncertainInvoice('Original send lease checkpoint');await data(await call(deliveryLeaseInput.path+'/retry',{}));
+ const leasedSendPath='invoices/'+deliveryLeaseInput.invoice.id+'/stripe/send',leasedSendBody=await deliveryIntent(leasedSendPath);provider.failSendBefore=true;const leasedSend=await data(await call(leasedSendPath,leasedSendBody),202);assert.equal(leasedSend.state,'UNKNOWN');
+ const sendLeaseUntil=Date.now()+300000;await source.env.DB.prepare('UPDATE stripe_invoice_delivery_operations SET lease_token=?,lease_until=? WHERE id=?').bind('synthetic-send-lease',sendLeaseUntil,leasedSend.id).run();const leasedSendRow=await source.env.DB.prepare('SELECT * FROM stripe_invoice_delivery_operations WHERE id=?').bind(leasedSend.id).first();
+ const cancelledSendBody=await deliveryIntent(fullSendPath),cancelledSend=await data(await call(fullSendPath+'/requests/'+cancelledSendBody.requestId+'/cancel',{}));assert.equal(cancelledSend.state,'CANCELLED');
+ fixture.env.STRIPE_WEBHOOK_SECRET=['whsec','synthetic_recovery_delivery_only'].join('_');
+ const sendEvent={id:'evt_recovery_send_'+crypto.randomUUID().replaceAll('-',''),object:'event',api_version:'2026-09-30.endive',livemode:false,account:fixture.env.STRIPE_ACCOUNT_ID,created:Math.floor(Date.now()/1000),type:'invoice.sent',request:{id:childSendEffect.requestId,idempotency_key:childSendEffect.key},data:{object:structuredClone(provider.invoices.get(deposit.stripeInvoiceId))}};
+ const sendRaw=JSON.stringify(sendEvent),sendTimestamp=Math.floor(Date.now()/1000),sendSigningKey=await crypto.subtle.importKey('raw',new TextEncoder().encode(fixture.env.STRIPE_WEBHOOK_SECRET),{name:'HMAC',hash:'SHA-256'},false,['sign']),sendMac=await crypto.subtle.sign('HMAC',sendSigningKey,new TextEncoder().encode(sendTimestamp+'.'+sendRaw));
+ await data(await fixture.worker.fetch(new Request(fixture.env.APP_ORIGIN+'/api/stripe/webhook',{method:'POST',headers:{'content-type':'application/json','stripe-signature':'t='+sendTimestamp+',v1='+Buffer.from(sendMac).toString('hex')},body:sendRaw}),fixture.env),202);
+ const pendingSendInbox=await source.env.DB.prepare('SELECT * FROM stripe_event_inbox WHERE event_id=?').bind(sendEvent.id).first();assert.equal(pendingSendInbox.state,'PENDING');assert.ok(pendingSendInbox.send_evidence_json);
+
  // Preserve independent authoritative child observations and pending event work.
  const childBilling='invoices/'+childInput.invoice.id+'/parts/'+childSchedule.parts[0].id+'/billing';
  await data(await call(childBilling+'/reconcile',{}));
@@ -116,7 +134,7 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  await writeFile(keyFile,JSON.stringify({active:'journey',keys:fixture.keyRing}),{mode:0o600});
  const {image,objects}=JSON.parse(await readFile(checkpoint,'utf8'));
  for(const key of Object.values(fixture.keyRing))assert.equal((await readFile(checkpoint,'utf8')).includes(key),false);
- assert.equal(Object.keys(image.tables).length,57);assert.equal(image.schema.filter(s=>s.type==='index').length,43);assert.equal(objects.length,6);
+ assert.equal(Object.keys(image.tables).length,60);assert.equal(image.schema.filter(s=>s.type==='index').length,45);assert.equal(objects.length,6);
  const sql=await exportDatabase(source);
  // External Stripe state is deliberately NOT restored with our D1/R2 image.
  const externalFinalize=provider.requests.findLast(p=>p.method==='POST'&&p.path==='/v1/invoices/'+externallyFinished.creation.stripeInvoiceId+'/finalize');
@@ -130,8 +148,26 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  const DB=target.env.DB,FILES=target.env.FILES;
  const verify=async()=>assert.deepEqual(await databaseImage(DB),image,'all schema and exact table images must match trusted checkpoint');
  const putRow=async(table,row)=>{const cols=Object.keys(row);await DB.prepare('INSERT INTO "'+table+'"('+cols.map(c=>'"'+c+'"').join(',')+') VALUES('+cols.map(()=>'?').join(',')+')').bind(...cols.map(c=>row[c])).run();};
- await t.test('all 57 tables and 43 indexes match before any restored application use',verify);
+ await t.test('all 60 tables and 45 indexes match before any restored application use',verify);
  await t.test('all paginated objects including orphans, empty data and private metadata match',()=>verifyObjects(FILES,objects));
+
+ await t.test('restored delivery receipts and signed pending evidence remain local with the provider disabled',async()=>{
+  const before=provider.requests.length,disabled={STRIPE_MODE:undefined,STRIPE_SECRET_KEY:undefined,STRIPE_ACCOUNT_ID:undefined};
+  for(const[path,body,operation]of[[fullSendPath,fullSendBody,fullSend],[childSendPath,childSendBody,childSend]]){assert.deepEqual(await data(await restored(path,undefined,'finance','GET',disabled)),operation);assert.deepEqual((await data(await restored(path+'/requests/'+body.requestId,undefined,'finance','GET',disabled))).operation,operation);assert.deepEqual(await data(await restored(path,body,'finance','POST',disabled)),operation);assert.equal(operation.emailDelivery,'TEST_MODE_NO_EMAIL');}
+  assert.deepEqual(await DB.prepare('SELECT * FROM stripe_event_inbox WHERE id=?').bind(pendingSendInbox.id).first(),pendingSendInbox);assert.equal(provider.requests.length,before);await verify();
+ });
+ await t.test('restored delivery cancellation and active lease fence late writes without refreshing the lease',async()=>{
+  const before=provider.requests.length;assert.deepEqual(await data(await restored(fullSendPath+'/requests/'+cancelledSendBody.requestId)),cancelledSend);assert.equal((await restored(fullSendPath,cancelledSendBody)).status,409);assert.equal((await restored(leasedSendPath+'/retry',{})).status,202);assert.equal(provider.requests.length,before);assert.deepEqual(await DB.prepare('SELECT lease_token,lease_until FROM stripe_invoice_delivery_operations WHERE id=?').bind(leasedSend.id).first(),{lease_token:'synthetic-send-lease',lease_until:sendLeaseUntil});await verify();
+ });
+ await t.test('missing original delivery journals reject restored receipts and retry without provider IO or repair',async()=>{
+  const events=image.tables.stripe_invoice_delivery_events.filter(row=>row.operation_id===childSend.id).sort((a,b)=>a.revision-b.revision);assert.ok(events.length>=3);const before=provider.requests.length;
+  for(const row of[events[0],events.at(-1)]){await DB.prepare('DELETE FROM stripe_invoice_delivery_events WHERE id=?').bind(row.id).run();try{assert.equal((await restored(childSendPath)).status,503);assert.equal((await restored(childSendPath+'/retry',{})).status,503);}finally{await putRow('stripe_invoice_delivery_events',row);}}
+  assert.equal(provider.requests.length,before);await verify();
+ });
+ await t.test('restored delivery remains scoped to current finance grants and immutable source claims',async()=>{
+  const before=provider.requests.length;await DB.prepare("DELETE FROM actor_finance_access WHERE id='finance'").run();try{assert.equal((await restored(childSendPath)).status,403);assert.equal((await restored(childSendPath+'/retry',{})).status,403);}finally{await putRow('actor_finance_access',image.tables.actor_finance_access.find(row=>row.id==='finance'));}
+  assert.equal((await restored(childSendPath,undefined,'client')).status,403);const claimed=image.tables.time_details.find(row=>row.id===childInput.approved.id);await DB.prepare('UPDATE time_details SET invoice_ref=NULL WHERE id=?').bind(claimed.id).run();try{assert.ok((await restored(childSendPath+'/retry',{})).status>=400);}finally{await DB.prepare('UPDATE time_details SET invoice_ref=? WHERE id=?').bind(claimed.invoice_ref,claimed.id).run();}assert.equal(provider.requests.length,before);await verify();
+ });
 
  await t.test('restored frozen schedule keeps distinct identities, original receipts and exact source reservations',async()=>{
   const before=provider.requests.length;assert.deepEqual(await data(await restored(reservedInput.path)),reserved);assert.deepEqual((await data(await restored(reservedInput.path+'/requests/'+reservedInput.body.requestId))).schedule,reserved);assert.deepEqual(await data(await restored(reservedInput.path,reservedInput.body)),reserved);assert.equal(provider.requests.length,before,'receipt recovery cannot invoke the provider');assert.equal((await DB.prepare('SELECT invoice_ref FROM time_details WHERE id=?').bind(reservedInput.approved.id).first()).invoice_ref,'workspace:'+reservedInput.invoice.id);assert.notEqual(reserved.parts[0].id,reserved.parts[1].id);await verify();
@@ -258,6 +294,15 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  await t.test('explicit retry of an unexecuted operation retains its first attempt and original provider key',async()=>{
   const original=provider.requests.findLast(p=>p.method==='POST'&&p.path==='/v1/invoices/'+retryable.creation.stripeInvoiceId+'/finalize'),before=posts().length,result=await data(await restored(retryable.path+'/retry',{}));assert.equal(result.state,'DONE');assert.equal(posts().length,before+1);assert.equal(posts().at(-1).key,original.key);assert.equal((await DB.prepare('SELECT attempt_at FROM stripe_invoice_issuance_operations WHERE id=?').bind(retryable.row.id).first()).attempt_at,retryable.row.attempt_at);
  });
+ await t.test('restored signed send event recovers a lost child acknowledgement without another Send or financial mutation',async()=>{
+  const before=posts().length,parent=await DB.prepare('SELECT * FROM invoice_drafts WHERE id=?').bind(childInput.invoice.id).first(),claimed=await DB.prepare('SELECT * FROM time_details WHERE id=?').bind(childInput.approved.id).first();
+  const checked=await data(await restored(childSendPath+'/reconcile',{}));assert.equal(checked.state,'DONE');assert.equal(checked.matchingSentEventId,sendEvent.id);assert.equal((await DB.prepare('SELECT state FROM stripe_event_inbox WHERE id=?').bind(pendingSendInbox.id).first()).state,'PENDING');assert.equal(posts().length,before);
+  assert.equal((await data(await restored('stripe/events/'+sendEvent.id+'/retry',{}))).state,'APPLIED');const recovered=await data(await restored(childSendPath));assert.equal(recovered.state,'DONE');assert.equal(recovered.matchingSentEventId,sendEvent.id);assert.equal(recovered.providerAcknowledgedAt,null);assert.equal(recovered.attemptAt,childSendRow.attempt_at);assert.equal(recovered.emailDelivery,'TEST_MODE_NO_EMAIL');
+  const count=(await DB.prepare('SELECT COUNT(*) n FROM stripe_invoice_delivery_events WHERE operation_id=?').bind(childSend.id).first()).n;assert.equal((await data(await restored('stripe/events/'+sendEvent.id+'/retry',{}))).state,'APPLIED');assert.equal((await DB.prepare('SELECT COUNT(*) n FROM stripe_invoice_delivery_events WHERE operation_id=?').bind(childSend.id).first()).n,count);assert.equal(posts().length,before);assert.equal(provider.sendEffects.filter(row=>row.invoiceId===deposit.stripeInvoiceId).length,1);assert.deepEqual(await DB.prepare('SELECT * FROM invoice_drafts WHERE id=?').bind(childInput.invoice.id).first(),parent);assert.deepEqual(await DB.prepare('SELECT * FROM time_details WHERE id=?').bind(childInput.approved.id).first(),claimed);
+ });
+ await t.test('restored send retry retains the original key and first attempt after the preserved lease is released',async()=>{
+  await DB.prepare('UPDATE stripe_invoice_delivery_operations SET lease_token=NULL,lease_until=0 WHERE id=?').bind(leasedSend.id).run();const original=provider.requests.find(row=>row.method==='POST'&&row.path==='/v1/invoices/'+leasedSend.stripeInvoiceId+'/send'),before=posts().length;assert.ok(original);const result=await data(await restored(leasedSendPath+'/retry',{}));assert.equal(result.state,'DONE');assert.equal(result.id,leasedSend.id);assert.equal(result.attemptAt,leasedSendRow.attempt_at);assert.equal(posts().length,before+1);assert.equal(posts().at(-1).key,original.key);assert.deepEqual(posts().at(-1).params,original.params);assert.equal(provider.sendEffects.filter(row=>row.invoiceId===leasedSend.stripeInvoiceId).length,1);
+ });
  await t.test('target fault injection and subsequent writes leave the source checkpoint unchanged',async()=>{await source.open();try{assert.deepEqual(await databaseImage(source.env.DB),image);await verifyObjects(source.env.FILES,objects);}finally{await source.dispose();}});
 });
 
@@ -272,7 +317,7 @@ test('native isolated recovery preserves an ingested source package, original by
  await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name) VALUES('canonical-project','pilot-org','canonical-client','Site')").run();
  const objects=[];for(const[source,pins]of Object.entries(report.sourceFiles))for(const pin of pins)objects.push({source,path:pin.path,bytes:new Uint8Array(await readFile(join(fixture.root,source,pin.path)))});
  const input={requestId:crypto.randomUUID(),report,objects,snapshot:{clientRevision:0,projectRevision:0}},receipt=await applySourcePilot(source.env,actor,input),before=await readSourcePilot(source.env,actor,receipt.id),image=await databaseImage(DB),objectImage=await captureObjects(source.env.FILES);
- assert.equal(Object.keys(image.tables).length,57);assert.equal(image.schema.filter(s=>s.type==='index').length,43);
+ assert.equal(Object.keys(image.tables).length,60);assert.equal(image.schema.filter(s=>s.type==='index').length,45);
  assert.equal(image.tables.source_pilot_records.length,19);assert.equal(image.tables.source_pilot_objects.length,objects.length);
  const target=await importDatabase(join(root,'restored'),await exportDatabase(source));t.after(()=>target.dispose());await restoreObjects(target.env.FILES,objectImage);
  assert.deepEqual(await databaseImage(target.env.DB),image);assert.deepEqual(await readSourcePilot(target.env,actor,receipt.id),before);

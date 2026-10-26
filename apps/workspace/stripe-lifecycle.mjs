@@ -1,3 +1,4 @@
+import {observeInvoiceDeliverySent,deliveryInboxProof} from './stripe-delivery.mjs';
 import {observeStripePartNative,stripePartInboxProof} from './stripe-part-lifecycle.mjs';
 import {hasFinance} from './time-details.mjs';
 import {stripeProviderRead,stripeInvoiceLines,stripeInvoiceContentsMatch} from './stripe-drafts.mjs';
@@ -45,8 +46,10 @@ export async function stripeWebhook(request,env,json,fetcher=fetch,ctx){
  const resource=target(event);if(!resource)return json({received:true},200);
  if(resource.kind==='invoice'&&event.data.object.customer!=null){const known=await env.DB.prepare('SELECT customer_id FROM stripe_invoice_operations WHERE organization_id=? AND account_id=? AND stripe_invoice_id=? UNION ALL SELECT customer_id FROM stripe_part_operations WHERE organization_id=? AND account_id=? AND stripe_invoice_id=? LIMIT 1').bind(c.org,c.account,resource.id,c.org,c.account,resource.id).first();if(known&&event.data.object.customer!==known.customer_id)throw 400;}
  const hash=await digest(JSON.stringify(canonical(event))),now=Date.now();sameConfig(env,c);
- await env.DB.prepare("INSERT INTO stripe_event_inbox(id,organization_id,account_id,event_id,event_type,target_kind,target_id,content_hash,api_version,stripe_created_at,received_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(account_id,event_id) DO NOTHING")
-  .bind(crypto.randomUUID(),c.org,c.account,event.id,event.type,resource.kind,resource.id,hash,event.api_version??null,event.created,now,now).run();
+ const sendEvidence=event.type==='invoice.sent'?JSON.stringify({requestId:event.request?.id??null,requestKey:event.request?.idempotency_key??null,customerId:event.data.object.customer,primaryEmail:event.data.object.customer_email??null,livemode:event.data.object.livemode,metadata:event.data.object.metadata??null}):null;
+ if(sendEvidence!==null&&(new TextEncoder().encode(sendEvidence).length>16384||event.request!=null&&(typeof event.request!=='object'||event.request.id!=null&&(typeof event.request.id!=='string'||event.request.id.length>255)||event.request.idempotency_key!=null&&(typeof event.request.idempotency_key!=='string'||event.request.idempotency_key.length>255))))throw 400;
+ await env.DB.prepare("INSERT INTO stripe_event_inbox(id,organization_id,account_id,event_id,event_type,target_kind,target_id,content_hash,api_version,stripe_created_at,received_at,updated_at,send_evidence_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(account_id,event_id) DO NOTHING")
+  .bind(crypto.randomUUID(),c.org,c.account,event.id,event.type,resource.kind,resource.id,hash,event.api_version??null,event.created,now,now,sendEvidence).run();
  const row=await env.DB.prepare('SELECT * FROM stripe_event_inbox WHERE organization_id=? AND account_id=? AND event_id=?').bind(c.org,c.account,event.id).first();if(!row)throw 500;if(row.content_hash!==hash)throw 409;
  if(ctx?.waitUntil&&!['APPLIED','IGNORED','REVIEW_REQUIRED'].includes(row.state))ctx.waitUntil(processEvent(env,fetcher,row.id,'WEBHOOK').catch(()=>{}));
  return json({received:true},202);
@@ -150,6 +153,7 @@ async function processEvent(env,fetcher,inboxId,source,actor=null,force=false){
  const c=config(env),db=env.DB;if(actor&&(actor.organization_id!==c.org||!await hasFinance(db,actor)))throw 403;const lease=crypto.randomUUID();
  const row=await db.prepare(`UPDATE stripe_event_inbox SET state='PROCESSING',lease_token=?,lease_until=?,attempts=attempts+1,next_attempt_at=0,updated_at=? WHERE id=? AND organization_id=? AND account_id=? AND state IN ('PENDING','RETRY','PROCESSING'${force?",'REVIEW_REQUIRED'":''}) AND lease_until<=${clock}${force?'':` AND next_attempt_at<=${clock}`} ${actor?'AND '+authority:''} RETURNING *`).bind(lease,Date.now()+leaseMs,Date.now(),inboxId,c.org,c.account,...(actor?[actor.id,c.org]:[])).first();if(!row)return;
  try{
+  const delivery=await observeInvoiceDeliverySent(env,row);
   const invoices=await eventInvoices(env,fetcher,c,row),owned=[],ownedParts=[];for(const nativeId of invoices){const child=await observeStripePartNative(env,fetcher,nativeId,{actor,inbox:row,source});if(child){ownedParts.push(child.partId);continue;}let op=await opFor(env,c,nativeId,true);if(!op){
     const read=reader(env,fetcher);let remote;try{remote=await read.get('invoices/'+nativeId);}catch(e){if(e.code==='PROVIDER_NOT_FOUND')continue;throw e;}
     if(remote.object!=='invoice'||remote.id!==nativeId||remote.livemode!==false)mismatch();const pendingChild=await observeStripePartNative(env,fetcher,nativeId,{actor,inbox:row,source,remote});if(pendingChild){ownedParts.push(pendingChild.partId);continue;}const operationId=remote.metadata?.ashbi_operation,invoiceId=remote.metadata?.ashbi_invoice;
@@ -159,10 +163,11 @@ async function processEvent(env,fetcher,inboxId,source,actor=null,force=false){
   const childProofs=[];for(const partId of ownedParts)childProofs.push(await stripePartInboxProof(env,partId,row.id,actor));
   sameConfig(env,c);const partRequired=ownedParts.length?` AND NOT EXISTS(SELECT 1 FROM json_each(?) expected WHERE NOT EXISTS(SELECT 1 FROM stripe_part_lifecycle_events e WHERE e.inbox_id=stripe_event_inbox.id AND e.organization_id=stripe_event_inbox.organization_id AND e.part_id=expected.value))`:'';const required=owned.length?` AND NOT EXISTS(SELECT 1 FROM json_each(?) expected WHERE NOT EXISTS(SELECT 1 FROM stripe_lifecycle_events e WHERE e.inbox_id=stripe_event_inbox.id AND e.organization_id=stripe_event_inbox.organization_id AND e.invoice_id=expected.value))`:'';
   const terminal=db.prepare(`UPDATE stripe_event_inbox SET state=?,invoice_id=?,last_error=NULL,lease_token=NULL,lease_until=0,updated_at=? WHERE id=? AND organization_id=? AND lease_token=? AND lease_until>${clock}${childProofs.length?" AND state='PROCESSING'":''}${required}${partRequired}${actor?' AND '+authority:''} RETURNING id`).bind(owned.length||ownedParts.length?'APPLIED':'IGNORED',owned.length===1&&!ownedParts.length?owned[0]:null,Date.now(),row.id,c.org,lease,...(owned.length?[JSON.stringify(owned)]:[]),...(ownedParts.length?[JSON.stringify(ownedParts)]:[]),...(actor?[actor.id,c.org]:[]));
-  if(childProofs.length){
+  const deliveryProofs=delivery?deliveryInboxProof(delivery):[];
+  if(childProofs.length||deliveryProofs.length){
    // Each owner proof stays below D1's per-statement parameter bound. The
    // NOT NULL fence and terminal transition share one atomic batch snapshot.
-   const checks=childProofs.map(proof=>db.prepare(`UPDATE stripe_event_inbox SET content_hash=CASE WHEN (${proof.sql}) THEN content_hash ELSE NULL END WHERE id=? AND organization_id=? AND lease_token=? AND state='PROCESSING' AND lease_until>${clock} RETURNING id`).bind(...proof.args,row.id,c.org,lease));
+   const checks=[...childProofs,...deliveryProofs].map(proof=>db.prepare(`UPDATE stripe_event_inbox SET content_hash=CASE WHEN (${proof.sql}) THEN content_hash ELSE NULL END WHERE id=? AND organization_id=? AND lease_token=? AND state='PROCESSING' AND lease_until>${clock} RETURNING id`).bind(...proof.args,row.id,c.org,lease));
    let results;try{results=await db.batch([...checks,terminal]);}catch{if(actor&&!await hasFinance(db,actor))throw 403;throw 409;}
    if(results.some(result=>!result.results.length))throw 409;
   }else if(!await terminal.first())throw 409;
