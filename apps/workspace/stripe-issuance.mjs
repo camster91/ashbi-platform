@@ -1,3 +1,4 @@
+import {stripeCustomerMatches} from './stripe-customer-identity.mjs';
 import {hasFinance} from './time-details.mjs';
 import {invoiceClaimGuard} from './invoices.mjs';
 import {stripeProviderRead,stripeFinalizeInvoice,stripeInvoiceLines,stripeInvoiceContentsMatch,stripeDraftContentsMatch} from './stripe-drafts.mjs';
@@ -26,7 +27,7 @@ async function local(env,actor,invoiceId){
 async function remote(env,actor,proof,fetcher,{draft=false}={}){
  const account=configured(env,actor),value=await stripeProviderRead(env,fetcher,'account');if(value.object!=='account'||value.id!==account||account!==proof.op.account_id)throw 409;
  const customer=await stripeProviderRead(env,fetcher,'customers/'+proof.op.customer_id),expected=proof.plan.customer;
- if(customer.object!=='customer'||customer.id!==expected.id||customer.livemode!==false||customer.deleted||customer.name!==expected.name||customer.email!==expected.email||(customer.currency??null)!==expected.currency)throw 409;
+ if(customer.object!=='customer'||customer.id!==expected.id||customer.livemode!==false||customer.deleted||!stripeCustomerMatches(customer,expected,proof.plan.currency))throw 409;
  const invoice=await stripeProviderRead(env,fetcher,'invoices/'+proof.op.stripe_invoice_id),lines=await stripeInvoiceLines(env,fetcher,proof.op.stripe_invoice_id,proof.plan.lines.length);
  if(draft){if(!stripeDraftContentsMatch(invoice,lines,proof.op,proof.plan))throw 409;}
  else{stripeInvoiceIdentity(invoice,proof.op,proof.plan);if(invoice.auto_advance!==false||!stripeInvoiceContentsMatch(invoice,lines,proof.op,proof.plan))throw 409;}

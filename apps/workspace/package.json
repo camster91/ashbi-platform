@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "pretest": "node build-contract-fonts.mjs",
-    "test": "node --test stripe-transport-runtime.test.mjs source-statuses.test.mjs auth.test.mjs test.mjs files.test.mjs time-details.test.mjs invoice-drafts.test.mjs invoice-recovery.test.mjs commercial.test.mjs proposal-reviews.test.mjs stripe-drafts.test.mjs stripe-org.test.mjs stripe-recovery.test.mjs stripe-lifecycle.test.mjs dashboard.test.mjs dashboard-reviews.test.mjs dashboard-invoices.test.mjs contract-publications.test.mjs contract-signatures.test.mjs contract-pdf.test.mjs stripe-issuance.test.mjs workspace-journey.test.mjs browser-groups.test.mjs pilot-source-formats.test.mjs pilot-reconcile.test.mjs source-pilot.test.mjs",
+    "test": "node --test stripe-transport-runtime.test.mjs stripe-customer-currency.test.mjs source-statuses.test.mjs auth.test.mjs test.mjs files.test.mjs time-details.test.mjs invoice-drafts.test.mjs invoice-recovery.test.mjs commercial.test.mjs proposal-reviews.test.mjs stripe-drafts.test.mjs stripe-org.test.mjs stripe-recovery.test.mjs stripe-lifecycle.test.mjs dashboard.test.mjs dashboard-reviews.test.mjs dashboard-invoices.test.mjs contract-publications.test.mjs contract-signatures.test.mjs contract-pdf.test.mjs stripe-issuance.test.mjs workspace-journey.test.mjs browser-groups.test.mjs pilot-source-formats.test.mjs pilot-reconcile.test.mjs source-pilot.test.mjs",
     "prebuild": "node build-contract-fonts.mjs",
     "build": "wrangler deploy --dry-run --outdir dist",
     "predev": "node build-contract-fonts.mjs",
@@ -12,7 +12,7 @@
     "pretest:browser": "node build-contract-fonts.mjs",
     "test:browser": "node browser.test.mjs",
     "pretest:invoice-built": "node build-contract-fonts.mjs",
-    "test:invoice-built": "node --test invoice-drafts-built.test.mjs invoice-recovery-built.test.mjs commercial-built.test.mjs proposal-reviews-built.test.mjs stripe-drafts-built.test.mjs stripe-org-built.test.mjs stripe-recovery-built.test.mjs stripe-lifecycle-built.test.mjs dashboard-built.test.mjs dashboard-reviews-built.test.mjs dashboard-invoices-built.test.mjs contract-publications-built.test.mjs contract-signatures-built.test.mjs contract-pdf-built.test.mjs stripe-issuance-built.test.mjs workspace-journey-built.test.mjs source-history-built.test.mjs",
+    "test:invoice-built": "node --test invoice-drafts-built.test.mjs invoice-recovery-built.test.mjs commercial-built.test.mjs proposal-reviews-built.test.mjs stripe-drafts-built.test.mjs stripe-org-built.test.mjs stripe-recovery-built.test.mjs stripe-lifecycle-built.test.mjs dashboard-built.test.mjs dashboard-reviews-built.test.mjs dashboard-invoices-built.test.mjs contract-publications-built.test.mjs contract-signatures-built.test.mjs contract-pdf-built.test.mjs stripe-issuance-built.test.mjs stripe-customer-currency-built.test.mjs workspace-journey-built.test.mjs source-history-built.test.mjs",
     "pretest:recovery": "node build-contract-fonts.mjs",
     "test:recovery": "node --test recovery.test.mjs",
     "pretest:recovery-built": "node build-contract-fonts.mjs",

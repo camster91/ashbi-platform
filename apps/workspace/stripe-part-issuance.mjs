@@ -1,3 +1,4 @@
+import {stripeCustomerMatches} from './stripe-customer-identity.mjs';
 import {hasFinance} from './time-details.mjs';
 import {loadPartDraft,partDraftGuard,partDraftMappingGuard} from './stripe-part-drafts.mjs';
 
@@ -59,7 +60,7 @@ async function finalProof(db,actor,loaded,services,{strict=false}={}){
 async function present(db,actor,invoiceId,partId,services){const loaded=await load(db,actor,invoiceId,partId,services);if(!loaded.saved)throw 404;const value=dto(loaded.saved.row);await finalProof(db,actor,loaded,services);return value;}
 async function remote(env,actor,context,services,config,{draft=false}={}){
  const op=context.op,plan=JSON.parse(op.plan_json);if(config.accountId!==op.account_id)throw 409;
- const customer=await services.customer(env,op.customer_id);if(json(customer)!==json(plan.customer))throw 409;
+ const customer=await services.customer(env,op.customer_id);if(!stripeCustomerMatches(customer,plan.customer,plan.currency))throw 409;
  const value=await services.read(env,'invoices/'+op.stripe_invoice_id),lines=await services.lines(env,op.stripe_invoice_id,plan.lines.length);
  if(draft){services.baseMatches(value,op,plan);if(!services.exact(value,lines,op,plan))throw 409;}
  else{services.finalIdentity(value,op,plan);if(!services.finalExact(value,lines,op,plan))throw 409;}

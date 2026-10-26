@@ -1,3 +1,4 @@
+import {stripeCustomerMatches} from './stripe-customer-identity.mjs';
 import {hasFinance} from './time-details.mjs';
 
 const authority="EXISTS(SELECT 1 FROM actors a JOIN actor_finance_access f ON f.id=a.id AND f.organization_id=a.organization_id WHERE a.id=? AND a.organization_id=? AND a.active=1 AND a.role='staff')";
@@ -85,7 +86,7 @@ async function prepare(env,actor,invoiceId,partId,body,services){
  if(prior.state==='SAVED')throw 409;
  const configured=configuration(env,actor,services),plan=JSON.parse(part.plan_json);
  if(saved.row.state!=='FROZEN'||saved.row.revision!==body.revision||body.revision!==0||plan.fingerprint!==body.fingerprint||plan.accountId!==configured.accountId||plan.dueAt*1000<=Date.now())throw 409;
- const providerCustomer=await services.customer(env,plan.customer.id);if(json(providerCustomer)!==json(plan.customer))throw 409;
+ const providerCustomer=await services.customer(env,plan.customer.id);if(!stripeCustomerMatches(providerCustomer,plan.customer,plan.currency))throw 409;
  ({saved,part,op}=await load(db,actor,invoiceId,partId,services));if(op){if(op.request_key===key&&op.request_fingerprint===requestHash)return {op,status:200};throw 409;}
  const now=Date.now(),token=crypto.randomUUID(),r=saved.row;
  op={id:crypto.randomUUID(),organization_id:actor.organization_id,invoice_id:invoiceId,schedule_id:r.id,part_id:partId,kind:part.kind,mapping_id:plan.mappingId,account_id:plan.accountId,customer_id:plan.customer.id,actor_id:actor.id,reason:why,request_key:key,request_fingerprint:requestHash,plan_json:part.plan_json,plan_hash:part.plan_hash,activation_at:r.activated_at??now,state:'PENDING',stage:'CREATE',stripe_invoice_id:null,create_attempt_at:null,lines_attempt_at:null,last_error:null,revision:0,created_at:now,updated_at:now,lease_token:null,lease_until:0,write_token:token};
@@ -129,7 +130,7 @@ async function execute(env,actor,original,services,{adoption=null,eventReason=nu
  if(!locked){await allowed(db,actor);return (await load(db,actor,original.invoice_id,original.part_id,services)).op;}
  let op=locked;const plan=JSON.parse(op.plan_json);
  try{
-  const c=await services.customer(env,op.customer_id);if(json(c)!==json(plan.customer))throw services.error('PROVIDER_MISMATCH');
+  const c=await services.customer(env,op.customer_id);if(!stripeCustomerMatches(c,plan.customer,plan.currency))throw services.error('PROVIDER_MISMATCH');
   let remote;
   if(adoption){remote=await services.read(env,'invoices/'+adoption);services.baseMatches(remote,op,plan);if(op.stripe_invoice_id&&op.stripe_invoice_id!==adoption)throw 409;await prePost(env,actor,op,lease,services,configured);op=await change(env,actor,op,lease,{state:'PENDING',stripe_invoice_id:adoption,stage:'LINES',last_error:null},'ADOPT',services,{authorize:true,eventReason});}
   if(!op.stripe_invoice_id){
