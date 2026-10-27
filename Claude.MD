@@ -505,7 +505,7 @@ agency-hub/
 │   ├── package.json
 │   └── vite.config.js
 ├── package.json
-├── ecosystem.config.js
+├── ecosystem.config.cjs
 ├── .env.example
 └── CLAUDE.md
 ```
@@ -652,7 +652,7 @@ npm run build:all        # Build everything
 
 # Production
 npm start                # Start production server
-pm2 start ecosystem.config.js
+pm2 start ecosystem.config.cjs
 
 # Testing
 npm test
