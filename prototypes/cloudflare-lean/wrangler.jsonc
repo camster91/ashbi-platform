@@ -1,0 +1,14 @@
+{
+  "name": "ashbi-lean-local-prototype",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-07-30",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [],
+  "vars": { "LOCAL_PROTOTYPE": "true" },
+  "d1_databases": [{
+    "binding": "DB", "database_name": "ashbi-lean-local-prototype",
+    "database_id": "00000000-0000-0000-0000-000000000000",
+    "migrations_dir": "migrations", "remote": false
+  }]
+}

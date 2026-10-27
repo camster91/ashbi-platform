@@ -1,0 +1,14 @@
+{
+  "fontTools": "4.61.1",
+  "axes": {
+    "wght": 400
+  },
+  "source": "cjk-variable-source.json",
+  "output": "fonts/AshbiCJK-Regular.ttf",
+  "size": 21659548,
+  "sha256": "5ef850c47f94eb8879e955f9c0bd8bd86997bd2b99c78ea7ef2b96b3aeae9e73",
+  "nameChange": "Ashbi CJK Probe; copyright/license retained; derived static TrueType, no variable axes",
+  "glyphCount": 65535,
+  "hasFvar": false,
+  "hasGlyf": true
+}

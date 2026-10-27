@@ -1,1 +1,4 @@
 *.sh text eol=lf
+apps/workspace/contract-fonts/*.ttf binary
+# Preserve upstream license bytes for checksum verification on every host.
+apps/workspace/contract-fonts/*-OFL.txt -text whitespace=-blank-at-eol
