@@ -2,6 +2,12 @@
 
 23 October 2026. Owner direction and execution order: [#565](https://github.com/camster91/ashbi-platform/issues/565), [plan](../tasks/plan.md), dependency audit #686. This is a source inventory, not permission to delete customer records.
 
+27 October 2026: at the owner's explicit request, all 54 remaining issues were
+closed as not planned and all five open pull requests were closed unmerged,
+including the previously held #684. The issue references below preserve the
+historical plan; their closure does not establish implementation, deployment,
+acceptance or remediation. The route removal below is local source work.
+
 | Area | Disposition | Evidence and next action |
 | --- | --- | --- |
 | Client/project/task UI and services | Keep/adapt | Existing pages, routes and validation; #690/#691 port one workflow at a time. |
@@ -9,8 +15,8 @@
 | Contracts/proposals and signing records | Keep/adapt | Existing public/staff routes and evidence hashes; #280/#380 own the complete lifecycle and evidence decision. |
 | Invoices and Stripe | Keep/adapt | Current service creates Checkout sessions; #693/#694 add native Stripe invoice drafting/status. Preserve legacy billing and locks. |
 | Client portal and deliberate approvals | Keep/adapt | Restricted project/file/document/invoice access stays under #286/#417; client privacy is not optional. |
-| Singular legacy timer route | Remove in #687 | `src/routes/time-session.routes.js` has no application/test consumer. Only references found are in historical `scripts/_legacy/fix-3-missing-imports.py`. The mounted route is `src/routes/time-sessions.routes.js`. |
-| Legacy landing route | Remove in #687 | `src/routes/landing.routes.js` has no application/test consumer, only the same legacy generator reference. Its `prisma.lead` model is absent; do not mount or repair it as cleanup. |
+| Singular legacy timer route | Removed from source in #687 cleanup | Deleted `src/routes/time-session.routes.js` after rechecking consumers against main `8dc9c45` on 27 October 2026. The mounted module remains `src/routes/time-sessions.routes.js`; persisted sessions and time entries are unchanged. See removal evidence below. |
+| Legacy landing route | Removed from source in #687 cleanup | Deleted `src/routes/landing.routes.js` after the same consumer check. Its `prisma.lead` model is absent. The mounted `src/routes/leads.routes.js` remains unchanged. See removal evidence below. |
 | Capacitor packages | Remove after package audit #688 | Six dependencies in web/package.json, no source consumers found in the earlier proposal. Recheck all configs/scripts; preserve browser push. |
 | Duplicate timer UI/APIs | Consolidate after #692 passes | Header and project controls must use one persisted session before any active handler is removed. |
 | Embedded AI, bots, semantic search, MCP expansion | Defer/retire after dependency map | #561 is deferred. Do not delete security/redaction tests or existing OAuth data simply because the new milestone excludes agents. Credential exposure #382 still requires remediation. |
@@ -21,6 +27,29 @@
 | PostgreSQL/Redis/BullMQ/local files | Replace only after prototype | #689 must demonstrate retained guarantees on D1/R2/bounded jobs before any runtime or table is dropped. |
 | WordPress bridge | Separate work, not lean core | PR #682 proposes a restoration, so the earlier proposal's no-mounted-bridge claim is branch-specific. Leave PR and stored site data untouched. |
 | Legacy tests | Keep meaningful guarantees | No deletion based on file count/lines/name. Consumer removal precedes test retirement; preserve unique security, money, accessibility and recovery assertions. |
+
+## Legacy route removal evidence (#687)
+
+The application registers explicit imports through `src/domains/`; it does not
+discover route files dynamically. A repository-wide search for
+`time-session.routes` and `landing.routes` found no application, test, build or
+deployment consumer. The only executable-text references are in the historical
+one-off `scripts/_legacy/fix-3-missing-imports.py`. That script targets a hardcoded
+old workspace and edits existing files with `read_text()`; it is not invoked by
+package scripts or CI and cannot recreate the deleted modules. It is retained as
+historical evidence, not a supported maintenance command.
+
+`registerClientWorkspaceRoutes` still mounts the plural `time-sessions` module at
+`/api/time-sessions`. `registerCommercialRevenueRoutes` still mounts `leads` at
+`/api/leads`. Existing route-table, domain registration and access-matrix tests
+verify these active contracts without updating their snapshots or allowlists.
+The timer start schema is also used by `time-tracking.routes.js` and is retained.
+
+No schema, stored data, frontend, package, deployment or release setting changes
+are part of this removal. Before commit, restore the two files from `HEAD` to
+undo it; after commit, revert the cleanup commit. Restoring these unmounted files
+requires no database repair or migration. Source cleanup alone is not deployment
+or target-environment acceptance.
 
 ## Backlog dispositions
 
