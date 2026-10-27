@@ -6,7 +6,7 @@ import { api } from '../lib/api';
 import { Button, EmptyState, KanbanPageSkeleton } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import CreateProjectModal from '../components/CreateProjectModal';
-import ProjectBoard from '../components/projects/ProjectBoard';
+import ProjectBoard from '../components/projects/ProjectBoard.jsx';
 import ProjectListView from '../components/projects/ProjectListView';
 import ProjectCalendarView from '../components/projects/ProjectCalendarView';
 import { matchesOwner, projectSummary, teamOwners } from '../components/projects/projectBoard';
