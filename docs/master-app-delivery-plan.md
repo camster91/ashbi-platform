@@ -1,6 +1,12 @@
 # Ashbi master-app delivery plan
 
-## Current status entrypoint — October 17, 2026
+> **Planning direction — 23 October 2026:** The two-person Bonsai/Notion replacement is now scoped in [tasks/plan.md](../tasks/plan.md) and [GitHub #565](https://github.com/camster91/ashbi-platform/issues/565). The Cloudflare target is unverified; the runtime/deployment evidence below remains historical evidence for the existing application. No production cutover or release-setting change is authorized by this planning update.
+
+## Current delivery direction — 26 October 2026
+
+Use [tasks/plan.md](../tasks/plan.md) for the simple two-person scope and [#565](https://github.com/camster91/ashbi-platform/issues/565) for execution. The [current source checkpoint](product-status.md#current-cloudflare-source-checkpoint--26-october-2026) and [current acceptance matrix](replacement-readiness-matrix.md#current-two-person-workspace-acceptance--26-october-2026) distinguish draft Cloudflare source evidence from hosted/provider/company acceptance and identify remaining implementation work. The dated legacy delivery ledger below is retained as evidence; its wider SaaS, AI, chat and calls backlog is not the current build queue. It grants no new release, migration or source-retirement authority.
+
+## Historical status entrypoint — October 17, 2026
 
 This is the single current delivery/status entrypoint. [GitHub #565](https://github.com/camster91/ashbi-platform/issues/565) is the actionable execution checklist; the linked roadmap and dated implementation plans explain scope and acceptance, not competing build queues.
 

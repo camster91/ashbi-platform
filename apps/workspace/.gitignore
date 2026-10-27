@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars*
+contract-font-assets.generated.mjs
+contract-font-assets.*.tmp

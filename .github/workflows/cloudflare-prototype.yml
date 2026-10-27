@@ -1,0 +1,36 @@
+name: Cloudflare local prototype
+
+on:
+  pull_request:
+    paths:
+      - 'prototypes/cloudflare-lean/**'
+      - '.github/workflows/cloudflare-prototype.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  local-proof:
+    name: Local Worker and D1 integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CI: true
+      WRANGLER_SEND_METRICS: 'false'
+    defaults:
+      run:
+        working-directory: prototypes/cloudflare-lean
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+          package-manager-cache: false
+      - name: Install locked prototype dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Exercise synthetic local persistence and isolation
+        run: npm test
+      - name: Build without publishing
+        run: npm run build

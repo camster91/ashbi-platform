@@ -1,0 +1,234 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile,readdir,mkdtemp,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {Miniflare} from 'miniflare';
+import {generateKeyPair,SignJWT} from 'jose';
+const {createWorker}=await import(process.env.WORKSPACE_TEST_BUILT_WORKER?'./dist/worker.js':'./worker.mjs');
+import {makePilotFixture} from './pilot-source-fixture.mjs';
+import {reconcilePilot} from './pilot-reconcile.mjs';
+import {applySourcePilot,readSourcePilot,readSourceObject} from './source-pilot.mjs';
+
+let material;
+async function sourceMaterial(){
+ return material??=Promise.resolve().then(async()=>{const fixture=await makePilotFixture(await mkdtemp(join(tmpdir(),'source-pilot-test-'))),report=await reconcilePilot(fixture.root,fixture.mapping),objects=[];for(const[source,entries]of Object.entries(report.sourceFiles))for(const entry of entries)objects.push({source,path:entry.path,bytes:new Uint8Array(await readFile(join(fixture.root,source,entry.path)))});return {fixture,report,objects};});
+}
+async function setup(t){
+ const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("synthetic fixture")}}',d1Databases:{DB:'source-pilot'},r2Buckets:['FILES'],cf:false});t.after(()=>mf.dispose());
+ const DB=await mf.getD1Database('DB'),FILES=await mf.getR2Bucket('FILES');
+ for(const name of(await readdir(new URL('./migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL('./migrations/'+name,import.meta.url),'utf8');await DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));}
+ const actors={};for(const[id,org,role,client,active]of[['cameron','pilot-org','staff',null,1],['bianca','pilot-org','staff',null,1],['staff','pilot-org','staff',null,1],['client','pilot-org','client','canonical-client',1],['foreign','foreign-org','staff',null,1],['inactive','pilot-org','staff',null,0]]){await DB.prepare('INSERT INTO actors VALUES(?,?,?,?,?,?)').bind(id,id+'@example.invalid',org,role,client,active).run();actors[id]={id,email:id+'@example.invalid',organization_id:org,role,client_id:client,active};}
+ for(const[id,org]of[['cameron','pilot-org'],['foreign','foreign-org'],['inactive','pilot-org']])await DB.prepare('INSERT INTO actor_finance_access VALUES(?,?)').bind(id,org).run();
+ await DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('canonical-client','pilot-org','Existing canonical client'),('other-client','pilot-org','Other client')").run();
+ await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES('canonical-project','pilot-org','canonical-client','Existing canonical project',0)").run();
+ const seeded=await sourceMaterial(),input={requestId:crypto.randomUUID(),report:structuredClone(seeded.report),objects:seeded.objects.map(o=>({...o,bytes:new Uint8Array(o.bytes)})),snapshot:{clientRevision:0,projectRevision:0}},env={DB,FILES};
+ return {DB,FILES,env,actors,input,fixture:seeded.fixture,actor:actors.cameron,apply:(value=input,who=actors.cameron,bindings=env)=>applySourcePilot(bindings,who,value)};
+}
+const rejected=async(action,status)=>assert.rejects(action,error=>error===status||error?.status===status,`Expected ${status}`);
+const count=async(DB,table,where='')=>(await DB.prepare('SELECT COUNT(*) AS n FROM '+table+(where?' WHERE '+where:'')).first()).n;
+async function noPublished(DB){assert.equal(await count(DB,'notes'),0);assert.equal(await count(DB,'tasks'),0);assert.equal(await count(DB,'files',"state='ready'"),0);}
+async function noLiveFinance(DB){for(const table of['time_entries','time_details','invoice_drafts','commercial_drafts','proposal_reviews','contract_publications','stripe_customer_links','stripe_invoice_operations','stripe_invoice_issuance_operations'])assert.equal(await count(DB,table),0,table);}
+const dbHook=(env,before,after)=>({...env,DB:{prepare:sql=>env.DB.prepare(sql),async batch(statements){await before?.();const result=await env.DB.batch(statements);await after?.();return result;}}});
+
+if(!process.env.WORKSPACE_TEST_BUILT_WORKER){
+
+test('source pilot preserves explicit waiting status from pinned original task bytes',async t=>{
+ const f=await setup(t),fixture=await makePilotFixture(await mkdtemp(join(tmpdir(),'source-waiting-test-'))),path=join(fixture.root,'legacy/data/tasks.jsonl'),task=JSON.parse(await readFile(path,'utf8'));
+ task.status='WAITING';await writeFile(path,JSON.stringify(task)+'\n');await fixture.repin({decisions:true});
+ const report=await reconcilePilot(fixture.root,fixture.mapping),objects=[];for(const[source,entries]of Object.entries(report.sourceFiles))for(const entry of entries)objects.push({source,path:entry.path,bytes:new Uint8Array(await readFile(join(fixture.root,source,entry.path)))});
+ await f.apply({...f.input,report,objects});assert.equal((await f.DB.prepare("SELECT status FROM tasks WHERE id='canonical-legacy-task'").first()).status,'waiting');
+ const saved=await readSourcePilot(f.env,f.actor,f.input.requestId);assert.equal(saved.records.find(r=>r.kind==='task').normalized.sourceStatus,'WAITING');
+});
+test('source pilot applies exact private documents, hierarchy, pending task and verified original against existing targets',async t=>{
+ const f=await setup(t),beforeClient=await f.DB.prepare("SELECT * FROM clients WHERE id='canonical-client'").first(),beforeProject=await f.DB.prepare("SELECT * FROM projects WHERE id='canonical-project'").first(),receipt=await f.apply();
+ assert.equal(receipt.id,f.input.requestId);assert.equal(receipt.state,'DONE');assert.equal(receipt.fingerprint,f.input.report.fingerprint);assert.deepEqual(receipt.counts,{sourceRecords:19,mapped:17,held:2});
+ assert.deepEqual(await f.DB.prepare("SELECT * FROM clients WHERE id='canonical-client'").first(),beforeClient);assert.deepEqual(await f.DB.prepare("SELECT * FROM projects WHERE id='canonical-project'").first(),beforeProject);
+ const docs=f.input.report.records.filter(r=>r.kind==='document'&&r.disposition==='MAPPED');assert.equal(docs.length,3);
+ for(const record of docs){const row=await f.DB.prepare('SELECT * FROM notes WHERE id=?').bind(record.canonicalId).first();assert.ok(row);assert.equal(row.text,record.normalized.text);assert.equal(row.client_visible,0);assert.equal(row.project_id,'canonical-project');const position=await f.DB.prepare('SELECT * FROM note_positions WHERE id=?').bind(row.id).first();assert.equal(position.parent_id,record.normalized.parentCanonicalId??null);const history=(await f.DB.prepare('SELECT * FROM note_versions WHERE note_id=?').bind(row.id).all()).results;assert.equal(history.length,1);assert.equal(history[0].text,row.text);assert.equal(history[0].client_visible,0);}
+ const task=await f.DB.prepare("SELECT * FROM tasks WHERE id='canonical-legacy-task'").first();assert.equal(task.status,'todo');assert.equal(task.assignee_id,'bianca');assert.equal(task.client_visible,0);assert.equal(task.title,'Retained launch task');
+ const file=await f.DB.prepare("SELECT * FROM files WHERE id='canonical-legacy-attachment'").first();assert.equal(file.state,'ready');assert.equal(file.client_visible,0);assert.equal(file.size,f.fixture.expected.attachmentBytes.length);assert.equal(file.sha256,f.fixture.expected.attachmentSha256);assert.deepEqual(new Uint8Array(await(await f.FILES.get(file.object_key)).arrayBuffer()),new Uint8Array(f.fixture.expected.attachmentBytes));await noLiveFinance(f.DB);
+});
+test('all source records including held and historical finance are immutable provenance and every source file is readable only through its archive identity',async t=>{
+ const f=await setup(t),receipt=await f.apply(),saved=await readSourcePilot(f.env,f.actor,receipt.id);assert.equal(saved.run.state,'DONE');assert.deepEqual(saved.run.counts,f.input.report.counts);assert.deepEqual(saved.totals,f.input.report.totals);assert.deepEqual(saved.coverage,f.input.report.coverage);assert.deepEqual(saved.sourceFiles,f.input.report.sourceFiles);assert.deepEqual([...saved.records].sort((a,b)=>a.key.localeCompare(b.key)),[...f.input.report.records].sort((a,b)=>a.key.localeCompare(b.key)));
+ assert.equal(await count(f.DB,'source_pilot_records'),19);assert.equal(await count(f.DB,'source_pilot_objects'),f.input.objects.length);
+ for(const object of f.input.objects)assert.deepEqual(await readSourceObject(f.env,f.actor,receipt.id,object.source,object.path),object.bytes);
+ await noLiveFinance(f.DB);
+});
+test('same request replay preserves edited canonical records and adds no versions or archive objects',async t=>{
+ const f=await setup(t),receipt=await f.apply(),objects=(await f.FILES.list()).objects.length;await f.DB.batch([f.DB.prepare("UPDATE notes SET text='Later authorized edit',revision=revision+1 WHERE id='notion-handbook'"),f.DB.prepare("UPDATE tasks SET title='Later task edit',status='doing',assignee_id='cameron',revision=revision+1 WHERE id='canonical-legacy-task'"),f.DB.prepare("UPDATE files SET deleted=1,revision=revision+1 WHERE id='canonical-legacy-attachment'")]);assert.deepEqual(await f.apply(),receipt);assert.equal((await f.DB.prepare("SELECT text FROM notes WHERE id='notion-handbook'").first()).text,'Later authorized edit');assert.equal((await f.DB.prepare("SELECT title FROM tasks WHERE id='canonical-legacy-task'").first()).title,'Later task edit');assert.equal((await f.DB.prepare("SELECT deleted FROM files WHERE id='canonical-legacy-attachment'").first()).deleted,1);assert.equal(await count(f.DB,'note_versions'),3);assert.equal((await f.FILES.list()).objects.length,objects);assert.equal(await count(f.DB,'source_pilot_records'),19);
+});
+test('ordinary staff clients foreign actors inactive actors and revoked finance cannot apply or read source archives',async t=>{
+ const f=await setup(t);for(const name of['staff','client','foreign','inactive'])await rejected(()=>f.apply(f.input,f.actors[name]),name==='foreign'?404:403);await noPublished(f.DB);const receipt=await f.apply();for(const name of['staff','client','foreign','inactive']){await rejected(()=>readSourcePilot(f.env,f.actors[name],receipt.id),name==='foreign'?404:403);await rejected(()=>readSourceObject(f.env,f.actors[name],receipt.id,f.input.objects[0].source,f.input.objects[0].path),name==='foreign'?404:403);}await f.DB.prepare("DELETE FROM actor_finance_access WHERE id='cameron'").run();await rejected(()=>f.apply(),403);await rejected(()=>readSourcePilot(f.env,f.actor,receipt.id),403);
+});
+
+test('a reused request rejects changed report contents and a new request cannot overlap existing source identities',async t=>{
+ const f=await setup(t),receipt=await f.apply(),changed=structuredClone(f.input);changed.report.records.find(r=>r.kind==='document').normalized.text='Changed reviewed payload';await rejected(()=>f.apply(changed),409);await rejected(()=>f.apply({...f.input,requestId:crypto.randomUUID()}),409);assert.deepEqual(await f.apply(),receipt);assert.equal(await count(f.DB,'notes'),3);assert.equal(await count(f.DB,'source_pilot_records'),19);
+});
+test('source inventory requires every exact object once and rejects missing extra duplicate and changed bytes before canonical writes',async t=>{
+ const f=await setup(t);for(const fault of['missing','extra','duplicate','bytes']){const input={...f.input,requestId:crypto.randomUUID(),objects:f.input.objects.map(o=>({...o,bytes:new Uint8Array(o.bytes)}))};if(fault==='missing')input.objects.pop();if(fault==='extra')input.objects.push({source:'notion',path:'unexpected.md',bytes:new Uint8Array([1])});if(fault==='duplicate')input.objects.push(input.objects[0]);if(fault==='bytes')input.objects[0].bytes[0]^=1;await assert.rejects(()=>f.apply(input),error=>[400,409].includes(error),fault);await noPublished(f.DB);}assert.equal(await count(f.DB,'source_pilot_records'),0);
+});
+test('source pilot rejects source visibility broadening and unknown task status rather than guessing canonical behavior',async t=>{
+ const f=await setup(t);for(const fault of['visibility','status']){const input=structuredClone(f.input);input.requestId=crypto.randomUUID();if(fault==='visibility')input.report.records.find(r=>r.kind==='document').normalized.proposedClientVisible=true;else input.report.records.find(r=>r.kind==='task').normalized.sourceStatus='UNRECOGNIZED';await assert.rejects(()=>f.apply(input),error=>[400,409].includes(error));await noPublished(f.DB);}await noLiveFinance(f.DB);
+});
+test('missing stale and reassigned canonical targets are never created overwritten or silently remapped',async t=>{
+ const f=await setup(t);for(const snapshot of[{clientRevision:1,projectRevision:0},{clientRevision:0,projectRevision:1}])await rejected(()=>f.apply({...f.input,requestId:crypto.randomUUID(),snapshot}),409);
+ await f.DB.prepare("UPDATE projects SET client_id='other-client' WHERE id='canonical-project'").run();await rejected(()=>f.apply(),404);await f.DB.prepare("UPDATE projects SET client_id='canonical-client' WHERE id='canonical-project'").run();await f.DB.prepare("DELETE FROM projects WHERE id='canonical-project'").run();await rejected(()=>f.apply(),404);assert.equal(await count(f.DB,'projects'),0);await noPublished(f.DB);
+});
+test('deactivated or nonstaff mapped authors cannot establish canonical ownership or provenance',async t=>{
+ const f=await setup(t);await f.DB.prepare("UPDATE actors SET active=0 WHERE id='bianca'").run();await assert.rejects(()=>f.apply(),error=>[403,409].includes(error));await noPublished(f.DB);await f.DB.prepare("UPDATE actors SET active=1,role='client',client_id='canonical-client' WHERE id='bianca'").run();await assert.rejects(()=>f.apply(),error=>[403,409].includes(error));await noPublished(f.DB);
+});
+test('preexisting target notes tasks or files are conflicts and remain byte-for-byte unchanged',async t=>{
+ for(const kind of ['note','task','file']){const f=await setup(t);let table,id;
+  if(kind==='note'){table='notes';id='notion-handbook';await f.DB.prepare("INSERT INTO notes(id,organization_id,project_id,title,text,client_visible) VALUES('notion-handbook','pilot-org','canonical-project','Existing note','Existing private bytes',0)").run();}
+  if(kind==='task'){table='tasks';id='canonical-legacy-task';await f.DB.prepare("INSERT INTO tasks(id,organization_id,project_id,title,status,client_visible) VALUES('canonical-legacy-task','pilot-org','canonical-project','Existing task','doing',0)").run();}
+  if(kind==='file'){table='files';id='canonical-legacy-attachment';await f.DB.prepare("INSERT INTO files(id,organization_id,project_id,actor_id,name,object_key,size,sha256,state,client_visible,created_at) VALUES('canonical-legacy-attachment','pilot-org','canonical-project','cameron','Existing file','existing-private-original',1,?,'ready',0,1)").bind('0'.repeat(64)).run();}
+  const before=await f.DB.prepare('SELECT * FROM '+table+' WHERE id=?').bind(id).first();await rejected(()=>f.apply(),409);assert.deepEqual(await f.DB.prepare('SELECT * FROM '+table+' WHERE id=?').bind(id).first(),before);assert.equal(await count(f.DB,'notes'),kind==='note'?1:0);assert.equal(await count(f.DB,'tasks'),kind==='task'?1:0);assert.equal(await count(f.DB,'files'),kind==='file'?1:0);assert.equal(await count(f.DB,'source_pilot_records','target_kind IS NOT NULL'),0);
+ }
+});
+const lateCanonicalBatch=(f,change)=>{let prepared=[],fired=false;const bindings={...f.env,DB:{prepare(sql){prepared.push(sql);return f.DB.prepare(sql);},async batch(statements){const queries=prepared;prepared=[];if(!fired&&queries.some(sql=>/INSERT\s+INTO\s+notes\b/i.test(sql))){fired=true;await change();}return f.DB.batch(statements);}}};return {bindings,fired:()=>fired};};
+test('finance revoked inside the canonical commit batch rolls back all published work provenance and DONE state',async t=>{
+ const f=await setup(t),hook=lateCanonicalBatch(f,()=>f.DB.prepare("DELETE FROM actor_finance_access WHERE id='cameron'").run());await rejected(()=>f.apply(f.input,f.actor,hook.bindings),403);assert.equal(hook.fired(),true);await noPublished(f.DB);assert.equal(await count(f.DB,'source_pilot_records','target_kind IS NOT NULL'),0);assert.equal(await count(f.DB,'source_pilot_runs',"state='DONE'"),0);
+});
+test('canonical project reassignment inside the commit batch cannot publish records under another client',async t=>{
+ const f=await setup(t),hook=lateCanonicalBatch(f,()=>f.DB.prepare("UPDATE projects SET client_id='other-client' WHERE id='canonical-project'").run());await assert.rejects(()=>f.apply(f.input,f.actor,hook.bindings),error=>[404,409].includes(error));assert.equal(hook.fired(),true);await noPublished(f.DB);assert.equal(await count(f.DB,'source_pilot_records','target_kind IS NOT NULL'),0);assert.equal(await count(f.DB,'source_pilot_runs',"state='DONE'"),0);
+});
+test('R2 staging failure publishes no canonical records and same-request recovery completes exactly once',async t=>{
+ const f=await setup(t);let puts=0;const bindings={...f.env,FILES:{head:(...a)=>f.FILES.head(...a),get:(...a)=>f.FILES.get(...a),put:async(...args)=>{if(++puts===3)throw Error('Synthetic source stage failure');return f.FILES.put(...args);}}};await rejected(()=>f.apply(f.input,f.actor,bindings),503);await noPublished(f.DB);assert.equal(await count(f.DB,'source_pilot_runs',"state='DONE'"),0);const receipt=await f.apply();assert.equal(receipt.state,'DONE');assert.deepEqual(await f.apply(),receipt);assert.equal(await count(f.DB,'notes'),3);assert.equal(await count(f.DB,'note_versions'),3);assert.equal(await count(f.DB,'tasks'),1);assert.equal(await count(f.DB,'files',"state='ready'"),1);assert.equal(await count(f.DB,'source_pilot_records'),19);
+});
+test('missing or corrupted retained source objects fail reads and DONE replay without silently replacing originals',async t=>{
+ const f=await setup(t),receipt=await f.apply(),source=f.input.objects[0];for(const fault of['missing','corrupt']){let writes=0;const bindings={...f.env,FILES:{head:(...a)=>f.FILES.head(...a),put:async(...a)=>{writes++;return f.FILES.put(...a);},async get(key){const actual=await f.FILES.get(key);if(fault==='missing')return null;const bytes=new Uint8Array(await actual.arrayBuffer());bytes[0]^=1;return {size:actual.size,arrayBuffer:async()=>bytes.buffer};}}};await rejected(()=>readSourceObject(bindings,f.actor,receipt.id,source.source,source.path),503);await rejected(()=>f.apply(f.input,f.actor,bindings),503);assert.equal(writes,0);}const original=await f.DB.prepare("SELECT object_key FROM files WHERE id='canonical-legacy-attachment'").first();await f.FILES.delete(original.object_key);await rejected(()=>f.apply(),503);
+});
+test('source object delivery rechecks current finance and project-client scope after storage I/O',async t=>{
+ for(const fault of['finance','scope']){const f=await setup(t),receipt=await f.apply(),source=f.input.objects[0];let fired=false;const bindings={...f.env,FILES:{head:(...a)=>f.FILES.head(...a),put:(...a)=>f.FILES.put(...a),async get(key){const object=await f.FILES.get(key);if(!fired){fired=true;if(fault==='finance')await f.DB.prepare("DELETE FROM actor_finance_access WHERE id='cameron'").run();else await f.DB.prepare("UPDATE projects SET client_id='other-client' WHERE id='canonical-project'").run();}return object;}}};await rejected(()=>readSourceObject(bindings,f.actor,receipt.id,source.source,source.path),fault==='finance'?403:404);assert.equal(fired,true);}
+});
+test('lost acknowledgement of the canonical D1 commit is recovered by the same immutable receipt without duplicate records',async t=>{
+ const f=await setup(t);let prepared=[],lost=false;const bindings={...f.env,DB:{prepare(sql){prepared.push(sql);return f.DB.prepare(sql);},async batch(statements){const queries=prepared;prepared=[];const result=await f.DB.batch(statements);if(!lost&&queries.some(sql=>/INSERT\s+INTO\s+notes\b/i.test(sql))){lost=true;throw Error('Synthetic lost D1 response after commit');}return result;}}};let returned;try{returned=await f.apply(f.input,f.actor,bindings);}catch(error){assert.ok(error===503||error instanceof Error);}assert.equal(lost,true);const receipt=await f.apply();assert.equal(receipt.state,'DONE');if(returned)assert.deepEqual(returned,receipt);assert.equal(await count(f.DB,'notes'),3);assert.equal(await count(f.DB,'note_versions'),3);assert.equal(await count(f.DB,'source_pilot_records'),19);
+});
+
+test('late mutation of held provenance or pinned object metadata cannot commit canonical records or DONE',async t=>{
+ for(const fault of['held-image','object-metadata','run-fingerprint','missing-run'])await t.test(fault,async child=>{const f=await setup(child),hook=lateCanonicalBatch(f,async()=>{if(fault==='missing-run'){await f.DB.prepare('DELETE FROM source_pilot_objects WHERE run_id=?').bind(f.input.requestId).run();await f.DB.prepare('DELETE FROM source_pilot_records WHERE run_id=?').bind(f.input.requestId).run();await f.DB.prepare('DELETE FROM source_pilot_runs WHERE id=?').bind(f.input.requestId).run();}else if(fault==='held-image')await f.DB.prepare("UPDATE source_pilot_records SET image_json='{}' WHERE run_id=? AND source_key='notion:database.csv'").bind(f.input.requestId).run();else if(fault==='run-fingerprint')await f.DB.prepare('UPDATE source_pilot_runs SET fingerprint=? WHERE id=?').bind('0'.repeat(64),f.input.requestId).run();else await f.DB.prepare('UPDATE source_pilot_objects SET sha256=? WHERE run_id=? AND source=? AND path=?').bind('0'.repeat(64),f.input.requestId,f.input.objects[0].source,f.input.objects[0].path).run();});await assert.rejects(()=>f.apply(f.input,f.actor,hook.bindings),error=>[409,503].includes(error),fault);assert.equal(hook.fired(),true);await noPublished(f.DB);assert.equal(await count(f.DB,'source_pilot_records','target_kind IS NOT NULL'),0);assert.equal(await count(f.DB,'source_pilot_runs',"state='DONE'"),0);});
+});
+test('source record reads discard cached provenance after finance is revoked during the D1 read',async t=>{
+ const f=await setup(t),receipt=await f.apply();let fired=false;
+ const after=async sql=>{if(!fired&&/FROM\s+["`]?source_pilot_records\b/i.test(sql)){fired=true;await f.DB.prepare("DELETE FROM actor_finance_access WHERE id='cameron'").run();}};
+ const wrap=(statement,sql)=>new Proxy(statement,{get(target,key){if(key==='bind')return(...values)=>wrap(target.bind(...values),sql);if(key==='all')return async(...args)=>{const result=await target.all(...args);await after(sql);return result;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ const bindings={...f.env,DB:{prepare:sql=>wrap(f.DB.prepare(sql),sql),batch:statements=>f.DB.batch(statements)}};
+ await rejected(()=>readSourcePilot(bindings,f.actor,receipt.id),403);assert.equal(fired,true);
+});
+
+test('DONE replay rejects a deleted imported task or an original file reverted to pending',async t=>{
+ for(const fault of['deleted-task','pending-file'])await t.test(fault,async child=>{const f=await setup(child),receipt=await f.apply();if(fault==='deleted-task')await f.DB.prepare("DELETE FROM tasks WHERE id='canonical-legacy-task'").run();else await f.DB.prepare("UPDATE files SET state='pending' WHERE id='canonical-legacy-attachment'").run();await rejected(()=>f.apply(),503);await rejected(()=>readSourcePilot(f.env,f.actor,receipt.id),503);});
+});
+test('invalid exported calendar due dates are held explicitly rather than throwing an uncoded RangeError',async t=>{
+ const f=await setup(t),input=structuredClone(f.input);input.report.records.find(r=>r.kind==='task').raw.dueDate='2025-99-99';await assert.rejects(()=>f.apply(input),error=>[400,409].includes(error));await noPublished(f.DB);
+});
+test('archive identity cannot be swapped to an unrelated object containing identical bytes',async t=>{
+ const f=await setup(t),receipt=await f.apply(),object=f.input.objects[0];await f.FILES.put('nonarchive-identical-copy',object.bytes);await f.DB.prepare('UPDATE source_pilot_objects SET object_key=? WHERE run_id=? AND source=? AND path=?').bind('nonarchive-identical-copy',receipt.id,object.source,object.path).run();await rejected(()=>readSourceObject(f.env,f.actor,receipt.id,object.source,object.path),503);await rejected(()=>f.apply(),503);
+});
+test('run fingerprints and target identity must remain bound to the immutable reviewed report',async t=>{
+ for(const fault of['fingerprint','target'])await t.test(fault,async child=>{const f=await setup(child);await f.apply();if(fault==='fingerprint')await f.DB.prepare('UPDATE source_pilot_runs SET fingerprint=? WHERE id=?').bind('0'.repeat(64),f.input.requestId).run();else await f.DB.prepare("UPDATE source_pilot_runs SET client_id='other-client' WHERE id=?").bind(f.input.requestId).run();await rejected(()=>f.apply(),503);});
+});
+
+test('declared archive budget is rejected before cloning or hashing oversized shared source buffers',async t=>{
+ const f=await setup(t),input=structuredClone(f.input);let reads=0;
+ for(let i=0;i<4;i++){const path='extra-large-'+i+'.bin';input.report.sourceFiles.notion.push({path,bytes:5*1024*1024,sha256:'0'.repeat(64)});input.objects.push({source:'notion',path,get bytes(){reads++;throw Error('buffer accessed before declared limit');}});}
+ await rejected(()=>f.apply(input),413);assert.equal(reads,0);await noPublished(f.DB);assert.equal(await count(f.DB,'source_pilot_runs'),0);
+});
+test('malformed canonical target field names fail input validation before any D1 binding or write',async t=>{
+ const f=await setup(t),input=structuredClone(f.input);input.report.target={organizationId:'pilot-org',clientId:'canonical-client',wrongProjectField:'canonical-project'};await rejected(()=>f.apply(input),400);await noPublished(f.DB);assert.equal(await count(f.DB,'source_pilot_runs'),0);
+});
+
+test('concurrent identical source-pilot submissions return one stable receipt and canonical work exactly once',async t=>{
+ const f=await setup(t),receipts=await Promise.all([f.apply(),f.apply()]);assert.deepEqual(receipts[0],receipts[1]);assert.equal(receipts[0].state,'DONE');assert.deepEqual(await f.apply(),receipts[0]);assert.equal(await count(f.DB,'source_pilot_runs'),1);assert.equal(await count(f.DB,'source_pilot_records'),19);assert.equal(await count(f.DB,'source_pilot_objects'),f.input.objects.length);assert.equal(await count(f.DB,'notes'),3);assert.equal(await count(f.DB,'note_versions'),3);assert.equal(await count(f.DB,'tasks'),1);assert.equal(await count(f.DB,'files'),1);
+});
+
+test('accepted original snapshots copy Node Buffer inputs before asynchronous storage work',async t=>{
+ const f=await setup(t),object=f.input.objects[0],expected=object.bytes.slice();object.bytes=Buffer.from(object.bytes);let changed=false;
+ const bindings={...f.env,FILES:{put:(...a)=>f.FILES.put(...a),async get(key){if(!changed){changed=true;object.bytes[0]^=1;}return f.FILES.get(key);}}};
+ const result=await f.apply(f.input,f.actor,bindings);assert.equal(result.state,'DONE');assert.equal(changed,true);assert.deepEqual(await readSourceObject(f.env,f.actor,result.id,object.source,object.path),expected);
+});
+
+
+}
+
+test('authenticated source history routes preserve scoped provenance and exact private original bytes',async t=>{
+ const f=await setup(t),first=await f.apply(),origin='https://source-history.example.invalid',issuer='https://identity.cloudflareaccess.com',audience='source-history',{publicKey,privateKey}=await generateKeyPair('RS256'),tokens={};
+ for(const actor of Object.values(f.actors))tokens[actor.id]=await new SignJWT({email:actor.email}).setProtectedHeader({alg:'RS256'}).setIssuer(issuer).setAudience(audience).setSubject(actor.id).setIssuedAt().setExpirationTime('20m').sign(privateKey);
+ let providerCalls=0;const worker=createWorker(publicKey,{stripeFetch:async()=>{providerCalls++;throw Error('Source history must not call a provider');}}),env={...f.env,APP_ORIGIN:origin,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:audience};
+ const call=(path='',who='cameron',bindings=env,method='GET')=>worker.fetch(new Request(origin+'/api/source-history'+path,{method,headers:{'cf-access-jwt-assertion':tokens[who],...(!['GET','HEAD'].includes(method)?{origin,'content-type':'application/json'}:{})},...(!['GET','HEAD'].includes(method)?{body:'{}'}:{})}),bindings);
+ const data=async(response,status=200)=>{assert.equal(response.status,status,await response.clone().text());return response.json();};
+ let second,detail;const opaque=async(source,path)=>Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(source+':'+path))).toString('hex');
+ const seedRun=async(projectId,prefix,pending=false)=>{await f.DB.prepare('INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES(?,?,?,?,0)').bind(projectId,'pilot-org','canonical-client',prefix+' project').run();const fixture=await makePilotFixture(await mkdtemp(join(tmpdir(),'history-second-')));fixture.mapping.target.projectId=projectId;for(const row of fixture.mapping.records)row.canonicalId=row.canonicalId==='canonical-client'?'canonical-client':row.canonicalId==='canonical-project'?projectId:prefix+'-'+row.canonicalId;const report=await reconcilePilot(fixture.root,fixture.mapping),objects=[];for(const[source,entries]of Object.entries(report.sourceFiles))for(const entry of entries)objects.push({source,path:entry.path,bytes:new Uint8Array(await readFile(join(fixture.root,source,entry.path)))});const input={requestId:crypto.randomUUID(),report,objects,snapshot:{clientRevision:0,projectRevision:0}};if(pending){const bindings={...f.env,FILES:{get:(...args)=>f.FILES.get(...args),put:async()=>{throw Error('Synthetic pending archive');}}};await rejected(()=>f.apply(input,f.actor,bindings),503);}else await f.apply(input);return input;};
+ await t.test('default list exposes only bounded current canonical metadata',async()=>{
+  const listed=await data(await call());assert.equal(listed.items.length,1);assert.equal(listed.nextCursor,null);const item=listed.items[0];assert.equal(item.id,first.id);assert.equal(item.clientId,'canonical-client');assert.equal(item.projectId,'canonical-project');assert.equal(item.clientName,'Existing canonical client');assert.equal(item.projectName,'Existing canonical project');assert.deepEqual(item.counts,f.input.report.counts);assert.equal(item.fingerprint,f.input.report.fingerprint);assert.ok(Number.isSafeInteger(item.createdAt));assert.equal(item.records,undefined);assert.equal(item.sourceFiles,undefined);assert.doesNotMatch(JSON.stringify(listed),/source-pilots\/|object_key|image_json|Original task body|Handbook — café/);
+ });
+ await t.test('two genuine reconciled runs paginate without omission or duplication',async()=>{
+  second=await seedRun('history-second-project','history-second');const seen=[],page1=await data(await call('?limit=1'));assert.equal(page1.items.length,1);assert.equal(page1.nextCursor,page1.items[0].id);seen.push(page1.items[0].id);const page2=await data(await call('?limit=1&after='+encodeURIComponent(page1.nextCursor)));assert.equal(page2.items.length,1);assert.equal(page2.nextCursor,null);seen.push(page2.items[0].id);assert.deepEqual(seen.sort(),[first.id,second.requestId].sort());
+ });
+ await t.test('canonical client and project filters combine with AND semantics',async()=>{
+  for(const[query,expected]of[['?clientId=canonical-client',2],['?projectId=canonical-project',1],['?clientId=canonical-client&projectId=history-second-project',1],['?clientId=other-client&projectId=history-second-project',0]])assert.equal((await data(await call(query))).items.length,expected,query);
+ });
+ await t.test('detail exposes bounded report context and opaque source-file identifiers without raw records or storage keys',async()=>{
+  detail=await data(await call('/'+first.id));assert.equal(detail.run.id,first.id);assert.equal(detail.run.clientId,'canonical-client');assert.equal(detail.run.projectId,'canonical-project');assert.equal(detail.run.clientName,'Existing canonical client');assert.equal(detail.run.projectName,'Existing canonical project');assert.deepEqual(detail.totals,f.input.report.totals);assert.deepEqual(detail.coverage,f.input.report.coverage);assert.equal(detail.records,undefined);
+  for(const[source,pins]of Object.entries(f.input.report.sourceFiles)){assert.equal(detail.sourceFiles[source].length,pins.length);for(const pin of pins){const item=detail.sourceFiles[source].find(item=>item.path===pin.path);assert.deepEqual(item,{...pin,id:await opaque(source,pin.path)});}}
+  assert.doesNotMatch(JSON.stringify(detail),/source-pilots\/|object_key|image_json|Original task body/);
+ });
+ await t.test('default and small record pages preserve all nineteen original records exactly once',async()=>{
+  const original=await data(await call('/'+first.id+'/records'));assert.equal(original.items.length,19);assert.equal(original.nextCursor,null);const byKey=new Map(f.input.report.records.map(row=>[row.key,row])),seen=new Set();let after='';do{const page=await data(await call('/'+first.id+'/records?limit=5'+(after?'&after='+encodeURIComponent(after):'')));assert.ok(page.items.length<=5);for(const record of page.items){assert.equal(seen.has(record.key),false);seen.add(record.key);assert.deepEqual(record,byKey.get(record.key));}if(page.nextCursor)assert.equal(page.nextCursor,page.items.at(-1).key);after=page.nextCursor;}while(after);assert.equal(seen.size,19);
+ });
+ await t.test('opaque original download retains exact binary bytes and private attachment headers',async()=>{
+  const original=f.input.objects.find(o=>o.path.endsWith('/original.bin')),id=await opaque(original.source,original.path),response=await call('/'+first.id+'/objects/'+id+'/download');assert.equal(response.status,200,await response.clone().text());assert.deepEqual(new Uint8Array(await response.arrayBuffer()),original.bytes);assert.equal(response.headers.get('cache-control'),'no-store');assert.match(response.headers.get('content-disposition'),/^attachment;/);assert.match(response.headers.get('content-security-policy'),/sandbox/);assert.equal(response.headers.get('x-content-type-options'),'nosniff');assert.equal(response.headers.get('content-type'),'application/octet-stream');assert.equal(Number(response.headers.get('content-length')),original.bytes.length);
+ });
+ await t.test('only current finance staff can inspect same-organization history',async()=>{
+  const id=await opaque(f.input.objects[0].source,f.input.objects[0].path),paths=['','/'+first.id,'/'+first.id+'/records','/'+first.id+'/objects/'+id+'/download'];for(const who of['staff','client','inactive'])for(const path of paths)assert.equal((await call(path,who)).status,403,who+path);assert.deepEqual((await data(await call('','foreign'))).items,[]);for(const path of paths.slice(1))assert.equal((await call(path,'foreign')).status,404);await f.DB.prepare("DELETE FROM actor_finance_access WHERE id='cameron'").run();try{for(const path of paths)assert.equal((await call(path)).status,403);}finally{await f.DB.prepare("INSERT INTO actor_finance_access VALUES('cameron','pilot-org')").run();}
+ });
+ await t.test('unknown duplicate and malformed query parameters fail closed',async()=>{
+  const invalidList=['?unknown=1','?limit=0','?limit=51','?limit=1.5','?limit=','?limit=+1','?limit=1&limit=2','?clientId=canonical-client&clientId=canonical-client','?projectId=../wrong','?after=bad!'];for(const query of invalidList)assert.equal((await call(query)).status,400,query);for(const query of['?unknown=1','?limit=0','?limit=51','?limit=1&limit=2','?after=x&after=y'])assert.equal((await call('/'+first.id+'/records'+query)).status,400,query);const id=await opaque(f.input.objects[0].source,f.input.objects[0].path);assert.equal((await call('/'+first.id+'?unknown=1')).status,400);assert.equal((await call('/'+first.id+'/objects/'+id+'/download?unknown=1')).status,400);
+ });
+ await t.test('history endpoints accept GET only and cannot create financial or workspace mutations',async()=>{
+  const id=await opaque(f.input.objects[0].source,f.input.objects[0].path),before={notes:await count(f.DB,'notes'),tasks:await count(f.DB,'tasks'),files:await count(f.DB,'files'),runs:await count(f.DB,'source_pilot_runs')};for(const path of['','/'+first.id,'/'+first.id+'/records','/'+first.id+'/objects/'+id+'/download'])for(const method of['POST','PUT','PATCH','DELETE','HEAD'])assert.equal((await call(path,'cameron',env,method)).status,405,method+path);assert.deepEqual({notes:await count(f.DB,'notes'),tasks:await count(f.DB,'tasks'),files:await count(f.DB,'files'),runs:await count(f.DB,'source_pilot_runs')},before);await noLiveFinance(f.DB);assert.equal(providerCalls,0);
+ });
+ await t.test('pending reservations remain invisible across list detail records and downloads',async()=>{
+  const pending=await seedRun('history-pending-project','history-pending',true),id=await opaque(pending.objects[0].source,pending.objects[0].path),listed=await data(await call());assert.deepEqual(new Set(listed.items.map(item=>item.id)),new Set([first.id,second.requestId]));for(const path of['/'+pending.requestId,'/'+pending.requestId+'/records','/'+pending.requestId+'/objects/'+id+'/download'])assert.equal((await call(path)).status,404,path);
+ });
+ await t.test('missing or corrupt archive bytes fail download without returning a misleading original',async()=>{
+  const original=f.input.objects[0],row=await f.DB.prepare('SELECT object_key FROM source_pilot_objects WHERE run_id=? AND source=? AND path=?').bind(first.id,original.source,original.path).first(),path='/'+first.id+'/objects/'+await opaque(original.source,original.path)+'/download';for(const fault of['missing','corrupt']){try{if(fault==='missing')await f.FILES.delete(row.object_key);else{const bytes=original.bytes.slice();bytes[0]^=1;await f.FILES.put(row.object_key,bytes);}const response=await call(path);assert.equal(response.status,503);assert.notEqual(await response.text(),new TextDecoder().decode(original.bytes));}finally{await f.FILES.put(row.object_key,original.bytes);}}assert.equal((await call('/'+first.id+'/objects/'+'0'.repeat(64)+'/download')).status,404);
+ });
+ await t.test('download discards bytes after finance or canonical project scope changes during R2 I/O',async()=>{
+  const object=f.input.objects[0],path='/'+first.id+'/objects/'+await opaque(object.source,object.path)+'/download';for(const fault of['finance','scope']){let fired=false;const bindings={...env,FILES:{get:async key=>{const object=await f.FILES.get(key);if(!fired){fired=true;if(fault==='finance')await f.DB.prepare("DELETE FROM actor_finance_access WHERE id='cameron'").run();else await f.DB.prepare("UPDATE projects SET client_id='other-client' WHERE id='canonical-project'").run();}return object;},put:(...args)=>f.FILES.put(...args),head:(...args)=>f.FILES.head(...args)}};try{const response=await call(path,'cameron',bindings);assert.equal(fired,true);assert.equal(response.status,fault==='finance'?403:404);assert.notDeepEqual(new Uint8Array(await response.arrayBuffer()),object.bytes);}finally{await f.DB.prepare("INSERT OR IGNORE INTO actor_finance_access VALUES('cameron','pilot-org')").run();await f.DB.prepare("UPDATE projects SET client_id='canonical-client' WHERE id='canonical-project'").run();}}
+ });
+ await t.test('cached list results cannot escape a finance revocation after the D1 selection',async()=>{
+  let fired=false;const wrap=(statement,sql)=>new Proxy(statement,{get(target,key){if(key==='bind')return(...values)=>wrap(target.bind(...values),sql);if(key==='all')return async(...args)=>{const result=await target.all(...args);if(!fired&&/FROM\s+source_pilot_runs\b/i.test(sql)){fired=true;await f.DB.prepare("DELETE FROM actor_finance_access WHERE id='cameron'").run();}return result;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const bindings={...env,DB:{prepare:sql=>wrap(f.DB.prepare(sql),sql),batch:statements=>f.DB.batch(statements)}};try{assert.equal((await call('','cameron',bindings)).status,403);assert.equal(fired,true);}finally{await f.DB.prepare("INSERT OR IGNORE INTO actor_finance_access VALUES('cameron','pilot-org')").run();}
+ });
+ await t.test('cached list scope is rechecked after a canonical project changes client',async()=>{
+  let fired=false;const wrap=(statement,sql)=>new Proxy(statement,{get(target,key){if(key==='bind')return(...values)=>wrap(target.bind(...values),sql);if(key==='all')return async(...args)=>{const result=await target.all(...args);if(!fired&&/FROM\s+source_pilot_runs\b/i.test(sql)){fired=true;await f.DB.prepare("UPDATE projects SET client_id='other-client' WHERE id='canonical-project'").run();}return result;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const bindings={...env,DB:{prepare:sql=>wrap(f.DB.prepare(sql),sql),batch:statements=>f.DB.batch(statements)}};try{const response=await call('','cameron',bindings);assert.equal(fired,true);assert.ok([200,409].includes(response.status));if(response.status===200)assert.equal((await response.json()).items.some(item=>item.id===first.id),false);}finally{await f.DB.prepare("UPDATE projects SET client_id='canonical-client' WHERE id='canonical-project'").run();}
+ });
+ await t.test('final list snapshot cannot return scope revoked during its last finance read',async()=>{
+  let selections=0,fired=false;
+  const change=async()=>{if(!fired){fired=true;await f.DB.prepare("UPDATE projects SET client_id='other-client' WHERE id='canonical-project'").run();}};
+  const wrap=(statement,sql)=>new Proxy(statement,{get(target,key){
+   if(key==='bind')return(...values)=>wrap(target.bind(...values),sql);
+   if(key==='all')return async(...args)=>{const result=await target.all(...args);if(/FROM\s+source_pilot_runs\b/i.test(sql))selections++;return result;};
+   if(key==='first')return async(...args)=>{if(selections>=2&&/SELECT\s+finance\s+FROM\s+viewer/i.test(sql))await change();return target.first(...args);};
+   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+  }});
+  const bindings={...env,DB:{prepare:sql=>wrap(f.DB.prepare(sql),sql),async batch(statements){if(selections>=1)await change();return f.DB.batch(statements);}}};
+  try{const response=await call('','cameron',bindings);assert.equal(fired,true,'The project must change during the final authority/scope snapshot.');assert.ok([200,409].includes(response.status));if(response.status===200)assert.equal((await response.json()).items.some(item=>item.id===first.id),false,'A stale run must not escape the final snapshot.');}finally{await f.DB.prepare("UPDATE projects SET client_id='canonical-client' WHERE id='canonical-project'").run();}
+ });
+
+ await t.test('download final authority snapshot rejects finance revoked during its last scope read',async()=>{
+  const original=f.input.objects[0],path='/'+first.id+'/objects/'+await opaque(original.source,original.path)+'/download';let storageRead=false,scopeReads=0,fired=false;
+  const change=async()=>{if(!fired){fired=true;await f.DB.prepare("DELETE FROM actor_finance_access WHERE id='cameron'").run();}};
+  const scopeSql=sql=>/FROM\s+projects\s+p\s+JOIN\s+clients\s+c/i.test(sql);
+  const sqlFor=new WeakMap();
+  const wrap=(statement,sql)=>{const proxy=new Proxy(statement,{get(target,key){
+   if(key==='bind')return(...values)=>wrap(target.bind(...values),sql);
+   if(key==='first')return async(...args)=>{if(storageRead&&scopeSql(sql)){if(scopeReads>=1)await change();scopeReads++;}return target.first(...args);};
+   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+  }});sqlFor.set(proxy,sql);return proxy;};
+  const bindings={...env,DB:{prepare:sql=>wrap(f.DB.prepare(sql),sql),async batch(statements){const authority=storageRead&&statements.some(statement=>scopeSql(sqlFor.get(statement)??''));if(authority){if(scopeReads>=1)await change();scopeReads++;}return f.DB.batch(statements);}},FILES:{get:async key=>{const object=await f.FILES.get(key);storageRead=true;return object;},put:(...args)=>f.FILES.put(...args),head:(...args)=>f.FILES.head(...args)}};
+  try{const response=await call(path,'cameron',bindings);assert.equal(fired,true,'Finance must change during the final post-storage authority snapshot.');assert.equal(response.status,403);assert.notDeepEqual(new Uint8Array(await response.arrayBuffer()),original.bytes);}finally{await f.DB.prepare("INSERT OR IGNORE INTO actor_finance_access VALUES('cameron','pilot-org')").run();}
+ });
+
+});
