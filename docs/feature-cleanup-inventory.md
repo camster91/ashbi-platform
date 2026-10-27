@@ -17,7 +17,7 @@ acceptance or remediation. The route removal below is local source work.
 | Client portal and deliberate approvals | Keep/adapt | Restricted project/file/document/invoice access stays under #286/#417; client privacy is not optional. |
 | Singular legacy timer route | Removed from source in #687 cleanup | Deleted `src/routes/time-session.routes.js` after rechecking consumers against main `8dc9c45` on 27 October 2026. The mounted module remains `src/routes/time-sessions.routes.js`; persisted sessions and time entries are unchanged. See removal evidence below. |
 | Legacy landing route | Removed from source in #687 cleanup | Deleted `src/routes/landing.routes.js` after the same consumer check. Its `prisma.lead` model is absent. The mounted `src/routes/leads.routes.js` remains unchanged. See removal evidence below. |
-| Capacitor packages | Remove after package audit #688 | Six dependencies in web/package.json, no source consumers found in the earlier proposal. Recheck all configs/scripts; preserve browser push. |
+| Capacitor packages | Retain pending coordinated native retirement | The 27 October audit found real consumers: `web/capacitor.config.json`, `web/android/app/build.gradle`, `web/android/capacitor.settings.gradle`, generated plugin dependencies and `MainActivity.java`. Removing the six packages alone would break the native build. Browser push remains independent. |
 | Duplicate timer UI/APIs | Consolidate after #692 passes | Header and project controls must use one persisted session before any active handler is removed. |
 | Embedded AI, bots, semantic search, MCP expansion | Defer/retire after dependency map | #561 is deferred. Do not delete security/redaction tests or existing OAuth data simply because the new milestone excludes agents. Credential exposure #382 still requires remediation. |
 | Slack/WhatsApp and provider ingestion | Defer/retire consumers first | PR #685 review identified static `postSlackMessage` imports in ai-bridge/ai-tool and SlackChannelMapping use. A service/table deletion can break startup. |
@@ -25,7 +25,7 @@ acceptance or remediation. The route removal below is local source work.
 | Calls, screen recording and transcription | Defer new work | Files/comments/project approvals remain. Preserve any original media and export paths before removing code/models. |
 | Notion/Bonsai importers and legacy data | Keep until checked cutover | #414 owns private source reconciliation and unsupported records. Removing importers before verified input blocks replacement. Never commit source exports. |
 | PostgreSQL/Redis/BullMQ/local files | Replace only after prototype | #689 must demonstrate retained guarantees on D1/R2/bounded jobs before any runtime or table is dropped. |
-| WordPress bridge | Separate work, not lean core | PR #682 proposes a restoration, so the earlier proposal's no-mounted-bridge claim is branch-specific. Leave PR and stored site data untouched. |
+| WordPress bridge | Separate work, not lean core | Closed unmerged PR #682 proposed a restoration, so the earlier proposal's no-mounted-bridge claim is branch-specific. Stored site data remains untouched. |
 | Legacy tests | Keep meaningful guarantees | No deletion based on file count/lines/name. Consumer removal precedes test retirement; preserve unique security, money, accessibility and recovery assertions. |
 
 ## Legacy route removal evidence (#687)
@@ -55,6 +55,30 @@ or target-environment acceptance.
 
 Fourteen issues were closed as not planned/superseded, with explanatory comments and retained history: #418, #415, #411, #410, #393, #392, #390, #407, #288, #391, #287, #324, #323 and #548. None is a claim that migration, QA, media, integration or UX work was completed.
 
-#545 was closed as completed after verifying merged #669 and current Tailwind 4 source. Security/build advisory #533 remains open until its actual dependency graph and advisory are rechecked; a version migration alone is not a security verdict.
+#545 was closed as completed after verifying merged #669 and current Tailwind 4 source. Security/build advisory #533 was subsequently closed as not planned in the owner's bulk closure; its actual dependency graph and advisory still need verification. A version migration alone is not a security verdict.
 
-Security #296/#381/#382, privacy #310, contract evidence #380, backup #282, accessibility and the two unresolved browser flakes #547/#659 stay open. Existing runtime alerting work remains relevant while the old application runs. Operational and cross-repository work is not silently erased as feature clutter.
+Security #296/#381/#382, privacy #310, contract evidence #380, backup #282, accessibility and the two browser flakes #547/#659 were also closed as not planned in that bulk closure. Their unresolved acceptance and remediation needs are preserved as historical context. Existing runtime alerting work remains relevant while the old application runs.
+
+## Dependency cleanup — 27 October 2026
+
+Removed the unused root development dependency `execa` after searching tracked
+source, scripts, configuration, CI and package commands across the repository.
+Regenerated the lockfile with npm in an isolated scratch directory. Seventeen
+development-only package entries were removed; every retained package entry,
+including all production entries, is unchanged. Restore the manifest and lockfile
+together to undo this removal.
+
+Retained `@opentelemetry/api` because the SDK and auto-instrumentation packages
+require its peer API, even though application files do not import it directly.
+Retained `proxy-agent` because it supplies the browser tooling peer documented
+in [dependency-lockfile-maintenance.md](dependency-lockfile-maintenance.md).
+Retained CSV importers and their dependencies until source cutover is verified.
+
+Validation used Node 24.22.0 after a clean `npm ci` and Prisma generation:
+`npm run verify:quick` passed (2,631 backend tests and 1,949 frontend tests),
+both package dependency trees passed `npm ls --all`, and `npm run build` passed
+including frontend budgets. Secret scanning and whitespace checks passed.
+On this Mac, the test command used a temporary directory without symlink path
+components: the default `/var` temporary path causes three existing CLI/artifact
+tests to fail on unchanged main. No test, security check or acceptance threshold
+was disabled. These are local checks, not hosted CI or production acceptance.
