@@ -27,7 +27,17 @@ export async function filesRoute(request,env,actor,readBody,json){
     if(!checksum||new Uint8Array(checksum).length!==32||hex(checksum)!==row.sha256||!object.body)throw 503;
     bytes=object.body;
    }else{bytes=await object.arrayBuffer();if(hex(await crypto.subtle.digest('SHA-256',bytes))!==row.sha256)throw 503;}
-   return new Response(bytes,{headers:{'Content-Type':'application/octet-stream','Content-Length':String(row.size),'Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(row.name).replace(/['()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase()),'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox",'Referrer-Policy':'no-referrer','X-Frame-Options':'DENY'}});
+    // Storage and hashing can outlive a sharing/deletion or identity change.
+    // Check the current viewer and file/project scope in one D1 snapshot before
+    // returning either buffered bytes or the original stream.
+    const [viewer,current]=await db.batch([
+     db.prepare('SELECT id FROM actors WHERE id=? AND organization_id=? AND active=1 AND role=? AND client_id IS ?').bind(actor.id,actor.organization_id,actor.role,actor.client_id??null),
+     db.prepare('SELECT f.*'+join+' WHERE '+scope+' AND f.id=? AND f.deleted=0').bind(...scopeArgs,id)
+    ]);
+    if(!viewer.results[0])throw 403;
+    const latest=current.results[0];if(!latest)throw 404;
+    if(['object_key','size','sha256','project_id'].some(key=>latest[key]!==row[key]))throw 409;
+    return new Response(bytes,{headers:{'Content-Type':'application/octet-stream','Content-Length':String(row.size),'Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(latest.name).replace(/['()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase()),'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox",'Referrer-Policy':'no-referrer','X-Frame-Options':'DENY'}});
   }
   if(id)throw 404;
   const includeDeleted=url.searchParams.get('includeDeleted');if(includeDeleted!==null&&!['true','false'].includes(includeDeleted))throw 400;if(includeDeleted==='true'&&!staff)throw 403;

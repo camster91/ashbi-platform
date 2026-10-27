@@ -101,12 +101,15 @@ export function commercialExportStatement(db,actor,table){const columns=table===
 
 export async function commercialRoute(request,db,actor,readBody,json){
  if(!await hasFinance(db,actor))throw 403;
+ // A scoped SELECT can finish before a grant is revoked. Recheck every response,
+ // including saved request replays and immutable history, before returning it.
+ const respond=async(value,status=200)=>{if(!await hasFinance(db,actor))throw 403;return json(value,status);};
  const url=new URL(request.url),path=url.pathname;
  const key=path.match(/^\/api\/commercial\/requests\/([^/]+)(\/cancel)?$/);
  if(key){
   if(request.method!==(key[2]?'POST':'GET'))throw 405;if(url.search||!uuid(key[1]))throw 400;
   if(key[2]){strict(await readBody(request),[]);await db.prepare(`${viewer} INSERT INTO cancelled_commercial_requests(id,organization_id,request_key,actor_id,created_at) SELECT ?,?,?,?,? WHERE ${authority} AND NOT EXISTS(SELECT 1 FROM commercial_versions WHERE organization_id=? AND request_key=?) ON CONFLICT(organization_id,request_key) DO NOTHING RETURNING id`).bind(actor.id,actor.organization_id,crypto.randomUUID(),actor.organization_id,key[1].toLowerCase(),actor.id,Date.now(),actor.organization_id,key[1].toLowerCase()).all();}
-  const result=await receipt(db,actor,key[1].toLowerCase());if(!await hasFinance(db,actor))throw 403;return json(result);
+  return respond(await receipt(db,actor,key[1].toLowerCase()));
  }
  const match=path.match(/^\/api\/commercial\/(proposals|templates|contracts)(?:\/([a-zA-Z0-9-]{1,100})(?:\/(history|archive|reopen)(?:\/(\d{1,16}))?)?)?$/);if(!match)throw 404;
  const kind=kinds[match[1]],draftId=match[2],operation=match[3],version=match[4];
@@ -118,18 +121,18 @@ export async function commercialRoute(request,db,actor,readBody,json){
    if(status&&!['DRAFT','ARCHIVED'].includes(status)||status===''||after!==null&&!id(after)||client!==null&&!id(client)||project!==null&&!id(project))throw 400;
    const filters=['organization_id=?','kind=?',authority],params=[actor.id,actor.organization_id,actor.organization_id,kind];for(const [column,value,op]of [['status',status,'='],['id',after,'>'],['client_id',client,'='],['project_id',project,'=']])if(value!==null){filters.push(`${column}${op}?`);params.push(value);}
    const rows=(await db.prepare(`${viewer} SELECT snapshot_json FROM commercial_drafts WHERE ${filters.join(' AND ')} ORDER BY id LIMIT 51`).bind(...params).all()).results;
-   const items=rows.slice(0,50).map(row=>summary(JSON.parse(row.snapshot_json)));return json({items,nextCursor:rows.length>50?items.at(-1).id:null});
+   const items=rows.slice(0,50).map(row=>summary(JSON.parse(row.snapshot_json)));return respond({items,nextCursor:rows.length>50?items.at(-1).id:null});
   }
   const row=await read(db,actor,kind,draftId);if(!row){if(!await hasFinance(db,actor))throw 403;throw 404;}
-  if(!operation){if(url.search)throw 400;return json(JSON.parse(row.snapshot_json));}
+  if(!operation){if(url.search)throw 400;return respond(JSON.parse(row.snapshot_json));}
   query(url,version===undefined?['before']:[]);const before=url.searchParams.get('before');if(before!==null&&(!/^\d{1,16}$/.test(before)||!integer(Number(before)))||version!==undefined&&!integer(Number(version)))throw 400;
   const rows=(await db.prepare(`${viewer} SELECT state_json,actor_id,recorded_at,revision,action,reason FROM commercial_versions WHERE organization_id=? AND draft_id=? AND ${authority} ${version!==undefined?'AND revision=?':before!==null?'AND revision<?':''} ORDER BY revision DESC LIMIT 51`).bind(actor.id,actor.organization_id,actor.organization_id,draftId,...(version!==undefined?[Number(version)]:before!==null?[Number(before)]:[])).all()).results;
-  if(version!==undefined){if(!rows[0])throw 404;return json({...JSON.parse(rows[0].state_json),actorId:rows[0].actor_id,recordedAt:rows[0].recorded_at,action:rows[0].action,reason:rows[0].reason});}
-  const items=rows.slice(0,50).map(v=>({revision:v.revision,actorId:v.actor_id,recordedAt:v.recorded_at,action:v.action,reason:v.reason,title:JSON.parse(v.state_json).title,status:JSON.parse(v.state_json).status}));return json({items,currentRevision:JSON.parse(row.snapshot_json).revision,nextCursor:rows.length>50?String(items.at(-1).revision):null});
+  if(version!==undefined){if(!rows[0])throw 404;return respond({...JSON.parse(rows[0].state_json),actorId:rows[0].actor_id,recordedAt:rows[0].recorded_at,action:rows[0].action,reason:rows[0].reason});}
+  const items=rows.slice(0,50).map(v=>({revision:v.revision,actorId:v.actor_id,recordedAt:v.recorded_at,action:v.action,reason:v.reason,title:JSON.parse(v.state_json).title,status:JSON.parse(v.state_json).status}));return respond({items,currentRevision:JSON.parse(row.snapshot_json).revision,nextCursor:rows.length>50?String(items.at(-1).revision):null});
  }
  if(url.search)throw 400;
  const action=request.method==='POST'&&!draftId?'CREATE':request.method==='PATCH'&&draftId&&!operation?'EDIT':request.method==='POST'&&draftId&&['archive','reopen'].includes(operation)?operation.toUpperCase():null;
  if(!action)throw 405;
  const result=await write(db,actor,kind,draftId,action,normalize(kind,action,await readBody(request)));
- return json(result.record,action==='CREATE'&&!result.replayed?201:200);
+ return respond(result.record,action==='CREATE'&&!result.replayed?201:200);
 }

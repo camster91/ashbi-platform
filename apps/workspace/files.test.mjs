@@ -70,6 +70,17 @@ test('private files use real local D1/R2 and preserve original bytes',async t=>{
   const first=await (await call('/api/files','client')).json();assert.equal(first.items.length,50);assert.ok(first.nextCursor);const next=await (await call('/api/files?after='+first.nextCursor,'client')).json();assert.equal(new Set([...first.items,...next.items].map(x=>x.id)).size,53);assert.equal(next.nextCursor,null);
   assert.equal((await call('/api/files?after=%27','client')).status,400);assert.equal((await call('/api/files?includeDeleted=true','client')).status,403);
  });
+ await t.test('downloads discard bytes when sharing, deletion or identity changes during storage I/O',async()=>{
+  await DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('reassigned','a','Reassigned client')").run();
+  for(const fault of ['file-private','project-private','deleted','client-reassigned','actor-inactive','actor-role','actor-client']){
+   const created=await upload(),current=await created.json();assert.equal(created.status,201);
+   const mutate=()=>DB.prepare(({ 'file-private':'UPDATE files SET client_visible=0 WHERE id=?','deleted':'UPDATE files SET deleted=1 WHERE id=?','project-private':"UPDATE projects SET client_visible=0 WHERE id='p'",'client-reassigned':"UPDATE projects SET client_id='reassigned' WHERE id='p'",'actor-inactive':"UPDATE actors SET active=0 WHERE id='client'",'actor-role':"UPDATE actors SET role='staff',client_id=NULL WHERE id='client'",'actor-client':"UPDATE actors SET client_id='reassigned' WHERE id='client'"})[fault]).bind(...(['file-private','deleted'].includes(fault)?[current.id]:[])).run();
+   let changed=false;const delayed={...env,FILES:{async get(key){const object=await FILES.get(key);return {...object,size:object.size,async arrayBuffer(){const bytes=await object.arrayBuffer();await mutate();changed=true;return bytes;}};}}};
+   const response=await call('/api/files/'+current.id+'/download','client','GET',undefined,{},delayed);
+   assert.equal(changed,true);assert.equal(response.status,fault.startsWith('actor-')?403:404,fault);assert.ok(!(await response.text()).includes(String.fromCharCode(255)));
+   await DB.prepare("UPDATE projects SET client_visible=1,client_id='c' WHERE id='p'").run();await DB.prepare("UPDATE actors SET active=1,role='client',client_id='c' WHERE id='client'").run();
+  }
+ });
  await t.test('missing/corrupt originals fail closed and insertion failure leaves no downloadable metadata',async()=>{
   const row=await DB.prepare('SELECT * FROM files WHERE id=?').bind(file.id).first();await FILES.put(row.object_key,new Uint8Array([9,9,9,9,9]));assert.equal((await call('/api/files/'+file.id+'/download')).status,503);await FILES.delete(row.object_key);assert.equal((await call('/api/files/'+file.id+'/download')).status,503);
   const before=(await FILES.list()).objects.length;

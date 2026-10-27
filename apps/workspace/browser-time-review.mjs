@@ -4,7 +4,22 @@ import {hold} from './browser-regressions.mjs';
 const json=data=>({status:200,contentType:'application/json',body:JSON.stringify(data)});
 const failure={status:503,contentType:'application/json',body:JSON.stringify({error:'Delayed time failure'})};
 async function call(page,path,method='GET',body){return page.evaluate(async({path,method,body})=>{const r=await fetch('/api/'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()};},{path,method,body});}
+export async function runTimePaginationFailureTests({browser,origin}){
+ await test('failed time project filter clears previous rows and restarts pagination without losing tracking draft',async t=>{
+  const page=await browser.newPage();t.after(()=>page.close());const oldId='90000000-0000-4000-8000-000000000001',newId='10000000-0000-4000-8000-000000000001',lastId='20000000-0000-4000-8000-000000000001',projectId='10000000-0000-4000-8000-000000000002',requests=[];let initialFailure=true,appendFailure=true;
+  const row=(id,description)=>({id,project_name:'New project',actor_email:'qa@example.invalid',worked_on:'2026-10-26',ended_at:100,seconds:60,description,review_status:'PENDING',billable:1,invoiced:false});
+  await page.route('**/api/projects',route=>route.fulfill(json({items:[{id:projectId,name:'New project'}],nextCursor:null})));
+  await page.route('**/api/time/entries?*',route=>{const url=new URL(route.request().url());requests.push(url.search);if(!url.searchParams.has('projectId'))return route.fulfill(json({items:[row(oldId,'Previous project time')],nextCursor:oldId}));if(initialFailure){initialFailure=false;return route.fulfill(failure);}if(url.searchParams.has('after')&&appendFailure){appendFailure=false;return route.fulfill(failure);}return route.fulfill(json(url.searchParams.has('after')?{items:[row(lastId,'Last new time')],nextCursor:null}:{items:[row(newId,'First new time')],nextCursor:newId}));});
+  await page.goto(origin+'/#time');await page.getByRole('heading',{name:'Track time',exact:true}).waitFor();await page.getByLabel('Minutes for manual entry',{exact:true}).fill('29');await page.getByRole('button',{name:'Entries and review',exact:true}).click();await page.getByText('Previous project time',{exact:true}).waitFor();
+  await page.getByLabel('Filter time by project',{exact:true}).selectOption(projectId);await page.getByRole('button',{name:'Apply time filters',exact:true}).click();await page.getByText('Unable to load time entries.',{exact:true}).waitFor();
+  assert.equal(await page.getByText('Previous project time',{exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:'Load more time entries',exact:true}).count(),0);
+  await page.getByRole('button',{name:'Apply time filters',exact:true}).click();await page.getByText('First new time',{exact:true}).waitFor();assert.equal(new URLSearchParams(requests.at(-1)).has('after'),false);
+  await page.getByRole('button',{name:'Load more time entries',exact:true}).click();await page.getByText('Unable to load time entries.',{exact:true}).waitFor();assert.equal(await page.getByText('First new time',{exact:true}).count(),1);
+  await page.getByRole('button',{name:'Load more time entries',exact:true}).click();await page.getByText('Last new time',{exact:true}).waitFor();assert.equal(new URLSearchParams(requests.at(-1)).get('after'),newId);assert.equal(await page.getByText('First new time',{exact:true}).count(),1);assert.equal(await page.getByLabel('Minutes for manual entry',{exact:true}).inputValue(),'29');
+ });
+}
 export async function runTimeReviewTests({browser,origin,DB,axe,addActor}){
+ await runTimePaginationFailureTests({browser,origin});
  const project=await DB.prepare("SELECT * FROM projects WHERE name='QA project'").first();
  if(!await DB.prepare("SELECT id FROM actors WHERE id='qa-finance'").first())await addActor('qa-finance','finance@example.invalid','staff',null);
  await DB.prepare("INSERT OR IGNORE INTO actor_finance_access VALUES('qa-finance','qa-org')").run();

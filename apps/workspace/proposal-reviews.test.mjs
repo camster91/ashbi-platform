@@ -3,7 +3,20 @@ import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare} from 'miniflare';
 import {generateKeyPair,SignJWT} from 'jose';
+import {proposalReviewsRoute} from './proposal-reviews.mjs';
 const {createWorker}=await import(process.env.WORKSPACE_TEST_BUILT_WORKER?'./dist/worker.js':'./worker.mjs');
+
+test('proposal detail discards private content if project scope is revoked after selection',async()=>{
+ let visible=true,revoked=false;
+ const row={id:'review',proposal_id:'proposal',source_revision:0,revision:0,content_hash:'a'.repeat(64),snapshot_json:JSON.stringify({title:'Private proposal',content:{scope:'Private scope'}}),round_number:1,status:'OPEN',expires_at:Date.now()+60000,revoked_at:null,is_latest:1,source_live:1};
+ const DB={prepare(sql){return {bind(){return {async first(){
+  if(sql.includes('SELECT id FROM actors'))return {id:'client'};
+  if(sql.includes('SELECT r.*')){const result=visible?row:null;if(visible){visible=false;revoked=true;}return result;}
+  throw new Error('Unexpected proposal read');
+ } };} };} };
+ await assert.rejects(()=>proposalReviewsRoute(new Request('https://reviews.example.invalid/api/portal/proposals/review'),DB,{id:'client',organization_id:'a',client_id:'ca',role:'client'},null,(value,status=200)=>Response.json(value,{status})),error=>error===404);
+ assert.equal(revoked,true);
+});
 
 test('authenticated proposal reviews retain immutable client decisions and private staff history in actual D1',async t=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'proposal-reviews'},cf:false});t.after(()=>mf.dispose());const DB=await mf.getD1Database('DB');for(const name of (await readdir(new URL('./migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL('./migrations/'+name,import.meta.url),'utf8');await DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));}
@@ -22,6 +35,15 @@ test('authenticated proposal reviews retain immutable client decisions and priva
  const portal=id=>'portal/proposals/'+id,staff=id=>'proposal-reviews/'+id;
  const receipt=(key,reviewId)=>reviewId?portal(reviewId)+'/requests/'+key:'proposal-reviews/requests/'+key;
  await t.test('sharing is explicit and client views contain one immutable version without financial internals',async()=>{const p=await draft();assert.equal((await (await call('portal/proposals',undefined,'client')).json()).items.length,0);const {review:r}=await shared(p);assert.equal(r.state,'OPEN');assert.equal(r.proposalRevision,0);assert.equal(r.round,1);assert.match(r.contentHash,/^[a-f0-9]{64}$/);const pub=await (await call(portal(r.id),undefined,'client')).json();assert.equal(pub.canRespond,true);assert.equal(pub.snapshot.content.totals.totalMinor,22600);assert.equal(pub.snapshot.title,p.title);assert.equal(pub.snapshot.client.name,'Synthetic ca');for(const key of ['createdBy','sourceHash','organization_id','write_token','revocationReason'])assert.equal(pub[key],undefined);assert.doesNotMatch(JSON.stringify(pub),/finance@example|PRIVATE publication reason|createdBy|request_fingerprint/);assert.equal((await call('commercial/proposals/'+p.id,undefined,'client')).status,403);});
+ await t.test('in-flight proposal detail, lists, dashboard and saved receipts discard revoked client scope',async()=>{
+  const {review:r}=await shared(await draft()),body=decision(r);assert.equal((await call(portal(r.id)+'/respond',body,'client')).status,200);
+  const paths=[[portal(r.id),'SELECT r.*','first'],['portal/proposals?proposalId='+r.proposalId,'SELECT r.*','all'],['dashboard/reviews?state=all','dashboard_scoped','all'],[receipt(body.requestId,r.id),'SELECT e.state_json','first']];
+  for(const mutation of["UPDATE actors SET client_id='co' WHERE id='client'","UPDATE projects SET client_visible=0 WHERE id='pa'"])for(const[path,selected,method]of paths){
+   let revoked=false;const bindings={...env,DB:{prepare(sql){const statement=DB.prepare(sql);return {bind(...values){const bound=statement.bind(...values),intercept=async(kind,args)=>{const result=await bound[kind](...args);if(!revoked&&kind===method&&sql.includes(selected)){revoked=true;await DB.prepare(mutation).run();}return result;};return {first:(...args)=>intercept('first',args),all:(...args)=>intercept('all',args),run:(...args)=>bound.run(...args)};}};},batch:statements=>DB.batch(statements)}};
+   try{const response=await call(path,undefined,'client','GET',bindings);assert.equal(revoked,true,path);assert.ok([403,404,409].includes(response.status),path+': '+response.status);assert.doesNotMatch(await response.text(),/Explicit scope|Synthetic review proposal|Reviewed exact terms/);}finally{await DB.prepare("UPDATE actors SET client_id='ca' WHERE id='client'").run();await DB.prepare("UPDATE projects SET client_visible=1 WHERE id='pa'").run();}
+   assert.equal((await call(path,undefined,'client')).status,200,'Restored scope '+path);
+  }
+ });
  await t.test('foreign clients, other clients, ordinary staff and anonymous callers cannot cross boundaries',async()=>{const {review:r}=await shared(await draft());for(const who of ['other','foreign-client']){assert.equal((await call(portal(r.id),undefined,who)).status,404);assert.equal((await (await call('portal/proposals',undefined,who)).json()).items.length,0);assert.equal((await call(portal(r.id)+'/respond',decision(r),who)).status,404);}for(const who of ['staff','client','other'])assert.equal((await call('proposal-reviews',shareBody(await draft()),who)).status,403);assert.equal((await call(portal(r.id),undefined,'finance')).status,403);assert.equal((await worker.fetch(new Request(origin+'/api/'+portal(r.id)),env)).status,401);assert.equal((await call(staff(r.id),undefined,'foreign')).status,404);});
  await t.test('only proposals and current public project scope can be shared',async()=>{const privateProposal=await draft({projectId:'private'});assert.equal((await call('proposal-reviews',shareBody(privateProposal))).status,409);for(const kind of ['templates','contracts']){const r=await call('commercial/'+kind,{requestId:crypto.randomUUID(),title:'Not a proposal',...(kind==='contracts'?{clientId:'ca'}:{}),content:{text:'Literal terms'}});assert.equal(r.status,201);const item=await r.json();assert.equal((await call('proposal-reviews',shareBody(item))).status,404);}const p=await draft();assert.equal((await call('proposal-reviews',{...shareBody(p),proposalRevision:1})).status,409);assert.equal((await call('proposal-reviews',{...shareBody(p),proposalHash:'0'.repeat(64)})).status,409);});
  await t.test('expired, malformed, implicit and unknown publication inputs fail before writes',async()=>{const p=await draft();for(const extra of [{expiresAt:'2020-01-01T00:00:00Z'},{expiresAt:new Date(Date.now()+100*86400000).toISOString().replace(/\.\d{3}Z$/,'Z')},{expiresAt:'2026-11-30'},{reason:''},{sendEmail:true},{proposalHash:'not-hash'},{previousReviewId:crypto.randomUUID()}])assert.equal((await call('proposal-reviews',shareBody(p,extra))).status,400);});

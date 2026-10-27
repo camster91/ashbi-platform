@@ -4,6 +4,23 @@ import {mkdtemp,readFile,readdir,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {localStore,exportDatabase,importDatabase,databaseImage,captureObjects,restoreObjects,verifyObjects} from './recovery-local.mjs';
+import {Miniflare} from 'miniflare';
+import {generateKeyPair,SignJWT} from 'jose';
+const {createWorker}=await import(process.env.WORKSPACE_TEST_BUILT_WORKER?'./dist/worker.js':'./worker.mjs');
+
+test('large imported originals retain native checksums and download after object recovery',async t=>{
+ const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("recovery fixture")}}',d1Databases:{DB:'large-recovery'},r2Buckets:['SOURCE','RESTORED'],cf:false});t.after(()=>mf.dispose());
+ const DB=await mf.getD1Database('DB'),SOURCE=await mf.getR2Bucket('SOURCE'),RESTORED=await mf.getR2Bucket('RESTORED');
+ for(const name of(await readdir(new URL('./migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL('./migrations/'+name,import.meta.url),'utf8');await DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));}
+ await DB.prepare("INSERT INTO actors VALUES('staff','staff@example.invalid','a','staff',NULL,1)").run();await DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('c','a','Synthetic client')").run();await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name) VALUES('p','a','c','Synthetic project')").run();
+ const bytes=new Uint8Array(6*1024*1024).fill(71),sha256=Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex');await SOURCE.put('large',bytes,{sha256});
+ await DB.prepare("INSERT INTO files(id,organization_id,project_id,actor_id,name,object_key,size,sha256,state,created_at) VALUES('large','a','p','staff','Large original.bin','large',?,?,'ready',1)").bind(bytes.length,sha256).run();
+ const {publicKey,privateKey}=await generateKeyPair('RS256'),origin='https://recovery.example.invalid',issuer='https://identity.cloudflareaccess.com',token=await new SignJWT({email:'staff@example.invalid'}).setProtectedHeader({alg:'RS256'}).setIssuer(issuer).setAudience('recovery').setSubject('staff').setIssuedAt().setExpirationTime('10m').sign(privateKey),worker=createWorker(publicKey);
+ const download=FILES=>worker.fetch(new Request(origin+'/api/files/large/download',{headers:{'cf-access-jwt-assertion':token}}),{DB,FILES,APP_ORIGIN:origin,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'recovery'});
+ const original=await download(SOURCE);assert.equal(original.status,200);assert.deepEqual(new Uint8Array(await original.arrayBuffer()),bytes);const image=await captureObjects(SOURCE);await restoreObjects(RESTORED,image);await verifyObjects(RESTORED,image);
+ assert.equal(Buffer.from((await RESTORED.head('large')).checksums.sha256??[]).toString('hex'),sha256,'native checksum is required by the streamed download route');
+ const response=await download(RESTORED);assert.equal(response.status,200);assert.deepEqual(new Uint8Array(await response.arrayBuffer()),bytes);
+});
 
 test('native local D1 SQL export restores exact schema and literal data into separate storage',async t=>{
  const root=await mkdtemp(join(tmpdir(),'ashbi-recovery-'));
@@ -32,7 +49,6 @@ import {stripeDeliveryProvider} from './stripe-delivery-provider.mjs';
 import {makePilotFixture} from './pilot-source-fixture.mjs';
 import {reconcilePilot} from './pilot-reconcile.mjs';
 import {applySourcePilot,readSourcePilot,readSourceObject} from './source-pilot.mjs';
-const {createWorker}=await import(process.env.WORKSPACE_TEST_BUILT_WORKER?'./dist/worker.js':'./worker.mjs');
 
 test('complete native D1 and private R2 recovery retains the joined workspace, evidence and external idempotency',async t=>{
  const root=await mkdtemp(join(tmpdir(),'ashbi-workspace-recovery-'));

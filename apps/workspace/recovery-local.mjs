@@ -62,7 +62,7 @@ export async function captureObjects(FILES){
  return objects.sort((a,b)=>a.key.localeCompare(b.key,'en'));
 }
 export async function restoreObjects(FILES,objects){
- for(const object of objects){const bytes=Buffer.from(object.base64,'base64');assert.equal(bytes.length,object.size,'image length mismatch');assert.equal(hash(bytes),object.sha256,'image hash mismatch');await FILES.put(object.key,bytes,{httpMetadata:{...object.httpMetadata,...(object.httpMetadata.cacheExpiry?{cacheExpiry:new Date(object.httpMetadata.cacheExpiry)}:{})},customMetadata:object.customMetadata});}
+ for(const object of objects){const bytes=Buffer.from(object.base64,'base64');assert.equal(bytes.length,object.size,'image length mismatch');assert.equal(hash(bytes),object.sha256,'image hash mismatch');await FILES.put(object.key,bytes,{sha256:object.sha256,httpMetadata:{...object.httpMetadata,...(object.httpMetadata.cacheExpiry?{cacheExpiry:new Date(object.httpMetadata.cacheExpiry)}:{})},customMetadata:object.customMetadata});}
  await verifyObjects(FILES,objects);
 }
 export async function verifyObjects(FILES,objects){assert.deepEqual(await captureObjects(FILES),objects,'complete private object image must match');}

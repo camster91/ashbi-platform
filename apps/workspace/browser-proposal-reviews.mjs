@@ -4,9 +4,26 @@ import {fileURLToPath} from 'node:url';
 import {hold} from './browser-regressions.mjs';
 const json=data=>({status:200,contentType:'application/json',body:JSON.stringify(data)}),failure={status:503,contentType:'application/json',body:JSON.stringify({error:'Synthetic review failure'})};
 async function call(page,path,body,method=body?'POST':'GET'){return page.evaluate(async({path,body,method})=>{const r=await fetch('/api/'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()};},{path,body,method});}
+export async function runProposalPaginationFailureTests({browser,origin}){
+ for(const identity of ['qa-review-fin','qa-review-client'])await test('review '+identity+' failed project filter clears previous rows and restarts pagination',async t=>{
+  const page=await browser.newPage({extraHTTPHeaders:{'X-Test-Actor':identity}});t.after(()=>page.close());
+  const oldId='90000000-0000-4000-8000-000000000001',newId='10000000-0000-4000-8000-000000000001',lastId='20000000-0000-4000-8000-000000000001',projectId='10000000-0000-4000-8000-000000000002',requests=[];let initialFailure=true,appendFailure=true;
+  const row=(id,title)=>({id,title,state:'OPEN',round:1,proposalRevision:1,currency:'CAD',totalMinor:100});
+  await page.route('**/api/projects',route=>route.fulfill(json({items:[{id:projectId,name:'New project'}],nextCursor:null})));
+  await page.route(/\/api\/(?:portal\/proposals|proposal-reviews)(?:\?.*)?$/,route=>{const url=new URL(route.request().url());requests.push(url.search);if(!url.searchParams.has('projectId'))return route.fulfill(json({items:[row(oldId,'Previous project review')],nextCursor:oldId}));if(initialFailure){initialFailure=false;return route.fulfill(failure);}if(url.searchParams.has('after')&&appendFailure){appendFailure=false;return route.fulfill(failure);}return route.fulfill(json(url.searchParams.has('after')?{items:[row(lastId,'Last new review')],nextCursor:null}:{items:[row(newId,'First new review')],nextCursor:newId}));});
+  await page.goto(origin+'/#reviews');await page.getByRole('button',{name:'Open review Previous project review',exact:true}).waitFor();
+  await page.getByLabel('Review project filter',{exact:true}).selectOption(projectId);await page.getByText('Unable to load reviews.',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Open review Previous project review',exact:true}).count(),0);
+  assert.equal(await page.getByRole('button',{name:'Load more reviews',exact:true}).isVisible(),false);
+  await page.getByRole('button',{name:'Refresh reviews',exact:true}).click();await page.getByRole('button',{name:'Open review First new review',exact:true}).waitFor();assert.equal(new URLSearchParams(requests.at(-1)).has('after'),false);
+  await page.getByRole('button',{name:'Load more reviews',exact:true}).click();await page.getByText('Unable to load reviews.',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Open review First new review',exact:true}).count(),1);
+  await page.getByRole('button',{name:'Load more reviews',exact:true}).click();await page.getByRole('button',{name:'Open review Last new review',exact:true}).waitFor();assert.equal(new URLSearchParams(requests.at(-1)).get('after'),newId);assert.equal(await page.getByRole('button',{name:'Open review First new review',exact:true}).count(),1);
+ });
+}
 export async function runProposalReviewTests({browser,origin,DB,addActor,axe}){
  const baseProject=await DB.prepare("SELECT * FROM projects WHERE name='QA project'").first(),projectId=crypto.randomUUID(),otherClientId=crypto.randomUUID();await DB.prepare('INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES(?,?,?,?,1)').bind(projectId,'qa-org',baseProject.client_id,'Review UI project').run();await DB.prepare('INSERT INTO clients(id,organization_id,name) VALUES(?,?,?)').bind(otherClientId,'qa-org','Other review client').run();
  for(const [id,role,client]of [['qa-review-fin','staff',null],['qa-review-client','client',baseProject.client_id],['qa-review-contact','client',baseProject.client_id],['qa-review-other','client',otherClientId]])await addActor(id,id+'@example.invalid',role,client);await DB.prepare("INSERT INTO actor_finance_access VALUES('qa-review-fin','qa-org')").run();
+ await runProposalPaginationFailureTests({browser,origin});
  const expires=()=>new Date(Math.floor((Date.now()+3600000)/1000)*1000).toISOString().replace('.000Z','Z'),localExpiry=()=>expires().slice(0,-1);
  const proposal=title=>({requestId:crypto.randomUUID(),title,clientId:baseProject.client_id,projectId,content:{scope:'<b>Literal client scope</b>',schedule:'Dates to agree',terms:'Quoted terms',currency:'CAD',charges:[{description:'Design',quantity:2,unitMinor:5000}],discountMinor:0,tax:{type:'HST',rateBps:1300},depositMinor:1000}});
  async function open(t,who='qa-review-fin'){const page=await browser.newPage({extraHTTPHeaders:{'X-Test-Actor':who}}),errors=[];page.on('pageerror',e=>errors.push(e.message));t.after(async()=>{await page.close();assert.deepEqual(errors,[]);});await page.goto(origin+'/#reviews');await page.locator('main[aria-busy]').waitFor({state:'detached'});assert.equal(await page.getByRole('heading',{name:'Proposal reviews',exact:true}).count(),1);return page;}
