@@ -2,9 +2,9 @@
 node_modules/
 
 # Environment
-.env
-.env.local
-.env.*.local
+.env*
+!.env.example
+!.env.*.example
 
 # Database
 *.db
@@ -46,12 +46,12 @@ config/google-tokens.json
 *.key
 
 # Temporary / generated scripts
-docker-compose.yml.old
-tmp-*.mjs
-tmp-*.js
-merge*.mjs
-set-budgets.js
-create-*.mjs
+/docker-compose.yml.old
+/tmp-*.mjs
+/tmp-*.js
+/merge*.mjs
+/set-budgets.js
+/create-*.mjs
 
 # Uploads and data directories
 uploads/
@@ -64,9 +64,6 @@ data/
 /playwright/.cache/
 /playwright/.auth/
 /.lighthouseci/
-
-.env*
-data/
 
 # E2E test artifacts
 tests/e2e/.vitest-output.json
