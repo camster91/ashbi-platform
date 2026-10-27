@@ -27,7 +27,25 @@ export async function records(request,db,actor,table,id,input,json){
  let {clause,values}=table==='notes'&&request.method==='GET'?documentQuery(request,actor,id):scope(table,actor);
  if(request.method==='GET'){
   if(table==='projects'){const params=new URL(request.url).searchParams,archive=params.get('archived');if(params.getAll('archived').length>1||archive!==null&&!['all','active','archived'].includes(archive))throw 400;if(archive&&archive!=='all'){clause+=' AND projects.archived=?';values.push(Number(archive==='archived'));}}
-  if(table==='tasks'){const params=new URL(request.url).searchParams,include=params.get('includeArchivedProjects');if(params.getAll('includeArchivedProjects').length>1||include!==null&&!['true','false'].includes(include))throw 400;if(!id&&include!=='true')clause+=' AND EXISTS(SELECT 1 FROM projects archive_project WHERE archive_project.id=tasks.project_id AND archive_project.organization_id=tasks.organization_id AND archive_project.archived=0)';}
+  if(table==='tasks'&&!id){
+   const params=new URL(request.url).searchParams,include=params.get('includeArchivedProjects');
+   for(const key of ['q','projectId','status','assigneeId','after','includeArchivedProjects'])if(params.getAll(key).length>1)throw 400;
+   if(include!==null&&!['true','false'].includes(include))throw 400;
+   if(include!=='true')clause+=' AND EXISTS(SELECT 1 FROM projects archive_project WHERE archive_project.id=tasks.project_id AND archive_project.organization_id=tasks.organization_id AND archive_project.archived=0)';
+   for(const key of ['q','projectId','assigneeId']){
+    const raw=params.get(key);if(raw===null)continue;
+    if(!short(raw))throw 400;
+    const value=raw.trim();
+    if(key==='q'){clause+=' AND instr(lower(tasks.title),lower(?))>0';values.push(value);}
+    else if(key==='projectId'){clause+=' AND tasks.project_id=?';values.push(value);}
+    else {
+     if(actor.role!=='staff')throw 403;
+     if(value==='unassigned')clause+=' AND tasks.assignee_id IS NULL';
+     else {clause+=' AND tasks.assignee_id=?';values.push(value);}
+    }
+   }
+   const status=params.get('status');if(status!==null){if(!spec.fields.status(status))throw 400;clause+=' AND tasks.status=?';values.push(status);}
+  }
   if(id){const row=await db.prepare(`SELECT ${projection} FROM ${table} WHERE ${clause} AND id=?`).bind(...values,id).first();return row?json(row):json({error:'Not found'},404);}
   const after=new URL(request.url).searchParams.get('after')||'';if(after.length>100)throw 400;
   const result=await db.prepare(`SELECT ${projection} FROM ${table} WHERE ${clause} AND id>? ORDER BY id LIMIT 51`).bind(...values,after).all();

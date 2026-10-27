@@ -153,7 +153,7 @@ export const clientScript=String.raw`(function uiMain(){
   panel.append(form,button('Clear document filters',()=>{state.documentOptions={q:'',projectId:'',parentId:'*',includeArchived:false};return load(true);},true,state),node('p',state.rows.length+' loaded documents'+(state.cursor?'. More matches are available.':'.'),'help'),node('p','Client access requires a shared, active document, every ancestor and its project. Archiving a parent hides its descendants; their own archive choices are preserved.','help'));main.append(panel);
  }
  function projectPath(state,cursor){return 'projects?archived='+state.projectArchive+(cursor?'&after='+encodeURIComponent(cursor):'');}
- function taskPath(state,cursor){const params=new URLSearchParams();if(state.taskOptions.includeArchivedProjects)params.set('includeArchivedProjects','true');if(cursor)params.set('after',cursor);return 'tasks'+(params.size?'?'+params:'');}
+ function taskPath(state,cursor){const params=new URLSearchParams(),options=state.taskOptions;for(const [key,value]of [['q',options.q],['projectId',options.project],['status',options.status],['assigneeId',options.assignee]])if(value)params.set(key,value);if(options.includeArchivedProjects)params.set('includeArchivedProjects','true');if(cursor)params.set('after',cursor);return 'tasks'+(params.size?'?'+params:'');}
  function captureTaskDraft(state){if(state?.page!=='tasks'||state.discardTaskDraft)return;const form=main.querySelector('form[data-task-create]');if(form)state.taskDraft={...Object.fromEntries(new FormData(form)),clientVisible:form.elements.clientVisible.checked};}
  function projectToolbar(state){const form=node('section',undefined,'panel'),select=field(form,'projectArchive','Project archive','text',[{id:'active',name:'Active projects'},{id:'archived',name:'Archived projects'},{id:'all',name:'All projects'}]);select.options[0].remove();select.value=state.projectArchive;select.onchange=()=>{if(!current(state))return;state.projectArchive=select.value;load(true);};main.append(form);}
  function recordForm(record,container=main,state=view){const {page,parents,staff}=state;if(actor.role!=='staff'||!['clients','projects','tasks','notes'].includes(page))return;const panel=node('section',undefined,'panel');panel.append(node('h2',(record?'Edit ':'Add ')+({clients:'client',projects:'project',tasks:'task',notes:'document'})[page]));const form=document.createElement('form');if(page==='tasks'&&!record)form.setAttribute('data-task-create','');if(page==='notes'&&!record){form.setAttribute('data-document-create','');for(const event of ['input','change'])form.addEventListener(event,()=>{form.dataset.dirty='true';});}
@@ -256,19 +256,22 @@ ${overviewUiScript}
 
  function taskRecords(state,panel){
   const options=state.taskOptions,names={todo:'To do',doing:'In progress',review:'Review',waiting:'Waiting',later:'Later',done:'Done',retired:'Retired',archived:'Archived'};
-  const toolbar=node('div',undefined,'task-toolbar'),views=node('div',undefined,'task-views');views.setAttribute('role','group');views.setAttribute('aria-label','Task view');
+  const toolbar=node('form',undefined,'task-toolbar'),views=node('div',undefined,'task-views');views.setAttribute('role','group');views.setAttribute('aria-label','Task view');
   const list=button('List',()=>{options.layout='list';update();},true,state),board=button('Board',()=>{options.layout='board';update();},true,state);views.append(list,board);panel.append(views);
   const project=field(toolbar,'projectFilter','Project filter','text',state.parents),status=field(toolbar,'statusFilter','Status filter','text',Object.entries(names).map(([id,name])=>({id,name})));
-  const assignee=actor.role==='staff'?field(toolbar,'assigneeFilter','Assignee filter','text',state.staff):null;
+  const query=field(toolbar,'taskSearch','Search tasks','search');query.required=false;query.maxLength=200;query.value=options.q||'';
+  const assignee=actor.role==='staff'?field(toolbar,'assigneeFilter','Assignee filter','text',[{id:'unassigned',name:'Unassigned'},...state.staff]):null;
   const archivedProjects=field(toolbar,'includeArchivedProjects','Show tasks in archived projects','checkbox');archivedProjects.checked=Boolean(options.includeArchivedProjects);archivedProjects.onchange=()=>{if(!current(state))return;captureTaskDraft(state);options.includeArchivedProjects=archivedProjects.checked;load(true);};
   for(const [select,key,all]of [[project,'project','All projects'],[status,'status','All statuses'],...(assignee?[[assignee,'assignee','All staff']]:[])]){
-   select.required=false;select.options[0].textContent=all;select.value=options[key];select.onchange=()=>{if(!current(state))return;options[key]=select.value;update();};
+   select.required=false;select.options[0].textContent=all;select.value=options[key];select.onchange=()=>{if(!current(state))return;options[key]=select.value;options.q=query.value.trim();load(true);};
   }
+  const search=node('button','Search tasks');search.type='submit';toolbar.append(search);toolbar.onsubmit=e=>{e.preventDefault();if(!current(state))return;options.q=query.value.trim();load(true);};
+  toolbar.append(button('Clear task filters',()=>{state.taskOptions={layout:options.layout,q:'',project:'',status:'',assignee:'',includeArchivedProjects:false};return load(true);},true,state));
   const summary=node('p',undefined,'help'),content=node('div');summary.setAttribute('role','status');panel.append(toolbar,summary,content);
   function update(){
    list.setAttribute('aria-pressed',String(options.layout==='list'));board.setAttribute('aria-pressed',String(options.layout==='board'));panel.setAttribute('aria-label','Tasks '+options.layout);
-   const filtered=state.rows.filter(r=>(!options.project||r.project_id===options.project)&&(!options.status||r.status===options.status)&&(!options.assignee||r.assignee_id===options.assignee));
-   summary.textContent=filtered.length+' of '+state.rows.length+' loaded tasks'+(state.cursor?'. More tasks are available; load more to include them.':'.');
+   const filtered=state.rows;
+   summary.textContent=filtered.length+' matching tasks loaded'+(state.cursor?'. More matches are available.':'.');
    content.replaceChildren();content.className=options.layout==='board'?'task-board':'';
    if(options.layout==='board'){
     for(const [status,name]of Object.entries(names)){const column=node('section',undefined,'task-column');column.setAttribute('aria-label',name);column.append(node('h2',name));const tasks=filtered.filter(r=>r.status===status);if(!tasks.length)column.append(node('p','No tasks in this status.','muted'));for(const record of tasks)column.append(recordItem(record,state));content.append(column);}
