@@ -102,7 +102,7 @@ jobs:
           java-version: '21'
       - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1
         with:
-          ruby-version: '3.3'
+          ruby-version: '4.0.6'
           bundler-cache: false
           working-directory: mobile-testing
       - name: Install pinned submission tooling
