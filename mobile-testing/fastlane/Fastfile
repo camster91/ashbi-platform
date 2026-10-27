@@ -1,0 +1,45 @@
+require "json"
+
+desc "Upload the verified binary to the app's internal testing destination"
+lane :mobile_testing do
+  project_root = File.expand_path("../..", __dir__)
+  platform = ENV.fetch("BETA_PLATFORM")
+  # Reverify in the credential-bearing job; never trust a previous job's output alone.
+  sh("python3", File.join(project_root, "scripts/mobile_testing.py"), "verify")
+  config = JSON.parse(File.read(File.join(project_root, "mobile-testing.json")))
+  receipt = JSON.parse(File.read(File.join(ENV.fetch("BETA_ARTIFACT_DIR"), "mobile-testing-receipt.json")))
+  binary = File.join(ENV.fetch("BETA_ARTIFACT_DIR"), receipt.fetch("artifact").fetch("filename"))
+  if platform == "ios"
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_API_PRIVATE_KEY"),
+      in_house: false
+    )
+    upload_to_testflight(
+      api_key: api_key,
+      app_identifier: config.fetch("identifiers").fetch("ios"),
+      ipa: binary,
+      skip_submission: true,
+      skip_waiting_for_build_processing: true,
+      distribute_external: false,
+      notify_external_testers: false
+    )
+    UI.message("Upload accepted. App Store Connect processing and internal-test installation still need verification.")
+  elsif platform == "android"
+    upload_to_play_store(
+      json_key_data: ENV.fetch("PLAY_SERVICE_ACCOUNT_JSON"),
+      package_name: config.fetch("identifiers").fetch("android"),
+      aab: binary,
+      track: "internal",
+      release_status: "completed",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: true
+    )
+    UI.message("Upload accepted on the internal track. Processing and tester installation still need verification.")
+  else
+    UI.user_error!("Select ios or android.")
+  end
+end

@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "repository": "camster91/ashbi-platform",
+  "framework": "capacitor",
+  "mobile_root": "web",
+  "identifiers": {
+    "ios": null,
+    "android": "ca.ashbi.hub"
+  },
+  "required_checks": [
+    "source-checks",
+    "native-build",
+    "signing"
+  ],
+  "build_workflows": {
+    "ios": [],
+    "android": []
+  },
+  "source_branches": [
+    "main"
+  ],
+  "upload_environments": {
+    "ios": "mobile-testing",
+    "android": "mobile-testing"
+  },
+  "release_owner": {
+    "login": "camster91",
+    "id": 33962910
+  }
+}
