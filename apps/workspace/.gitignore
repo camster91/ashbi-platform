@@ -4,3 +4,5 @@ dist/
 .dev.vars*
 contract-font-assets.generated.mjs
 contract-font-assets.*.tmp
+ui-font-assets.generated.mjs
+ui-font-assets.*.tmp
