@@ -27,3 +27,10 @@ area, for example `layout.contract.test.js` (shell), `client-portal.contract.tes
 `portal-pages.contract.test.js`, `page-actions-accessibility.contract.test.js`,
 `workflow-state.contract.test.js` and `finance-workflow-state.contract.test.js`.
 Add a new block to the matching file rather than a new file.
+
+Workflow contracts for invoices, rate cards and the asset library share
+`contracts/finance-workflow-state.contract.test.js`. Gmail reply and semantic
+search contracts share `contracts/workflow-state.contract.test.js`. These tests
+read source and use Node, without a jsdom environment. Date-only helpers and
+telemetry scrubbing also run in Node. Markdown rendering tests retain jsdom
+because the sanitizer uses browser APIs.

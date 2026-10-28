@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-// Two projects (docs/frontend-tests.md):
+// Three projects (docs/frontend-tests.md):
 // - contracts: tests that only read source files or call plain modules. They
 //   run in Node with shared module state, which skips a jsdom start per file.
 // - dom: everything that renders or touches browser APIs, in jsdom on
