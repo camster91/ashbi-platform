@@ -1,5 +1,10 @@
 # Canonical product and release status
 
+> **Repository housekeeping — 27 October 2026:** The owner closed all remaining
+> issues as not planned and all open PRs unmerged, including #684. Issue/PR state
+> claims below belong to their dated checkpoints. Closure does not establish
+> acceptance or remediation, and this source cleanup does not reverify production.
+
 > **Planning direction — 23 October 2026:** The two-person Bonsai/Notion replacement is now scoped in [tasks/plan.md](../tasks/plan.md) and [GitHub #565](https://github.com/camster91/ashbi-platform/issues/565). The Cloudflare target is unverified; the runtime/deployment evidence below remains historical evidence for the existing application. No production cutover or release-setting change is authorized by this planning update.
 
 ## Current Cloudflare source checkpoint — 26 October 2026

@@ -149,6 +149,11 @@ Generated references are checked in CI so they never drift from the code:
 
 Contribution rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
+Project instructions are in [AGENTS.md](AGENTS.md). Older roadmaps, code reviews,
+deployment checklists and model-specific guides live in [docs/archive/](docs/archive/)
+and are historical reference. The current production procedure is
+[deployment-and-rollback.md](docs/deployment-and-rollback.md).
+
 ## License
 
 [MIT](LICENSE)

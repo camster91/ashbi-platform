@@ -1,6 +1,6 @@
 # Security Audit Checklist - Agency Hub
 
-> **Historical checklist, not a current certification.** Checked boxes record earlier implementation work and do not prove present production clearance. Current security/release evidence is linked from [docs/product-status.md](docs/product-status.md), [docs/release-gates.md](docs/release-gates.md), and the open security/external-gate issues.
+> **Historical checklist, not a current certification.** Checked boxes record earlier implementation work and do not prove present production clearance. Current security/release evidence is linked from [docs/product-status.md](../product-status.md), [docs/release-gates.md](../release-gates.md), and the open security/external-gate issues.
 
 ## ✅ COMPLETED FIXES
 

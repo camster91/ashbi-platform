@@ -1,5 +1,10 @@
 # Simple Ashbi workspace implementation plan
 
+> **Historical planning reference — 27 October 2026:** The owner closed all
+> remaining issues and PRs. The linked execution queue and the hold on #684 below
+> record earlier direction; #684 is now closed unmerged. These closures do not
+> establish delivery or acceptance. Follow the current owner request for new work.
+
 Decision date: 23 October 2026. Canonical execution tracker: [#565](https://github.com/camster91/ashbi-platform/issues/565). Tasks live in GitHub Issues, not a second checklist here.
 
 ## Outcome and authority

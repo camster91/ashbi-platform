@@ -2,7 +2,7 @@
 
 This document is the authoritative repository delivery policy. If another document
 conflicts with it about branches, pull requests, verification, review, or issue closure,
-this document wins. `PRODUCTION_DEPLOYMENT.md` remains authoritative for production
+this document wins. `docs/deployment-and-rollback.md` remains authoritative for production
 operations, and the issue's accepted criteria remain authoritative for product behavior.
 
 ## One issue, one reviewable slice
