@@ -20,12 +20,14 @@ function zip(entries,method=0){
 const trace=(url='http://127.0.0.1:4188/api/client-portal/me',headers=[])=>zip({'test.trace':JSON.stringify({type:'context-options',options:{baseURL:'http://127.0.0.1:4188'}})+'\n','1-trace.network':JSON.stringify({type:'resource-snapshot',snapshot:{request:{url,headers,cookies:[]},response:{headers:[],cookies:[]}}})+'\n'});
 const chronology=(retry=0)=>({schemaVersion:1,issue:659,title:TITLE,projectName:'chromium',retry,repeatEachIndex:0,synthetic:true,sourceMarker:'portal-chooser-659-v1',originScope:'loopback-only',fontChecks:{status:'loaded',registeredDmSans:true,dmSans400:true,dmSans500:true,dmSans600:true},tracePolicy:{mode:'on',sources:false,attachments:false,screenshots:false,snapshots:true},boundary:{externalBlockedCount:0,unexpectedApiCount:0,truncated:false,drainStatus:'complete'},events:[{clock:'node',seq:0,ms:0,event:'START'},{clock:'browser',seq:0,ms:1,event:'CLICK',target:'upload-button',active:'upload-button',key:'Enter',trusted:true,phase:'capture'},{clock:'node',seq:1,ms:3,event:'FILECHOOSER'}]});
 function fixture(results=[{status:'passed',retry:0}],change=()=>{}){
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'ashbi-portal-collector-')),resultsRoot=path.join(root,'test-results');fs.mkdirSync(resultsRoot);
+ // Keep fixture paths aligned with the collector's canonical filesystem paths.
+ const tempRoot=fs.realpathSync(os.tmpdir());
+ const root=fs.mkdtempSync(path.join(tempRoot,'ashbi-portal-collector-')),resultsRoot=path.join(root,'test-results');fs.mkdirSync(resultsRoot);
  const report={config:{rootDir:path.join(root,'tests')},suites:[{specs:[{title:TITLE,file:'keyboard-journeys.spec.ts',tests:[{projectName:'chromium',results:results.map(r=>{
   const dir=path.join(resultsRoot,`attempt-${r.retry}`);fs.mkdirSync(dir);const chrono=path.join(dir,'portal-chooser-659-chronology.json'),t=path.join(dir,'trace.zip');fs.writeFileSync(chrono,JSON.stringify(chronology(r.retry)));fs.writeFileSync(t,trace());return {...r,annotations:[{type:'portal-chooser-repeat',description:'0'}],attachments:[{name:'portal-chooser-659-chronology',contentType:'application/json',path:chrono},{name:'trace',contentType:'application/zip',path:t}]};
  })}]}]}]};
  const options={reportFile:path.join(root,'report.json'),resultsRoot,outputDir:path.join(root,'output'),expectedSource:path.join(root,'tests/keyboard-journeys.spec.ts')};change({root,report,options});fs.writeFileSync(options.reportFile,JSON.stringify(report));
- return {root,report,options,run:()=>collect(options),cleanup:()=>{assert.equal(path.dirname(root),path.resolve(os.tmpdir()));assert.ok(path.basename(root).startsWith('ashbi-portal-collector-'));fs.rmSync(root,{recursive:true,force:true});}};
+ return {root,report,options,run:()=>collect(options),cleanup:()=>{assert.equal(path.dirname(root),tempRoot);assert.ok(path.basename(root).startsWith('ashbi-portal-collector-'));fs.rmSync(root,{recursive:true,force:true});}};
 }
 function run(results,change,check){const f=fixture(results,change);try{check(f.run(),f);}finally{f.cleanup();}}
 

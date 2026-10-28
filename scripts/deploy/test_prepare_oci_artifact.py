@@ -43,7 +43,9 @@ def fixture(change=None):
 class ArtifactTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        # The validator rejects symlink path components; macOS aliases /var to
+        # /private/var. Canonicalize only the synthetic fixture's root.
+        self.root = Path(self.temp.name).resolve()
         self.source = self.root / 'input.tar'
         self.output = self.root / f'ashbi-platform-{REVISION}-oci-gzip.tar'
 
