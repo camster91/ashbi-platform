@@ -20,7 +20,7 @@ test('existing Hub sessions authenticate the workspace without Access',async t=>
   assert.equal((await f.call('/api/me',{cookie:f.cookie+'; impersonation=forged',headers:{Authorization:'Bearer forged'}})).status,200);
   assert.equal(f.calls.at(-1).headers.get('cookie'),f.cookie);assert.equal(f.calls.at(-1).headers.get('authorization'),null);
   const good=f.sessions.get(f.cookie);
-  for(const change of [{role:'CLIENT'},{organizationId:'foreign'},{mfaEnrollmentRequired:true},{impersonation:{active:true}},{email:'unknown@example.invalid'}]){f.sessions.set(f.cookie,{...good,...change});assert.equal((await f.call('/api/me',{cookie:f.cookie})).status,403);}
+  for(const change of [{role:'CLIENT'},{organizationId:'foreign'},{mfaEnrollmentRequired:true},{impersonation:{active:true}},{email:'unknown@example.invalid'}]){f.sessions.set(f.cookie,{...good,...change});assert.equal((await f.call('/api/me',{cookie:f.cookie})).status,403);assert.equal((await f.call('/',{cookie:f.cookie})).headers.get('location'),'/login');}
   f.sessions.set(f.cookie,good);await f.DB.prepare("UPDATE actors SET active=0 WHERE id='native-staff'").run();assert.equal((await f.call('/api/me',{cookie:f.cookie})).status,403);await f.DB.prepare("UPDATE actors SET active=1 WHERE id='native-staff'").run();
  });
  await t.test('client sessions retain workspace client isolation',async()=>{

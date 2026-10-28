@@ -53,11 +53,11 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
   if(['GET','HEAD'].includes(request.method)&&url.pathname.startsWith('/fonts/')){const bytes=fontAsset(url.pathname);if(!bytes)throw 404;return new Response(request.method==='HEAD'?null:bytes,{headers:{...security,'Content-Type':'font/woff2','Content-Length':String(bytes.byteLength),'Cache-Control':'public, max-age=31536000, immutable'}});}
  }
  let identity;try{identity=nativeAuth?await hubIdentity(request,env,providers.authFetch):await authenticate(request,env,resolveKey);}catch(e){
-  if(nativeAuth&&e===401&&request.method==='GET'&&url.pathname==='/')return new Response(null,{status:303,headers:{...security,Location:'/login'}});
+  if(nativeAuth&&[401,403].includes(e)&&request.method==='GET'&&url.pathname==='/')return new Response(null,{status:303,headers:{...security,Location:'/login'}});
   throw nativeAuth&&[401,403,503].includes(e)?e:401;
  }
- const actor=await env.DB.prepare('SELECT id,organization_id,role,client_id FROM actors WHERE email=? AND active=1').bind(identity.email).first();if(!actor)throw 403;
- if(nativeAuth&&actor.role!==identity.role)throw 403;
+ const actor=await env.DB.prepare('SELECT id,organization_id,role,client_id FROM actors WHERE email=? AND active=1').bind(identity.email).first();
+ if(!actor||nativeAuth&&actor.role!==identity.role){if(nativeAuth&&request.method==='GET'&&url.pathname==='/')return new Response(null,{status:303,headers:{...security,Location:'/login'}});throw 403;}
  if(['GET','HEAD'].includes(request.method)&&url.pathname.startsWith('/fonts/')){
   const bytes=fontAsset(url.pathname);if(!bytes)throw 404;
   return new Response(request.method==='HEAD'?null:bytes,{headers:{...security,'Content-Type':'font/woff2','Content-Length':String(bytes.byteLength),'Cache-Control':'private, max-age=31536000, immutable'}});
