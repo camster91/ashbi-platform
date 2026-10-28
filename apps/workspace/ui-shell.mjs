@@ -38,6 +38,7 @@ export const html=`<!doctype html>
  <a class="skip" href="#main">Skip to content</a>
  <header class="app-header">
   <a class="brand" href="/">ashbi<span>Workspace</span></a>
+  <button type="button" id="workspace-search" class="secondary" aria-keyshortcuts="Control+k Meta+k">Search workspace</button>
   <a class="sign-out" href="/cdn-cgi/access/logout">Sign out</a>
  </header>
  <section id="active-timer" aria-label="Active timer" hidden>

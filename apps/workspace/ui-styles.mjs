@@ -128,6 +128,11 @@ main { min-width: 0; width: 100%; max-width: 88rem; padding: var(--space-7) clam
   .compact-record .record-actions > :is(button,a) { font-size: var(--text-xs); }
   .compact-record .record-identity p, .compact-record .record-details p { margin-block: var(--space-1); }
 }
+ .search-dialog { width: min(48rem,calc(100vw - 2rem)); }
+.search-results { border-top: 1px solid var(--color-border); padding-block: var(--space-3); }
+.search-results > a { display: flex; align-items: center; min-height: 44px; padding: var(--space-2); overflow-wrap: anywhere; }
+#workspace-search { margin-left: auto; }
+@media(max-width:480px) { #workspace-search { padding-inline: var(--space-2); font-size: var(--text-xs); } }
 .notice { border-left: 3px solid var(--color-brand); border-radius: 0 var(--radius-control) var(--radius-control) 0; padding: var(--space-3) var(--space-4); background: var(--color-brand-soft); font-size: var(--text-label); }
 .error { color: var(--color-error); font-weight: 600; padding: var(--space-3) var(--space-4); background: var(--color-error-surface); border-radius: var(--radius-control); }
 .stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
