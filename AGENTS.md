@@ -10,6 +10,7 @@
 
 - Use the Node version in `.nvmrc`. Install from lockfiles with `npm ci` and `npm ci --prefix web`; generate the Prisma client with `npm run db:generate`.
 - The API and worker do not automatically load `.env`. Export the intended local values in their shells before `npm run dev` or `npm run dev:worker`. The frontend runs with `npm run dev:web`.
+- `npm run test:core` runs the focused daily API/UI suite (about 100 cases). Use it for quick feedback; the full suites below remain release checks.
 - `npm run verify:quick` checks package boundaries, types, both linters and backend/frontend unit tests without a database.
 - `verify`, `verify:release` and `test:integration` mutate fixtures. Use only the separate disposable loopback test database in [local-verification.md](docs/local-verification.md). Never disable its safety guard or use development/customer data.
 - Shared environments use committed migrations with `prisma migrate deploy`. Reserve `prisma db push` for throwaway schema experiments.

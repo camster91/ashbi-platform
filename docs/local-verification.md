@@ -1,5 +1,40 @@
 # Local verification
 
+## Daily core suite
+
+Run `npm run test:core` for about 100 focused cases spanning the existing Hub's
+API and rendered React interface. It runs whole files through the existing Node
+and Vitest runners, without case-name filters or a hard count cap. Selections
+live in `package.json` under `test:core:api` and `test:core:web`.
+
+At the 27 October 2026 checkpoint, 61 API cases and 43 rendered UI cases passed
+on Node 24.22.0: 104 total, with reported runner times of 0.7 and 3.0 seconds.
+Let meaningful coverage guide future changes rather than enforcing that count.
+
+| Workflow | Selected checks |
+| --- | --- |
+| Identity and access | Revocable sessions, current portal principals, foreign-client invitation denial, MFA sign-in and recovery codes |
+| Tenant isolation | Scoped proxy reads/writes, nested relations and rejection of unlisted methods |
+| Clients and delivery | Contact editing, project paging/classification, task creation and keyboard stage movement |
+| Time | Persisted start/stop behavior, minute rounding, ownership and approved/invoiced-entry locks |
+| Billing | Atomic invoice replacement/rollback, reviewed unbilled-source claims and restricted portal balances |
+| Files | Extension/MIME/signature policy, upload progress/failure/size checks and authenticated download controls |
+| Documents | Revision races, foreign/deleted-note refusal, conflict comparison, retained drafts and failed-read recovery |
+
+Install root and frontend dependencies and generate Prisma before the first run
+(`npm ci`, `npm ci --prefix web`, `npm run db:generate`). Core tests use synthetic
+fixtures and need no live database, Redis, browser installation or provider
+credentials. API tests use in-memory doubles; rendered UI tests use jsdom and
+mocked API boundaries. They do not prove real database transactions, provider
+delivery, actual-browser behavior or hosted acceptance.
+
+`npm test`, `npm --prefix web test`, `verify:quick`, integration/browser suites
+and CI retain the full regression checks. Choose affected focused suites while
+editing; run the complete applicable checks before review or release. The
+separate Cloudflare pilot in `apps/workspace/` keeps its own commands.
+
+## Full verification and database safety
+
 `npm run verify:quick` does not need a database. `npm run verify`,
 `npm run verify:release` and `npm run test:integration` include mutating fixture
 suites. Do not point them at the development `ashbihub` database or any shared

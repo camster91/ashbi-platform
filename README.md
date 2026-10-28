@@ -96,11 +96,17 @@ Before `verify`, `verify:release` or `test:integration`, provision and select a
 `ashbihub` connection is not a safe test target. `verify:quick` needs no database.
 
 ```bash
+npm run test:core       # about 100 focused API and rendered UI tests for daily work
 npm run verify:quick    # package boundaries, typecheck, lint, backend and frontend unit tests
 npm run verify          # verify:quick plus integration tests and a production build
 npm run verify:browser  # Playwright browser, public-route and PWA offline checks
 npm run verify:release  # verify plus Lighthouse and release-policy checks
 ```
+
+The core suite covers sessions, tenant isolation, client/project/task flows,
+time locks, invoice saves/billing, uploads and document recovery. Its selected
+files and limits are documented in [local verification](docs/local-verification.md).
+The full regression, integration and browser suites remain the release checks.
 
 Full-stack end-to-end tests (PostgreSQL, Redis, worker and API in Docker):
 
