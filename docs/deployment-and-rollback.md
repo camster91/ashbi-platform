@@ -1,5 +1,36 @@
 # Immutable deployment and rollback
 
+## Cloudflare workspace
+
+The owner selected Cloudflare for daily app use on October 27, 2026. The app is
+[ashbi-workspace](https://ashbi-workspace.camster915391.workers.dev), protected by
+Cloudflare Access. The legacy Hub controller below applies only to the fallback
+Hub; it must not be used to deploy the workspace.
+
+Use `apps/workspace` commands with the pinned Node version. Build once, run source,
+compiled, browser and recovery checks, and record the exact commit and bundle
+SHA-256. Browser groups use separate synthetic databases; a combined-fixture
+failure is not a passing release check. Retain a private administrative D1 export,
+verify its isolated restore, and record the previous Worker version and rollback
+owner before promotion. Application exports are not complete backups.
+
+Upload the tested bundle as a Worker version through the connected Cloudflare API.
+Read current settings first and preserve every binding and runtime option; use
+strict binding inheritance and verify against the latest uploaded version.
+Explicitly set `RELEASE` to the tested source commit. The config preserves remote
+variables but cannot establish release identity by itself. Do not replace Stripe
+secrets, enable live billing, replay migrations or reimport existing business data
+as an implicit deployment step. Keep the existing Access-protected workers.dev
+route enabled and version preview URLs disabled.
+
+Promote the verified version to 100% traffic, download its content and compare its
+SHA-256, check database integrity, and verify browser sign-in and authenticated
+journeys separately. Roll back code by promoting the retained prior Worker version
+to 100%; database restoration needs separate review of intervening writes. A live
+release is not evidence of authenticated daily-use acceptance or legacy retirement.
+
+## Legacy Hub controller
+
 Verified October 15, 2026: the owner-authorized SSH release of `4349f6d` passed
 this controller and exact public revision/readiness checks. See
 [launch-status.md](launch-status.md) for the evidence and remaining acceptance.

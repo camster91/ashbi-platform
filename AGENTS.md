@@ -3,7 +3,7 @@
 ## Application boundaries
 
 - The existing Hub uses Fastify in `src/`, React/Vite in `web/`, Prisma/PostgreSQL in `prisma/`, and a BullMQ worker in `src/jobs/worker.js`.
-- `apps/workspace/` is a separate Cloudflare pilot with its own package, lockfile and [local commands](apps/workspace/README.md). Its source/tests do not establish production replacement or cutover.
+- `apps/workspace/` is the owner-selected Cloudflare app, with its own package, lockfile and [local commands](apps/workspace/README.md). The Hub remains a fallback. Deployment, authenticated daily-use acceptance and legacy retirement are separate; see [deployment and rollback](docs/deployment-and-rollback.md).
 - Use the nearest package's commands. Root scripts verify the existing Hub, not the pilot.
 
 ## Local development and verification
