@@ -104,8 +104,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.ref_name }}
+          key: ${{ runner.os }}-buildx-${{ github.ref_name }}-${{ github.sha }}
           restore-keys: |
+            ${{ runner.os }}-buildx-${{ github.ref_name }}-
             ${{ runner.os }}-buildx-main
             ${{ runner.os }}-buildx-
 
@@ -132,6 +133,11 @@ jobs:
             org.opencontainers.image.created=${{ github.event.repository.updated_at }}
           build-args: |
             APP_REVISION=${{ github.sha }}
+
+      - name: Retain refreshed Docker layer cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
       - name: Image summary
         run: |
