@@ -66,3 +66,7 @@ Open projects at `#projects/:id`, with scoped Tasks, Documents, Files, Time and 
 ## Actionable overview
 
 Daily priorities apply the existing server-side task/review/invoice filters and reset conflicting selections before requesting data. Show only authorized shortcuts. Keep daily feeds before inventory totals and exports. Link to canonical record and project workflows, preserve saved invoice observation warnings and per-currency totals, and never present a partial page length as a total. Shortcut activation focuses its destination heading immediately; asynchronous responses must not steal later focus.
+
+## Compact lists
+
+Client, project and task lists use `.compact-record`: aligned identity, status, details and actions above 1100px, stacked content below. Render through `compactRecord` to retain the same authorized actions as `recordItem`. Resolve parent and assignee names from already-loaded authorized choices; preserve source identifiers when a name is unavailable. Boards, dialogs and project overviews continue to use the ordinary record presentation. Never truncate essential names or reduce control targets to create density.
