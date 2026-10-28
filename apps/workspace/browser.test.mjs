@@ -1,3 +1,4 @@
+import {runNavigationGroupTests} from './browser-navigation-groups.mjs';
 import {runCompactListTests} from './browser-compact-lists.mjs';
 import {runProjectWorkspaceTests} from './browser-project-workspace.mjs';
 import {browserGroups,selectBrowserSuites} from './browser-groups.mjs';
@@ -90,6 +91,7 @@ if(selectedSuites.has('runTimeReviewTests')){await runTimeReviewTests({browser,o
 if(selectedSuites.has('runFinanceTests')){await runFinanceTests({browser,origin,DB,axe,addActor});executedSuites.push('runFinanceTests');}
 if(selectedSuites.has('runProjectWorkspaceTests')){await runProjectWorkspaceTests({browser,origin,DB,axe,addActor});executedSuites.push('runProjectWorkspaceTests');}
 if(selectedSuites.has('runCompactListTests')){await runCompactListTests({browser,origin,DB,axe});executedSuites.push('runCompactListTests');}
+if(selectedSuites.has('runNavigationGroupTests')){await runNavigationGroupTests({browser,origin,DB,axe,addActor});executedSuites.push('runNavigationGroupTests');}
 if(selectedSuites.has('runCommercialTests')){await runCommercialTests({browser,origin,DB,axe,addActor});executedSuites.push('runCommercialTests');}
 if(selectedSuites.has('runProposalReviewTests')){await runProposalReviewTests({browser,origin,DB,axe,addActor});executedSuites.push('runProposalReviewTests');}
 if(selectedSuites.has('runStripeTests')){await runStripeTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runStripeTests');}

@@ -17,10 +17,12 @@ const icons={
  'source-history':'M3 4v5h5 M3 9a9 9 0 1 1 1 9 M12 7v5l3 2'
 };
 const groups=[
- ['Workspace',[['overview','Overview'],['clients','Clients'],['projects','Projects'],['tasks','Tasks'],['notes','Documents'],['files','Files'],['time','Time']]],
- ['Business',[['finance','Finance'],['invoices','Invoices'],['commercial','Proposals &amp; contracts'],['reviews','Proposal reviews'],['contracts','Contracts'],['source-history','Source history']]]
+ ['Work',[['overview','Overview'],['projects','Projects'],['tasks','Tasks'],['time','Time']]],
+ ['Clients &amp; billing',[['clients','Clients'],['finance','Finance'],['invoices','Invoices'],['commercial','Proposals &amp; contracts'],['reviews','Proposal reviews'],['contracts','Contracts']]],
+ ['Documents',[['notes','Documents'],['files','Files']]],
+ ['Administration',[['source-history','Source history']]]
 ];
-const navigation=groups.map(([label,links])=>`<div class="nav-group"><p class="nav-label" aria-hidden="true">${label}</p>${links.map(([route,name])=>`<a href="#${route}"${route==='source-history'?' hidden':''}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${icons[route]}"/></svg><span>${name}</span></a>`).join('')}</div>`).join('');
+const navigation=groups.map(([label,links])=>`<div class="nav-group" role="group" aria-label="${label}"><p class="nav-label" aria-hidden="true">${label}</p>${links.map(([route,name])=>`<a href="#${route}"${route==='source-history'?' hidden':''}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${icons[route]}"/></svg><span>${name}</span></a>`).join('')}</div>`).join('');
 
 export const html=`<!doctype html>
 <html lang="en-CA">
