@@ -98,6 +98,23 @@ main { min-width: 0; width: 100%; max-width: 88rem; padding: var(--space-7) clam
 .record-actions { margin-top: var(--space-4); }
 .form-actions { margin-top: var(--space-2); }
 .record-actions > a:not(.button) { display: inline-flex; align-items: center; min-height: 44px; max-width: 100%; padding: .5rem .25rem; font-size: var(--text-sm); font-weight: 600; }
+/* Dashboard shortcuts select canonical feeds without inventing summary counts. */
+.priority-actions { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: var(--space-3); }
+.priority-action { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-4); text-align: left; background: var(--color-surface); }
+.priority-action strong { color: var(--color-brand); font-size: var(--text-body); }
+.priority-action span { color: var(--color-muted); font-size: var(--text-sm); font-weight: 400; }
+.overview-record-identity, .overview-record-details { min-width: 0; }
+.overview-record-identity > a { font-weight: 650; }
+@media (min-width: 1100px) {
+  .overview-record { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1.6fr) minmax(0,1fr); align-items: start; gap: var(--space-5); }
+  .overview-record .overview-record-context { margin-top: 0; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+  .overview-record-details p:first-child { margin-top: 0; }
+}
+.overview-record-context { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-top: var(--space-3); }
+.overview-record-context a { display: inline-flex; align-items: center; min-height: 44px; font-size: var(--text-sm); }
+@media (max-width: 1100px) { .priority-actions { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 480px) { .priority-actions { grid-template-columns: minmax(0,1fr); } }
+
 /* List rows share columns; boards, dialogs and project overviews keep their layout. */
 .compact-record { padding-block: var(--space-4); }
 .record-identity, .record-status, .record-details { min-width: 0; }
