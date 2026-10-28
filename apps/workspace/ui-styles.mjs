@@ -232,6 +232,9 @@ dialog > .panel:last-child { margin-bottom: 0; }
 .auth-card h1 { margin: 0 0 12px; }
 .auth-card form { display: grid; gap: 12px; margin: 20px 0; }
 .auth-card input { width: 100%; min-width: 0; }
+.auth-password { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
+.auth-password input { flex: 1; width: 0; }
+.auth-password button { flex: 0 0 auto; min-width: 64px; min-height: 44px; margin: 0; }
 .auth-card #auth-message { overflow-wrap: anywhere; margin-block: 16px; }
 .auth-card [role=alert] { color: #a02222; }
 .auth-codes { white-space: pre-wrap; overflow-wrap: anywhere; font-family: monospace; }
