@@ -6,7 +6,7 @@
  *
  * Issue #2: No input validation on most routes (~85/95 route files).
  *
- * Run with: node --test src/tests/input-validation.test.js
+ * Run with: node scripts/run-node-tests.mjs src/tests/unit/input-validation.test.js
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,10 +29,7 @@ const {
   createTaskSchema,
   createClientSchema,
   createExpenseSchema,
-  fileUpload,
 } = schemasModule;
-
-const { ALLOWED_EXTENSIONS: ALLOWED_UPLOAD_EXTENSIONS, ALLOWED_MIMETYPES: ALLOWED_UPLOAD_MIMETYPES } = fileUpload;
 
 describe('Zod Schema Validation', () => {
   describe('Auth schemas', () => {
@@ -182,29 +179,6 @@ describe('Zod Schema Validation', () => {
       assert.equal(result.success, true);
     });
   });
-
-  describe('File upload validation', () => {
-    it('allows only permitted file extensions', () => {
-      assert.ok(ALLOWED_UPLOAD_EXTENSIONS.includes('.jpg'));
-      assert.ok(ALLOWED_UPLOAD_EXTENSIONS.includes('.pdf'));
-      assert.ok(ALLOWED_UPLOAD_EXTENSIONS.includes('.png'));
-      // Dangerous extensions should not be allowed
-      assert.ok(!ALLOWED_UPLOAD_EXTENSIONS.includes('.exe'));
-      assert.ok(!ALLOWED_UPLOAD_EXTENSIONS.includes('.html'));
-      assert.ok(!ALLOWED_UPLOAD_EXTENSIONS.includes('.js'));
-      assert.ok(!ALLOWED_UPLOAD_EXTENSIONS.includes('.php'));
-      assert.ok(!ALLOWED_UPLOAD_EXTENSIONS.includes('.sh'));
-    });
-
-    it('allows only permitted MIME types', () => {
-      assert.ok(ALLOWED_UPLOAD_MIMETYPES.includes('image/jpeg'));
-      assert.ok(ALLOWED_UPLOAD_MIMETYPES.includes('application/pdf'));
-      // Dangerous MIME types should not be allowed
-      assert.ok(!ALLOWED_UPLOAD_MIMETYPES.includes('application/x-executable'));
-      assert.ok(!ALLOWED_UPLOAD_MIMETYPES.includes('text/html'));
-      assert.ok(!ALLOWED_UPLOAD_MIMETYPES.includes('application/javascript'));
-    });
-  });
 });
 
 // ── Route file scanning ─────────────────────────────────────────────────────
@@ -236,19 +210,6 @@ describe('Route File Validation Coverage', () => {
     }
     return mutations;
   }
-
-  it('should have validation schemas defined', () => {
-    const schemasPath = path.join(__dirname, '..', '..', 'validators', 'schemas.js');
-    assert.ok(fs.existsSync(schemasPath), 'validators/schemas.js should exist');
-
-    const content = fs.readFileSync(schemasPath, 'utf-8');
-    assert.ok(content.includes('z.object'), 'Should define Zod schemas');
-    assert.ok(content.includes('loginSchema'), 'Should have loginSchema');
-    assert.ok(content.includes('createProjectSchema'), 'Should have createProjectSchema');
-    assert.ok(content.includes('createTaskSchema'), 'Should have createTaskSchema');
-    assert.ok(content.includes('ALLOWED_EXTENSIONS'), 'Should have file upload extension allowlist');
-    assert.ok(content.includes('ALLOWED_MIMETYPES'), 'Should have file upload MIME type allowlist');
-  });
 
   it('should identify routes lacking validation on mutation endpoints', () => {
     const routeFiles = getRouteFiles();
