@@ -25,7 +25,7 @@ export const searchUiScript=String.raw`
    try{const data=await api('search?'+params);if(!valid()||local!==epoch)return;
     const restore=opener&&document.activeElement===opener;for(const group of data.groups)draw({...group,items:[...prior,...group.items]});status.textContent='Search results loaded. More matches may be available in each section.';if(restore)(groups.get(type)?.querySelector('button')||status).focus();
    }catch(e){if(!valid()||local!==epoch)return;if([401,403].includes(e.status)){results.replaceChildren();groups.clear();}error(e.message,feedback);status.textContent='Search unavailable. Try again.';}
-   finally{if(valid()&&local===epoch){results.removeAttribute('aria-busy');if(opener?.isConnected)opener.disabled=false;}}
+   finally{if(valid()){if(local===epoch)results.removeAttribute('aria-busy');if(opener?.isConnected)opener.disabled=false;}}
   }
   form.onsubmit=e=>{e.preventDefault();query=input.value.trim();if(!query){++epoch;results.replaceChildren();groups.clear();feedback.replaceChildren();results.removeAttribute('aria-busy');status.textContent='Enter a name or title to search.';return;}run();};
   dialog.addEventListener('close',()=>{closed=true;++epoch;dialog.remove();if(workspaceSearch===dialog)workspaceSearch=null;if(document.activeElement===document.body&&opener?.isConnected)opener.focus();},{once:true});

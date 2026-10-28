@@ -7,6 +7,7 @@ import {hold} from './browser-regressions.mjs';
 export async function runSearchTests({browser,origin,DB,axe,addActor}){
  await DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('search-client','qa-org','Findme client')").run();
  await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES('search-project','qa-org','search-client','Findme project',1)").run();
+ for(let i=0;i<21;i++)await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES(?,'qa-org','search-client',?,1)").bind('search-extra-'+String(i).padStart(2,'0'),'Findme extra project '+i).run();
  for(let i=0;i<25;i++)await DB.prepare("INSERT INTO tasks(id,organization_id,project_id,title,client_visible) VALUES(?,'qa-org','search-project',?,1)").bind('search-task-'+String(i).padStart(2,'0'),'Findme task '+i).run();
  await DB.prepare("INSERT INTO notes(id,organization_id,project_id,title,text,client_visible) VALUES('search-note','qa-org','search-project','Findme document','Synthetic search content',1)").run();
  await DB.prepare("INSERT INTO note_positions(id,organization_id,project_id) VALUES('search-note','qa-org','search-project')").run();
@@ -30,6 +31,16 @@ export async function runSearchTests({browser,origin,DB,axe,addActor}){
  });
  await test('#779 closed and superseded search responses cannot restore stale results or steal focus',async t=>{
   const p=await pageFor(t);await p.getByRole('button',{name:'Search workspace',exact:true}).click();let d=dialog(p);const held=await hold(p,'**/api/search?*');await d.getByRole('searchbox').fill('old');await d.getByRole('button',{name:'Search',exact:true}).click();await held.entered;await p.keyboard.press('Escape');d=await search(p);await d.getByRole('searchbox').focus();await held.release({status:200,contentType:'application/json',body:JSON.stringify({groups:[{type:'clients',items:[{id:'stale',title:'Stale result'}],nextCursor:null}]})});assert.equal(await p.getByText('Stale result',{exact:true}).count(),0);assert.equal(await d.getByRole('searchbox').evaluate(e=>e===document.activeElement),true);
+ });
+ await test('#779 paging another result group restores a superseded load-more button',async t=>{
+  const p=await pageFor(t),d=await search(p),more=d.getByRole('button',{name:'Load more tasks',exact:true}),held=await hold(p,'**/api/search?*');await more.click();await held.entered;
+  await d.getByRole('button',{name:'Load more projects',exact:true}).click();await d.getByRole('link',{name:'Findme extra project 20',exact:true}).waitFor();
+  await held.release({status:200,contentType:'application/json',body:JSON.stringify({groups:[{type:'tasks',items:[{id:'stale',title:'Stale page'}],nextCursor:null}]})});await more.waitFor();await p.waitForFunction(()=>!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Load more tasks')?.disabled);assert.equal(await more.isEnabled(),true);assert.equal(await d.getByText('Stale page',{exact:true}).count(),0);
+ });
+ await test('#779 a superseded page request cannot replace a newer search',async t=>{
+  const p=await pageFor(t),d=await search(p),more=d.getByRole('button',{name:'Load more tasks',exact:true}),held=await hold(p,'**/api/search?*');await more.click();await held.entered;
+  await d.getByRole('searchbox').fill('Findme client');await d.getByRole('button',{name:'Search',exact:true}).click();await d.getByRole('link',{name:'Findme client',exact:true}).waitFor();
+  await held.release({status:200,contentType:'application/json',body:JSON.stringify({groups:[{type:'tasks',items:[{id:'stale',title:'Stale page'}],nextCursor:null}]})});assert.equal(await d.getByText('Stale page',{exact:true}).count(),0);assert.equal(await d.getByRole('link').count(),1);
  });
  await test('#779 search failures can retry and blank searches clear prior results',async t=>{
   const p=await pageFor(t);await p.route('**/api/search?*',r=>r.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Synthetic search failure'})}),{times:1});await p.getByRole('button',{name:'Search workspace',exact:true}).click();const d=dialog(p);await d.getByRole('searchbox').fill('Findme');await d.getByRole('button',{name:'Search',exact:true}).click();await d.getByRole('alert').waitFor();await d.getByRole('button',{name:'Search',exact:true}).click();await d.getByRole('link',{name:'Findme client',exact:true}).waitFor();await d.getByRole('searchbox').fill('');await d.getByRole('button',{name:'Search',exact:true}).click();await d.getByText('Enter a name or title to search.',{exact:true}).waitFor();assert.equal(await d.getByRole('link').count(),0);
