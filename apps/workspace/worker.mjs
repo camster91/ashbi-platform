@@ -1,3 +1,4 @@
+import {searchRoute} from './search.mjs';
 import {fontAsset} from './ui-font-assets.generated.mjs';
 import { html, css, clientScript } from './ui.mjs';
 import { authenticate } from './auth.mjs';
@@ -54,6 +55,7 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  if(url.pathname==='/api/me'&&request.method==='GET')return json({role:actor.role,id:actor.id,pilot:true,features:{files:!!env.FILES,finance:await hasFinance(env.DB,actor)}});
  if(url.pathname==='/api/source-history'||url.pathname.startsWith('/api/source-history/'))return await sourceHistoryRoute(request,env,actor,json);
  if(url.pathname==='/api/export'&&request.method==='GET')return await exportRecords(env.DB,actor,json);
+ if(url.pathname==='/api/search')return await searchRoute(request,env.DB,actor,json);
  if(url.pathname==='/api/dashboard/tasks')return await dashboardTasks(request,env.DB,actor,json);
  if(url.pathname==='/api/dashboard/invoices')return await dashboardInvoices(request,env,actor,json);
  if(url.pathname==='/api/dashboard/reviews')return await dashboardReviews(request,env.DB,actor,json);

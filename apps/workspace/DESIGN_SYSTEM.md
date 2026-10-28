@@ -74,3 +74,7 @@ Client, project and task lists use `.compact-record`: aligned identity, status, 
 ## Navigation groups
 
 Work contains daily delivery routes; Clients & billing contains relationship and commercial workflows; Documents holds content and files; Administration holds source history. Groups have accessible names and disappear when every contained link is unavailable. `syncNavigation` owns presentation visibility and active route selection; APIs remain authoritative for access. Keep the same link names and native destinations at every width, and preserve active-link scrolling on the mobile strip.
+
+## Global search
+
+The header search button and Control/Command+K open a native modal. Search names/titles on the server, with separate bounded pages for clients, projects, tasks and documents. Results expose only identifiers and titles; canonical record views recheck access. Active-project and document-ancestor rules apply before pagination. Keep empty/loading/error states, Escape focus return and stale-response protection. Do not preload the dataset or infer complete counts from a result page.

@@ -1,3 +1,4 @@
+import {searchUiScript} from './ui-search.mjs';
 import {projectUiScript} from './ui-projects.mjs';
 import {recordsUiScript} from './ui-records.mjs';
 import {presentationUiScript} from './ui-presentation.mjs';
@@ -113,7 +114,7 @@ export const clientScript=String.raw`(function uiMain(){
 ${presentationUiScript}
  const labels={clients:'Clients',projects:'Projects',tasks:'Tasks',notes:'Documents',time:'Time',finance:'Finance',invoices:'Invoices',commercial:'Proposals & contracts',reviews:'Proposal reviews',contracts:'Contracts',files:'Files','source-history':'Source history',overview:'Overview'};
 ${projectUiScript}
- function readRoute(){const key=location.hash,parts=key.slice(1).split('/'),project=projectRoute(parts,key);if(project)return project;const page=Object.hasOwn(labels,parts[0])?parts[0]:'overview';if(parts.length===1||page==='overview'&&parts[0]!=='overview')return {page,key};const id=value=>typeof value==='string'&&/^[a-zA-Z0-9-]{1,100}$/.test(value);if(page==='invoices'&&parts.length===4&&parts[2]==='parts'&&id(parts[1])&&id(parts[3]))return {page,key,recordId:parts[1],partId:parts[3]};const valid=parts.length===2&&['tasks','reviews','invoices','contracts'].includes(page)&&id(parts[1]);return {page,key,recordId:valid?parts[1]:null,linkError:!valid};}
+ function readRoute(){const key=location.hash,parts=key.slice(1).split('/'),project=projectRoute(parts,key);if(project)return project;const page=Object.hasOwn(labels,parts[0])?parts[0]:'overview';if(parts.length===1||page==='overview'&&parts[0]!=='overview')return {page,key};const id=value=>typeof value==='string'&&/^[a-zA-Z0-9-]{1,100}$/.test(value);if(page==='invoices'&&parts.length===4&&parts[2]==='parts'&&id(parts[1])&&id(parts[3]))return {page,key,recordId:parts[1],partId:parts[3]};const valid=parts.length===2&&['clients','notes','tasks','reviews','invoices','contracts'].includes(page)&&id(parts[1]);return {page,key,recordId:valid?parts[1]:null,linkError:!valid};}
  const route=()=>readRoute().page;
  const current=state=>state&&!state.linkDenied&&state.generation===generation&&state.page===route()&&state.routeKey===location.hash;
  const refresh=async(state,focus=false)=>{if(current(state))await load(focus);};
@@ -265,13 +266,16 @@ ${overviewUiScript}
   if(page==='tasks')taskRecords(state,panel);else for(const record of rows)panel.append(['clients','projects'].includes(page)?compactRecord(record,state):recordItem(record,state));
   main.append(panel);if(cursor)main.append(button('Load more',async()=>{const more=await api(page==='notes'?documentPath(state,cursor):page==='projects'?projectPath(state,cursor):page==='tasks'?taskPath(state,cursor):page==='files'?filesPath(state,cursor):page+'?after='+encodeURIComponent(cursor));if(!current(state))return;state.rows=[...rows,...more.items];state.cursor=more.nextCursor;render(state);},false,state));
  }
+${searchUiScript}
  function render(state){const {page,rows,parents}=state;captureDocumentDraft(state);captureTimeDraft(state);captureTaskDraft(state);main.replaceChildren();if(state.project)projectHeader(state);else main.append(node('h1',labels[page]));if(state.linkError){main.append(node('p','This record link is invalid. Open the page to continue.','notice'));const link=node('a','Open '+labels[page]);link.href='#'+page;main.append(link);return;}if(state.project&&state.projectSection==='overview'){projectOverview(state);return;}if(page==='overview'){overviewPage(state);return;}
   if(page==='source-history'){sourceHistoryPage(state);return;}if(page==='invoices'){invoicesPage(state);return;}if(page==='finance'){financePage(state);return;}if(page==='commercial'){commercialPage(state);return;}if(page==='reviews'){proposalReviewsPage(state);return;}if(page==='contracts'){contractsPage(state);return;}if(page==='files'&&!actor.features.files){main.append(node('p','Private file storage is awaiting R2 activation. No files have been imported.','notice'));return;}
   if(page==='tasks'){if(actor.role==='staff')main.append(button('Add task',()=>{const input=main.querySelector('input[name=title]');input.focus();},false,state));let opener;if(state.recordId){opener=button('Open linked task',b=>linkedTask(state,b),true,state);state.taskLinkOpener=opener;main.append(opener);}renderRows(state);recordForm(undefined,main,state);if(state.recordId&&!state.recordOpened){state.recordOpened=true;linkedTask(state,opener);}return;}
+  if(state.recordId&&['clients','notes'].includes(page)){const opener=button('Open linked record',b=>linkedRecord(state,b),true,state);main.append(opener);if(!state.recordOpened){state.recordOpened=true;linkedRecord(state,opener);}}
   if(page==='notes'){if(actor.role==='staff')main.append(button('Add document',()=>main.querySelector('form[data-document-create] input[name=title]').focus(),false,state));documentToolbar(state);renderRows(state);recordForm(undefined,main,state);return;}
   if(page==='projects')projectToolbar(state);if(page==='files'){main.append(node('p','Files download privately as attachments. Removal hides a file; original bytes remain available for staff restoration.','notice'));fileForm(state);}recordForm(undefined,main,state);if(page==='time'&&actor.role==='staff'){timeForm(state);timeReview(state);}if(!(state.projectId&&page==='time'))renderRows(state);updateTimerControls();
  }
  async function load(focus=false){
+  closeWorkspaceSearch();
   const focusSerial=overviewFocusSerial,focusBefore=document.activeElement;
   if(view?.page==='overview')view.overviewInvalidate?.();
   if(route()==='time'&&view?.page==='time')captureTimeDraft(view);
