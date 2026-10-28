@@ -42,7 +42,9 @@ export async function filesRoute(request,env,actor,readBody,json){
   if(id)throw 404;
   const includeDeleted=url.searchParams.get('includeDeleted');if(includeDeleted!==null&&!['true','false'].includes(includeDeleted))throw 400;if(includeDeleted==='true'&&!staff)throw 403;
   const after=url.searchParams.get('after')||'';if(after&&!/^[a-zA-Z0-9-]{1,100}$/.test(after))throw 400;
-  const rows=await db.prepare('SELECT '+publicColumns+join+' WHERE '+scope+(includeDeleted==='true'?'':' AND f.deleted=0')+' AND f.id>? ORDER BY f.id LIMIT 51').bind(...scopeArgs,after).all();
+  const projectId=url.searchParams.get('projectId');
+  if(url.searchParams.getAll('projectId').length>1||projectId!==null&&!/^[a-zA-Z0-9-]{1,100}$/.test(projectId))throw 400;
+  const rows=await db.prepare('SELECT '+publicColumns+join+' WHERE '+scope+(includeDeleted==='true'?'':' AND f.deleted=0')+(projectId?' AND f.project_id=?':'')+' AND f.id>? ORDER BY f.id LIMIT 51').bind(...scopeArgs,...(projectId?[projectId]:[]),after).all();
   return json({items:rows.results.slice(0,50),nextCursor:rows.results.length>50?rows.results[49].id:null});
  }
  if(!staff)throw 403;
