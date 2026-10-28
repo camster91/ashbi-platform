@@ -7,6 +7,7 @@ This is the shared presentation system for the Cloudflare app. It extends the ex
 - `ui-styles.mjs`: semantic tokens, responsive layout and shared component states.
 - `ui-shell.mjs`: document structure, navigation and decorative icons.
 - `ui-presentation.mjs`: shared task/project status labels and active-navigation visibility.
+- `ui-records.mjs`: shared record forms, file upload form, edit dialogs and record cards.
 - `ui.mjs` and `ui-*.mjs`: application behavior and accessible content.
 - `ui-fonts/manifest.json`: pinned, licensed UI font assets and integrity hashes.
 
@@ -39,6 +40,7 @@ Use the 4, 8, 12, 16, 24, 32, 48px spacing scale. Controls have 8px corners; pan
 - `.panel`: contained work area; `.item`: individual record with a dividing rule; `.row`: wrapping title/action row.
 - `.stats` / `.stat`: responsive metric cards; `.badge`: compact supplementary status. Status must also have a text label.
 - `button` / `.button`: primary action; `.secondary`: supporting action. Links retain link semantics. Disabled controls remain visibly disabled; pressed controls use indigo and `aria-pressed`.
+- `.record-actions` / `.form-actions`: wrapping action rows with consistent 8px gaps. Keep metadata outside action groups. Edit controls use a compact visible label and retain the full record name in their accessible name. Save and Cancel share a form action row; Cancel remains `type="button"`.
 - Native labeled fields: at least 44px tall; 16px input text on phones prevents focus zoom. Do not replace labels with placeholders. Checkboxes retain native semantics.
 - `.notice`, `.error`, `.help`: explanatory, failure and supporting content. Live-region behavior belongs to the workflow; color alone never communicates failure.
 - Native `dialog`: contained scroll, dimmed backdrop and consistent padding. Preserve keyboard containment, Escape handling and return focus.

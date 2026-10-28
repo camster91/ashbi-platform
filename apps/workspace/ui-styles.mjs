@@ -88,6 +88,10 @@ main { min-width: 0; width: 100%; max-width: 88rem; padding: var(--space-7) clam
 .item:last-child { border-bottom: 0; }
 .item p { white-space: pre-wrap; margin: var(--space-2) 0; font-size: var(--text-label); }
 .item > a:first-child { font-weight: 650; font-size: var(--text-body); }
+.record-actions, .form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+.record-actions { margin-top: var(--space-4); }
+.form-actions { margin-top: var(--space-2); }
+.record-actions > a:not(.button) { display: inline-flex; align-items: center; min-height: 44px; max-width: 100%; padding: .5rem .25rem; font-size: var(--text-sm); font-weight: 600; }
 .notice { border-left: 3px solid var(--color-brand); border-radius: 0 var(--radius-control) var(--radius-control) 0; padding: var(--space-3) var(--space-4); background: var(--color-brand-soft); font-size: var(--text-label); }
 .error { color: var(--color-error); font-weight: 600; padding: var(--space-3) var(--space-4); background: var(--color-error-surface); border-radius: var(--radius-control); }
 .stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
@@ -124,6 +128,7 @@ dialog::backdrop { background: #29284066; }
 dialog h2:first-child { margin-top: 0; font-size: 1.375rem; }
 dialog form { max-width: none; }
 dialog > .panel { margin: 0 0 var(--space-5); padding: 0; border: 0; border-radius: 0; }
+dialog > .panel:last-child { margin-bottom: 0; }
 .history-dialog h2, .comment-dialog h2 { margin: 0 0 var(--space-3); }
 .history-dialog h3 { margin: var(--space-2) 0; }
 .history-dialog p { margin: var(--space-2) 0; }
@@ -146,6 +151,7 @@ dialog > .panel { margin: 0 0 var(--space-5); padding: 0; border: 0; border-radi
 .task-column h2 { font-size: var(--text-label); margin: 0 0 var(--space-4); }
 .task-column .item { display: grid; gap: var(--space-2); }
 .task-column .item button { width: 100%; text-align: left; }
+.task-column .record-actions { display: grid; align-items: stretch; }
 @media(max-width:1100px) {
  .task-board { grid-template-columns: 1fr; }
  .stat { padding: var(--space-4); }
