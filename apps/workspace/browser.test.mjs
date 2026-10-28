@@ -1,3 +1,5 @@
+import {runNavigationGroupTests} from './browser-navigation-groups.mjs';
+
 import {runSearchTests} from './browser-search.mjs';
 import {runCompactListTests} from './browser-compact-lists.mjs';
 import {runProjectWorkspaceTests} from './browser-project-workspace.mjs';
@@ -91,6 +93,8 @@ if(selectedSuites.has('runTimeReviewTests')){await runTimeReviewTests({browser,o
 if(selectedSuites.has('runFinanceTests')){await runFinanceTests({browser,origin,DB,axe,addActor});executedSuites.push('runFinanceTests');}
 if(selectedSuites.has('runProjectWorkspaceTests')){await runProjectWorkspaceTests({browser,origin,DB,axe,addActor});executedSuites.push('runProjectWorkspaceTests');}
 if(selectedSuites.has('runCompactListTests')){await runCompactListTests({browser,origin,DB,axe});executedSuites.push('runCompactListTests');}
+if(selectedSuites.has('runNavigationGroupTests')){await runNavigationGroupTests({browser,origin,DB,axe,addActor});executedSuites.push('runNavigationGroupTests');}
+
 if(selectedSuites.has('runSearchTests')){await runSearchTests({browser,origin,DB,axe,addActor});executedSuites.push('runSearchTests');}
 if(selectedSuites.has('runCommercialTests')){await runCommercialTests({browser,origin,DB,axe,addActor});executedSuites.push('runCommercialTests');}
 if(selectedSuites.has('runProposalReviewTests')){await runProposalReviewTests({browser,origin,DB,axe,addActor});executedSuites.push('runProposalReviewTests');}

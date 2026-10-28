@@ -284,7 +284,7 @@ ${searchUiScript}
   main.setAttribute('aria-busy','true');main.replaceChildren(node('h1',labels[page]),node('p','Loading…'));
   try{
    const identity=state.projectId||state.recordId||['overview','finance','commercial','reviews','invoices','contracts','source-history'].includes(page)?await api('me'):actor||await api('me');if(!current(state))return;actor=identity;syncTimer();
-   for(const a of document.querySelectorAll('nav a')){const selected=a.hash==='#'+(state.projectId?'projects':page);if(selected)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');a.hidden=a.hash==='#source-history'&&!(actor.role==='staff'&&actor.features?.finance)||actor.role==='client'&&['time','finance','commercial'].includes(a.hash.slice(1))||['#invoices','#contracts'].includes(a.hash)&&actor.role==='staff'&&!actor.features.finance;}
+   syncNavigation(state,actor);
    revealCurrentNavigation();
    if(page==='source-history'){view=state;render(state);await state.sourceHistoryReady;if(!current(state))return;if(focus&&overviewFocusSerial===focusSerial&&(document.activeElement===document.body||document.activeElement===main||document.activeElement===focusBefore))main.focus();return;}
    if(state.linkError){view=state;render(state);if(focus)main.focus();return;}
