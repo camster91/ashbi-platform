@@ -6,6 +6,7 @@ This is the shared presentation system for the Cloudflare app. It extends the ex
 
 - `ui-styles.mjs`: semantic tokens, responsive layout and shared component states.
 - `ui-shell.mjs`: document structure, navigation and decorative icons.
+- `ui-presentation.mjs`: shared task/project status labels and active-navigation visibility.
 - `ui.mjs` and `ui-*.mjs`: application behavior and accessible content.
 - `ui-fonts/manifest.json`: pinned, licensed UI font assets and integrity hashes.
 
@@ -46,6 +47,8 @@ Use the 4, 8, 12, 16, 24, 32, 48px spacing scale. Controls have 8px corners; pan
 ## Responsive and accessible behavior
 
 Below 768px navigation becomes a horizontally scrollable row and content uses 16px side padding. Filters become one column below 900px; task boards below 1100px. Metric cards use two columns below 900px. Content must wrap without widening the viewport at 390, 768 and 1440px; check long record names and error messages as well as empty states.
+
+On narrow screens, direct links, route changes, font loading and viewport resizing keep the active navigation item visible by scrolling only the horizontal strip. Do not move document scroll or keyboard focus to reveal it. Task/project labels use the shared readable names; keep API and stored status values unchanged, and preserve unknown source values as text.
 
 All focusable controls use a visible 3px focus ring. Keep the skip link and semantic headings. Respect reduced-motion and forced-colors preferences. The app currently defines a light theme only.
 

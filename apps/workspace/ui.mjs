@@ -1,3 +1,4 @@
+import {presentationUiScript} from './ui-presentation.mjs';
 import {overviewUiScript} from './ui-overview.mjs';
 import {financeUiScript} from './ui-finance.mjs';
 import {stripeUiScript} from './ui-stripe.mjs';
@@ -107,6 +108,7 @@ export const clientScript=String.raw`(function uiMain(){
   state.sourceHistoryReady=Promise.all([loadChoices(),loadRuns()]);
  }
  let timerGeneration=0,timerKnown=false,timerBusy=false,activeTimer=null;const timerPanel=document.querySelector('#active-timer'),timerSummary=document.querySelector('#timer-summary'),timerStop=document.querySelector('#stop-active-timer'),timerRefresh=document.querySelector('#refresh-active-timer');
+${presentationUiScript}
  const labels={clients:'Clients',projects:'Projects',tasks:'Tasks',notes:'Documents',time:'Time',finance:'Finance',invoices:'Invoices',commercial:'Proposals & contracts',reviews:'Proposal reviews',contracts:'Contracts',files:'Files','source-history':'Source history',overview:'Overview'};
  function readRoute(){const key=location.hash,parts=key.slice(1).split('/'),page=Object.hasOwn(labels,parts[0])?parts[0]:'overview';if(parts.length===1||page==='overview'&&parts[0]!=='overview')return {page,key};const id=value=>typeof value==='string'&&/^[a-zA-Z0-9-]{1,100}$/.test(value);if(page==='invoices'&&parts.length===4&&parts[2]==='parts'&&id(parts[1])&&id(parts[3]))return {page,key,recordId:parts[1],partId:parts[3]};const valid=parts.length===2&&['tasks','reviews','invoices','contracts'].includes(page)&&id(parts[1]);return {page,key,recordId:valid?parts[1]:null,linkError:!valid};}
  const route=()=>readRoute().page;
@@ -161,8 +163,8 @@ export const clientScript=String.raw`(function uiMain(){
   if(page==='projects')field(form,'clientId','Client','text',parents);
   if(['tasks','notes'].includes(page))field(form,'projectId','Project','text',parents);
   if(page==='clients'){field(form,'email','Contact email','email').required=false;field(form,'company','Company').required=false;}
-  if(page==='projects'){field(form,'status','Status','text',['planned','active','waiting','complete','canceled'].map(id=>({id,name:id}))).value='active';field(form,'archived','Archive project','checkbox');}
-  if(page==='tasks'){field(form,'status','Status','text',['todo','doing','review','waiting','later','done','retired','archived'].map(id=>({id,name:id}))).value='todo';field(form,'assigneeId','Assigned to','text',staff).required=false;field(form,'dueOn','Due date','date').required=false;}
+  if(page==='projects'){field(form,'status','Status','text',Object.entries(projectStatusNames).map(([id,name])=>({id,name}))).value='active';field(form,'archived','Archive project','checkbox');}
+  if(page==='tasks'){field(form,'status','Status','text',Object.entries(taskStatusNames).map(([id,name])=>({id,name}))).value='todo';field(form,'assigneeId','Assigned to','text',staff).required=false;field(form,'dueOn','Due date','date').required=false;}
   if(page==='notes'){const parent=field(form,'parentId','Parent document','text',[]);parent.required=false;const selected=state.documentParents.find(n=>n.id===state.documentOptions.parentId);form.elements.projectId.value=record?.project_id||state.documentDraft?.projectId||selected?.project_id||state.documentOptions.projectId||'';documentParents(form,record,state,parent);parent.value=record?(record.parent_id||''):(state.documentDraft?.parentId??selected?.id??'');form.elements.projectId.onchange=()=>documentParents(form,record,state,parent);field(form,'text','Content','textarea');}
   if(page!=='clients')field(form,'clientVisible','Share with client','checkbox');
   if(record){for(const input of form.elements){const column=({clientId:'client_id',projectId:'project_id',clientVisible:'client_visible',assigneeId:'assignee_id',dueOn:'due_on',parentId:'parent_id'})[input.name]||input.name;if(input.type==='checkbox')input.checked=Boolean(record[column]);else input.value=record[column]??'';if(['clientId','projectId'].includes(input.name))input.disabled=true;}}
@@ -244,7 +246,7 @@ ${commercialUiScript}
 ${proposalReviewUiScript}
 ${contractUiScript}
 ${overviewUiScript}
- function recordItem(record,state){const {page}=state;const item=node('article',undefined,'item'),line=node('div',undefined,'row');line.append(node('strong',record.name||record.title||'Time entry'));if(record.status)line.append(node('span',record.status,'badge'));if(record.client_visible!==undefined)line.append(node('span',record.client_visible?'Shared with client':'Internal','badge'));item.append(line);if(record.text)item.append(node('p',record.text));if(record.email)item.append(node('p',record.email));if(record.due_on)item.append(node('p','Due '+record.due_on));if(record.assignee_id)item.append(node('p','Assigned to '+record.assignee_id));if(actor.role==='staff'&&['clients','projects','tasks','notes'].includes(page)){const edit=button('Edit '+(record.name||record.title),opener=>editRecord(record,opener,state),true,state);if(page==='tasks'&&state.taskOptions.layout==='board'){edit.textContent='Edit task';edit.setAttribute('aria-label','Edit '+record.title);}item.append(edit);}
+ function recordItem(record,state){const {page}=state;const item=node('article',undefined,'item'),line=node('div',undefined,'row');line.append(node('strong',record.name||record.title||'Time entry'));if(record.status)line.append(node('span',recordStatusName(page,record.status),'badge'));if(record.client_visible!==undefined)line.append(node('span',record.client_visible?'Shared with client':'Internal','badge'));item.append(line);if(record.text)item.append(node('p',record.text));if(record.email)item.append(node('p',record.email));if(record.due_on)item.append(node('p','Due '+record.due_on));if(record.assignee_id)item.append(node('p','Assigned to '+record.assignee_id));if(actor.role==='staff'&&['clients','projects','tasks','notes'].includes(page)){const edit=button('Edit '+(record.name||record.title),opener=>editRecord(record,opener,state),true,state);if(page==='tasks'&&state.taskOptions.layout==='board'){edit.textContent='Edit task';edit.setAttribute('aria-label','Edit '+record.title);}item.append(edit);}
    if(page==='projects'){if(record.archived)item.append(node('span','Archived project','badge'));if(actor.role==='staff'){if(!record.archived)item.append(projectTimer(record,state));item.append(button((record.archived?'Restore project ':'Archive project ')+record.name,async()=>{await api('projects/'+record.id,'PATCH',{archived:!record.archived,revision:record.revision});await refresh(state,true);},true,state));}}if(page==='time'){item.dataset.recentTime=record.id;item.append(button('Time entry details',opener=>timeDetails(record.id,opener,state),true,state));item.append(node('p',record.ended_at?Math.floor(record.seconds/60)+' minutes':'Running since '+new Date(record.started_at).toLocaleTimeString('en-CA')));if(!record.ended_at){const stop=button('Stop timer',async()=>{await changeTimer('timer/'+record.id+'/stop',{});await refresh(state);});stop.dataset.timeStop=record.id;item.append(stop);}}
    if(page==='notes'){const ancestors=documentAncestors(record,state);item.append(node('p','Location: '+(ancestors.length?ancestors.map(n=>n.title).join(' / '):'Root'),'help'));if(record.archived)item.append(node('span','Archived','badge'));else if(ancestors.some(n=>n.archived))item.append(node('p','Hidden by an archived ancestor.','help'));if(ancestors.some(n=>!n.client_visible))item.append(node('p','An internal ancestor limits client access.','help'));item.append(button('Open children',()=>{state.documentOptions={...state.documentOptions,q:'',projectId:record.project_id,parentId:record.id};return load(true);},true,state));if(actor.role==='staff'){const archive=button(record.archived?'Restore document':'Archive document',async()=>{await api('notes/'+record.id,'PATCH',{archived:!record.archived,revision:record.revision});await refresh(state,true);},true,state);archive.setAttribute('aria-label',(record.archived?'Restore document ':'Archive document ')+record.title);item.append(archive);}}
    if(page==='notes'&&actor.role==='staff'){const history=button('History',opener=>documentVersions(record,opener,state),true,state);history.setAttribute('aria-label','Version history for '+record.title);item.append(history);}
@@ -255,7 +257,7 @@ ${overviewUiScript}
  }
 
  function taskRecords(state,panel){
-  const options=state.taskOptions,names={todo:'To do',doing:'In progress',review:'Review',waiting:'Waiting',later:'Later',done:'Done',retired:'Retired',archived:'Archived'};
+  const options=state.taskOptions,names=taskStatusNames;
   const toolbar=node('form',undefined,'task-toolbar'),views=node('div',undefined,'task-views');views.setAttribute('role','group');views.setAttribute('aria-label','Task view');
   const list=button('List',()=>{options.layout='list';update();},true,state),board=button('Board',()=>{options.layout='board';update();},true,state);views.append(list,board);panel.append(views);
   const project=field(toolbar,'projectFilter','Project filter','text',state.parents),status=field(toolbar,'statusFilter','Status filter','text',Object.entries(names).map(([id,name])=>({id,name})));
@@ -299,6 +301,7 @@ ${overviewUiScript}
   try{
    const identity=state.recordId||['overview','finance','commercial','reviews','invoices','contracts','source-history'].includes(page)?await api('me'):actor||await api('me');if(!current(state))return;actor=identity;syncTimer();
    for(const a of document.querySelectorAll('nav a')){const selected=a.hash==='#'+page;if(selected)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');a.hidden=a.hash==='#source-history'&&!(actor.role==='staff'&&actor.features?.finance)||actor.role==='client'&&['time','finance','commercial'].includes(a.hash.slice(1))||['#invoices','#contracts'].includes(a.hash)&&actor.role==='staff'&&!actor.features.finance;}
+   revealCurrentNavigation();
    if(page==='source-history'){view=state;render(state);await state.sourceHistoryReady;if(!current(state))return;if(focus&&overviewFocusSerial===focusSerial&&(document.activeElement===document.body||document.activeElement===main||document.activeElement===focusBefore))main.focus();return;}
    if(state.linkError){view=state;render(state);if(focus)main.focus();return;}
    if(['reviews','contracts'].includes(page)&&actor.role==='client'){state.parents=await listAll('projects');}
@@ -315,5 +318,7 @@ ${overviewUiScript}
   finally{if(current(state))main.removeAttribute('aria-busy');}
  }
  document.querySelector('.skip').addEventListener('click',e=>{e.preventDefault();main.focus();});
+ window.addEventListener('resize',revealCurrentNavigation);
+ document.fonts.ready.then(revealCurrentNavigation);
  window.addEventListener('hashchange',()=>load(true));load();
 })();`;
