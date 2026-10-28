@@ -33,11 +33,12 @@ acceptance or remediation. The route removal below is local source work.
 The application registers explicit imports through `src/domains/`; it does not
 discover route files dynamically. A repository-wide search for
 `time-session.routes` and `landing.routes` found no application, test, build or
-deployment consumer. The only executable-text references are in the historical
-one-off `scripts/_legacy/fix-3-missing-imports.py`. That script targets a hardcoded
-old workspace and edits existing files with `read_text()`; it is not invoked by
-package scripts or CI and cannot recreate the deleted modules. It is retained as
-historical evidence, not a supported maintenance command.
+deployment consumer. At the route-removal checkpoint, the only executable-text
+references were in the historical one-off
+`scripts/_legacy/fix-3-missing-imports.py`. It targeted a hardcoded old workspace
+and edited existing files with `read_text()`; no package script or CI invoked it.
+That fixer was subsequently removed in the bloat cleanup below. Its source
+remains available in Git history, including revision `2781218`.
 
 `registerClientWorkspaceRoutes` still mounts the plural `time-sessions` module at
 `/api/time-sessions`. `registerCommercialRevenueRoutes` still mounts `leads` at
@@ -95,3 +96,42 @@ path validation and all symlink/traversal rejection assertions are retained.
 The full `verify:quick` command passed on Node 24.22.0 with the default temporary
 directory: 2,631 backend and 1,949 frontend tests. The earlier temporary-directory
 override recorded above is no longer needed for these fixtures.
+
+## Test and tooling cleanup — 27 October 2026
+
+Consolidated five small frontend workflow-contract files into their existing
+finance/operations and general workflow suites. Moved those two grouped suites,
+date-only helpers and telemetry scrubbing to the Node contracts project. All
+frontend assertions are retained; nine files no longer start jsdom and five
+test files are eliminated through grouping. Markdown sanitization and component
+tests retain their browser environment.
+
+Removed four redundant backend cases: two upload-allowlist checks duplicated
+by the broader `file-upload-validation.test.js` cases, and two source-existence
+checks already enforced by actual schema imports and validation tests. The case
+previously titled path-traversal prevention only checked export text. Actual
+traversal and byte-policy checks remain in `file-upload-policy.test.js`, and the
+route-validation ratchet is unchanged.
+
+Removed five unreferenced one-off fixers from `scripts/_legacy/`, the unused
+`.pi` worktree/automatic-merge scripts, and the unused `utils/ai-prompts-proxy.js`
+barrel. None has an application, package-command or CI consumer. The remaining
+legacy audit scripts are retained because historical operator documents refer
+to them. Removed generated Upwork debug screenshot/notification output and
+ignored those two output paths to prevent recommitting them. Before deletion,
+all ten files were copied to a named backup outside the checkout; tracked
+versions also remain recoverable from Git history. No migration, original
+business record, native package, font or visual baseline was removed.
+
+The Hub Docker context excludes the separate `apps/`, `prototypes/` and
+`upwork-agent/` packages and root browser `tests/`, which its Dockerfile does not
+copy. These remain in source; all Dockerfile COPY inputs are retained. A local
+Docker image check was unavailable because the installed CLI lacks Buildx.
+
+Local validation passed on Node 24.22.0: `verify:quick` (2,627 backend tests and
+1,949 frontend tests across 257 frontend files), the application build and
+frontend budgets, the Dockerfile COPY-input check, four artifact-workflow
+contract tests, secret scanning and whitespace checks. A comparison confirmed
+that every moved/grouped frontend assertion was retained. Installed dependencies
+and generated build output can be recreated from the retained lockfiles and
+build commands; they are not source or backup evidence.
