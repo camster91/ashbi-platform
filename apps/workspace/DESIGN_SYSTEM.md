@@ -7,6 +7,7 @@ This is the shared presentation system for the Cloudflare app. It extends the ex
 - `ui-styles.mjs`: semantic tokens, responsive layout and shared component states.
 - `ui-shell.mjs`: document structure, navigation and decorative icons.
 - `ui-presentation.mjs`: shared task/project status labels and active-navigation visibility.
+- `ui-projects.mjs`: project routes, shared project header and scoped section navigation.
 - `ui-records.mjs`: shared record forms, file upload form, edit dialogs and record cards.
 - `ui.mjs` and `ui-*.mjs`: application behavior and accessible content.
 - `ui-fonts/manifest.json`: pinned, licensed UI font assets and integrity hashes.
@@ -57,3 +58,7 @@ All focusable controls use a visible 3px focus ring. Keep the skip link and sema
 ## Verification
 
 Run `npm run build`, focused API/auth checks and `npm run test:browser` in this package. Browser groups exercise real local D1 fixtures, navigation, dialogs, keyboard behavior, overflow and axe checks. Inspect dashboard, list/board and dialog screenshots at desktop and phone widths. Record results separately from production deployment or real-user acceptance.
+
+## Project workspace
+
+Open projects at `#projects/:id`, with scoped Tasks, Documents, Files, Time and Billing sections. The project heading and selected section remain visible; section links use native navigation and `aria-current`. Keep the global Projects item active. Project selectors contain the current project only, and server queries filter before pagination. Use the existing workflow modules and permission checks; global recovery controls remain available for uncertain financial requests. Never infer client sharing or financial authority from a selected project.

@@ -1,7 +1,7 @@
 export const recordLinkUiScript=String.raw`
  function recordLink(page,id,label,accessibleLabel=label){
   if(!['tasks','reviews','invoices','contracts'].includes(page)||typeof id!=='string'||!/^[a-zA-Z0-9-]{1,100}$/.test(id))return node('span','Record link unavailable.','help');
-  return recordRouteLink('#'+page+'/'+id,label,accessibleLabel);
+  return recordRouteLink(view?.projectId&&page==='tasks'?projectHref(view.projectId,'tasks')+'/'+id:'#'+page+'/'+id,label,accessibleLabel);
  }
  function recordSourceLink(source,label,accessibleLabel=label){
   const id=value=>typeof value==='string'&&/^[a-zA-Z0-9-]{1,100}$/.test(value);
@@ -28,7 +28,7 @@ export const recordLinkUiScript=String.raw`
   dialog.addEventListener('close',()=>{closed=true;++epoch;dialog.remove();if(state.taskLinkDialog===dialog)state.taskLinkDialog=null;if(current(state)&&!main.querySelector('dialog[open]')&&document.activeElement===document.body)(opener?.isConnected?opener:state.taskLinkOpener?.isConnected?state.taskLinkOpener:main).focus();},{once:true});dialog.showModal();
   async function read(){
    if(!valid())return;const local=++epoch,hadFocus=document.activeElement===reload;reload.disabled=true;body.setAttribute('aria-busy','true');errors.replaceChildren();image.replaceChildren();status.textContent='Loading task…';
-   try{const record=await api('tasks/'+state.recordId);if(!valid()||local!==epoch)return;if(record.id!==state.recordId)throw Error('The task response does not match this record.');image.append(recordItem(record,state));status.textContent='Task loaded.';}
+   try{const record=await api('tasks/'+state.recordId);if(!valid()||local!==epoch)return;if(record.id!==state.recordId)throw Error('The task response does not match this record.');if(state.projectId&&record.project_id!==state.projectId){denyLinkedRecord(state,'tasks',true);return;}image.append(recordItem(record,state));status.textContent='Task loaded.';}
    catch(e){if(!valid()||local!==epoch)return;if([401,403,404].includes(e.status)||e.message?.startsWith('Session ended')){denyLinkedRecord(state,'tasks',e.status===404);return;}error(e.message,errors);status.textContent='Unable to load the task. Try again.';}
    finally{if(valid()&&local===epoch){body.removeAttribute('aria-busy');reload.disabled=false;if(hadFocus&&document.activeElement===document.body)reload.focus();}}
   }

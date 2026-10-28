@@ -61,6 +61,7 @@ function recordForm(record, container = main, state = view) {
       else if (input.name in state.documentDraft) input.value = state.documentDraft[input.name];
     }
   }
+  if (!record && state.projectId) projectField(form.elements.projectId, state.projectId);
   const save = node("button", "Save");
   save.type = "submit";
   const actions = node("div", undefined, "form-actions");
@@ -121,6 +122,7 @@ function fileForm(state) {
   field(form, "projectId", "Project", "text", parents);
   field(form, "original", "File (maximum 5 MiB)", "file");
   field(form, "clientVisible", "Share with client", "checkbox");
+  projectField(form.elements.projectId, state.projectId);
   const save = node("button", "Upload file");
   save.type = "submit";
   const actions = node("div", undefined, "form-actions");
@@ -166,6 +168,7 @@ function recordItem(record, state) {
     actions.append(edit);
   }
   if (page === "projects") {
+    if (!state.projectId) actions.prepend(recordRouteLink(projectHref(record.id), "Open project", "Open project " + record.name));
     if (record.archived) item.append(node("span", "Archived project", "badge"));
     if (actor.role === "staff") {
       if (!record.archived) actions.append(projectTimer(record, state));

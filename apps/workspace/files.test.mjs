@@ -81,6 +81,16 @@ test('private files use real local D1/R2 and preserve original bytes',async t=>{
    await DB.prepare("UPDATE projects SET client_visible=1,client_id='c' WHERE id='p'").run();await DB.prepare("UPDATE actors SET active=1,role='client',client_id='c' WHERE id='client'").run();
   }
  });
+ await t.test('project-filtered pagination preserves client visibility and tenant isolation',async()=>{
+  await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES('project-filter','a','c','Filtered project',1)").run();
+  for(let i=0;i<55;i++)await DB.prepare("INSERT INTO files(id,organization_id,project_id,actor_id,name,object_key,size,sha256,state,client_visible,created_at) VALUES(?,'a','project-filter','staff','Filtered file',?,1,'synthetic','ready',1,0)").bind('filter-'+String(i).padStart(3,'0'),'filter-key-'+i).run();
+  const first=await (await call('/api/files?projectId=project-filter','client')).json();assert.equal(first.items.length,50);assert.ok(first.items.every(x=>x.project_id==='project-filter'));assert.ok(first.nextCursor);
+  const next=await (await call('/api/files?projectId=project-filter&after='+first.nextCursor,'client')).json();assert.equal(next.items.length,5);assert.equal(next.nextCursor,null);assert.equal(new Set([...first.items,...next.items].map(x=>x.id)).size,55);
+  for(const actor of ['other','foreign'])assert.deepEqual((await (await call('/api/files?projectId=project-filter',actor)).json()).items,[]);
+  await DB.prepare("UPDATE projects SET client_visible=0 WHERE id='project-filter'").run();assert.deepEqual((await (await call('/api/files?projectId=project-filter','client')).json()).items,[]);
+  assert.equal((await (await call('/api/files?projectId=project-filter')).json()).items.length,50);
+  for(const query of ['projectId=','projectId=%27','projectId=p&projectId=project-filter'])assert.equal((await call('/api/files?'+query)).status,400);
+ });
  await t.test('missing/corrupt originals fail closed and insertion failure leaves no downloadable metadata',async()=>{
   const row=await DB.prepare('SELECT * FROM files WHERE id=?').bind(file.id).first();await FILES.put(row.object_key,new Uint8Array([9,9,9,9,9]));assert.equal((await call('/api/files/'+file.id+'/download')).status,503);await FILES.delete(row.object_key);assert.equal((await call('/api/files/'+file.id+'/download')).status,503);
   const before=(await FILES.list()).objects.length;

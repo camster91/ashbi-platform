@@ -2,6 +2,12 @@ import {fontCss} from './ui-font-assets.generated.mjs';
 
 // Shared presentation primitives. Workflow modules own behavior, not styling.
 export const css=fontCss+`
+.project-header { margin-bottom: 1.5rem; }
+.project-header h1 { margin-top: .75rem; overflow-wrap: anywhere; }
+.project-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.5rem; border-bottom: 1px solid var(--color-border); padding-bottom: .5rem; }
+.project-tabs a { display: inline-flex; align-items: center; min-height: 44px; padding: .5rem .75rem; border-radius: var(--radius-control, 8px); color: var(--color-muted); text-decoration: none; font-weight: 600; }
+.project-tabs a:hover { background: var(--color-surface-soft); }
+.project-tabs a[aria-current] { background: var(--color-brand); color: white; }
 :root {
  --font-ui: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
  --color-canvas: #faf9f5;

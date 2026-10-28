@@ -1,3 +1,4 @@
+import {runProjectWorkspaceTests} from './browser-project-workspace.mjs';
 import {browserGroups,selectBrowserSuites} from './browser-groups.mjs';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
@@ -86,6 +87,7 @@ if(selectedSuites.has('runDocumentTreeTests')){await runDocumentTreeTests({brows
 if(selectedSuites.has('runTimerTests')){await runTimerTests({browser,origin,DB,axe,addActor});executedSuites.push('runTimerTests');}
 if(selectedSuites.has('runTimeReviewTests')){await runTimeReviewTests({browser,origin,DB,axe,addActor});executedSuites.push('runTimeReviewTests');}
 if(selectedSuites.has('runFinanceTests')){await runFinanceTests({browser,origin,DB,axe,addActor});executedSuites.push('runFinanceTests');}
+if(selectedSuites.has('runProjectWorkspaceTests')){await runProjectWorkspaceTests({browser,origin,DB,axe,addActor});executedSuites.push('runProjectWorkspaceTests');}
 if(selectedSuites.has('runCommercialTests')){await runCommercialTests({browser,origin,DB,axe,addActor});executedSuites.push('runCommercialTests');}
 if(selectedSuites.has('runProposalReviewTests')){await runProposalReviewTests({browser,origin,DB,axe,addActor});executedSuites.push('runProposalReviewTests');}
 if(selectedSuites.has('runStripeTests')){await runStripeTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runStripeTests');}
