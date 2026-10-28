@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 describe('approval-queue-state-contract.test.js', () => {
   const testDirectory = path.dirname(fileURLToPath(import.meta.url));
-  const source = fs.readFileSync(path.resolve(testDirectory, '../pages/ApprovalQueue.jsx'), 'utf8');
+  const source = fs.readFileSync(path.resolve(testDirectory, '../../pages/ApprovalQueue.jsx'), 'utf8');
 
   describe('Approval Queue workflow-state contract', () => {
     it('distinguishes named loading, failed, and empty collection states', () => {
@@ -109,7 +109,7 @@ describe('docs-workflow-state-contract.test.js', () => {
 
 describe('manual-load-error-contract.test.js', () => {
   const testDirectory = path.dirname(fileURLToPath(import.meta.url));
-  const sourceRoot = path.resolve(testDirectory, '..');
+  const sourceRoot = path.resolve(testDirectory, '../..');
 
   function readPage(name) {
     return fs.readFileSync(path.join(sourceRoot, 'pages', name), 'utf8');
@@ -206,7 +206,7 @@ describe('projects-workflow-state-contract.test.js', () => {
 
 describe('query-error-page-contract.test.js', () => {
   const testDirectory = path.dirname(fileURLToPath(import.meta.url));
-  const sourceRoot = path.resolve(testDirectory, '..');
+  const sourceRoot = path.resolve(testDirectory, '../..');
 
   const retryablePages = [
     'pages/Automations.jsx',
@@ -259,7 +259,7 @@ describe('schedule-workflow-state-contract.test.js', () => {
 
 describe('settings-workflow-state-contract.test.js', () => {
   const testDirectory = path.dirname(fileURLToPath(import.meta.url));
-  const source = fs.readFileSync(path.resolve(testDirectory, '../pages/Settings.jsx'), 'utf8');
+  const source = fs.readFileSync(path.resolve(testDirectory, '../../pages/Settings.jsx'), 'utf8');
 
   describe('Settings workflow-state contract', () => {
     it('uses shared named loading and retryable error states for AI settings', () => {
@@ -308,5 +308,58 @@ describe('time-workflow-state-contract.test.js', () => {
       }
       expect(tracking).toMatch(/entriesError\s*\?\s*\([\s\S]*<QueryErrorState[\s\S]*entries\.length === 0/);
     });
+  });
+});
+
+describe('Gmail reply workflow contract', () => {
+  const source = readFileSync(resolve(process.cwd(), 'src/pages/Thread.jsx'), 'utf8');
+  it('uses the shared modal and protects an uncertain send', () => {
+    expect(source).toContain("import Modal, { ModalFooter } from '../components/Modal'");
+    expect(source).toContain('isOpen={showGmailReply}');
+    expect(source).toContain('if (gmailSendMutation.isPending) return;');
+    expect(source).not.toContain('className="fixed inset-0 z-50 flex items-end');
+  });
+
+  it('labels required fields and uses native form submission', () => {
+    for (const id of ['gmail-reply-to', 'gmail-reply-subject', 'gmail-reply-message']) {
+      expect(source).toContain(`htmlFor="${id}"`);
+      expect(source).toContain(`id="${id}"`);
+    }
+    expect(source).toContain('type="submit"');
+    expect(source).toContain('required');
+  });
+
+  it('keeps draft and send failures visible and announced', () => {
+    expect(source).toContain('gmailDraftMutation.error');
+    expect(source).toContain('gmailSendMutation.error');
+    expect(source).toContain('role="alert"');
+    expect(source).toContain('Your draft is still available');
+  });
+});
+
+describe('Client Brain workflow contract', () => {
+  const source = readFileSync(resolve(process.cwd(), 'src/pages/SemanticSearch.jsx'), 'utf8');
+  it('does not seed fabricated client knowledge and sends the backend source contract', () => {
+    expect(source).not.toContain('Client prefers modern');
+    expect(source).not.toContain('Project timeline: 8 weeks');
+    expect(source).not.toContain('Budget range: $5,000');
+    expect(source).toContain('source: indexDoc.source');
+    expect(source).not.toContain('sourceType: doc.source');
+  });
+
+  it('uses the shared dialog with preserved input and pending dismissal protection', () => {
+    expect(source).toContain("import Modal, { ModalFooter } from '../components/Modal'");
+    expect(source).toContain('isOpen={showIndex}');
+    expect(source).toContain('if (indexMutation.isPending) return;');
+    expect(source).toContain('indexMutation.error');
+    expect(source).not.toContain('role="button" tabIndex={0}');
+  });
+
+  it('distinguishes search and stats failures from empty states and announces rebuild outcomes', () => {
+    expect(source).toContain('searchError');
+    expect(source).toContain('statsError');
+    expect(source).toContain('hasSearched');
+    expect(source).toContain('rebuildMutation.error');
+    expect(source).toContain('rebuildMutation.data');
   });
 });

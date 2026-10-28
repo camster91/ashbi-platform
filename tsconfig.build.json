@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "strict": true,
-    "noEmit": false,
-    "declaration": true
-  },
-  "exclude": ["node_modules", "dist", "web/dist", "web/node_modules", "**/*.test.ts", "**/*.spec.ts"]
-}

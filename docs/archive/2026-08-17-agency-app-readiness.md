@@ -1,3 +1,5 @@
+> **Historical planning snapshot.** This August 2026 record does not describe the current serving revision or grant deployment authority. See [product-status.md](../product-status.md) and [AGENTS.md](../../AGENTS.md).
+
 # Ashbi agency-app replacement readiness plan
 
 ## Goal

@@ -1,6 +1,6 @@
 # Finance Dashboard (QuickBooks Clone) Feature
 
-> **Superseded implementation brief.** This file is not a shipped-feature or release-status claim. Current finance status and external verification gates are classified in [docs/product-status.md](docs/product-status.md), especially #280 and #378–#380.
+> **Superseded implementation brief.** This file is not a shipped-feature or release-status claim. Current finance status and external verification gates are classified in [docs/product-status.md](../product-status.md), especially #280 and #378–#380.
 
 We need to add a comprehensive Finance Dashboard and Expense tracking to `hub.ashbi.ca` (the Ashbi-Design repo). 
 

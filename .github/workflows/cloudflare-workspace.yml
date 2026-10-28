@@ -33,7 +33,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24.22.0'
-          package-manager-cache: false
+          cache: npm
+          cache-dependency-path: apps/workspace/package-lock.json
       - name: Install locked workspace dependencies
         run: npm ci --no-audit --no-fund
       - name: Exercise signed identity and local persistence
@@ -60,7 +61,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24.22.0'
-          package-manager-cache: false
+          cache: npm
+          cache-dependency-path: apps/workspace/package-lock.json
       - name: Install locked workspace dependencies
         run: npm ci --no-audit --no-fund
       - name: Exercise independent part drafts and recovery through source routes
@@ -92,7 +94,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24.22.0'
-          package-manager-cache: false
+          cache: npm
+          cache-dependency-path: apps/workspace/package-lock.json
       - name: Install locked workspace dependencies
         run: npm ci --no-audit --no-fund
       - name: Build without publishing
@@ -131,7 +134,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24.22.0'
-          package-manager-cache: false
+          cache: npm
+          cache-dependency-path: apps/workspace/package-lock.json
       - name: Install locked workspace dependencies
         run: npm ci --no-audit --no-fund
       - name: Rehearse native local database and private-object recovery

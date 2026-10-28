@@ -1830,16 +1830,6 @@ export const clientPortalMessageNewSchema = z.object({
   type: z.enum(['TEXT', 'FILE', 'INVOICE_REPLY', 'CONTRACT_REPLY']).default('TEXT'),
 });
 
-// ── Landing (public lead form) ───────────────────────────────────────────
-export const landingLeadSchema = z.object({
-  name: z.string().min(1).max(200),
-  email: z.string().email().max(255),
-  company: z.string().max(200).optional(),
-  phone: z.string().max(50).optional(),
-  budget: z.number().positive().max(10_000_000).optional(),
-  message: z.string().max(10_000).optional(),
-});
-
 // ── Invoice Chaser ───────────────────────────────────────────────────────
 // "Generate all" sends {} and drafts reminders for every overdue invoice;
 // "Generate one" names the invoice.
@@ -1979,11 +1969,6 @@ export const inboxUnmatchedAssignSchema = z.object({
 
 export const invoiceBulkArchiveSchema = z.object({
   ids: z.array(cuidId).min(1).max(100),
-});
-
-export const landingLeadUpdateSchema = z.object({
-  status: z.enum(['NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'ARCHIVED']).optional(),
-  notes: z.string().max(10_000).optional(),
 });
 
 export const mailgunSendSchema = z.object({

@@ -1,6 +1,6 @@
 # Agency Hub — Product Roadmap
 
-> **Superseded status document.** This historical plan contains obsolete timelines, architecture, and completion claims. Use [docs/product-status.md](docs/product-status.md) and linked GitHub issues for current status. Retained only as planning history; do not use it for release or sales claims.
+> **Superseded status document.** This historical plan contains obsolete timelines, architecture, and completion claims. Use [docs/product-status.md](../product-status.md) and linked GitHub issues for current status. Retained only as planning history; do not use it for release or sales claims.
 
 ## Vision
 Replace Notion + Bonsai + Stripe + DocuSign + email threads with one AI-powered hub built for Ashbi Design.

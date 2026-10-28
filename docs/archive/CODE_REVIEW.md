@@ -5,8 +5,8 @@
 > Several findings below have been remediated (for example, Zod/`validateBody`
 > coverage across most mutation routes, frontend/backend dependency split, and
 > the AGENTS.md “known bugs”). For live product readiness, use
-> [`docs/product-status.md`](docs/product-status.md). For cloud setup, use
-> [`AGENTS.md`](AGENTS.md).
+> [`docs/product-status.md`](../product-status.md). For cloud setup, use
+> [`AGENTS.md`](../../AGENTS.md).
 
 **Date:** May 1, 2026
 **Reviewer:** Pi AI

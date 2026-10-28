@@ -21,7 +21,9 @@ test('only integration paths select one-file scheduling; every target and stdout
 });
 
 test('actual runner preserves discovery, internal Promise.all races, and nonzero failures', t => {
-  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-integration-scheduling-'));
+  // Node resolves entry modules through symlinks; keep fixture argv paths and
+  // import.meta.url consistent on macOS, where the temp directory uses /var.
+  const fixture = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ashbi-integration-scheduling-'));
   t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
   fs.mkdirSync(path.join(fixture, 'scripts'));
   fs.mkdirSync(path.join(fixture, 'src/tests/integration'), { recursive: true });

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { scrubCapabilityTokens, scrubTelemetry, sentryScrubOptions } from '../lib/telemetry-scrub';
+import { scrubCapabilityTokens, scrubTelemetry, sentryScrubOptions } from '../../lib/telemetry-scrub';
 
 const TOKEN = 'Zq9-capabilityToken_0123456789abcdefghijklm';
 

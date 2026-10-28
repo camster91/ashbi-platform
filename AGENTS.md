@@ -1,94 +1,25 @@
-# AGENTS.md
+# Repository instructions
 
-## Cursor Cloud specific instructions
+## Application boundaries
 
-Ashbi Hub is a single-repo app: a Fastify backend (`src/`), a Vite + React SPA
-(`web/`), a Prisma/PostgreSQL datastore (`prisma/`), and a BullMQ worker
-(`src/jobs/worker.js`). Standard commands live in the root `README.md`, root
-`package.json` scripts, and `web/package.json`; prefer those. Notes below cover
-only the non-obvious cloud setup.
+- The existing Hub uses Fastify in `src/`, React/Vite in `web/`, Prisma/PostgreSQL in `prisma/`, and a BullMQ worker in `src/jobs/worker.js`.
+- `apps/workspace/` is the owner-selected Cloudflare app, with its own package, lockfile and [local commands](apps/workspace/README.md). The Hub remains a fallback. Deployment, authenticated daily-use acceptance and legacy retirement are separate; see [deployment and rollback](docs/deployment-and-rollback.md).
+- Use the nearest package's commands. Root scripts verify the existing Hub, not the pilot.
 
-### Services that must already be running
-The update script only refreshes JS deps + the Prisma client. The datastore
-services are installed at the OS level (captured in the VM snapshot) but are
-**not auto-started** (no systemd). Start them at the beginning of a session:
+## Local development and verification
 
-```bash
-sudo pg_ctlcluster 16 main start        # PostgreSQL 16 (+pgvector), port 5432
-sudo redis-server /etc/redis/redis.conf --daemonize yes   # Redis, port 6379
-```
+- Use the Node version in `.nvmrc`. Install from lockfiles with `npm ci` and `npm ci --prefix web`; generate the Prisma client with `npm run db:generate`.
+- The API and worker do not automatically load `.env`. Export the intended local values in their shells before `npm run dev` or `npm run dev:worker`. The frontend runs with `npm run dev:web`.
+- `npm run test:core` runs the focused daily API/UI suite (about 100 cases). Use it for quick feedback; the full suites below remain release checks.
+- `npm run verify:quick` checks package boundaries, types, both linters and backend/frontend unit tests without a database.
+- `verify`, `verify:release` and `test:integration` mutate fixtures. Use only the separate disposable loopback test database in [local-verification.md](docs/local-verification.md). Never disable its safety guard or use development/customer data.
+- Shared environments use committed migrations with `prisma migrate deploy`. Reserve `prisma db push` for throwaway schema experiments.
+- Keep lint/type-check ratchets and meaningful security, tenant-isolation, money, accessibility and recovery assertions. [Frontend test placement](docs/frontend-tests.md) explains which tests need Node or jsdom.
 
-- The local DB is `ashbihub`, role `ashbihub` / password `localdevpass`
-  (SUPERUSER, local dev only), with the `vector` extension already enabled.
-- If a disposable local DB is empty, apply the committed chain with
-  `npx prisma migrate deploy`. Use `prisma db push` only for throwaway schema
-  experiments; it is not the source of truth for shared or production data.
-  `npx prisma generate` is already handled by the update script.
+## Architecture and authority
 
-### Env vars: the app does NOT auto-load `.env`
-`src/` never imports `dotenv`, so `npm run dev` / `dev:web` / `dev:worker` do
-**not** pick up `.env` on their own. Export it into the shell first, otherwise
-the backend aborts on startup with `@fastify/jwt: missing secret`:
-
-```bash
-set -a; source .env; set +a
-```
-
-A local `.env` already exists (gitignored, in the snapshot) with working dev
-values: `DATABASE_URL`, `JWT_SECRET`, `CREDENTIALS_KEY`, `ADMIN_INVITE_TOKEN`,
-`REDIS_URL`, `CORS_ORIGIN=http://localhost:5173`, `AI_PROVIDER=ollama`.
-(Prisma CLI commands read `.env` on their own via `prisma.config.ts`.)
-
-### Running the app (dev)
-Three processes, each after sourcing `.env`:
-- Backend API: `npm run dev` → http://localhost:3000
-- Frontend: `npm run dev:web` → http://localhost:5173 (proxies `/api` +
-  `/socket.io` to :3000; this is the URL to open in a browser)
-- Worker (optional, for async jobs): `npm run dev:worker`
-
-First admin bootstrap (no seed needed): POST to `/api/auth/register` with
-`adminInviteToken` equal to `ADMIN_INVITE_TOKEN`, then log in at the SPA.
-Optional seeding via `npx prisma db seed` / `node prisma/seed.js` uses
-`bcrypt` (not `bcryptjs`) and requires `ADMIN_SEED_PASSWORD` when configured.
-
-### Lint / test / build
-
-`npm run verify`, `verify:release` and `test:integration` mutate test fixtures.
-Use `docs/local-verification.md` to provision a separate loopback test database;
-the development `ashbihub` URL above is deliberately rejected by those suites.
-Do not disable this safety guard or point fixture tests at shared/customer data.
-Commands are in `package.json` / `web/package.json`:
-- Backend: `npm run lint`, `npm run type-check`, `npm test` (~600 unit tests),
-  `npm run build`.
-- Frontend: `npm test --prefix web` (Vitest; some tests intentionally assert
-  thrown errors — the stderr stack traces are expected, not failures).
-- Unit/integration tests set `NODE_ENV=test`, which mocks Redis/BullMQ, so
-  they do not need live Redis.
-
-### Product / review authority
-- Canonical capability status: `docs/product-status.md` (code-present ≠
-  market-ready).
-- `CODE_REVIEW.md` is a historical May 2026 snapshot — do not treat it as the
-  current risk register (many items, including Zod validation coverage, have
-  since been remediated).
-
-### Verified historical fixes (no longer pre-existing)
-
-The three items previously listed in this section were closed in earlier
-PRs and are documented here so future agents do not re-investigate the same
-code paths. If you believe one has regressed, verify against the closing
-PRs and open a fresh issue — do not edit this section to recreate the
-stale note.
-
-| Symptom | Closed in | How to verify today |
-|---|---|---|
-| `prisma/seed.js` imported the missing `bcryptjs` dep | `31c72df` (PR #251); regression introduced in `97eda8e` | `prisma/seed.js:3` imports `bcrypt`; `package.json` lists `bcrypt ^6.0.0` and no `bcryptjs` |
-| Dashboard `/api/dashboard/stats` returned 500 (table casing) | `31c72df` (PR #251), broader hardening in `10bd6e0` (PR #238) | `src/routes/dashboard.routes.js:250` uses `FROM "invoices" i`; covered by `src/tests/integration/invoice.test.js` |
-| Clients page always showed 6 hardcoded `ASHBI_DESIGN_CLIENTS` | `31c72df` (PR #251); unused constant removed in `080866d` | `web/src/pages/Clients.jsx:124` returns `Array.isArray(clients) ? clients : []`; no fallback constant is referenced by the render path |
-
-For the current execution checklist, see issue **#565** and
-`docs/master-app-delivery-plan.md`; `docs/launch-status.md` records the dated
-deployment/QA evidence. #290/#291 are historical trackers, not competing work
-queues. Verify older issue claims against current code and acceptance evidence
-before changing behavior. Do not add new bug notes here; file a confirmed defect
-on GitHub and link the current checklist.
+- Route handlers use `request.prisma` for tenant-scoped access. Follow the existing tenant policy and domain registration boundaries when changing routes or models.
+- [CONTRIBUTING.md](CONTRIBUTING.md) owns delivery policy. [deployment-and-rollback.md](docs/deployment-and-rollback.md) owns the current production procedure; [backup-and-restore.md](docs/backup-and-restore.md) owns recoverability. Historical deployment guides do not grant release authority.
+- [product-status.md](docs/product-status.md) distinguishes source capability from accepted behavior. [launch-status.md](docs/launch-status.md) retains dated deployment/QA evidence.
+- On 27 October 2026 the owner closed all remaining issues and pull requests. Their references in older plans are historical; closure does not establish implementation, deployment or acceptance. Follow the current owner request and verify older claims against code and evidence.
+- Older architecture, reviews and model-specific guides live in `docs/archive/`. Do not use them as current instructions or a new work queue.

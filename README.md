@@ -2,6 +2,18 @@
 
 An all-in-one operations platform for a small creative agency: clients, projects, tasks, time, finance documents, team chat, media review and a client portal in one self-hosted app.
 
+This repository contains the existing Hub (`src/`, `web/`, `prisma/`) and a
+separate [Cloudflare workspace pilot](apps/workspace/README.md) in
+`apps/workspace/`. The pilot targets the smaller two-person workflow described
+in [tasks/plan.md](tasks/plan.md); it has its own dependencies and verification
+commands. The feature list and root commands below describe the existing Hub.
+Pilot source and local tests do not establish production replacement or cutover.
+
+On 27 October 2026, the owner closed the remaining issues and pull requests.
+Their references in planning documents preserve history and do not prove
+completion. Local cleanup evidence is in the
+[feature cleanup inventory](docs/feature-cleanup-inventory.md).
+
 LLM integrations use the provider-free [workspace HTTP API and MCP tools](docs/workspace-api-mcp.md).
 Embedded assistance is optional and hidden by default. A generated
 [GPT Actions schema](docs/workspace-actions.openapi.json) is available for API-key clients.
@@ -84,11 +96,17 @@ Before `verify`, `verify:release` or `test:integration`, provision and select a
 `ashbihub` connection is not a safe test target. `verify:quick` needs no database.
 
 ```bash
+npm run test:core       # about 100 focused API and rendered UI tests for daily work
 npm run verify:quick    # package boundaries, typecheck, lint, backend and frontend unit tests
 npm run verify          # verify:quick plus integration tests and a production build
 npm run verify:browser  # Playwright browser, public-route and PWA offline checks
 npm run verify:release  # verify plus Lighthouse and release-policy checks
 ```
+
+The core suite covers sessions, tenant isolation, client/project/task flows,
+time locks, invoice saves/billing, uploads and document recovery. Its selected
+files and limits are documented in [local verification](docs/local-verification.md).
+The full regression, integration and browser suites remain the release checks.
 
 Full-stack end-to-end tests (PostgreSQL, Redis, worker and API in Docker):
 
@@ -116,6 +134,8 @@ web/            React + Vite frontend (pages, components, hooks)
 prisma/         schema and committed migrations
 scripts/        importers, generators and maintenance CLIs
 tests/          Playwright browser, accessibility, PWA and visual tests
+apps/workspace/ Separate Cloudflare workspace pilot (own package and local checks)
+prototypes/     Earlier isolated runtime proofs
 docs/           design and reference documentation
 ```
 
@@ -134,6 +154,11 @@ Generated references are checked in CI so they never drift from the code:
 - [docs/data-dictionary.md](docs/data-dictionary.md): every Prisma model with tenant scoping and fields (`npm run docs:data-dictionary`)
 
 Contribution rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Project instructions are in [AGENTS.md](AGENTS.md). Older roadmaps, code reviews,
+deployment checklists and model-specific guides live in [docs/archive/](docs/archive/)
+and are historical reference. The current production procedure is
+[deployment-and-rollback.md](docs/deployment-and-rollback.md).
 
 ## License
 

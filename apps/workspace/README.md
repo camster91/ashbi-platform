@@ -1,10 +1,12 @@
-# Ashbi workspace — private Cloudflare pilot
+# Ashbi workspace — Cloudflare app
 
-This is the deployable successor to the isolated local foundation proof. It uses verified Cloudflare Access JWTs and active D1 actors; there is no fixture-code login endpoint. It does not replace the current application or migrate production records.
+The owner-selected app is deployed at https://ashbi-workspace.camster915391.workers.dev behind Cloudflare Access, with the existing D1 database and private R2 originals. It uses verified Access JWTs and active D1 actors; there is no fixture-code login endpoint. The legacy Hub remains a fallback. Authenticated daily-use acceptance and live billing remain separate from deployment; Stripe is still in test mode.
+
+See [deployment and rollback](../../docs/deployment-and-rollback.md) for the current release procedure. The source-increment sections below preserve historical implementation notes; their earlier “activation pending” statements do not describe current hosting.
 
 ## Local checks
 
-`npm ci`, `npm test`, `npm run build`, `npx playwright install chromium`, `npm run test:browser` from this directory. Build is a dry-run only. `auth.test.mjs` verifies real RSA signatures and claims; `test.mjs` runs the application handler with real local D1 through Miniflare. This is not a hosted identity/MFA login test. Tests inject a signing key into the exported handler factory; the deployed default handler always uses Cloudflare's JWKS. Fixture identities are never configured in the hosted Worker.
+`npm ci`, `npm test`, `npm run build`, `npx playwright install chromium`, `npm run test:browser` from this directory. Build is a dry-run only. The default browser command runs all six CI groups in separate processes with fresh synthetic databases, one group at a time locally, with the same ten-minute per-group timeout as CI. Set `WORKSPACE_BROWSER_GROUP` to one named group for a focused check; no group is omitted from the default command. `auth.test.mjs` verifies real RSA signatures and claims; `test.mjs` runs the application handler with real local D1 through Miniflare. This is not a hosted identity/MFA login test. Tests inject a signing key into the exported handler factory; the deployed default handler always uses Cloudflare's JWKS. Fixture identities are never configured in the hosted Worker.
 
 For local development, `npm run dev -- --port 8787 --var APP_ORIGIN:http://127.0.0.1:8787`
 keeps the origin check aligned with the local listener. The predev hook generates
@@ -27,16 +29,16 @@ The Access app requires independent MFA. Organisation capability is enabled for 
 
 A new D1 database is independent of the existing PostgreSQL application. Schema is additive in this new database; never replay it over existing data. No business data is seeded. Access actors are provisioned through an approved administrative operation. Runtime configuration stores only public identifiers. Tokens/secret keys do not belong here.
 
-Deployment uses the reviewed dry-run bundle via the connected Cloudflare API. Keep workers.dev disabled until schema, actor mapping and Access policy are verified; disable version preview URLs. Production release metadata must record bundle SHA-256, source tree, Worker version and D1 ID. Enable observability at 10%, with invocation logs disabled and query strings redacted; app code never logs content or tokens. `/health` returns status and release only; Access may intercept it at the edge.
+Deployment uses the reviewed dry-run bundle via the connected Cloudflare API. The existing workers.dev route is enabled behind Access; version preview URLs remain disabled. The checked-in config includes local D1/R2 bindings and preserves remotely configured variables. Every release must explicitly set `RELEASE` to its exact source commit; it must not inherit a previous release identifier. Production release metadata must record bundle SHA-256, source tree, Worker version and D1 ID. Enable observability at 10%, with invocation logs disabled and query strings redacted; app code never logs content or tokens. `/health` returns status and release only; Access may intercept it at the edge.
 
-Rollback the isolated pilot by disabling its workers.dev route; preserve the D1 database and Access configuration for investigation. Do not roll back the existing Hub or restore exposed historical seed data. Export is limited to 1,000 records per table and explicitly refuses larger exports; it omits identities and does not include private objects. It is not a complete backup. D1 Time Travel/administrative export plus isolated restore rehearsal and R2 original-byte recovery remain release gates before real customer data/cutover. No source-system deletion or cancellation is authorised by this pilot.
+Rollback the app by restoring the retained previous Worker version to 100% traffic; preserve its route, D1 database, R2 objects and Access configuration. Do not roll back the existing Hub or restore exposed historical seed data. Export is limited to 1,000 records per table and explicitly refuses larger exports; it omits identities and does not include private objects. It is not a complete backup. D1 Time Travel/administrative export plus isolated restore rehearsal and R2 original-byte recovery remain release gates before real customer data/cutover. No source-system deletion or cancellation is authorised by this pilot.
 
-Owner direction is now Cloudflare deployment. Existing Coolify configuration and held #684 remain unchanged; no main merge is needed for this isolated release.
+Owner direction is Cloudflare for daily app use. Legacy Hub/Coolify infrastructure remains available; deployment does not authorize source-system deletion or retirement.
 
 
-## Private originals (local implementation; hosted activation pending)
+## Private originals (implementation history)
 
-`files.test.mjs` uses actual local Miniflare R2 and D1. Migration `0003.sql` adds metadata only; apply it once to the isolated hosted D1 only when releasing the file increment. Before binding R2, activate it through the owning account's reviewed dashboard flow and create a private bucket with public access disabled. This repository deliberately contains no live R2 binding until that gate is satisfied. Deploying these sources without FILES leaves the feature unavailable.
+`files.test.mjs` uses actual local Miniflare R2 and D1. Migration `0003.sql` adds metadata only; apply it once to the isolated hosted D1 only when releasing the file increment. Before binding R2, activate it through the owning account's reviewed dashboard flow and create a private bucket with public access disabled. The current configuration binds the existing private `ashbi-workspace-private` bucket as FILES. Local Wrangler uses isolated local storage (`remote: false`). Deploying without FILES leaves the feature unavailable.
 
 Uploads are limited to 5 MiB based on bytes read, not trusted Content-Length. D1 pending metadata is reserved before an immutable random object key is written; SHA-256 is supplied to R2 and checked again on download. An interrupted upload may leave pending records/objects requiring reconciliation; they are never visible through the API. A retry after a lost response can create a duplicate. Soft removal keeps original bytes and costs storage; staff can restore using revisions. Files always download as attachments. Client upload and inline preview are outside this slice. Arbitrary attachments are not antivirus-scanned; use synthetic records during this pilot.
 

@@ -15,3 +15,9 @@ dist
 coverage
 .nyc_output
 tmp
+
+# Separate packages and browser evidence are not inputs to the Hub Dockerfile.
+/apps/
+/prototypes/
+/upwork-agent/
+/tests/

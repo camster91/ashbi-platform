@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calendarDaysUntil, todayDateInputValue } from '../lib/format';
+import { calendarDaysUntil, todayDateInputValue } from '../../lib/format';
 
 // Date-only values (expense dates, milestone due dates) are stored as a UTC
 // calendar day; these helpers keep them on the chosen day in any timezone.

@@ -1,27 +1,16 @@
 /**
  * File Upload Validation Tests
  *
- * Validates that file upload endpoints properly check:
- * 1. File type (MIME type allowlist)
- * 2. File extension allowlist
- * 3. File size limits
- * 4. Path traversal prevention (via extension checking)
+ * Checks the shared extension and MIME allowlists. Runtime upload policy,
+ * byte validation and traversal rejection are covered by file-upload-policy.test.js.
  *
  * Issues #6, #7: No file type validation and path traversal risk on uploads.
  *
- * Run with: node --test src/tests/file-upload-validation.test.js
+ * Run with: node scripts/run-node-tests.mjs src/tests/unit/file-upload-validation.test.js
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Import schemas for allowlist testing
-const schemasModule = await import('../../validators/schemas.js');
-const fileUpload = schemasModule.fileUpload;
+import { fileUpload } from '../../validators/schemas.js';
 const ALLOWED_UPLOAD_EXTENSIONS = fileUpload.ALLOWED_EXTENSIONS;
 const ALLOWED_UPLOAD_MIMETYPES = fileUpload.ALLOWED_MIMETYPES;
 
@@ -74,27 +63,6 @@ describe('File Upload Validation', () => {
       for (const mime of expected) {
         assert.ok(mimetypes.includes(mime), `Should allow ${mime}`);
       }
-    });
-  });
-
-  describe('Path traversal prevention', () => {
-    it('file extensions should be validated against allowlist before storing', () => {
-      // Even with UUID filenames, the extension from the user upload
-      // determines how the file might be served later
-      const schemas_content = fs.readFileSync(
-        path.join(__dirname, '..', '..', 'validators', 'schemas.js'), 'utf-8'
-      );
-
-      assert.ok(
-        schemas_content.includes('ALLOWED_EXTENSIONS'),
-        'ALLOWED_EXTENSIONS should be defined for extension validation'
-      );
-
-      // Verify the allowlist is exported so routes can use it
-      assert.ok(
-        schemas_content.includes('export const fileUpload'),
-        'fileUpload allowlist should be exported for route use'
-      );
     });
   });
 });
