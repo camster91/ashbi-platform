@@ -22,6 +22,23 @@ test('workspace with signed identity and actual local D1 storage', async t => {
  }
  const call=(path,actor='staff',method='GET',body,extra={})=>worker.fetch(new Request(origin+path,{method,headers:{...(actor?{'Cf-Access-Jwt-Assertion':tokens[actor]}:{}),...(body?{'Content-Type':'application/json','Origin':origin}:{}),...extra},body:body?JSON.stringify(body):undefined}),env);
  let client,project,task,note;
+ await t.test('local UI fonts preserve authentication and deliver cacheable WOFF2 assets',async()=>{
+  const shell=await call('/');assert.match(shell.headers.get('Content-Security-Policy'),/font-src 'self'/);
+  const html=await shell.text(),path=html.match(/href="(\/fonts\/[^"<>]+)"/)[1];
+  assert.equal((await call(path,null)).status,401);
+  const font=await call(path);assert.equal(font.status,200);
+  assert.equal(font.headers.get('Content-Type'),'font/woff2');
+  assert.equal(font.headers.get('Cache-Control'),'private, max-age=31536000, immutable');
+  const bytes=Buffer.from(await font.arrayBuffer());assert.equal(bytes.subarray(0,4).toString(),'wOF2');assert.ok(bytes.length<32*1024);
+  const head=await call(path,'staff','HEAD');assert.equal(head.status,200);assert.equal(await head.text(),'');assert.equal(Number(head.headers.get('Content-Length')),bytes.length);
+  assert.equal((await call('/fonts/missing.woff2')).status,404);
+  await DB.prepare('UPDATE actors SET active=0 WHERE id=?').bind('staff2').run();
+  assert.equal((await call(path,'staff2')).status,403);
+  await DB.prepare('UPDATE actors SET active=1 WHERE id=?').bind('staff2').run();
+  const styles=await (await call('/app.css')).text();
+  for(const match of styles.matchAll(/url\("(\/fonts\/[^"<>]+)"\)/g))assert.equal((await call(match[1])).status,200);
+ });
+
  await t.test('anonymous, invented identity, wrong host, cross-origin and inactive actors are denied',async()=>{
   assert.equal((await call('/api/me',null)).status,401);
   tokens.unknown=await new SignJWT({email:'unknown@example.invalid'}).setProtectedHeader({alg:'RS256'}).setIssuer(issuer).setAudience('workspace').setSubject('u').setIssuedAt().setExpirationTime('5m').sign(privateKey);

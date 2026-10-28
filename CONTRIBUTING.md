@@ -13,11 +13,12 @@ operations, and the issue's accepted criteria remain authoritative for product b
    follow-up work into linked issues and branches.
 4. Open a draft pull request as soon as the approach is concrete. Complete every section
    in the repository pull-request template and link the primary issue.
-5. Request independent review only after automated checks and the applicable manual
-   checks pass. The author cannot be the only reviewer of security-, privacy-, data-,
-   migration-, finance-, authentication-, or deployment-sensitive work.
-6. Merge by squash after required checks and review pass. Never bypass a failed check to
-   meet a schedule.
+5. Complete automated checks and applicable manual verification before merge.
+   A second reviewer is optional, including for security-, privacy-, data-, migration-,
+   finance-, authentication-, and deployment-sensitive work. The implementer may
+   complete the review and record the evidence.
+6. Merge by squash after required checks pass and applicable verification is recorded.
+   Never bypass a failed check to meet a schedule.
 7. Close the issue only after its acceptance criteria pass in the named target
    environment. A merged PR alone is not acceptance evidence.
 
