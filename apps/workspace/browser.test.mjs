@@ -1,4 +1,5 @@
-import {selectBrowserSuites} from './browser-groups.mjs';
+import {browserGroups,selectBrowserSuites} from './browser-groups.mjs';
+import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {readFile,readdir} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
@@ -30,6 +31,19 @@ import {runContractPdfTests} from './browser-contract-pdf-tests.mjs';
 import {runStripeIssuanceTests} from './browser-stripe-issuance.mjs';
 import {runStripeDeliveryTests} from './browser-stripe-delivery.mjs';
 const selectedSuites=new Set(selectBrowserSuites(process.env.WORKSPACE_BROWSER_GROUP)),executedSuites=[];
+// Match CI's fresh fixture boundary without overlapping local browser processes.
+if(process.env.WORKSPACE_BROWSER_GROUP===undefined||process.env.WORKSPACE_BROWSER_GROUP==='all'){
+ const results=[];
+ for(const group of Object.keys(browserGroups)){
+  const code=await new Promise(resolve=>{
+   const child=spawn(process.execPath,[...process.execArgv,fileURLToPath(import.meta.url)],{stdio:'inherit',timeout:600000,env:{...process.env,WORKSPACE_BROWSER_GROUP:group}});
+   child.once('error',error=>{console.error('Browser group could not start:',group,error.code);resolve(1);});
+   child.once('close',(code,signal)=>{if(signal)console.error('Browser group terminated:',group,signal);resolve(code??1);});
+  });
+  results.push({group,code});console.log('Browser group result:',JSON.stringify({group,code}));
+ }
+ process.exit(results.every(result=>result.code===0)?0:1);
+}
 const base=fileURLToPath(new URL('.',import.meta.url));
 const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'qa'},r2Buckets:['FILES'],cf:false});
 const DB=await mf.getD1Database('DB'),FILES=await mf.getR2Bucket('FILES');
