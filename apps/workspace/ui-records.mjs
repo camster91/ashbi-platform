@@ -149,6 +149,43 @@ function fileForm(state) {
   panel.append(form);
   main.append(panel);
 }
+// Compact presentation is used only in lists, never in boards or dialogs.
+function compactRecord(record, state) {
+  const item = recordItem(record, state);
+  item.classList.add("compact-record", "compact-" + state.page);
+  const line = item.firstElementChild, title = line.firstElementChild;
+  const identity = node("div", undefined, "record-identity");
+  identity.append(title);
+  const parentId = state.page === "projects" ? record.client_id : record.project_id;
+  const parent = state.parents.find(row => row.id === parentId);
+  if (parent && !state.projectId) identity.append(node("p", parent.name, "help"));
+  const status = node("div", undefined, "record-status");
+  status.append(...line.children);
+  const details = node("div", undefined, "record-details");
+  for (const child of [...item.children]) {
+    if (child === line || child.classList.contains("record-actions")) continue;
+    if (child.classList.contains("badge")) status.append(child);
+    else details.append(child);
+  }
+  if (!details.childElementCount) details.append(node("span", state.page === "tasks" ? "No due date" : "—", "help"));
+  const actions = item.querySelector(".record-actions");
+  for (const action of actions.querySelectorAll("button")) {
+    if (action.dataset.timerProject) continue;
+    const label = action.getAttribute("aria-label") || action.textContent;
+    action.setAttribute("aria-label", label);
+    if (label.startsWith("Archive project ")) action.textContent = "Archive";
+    if (label.startsWith("Restore project ")) action.textContent = "Restore";
+    if (label === "Complete task") action.textContent = "Complete";
+    if (label === "Reopen task") action.textContent = "Reopen";
+  }
+  if (state.page === "projects") {
+    // Projects have no separate contact/due-date column.
+    for (const child of [...details.children]) if (child.textContent !== "—") identity.append(child);
+    item.replaceChildren(identity, status, actions);
+  } else if (state.page === "clients") item.replaceChildren(identity, details, actions);
+  else item.replaceChildren(identity, status, details, actions);
+  return item;
+}
 function recordItem(record, state) {
   const { page } = state;
   const actions = node("div", undefined, "record-actions");
@@ -160,7 +197,7 @@ function recordItem(record, state) {
   if (record.text) item.append(node("p", record.text));
   if (record.email) item.append(node("p", record.email));
   if (record.due_on) item.append(node("p", "Due " + record.due_on));
-  if (record.assignee_id) item.append(node("p", "Assigned to " + record.assignee_id));
+  if (record.assignee_id) item.append(node("p", "Assigned to " + (state.staff?.find(person => person.id === record.assignee_id)?.name || record.assignee_id)));
   if (actor.role === "staff" && ["clients", "projects", "tasks", "notes"].includes(page)) {
     const edit = button("Edit " + (record.name || record.title), (opener) => editRecord(record, opener, state), true, state);
     edit.textContent = "Edit " + recordKinds[page];

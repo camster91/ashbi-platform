@@ -98,6 +98,19 @@ main { min-width: 0; width: 100%; max-width: 88rem; padding: var(--space-7) clam
 .record-actions { margin-top: var(--space-4); }
 .form-actions { margin-top: var(--space-2); }
 .record-actions > a:not(.button) { display: inline-flex; align-items: center; min-height: 44px; max-width: 100%; padding: .5rem .25rem; font-size: var(--text-sm); font-weight: 600; }
+/* List rows share columns; boards, dialogs and project overviews keep their layout. */
+.compact-record { padding-block: var(--space-4); }
+.record-identity, .record-status, .record-details { min-width: 0; }
+.record-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
+.record-details { color: var(--color-muted); }
+@media (min-width: 1100px) {
+  .compact-record { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,.8fr) minmax(0,1fr) minmax(0,1.8fr); gap: var(--space-4); align-items: center; }
+  .compact-projects, .compact-clients { grid-template-columns: minmax(0,1.6fr) minmax(0,1fr) minmax(0,2fr); }
+  .compact-record .record-status { align-items: flex-start; flex-direction: column; margin: 0; }
+  .compact-record .record-actions { margin: 0; justify-content: flex-end; }
+  .compact-record .record-actions > :is(button,a) { font-size: var(--text-xs); }
+  .compact-record .record-identity p, .compact-record .record-details p { margin-block: var(--space-1); }
+}
 .notice { border-left: 3px solid var(--color-brand); border-radius: 0 var(--radius-control) var(--radius-control) 0; padding: var(--space-3) var(--space-4); background: var(--color-brand-soft); font-size: var(--text-label); }
 .error { color: var(--color-error); font-weight: 600; padding: var(--space-3) var(--space-4); background: var(--color-error-surface); border-radius: var(--radius-control); }
 .stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
