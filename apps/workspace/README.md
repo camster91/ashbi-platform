@@ -1,5 +1,7 @@
 # Ashbi workspace — Cloudflare app
 
+The shared visual rules and component guidance are in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md). UI fonts are self-hosted, pinned and licensed; see [font provenance](ui-fonts/README.md).
+
 The owner-selected app is deployed at https://ashbi-workspace.camster915391.workers.dev behind Cloudflare Access, with the existing D1 database and private R2 originals. It uses verified Access JWTs and active D1 actors; there is no fixture-code login endpoint. The legacy Hub remains a fallback. Authenticated daily-use acceptance and live billing remain separate from deployment; Stripe is still in test mode.
 
 See [deployment and rollback](../../docs/deployment-and-rollback.md) for the current release procedure. The source-increment sections below preserve historical implementation notes; their earlier “activation pending” statements do not describe current hosting.

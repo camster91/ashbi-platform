@@ -1,3 +1,8 @@
+import {runNavigationGroupTests} from './browser-navigation-groups.mjs';
+
+import {runSearchTests} from './browser-search.mjs';
+import {runCompactListTests} from './browser-compact-lists.mjs';
+import {runProjectWorkspaceTests} from './browser-project-workspace.mjs';
 import {browserGroups,selectBrowserSuites} from './browser-groups.mjs';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
@@ -62,6 +67,8 @@ const browser=await chromium.launch({headless:true,...(process.env.WORKSPACE_TES
 try{
 const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
 await page.goto(origin);await page.getByRole('heading',{name:'Overview',exact:true}).waitFor();
+await page.evaluate(()=>document.fonts.ready);
+assert.equal(await page.evaluate(()=>[...document.fonts].some(font=>font.family==='Plus Jakarta Sans'&&font.status==='loaded')),true,'Self-hosted UI font loads under the real response CSP');
 await page.getByRole('link',{name:'Clients',exact:true}).click();await page.getByLabel('Name',{exact:true}).fill('QA client');await page.getByRole('button',{name:'Save',exact:true}).click();await page.getByText('QA client',{exact:true}).waitFor();
 await page.getByRole('link',{name:'Projects',exact:true}).click();await page.locator('select[name=clientId]').waitFor();await page.getByLabel('Name',{exact:true}).fill('QA project');await page.locator('select[name=clientId]').selectOption({label:'QA client'});await page.getByRole('button',{name:'Save',exact:true}).click();await page.getByText('QA project',{exact:true}).waitFor();
 await page.getByRole('link',{name:'Tasks',exact:true}).click();await page.locator('select[name=projectId]').waitFor();await page.getByLabel('Name',{exact:true}).fill('QA task');await page.locator('select[name=projectId]').selectOption({label:'QA project'});await page.getByRole('button',{name:'Save',exact:true}).click();await page.getByText('QA task',{exact:true}).waitFor();await page.getByRole('button',{name:'Edit QA task',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByLabel('Name',{exact:true}).fill('QA task revised');await dialog.locator('select[name=assigneeId]').selectOption('qa');await dialog.getByLabel('Due date',{exact:true}).fill('2026-11-12');await dialog.getByRole('button',{name:'Save',exact:true}).click();await page.getByText('QA task revised',{exact:true}).waitFor();await page.getByText('Due 2026-11-12',{exact:true}).waitFor();await page.getByRole('button',{name:'Complete task',exact:true}).click();await page.getByRole('button',{name:'Reopen task',exact:true}).waitFor();
@@ -73,7 +80,7 @@ const axe=await readFile(createRequire(import.meta.url).resolve('axe-core/axe.mi
 for(const width of [390,768,1440]){await page.setViewportSize({width,height:1000});await page.getByRole('link',{name:'Tasks',exact:true}).click();await page.getByRole('button',{name:'Reopen task',exact:true}).waitFor();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.evaluate(axe);const violations=await page.evaluate(async()=>{const r=await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}});return r.violations.map(v=>v.id);});assert.deepEqual(violations,[]);console.log(JSON.stringify({width,overflow:false,axeViolations:0}));}
 for(const width of [390,768,1440]){await page.setViewportSize({width,height:1000});await page.getByRole('link',{name:'Files',exact:true}).click();await page.getByRole('heading',{name:'Upload private file',exact:true}).waitFor();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);const issues=await page.evaluate(async()=>{const r=await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}});return r.violations.map(v=>v.id);});assert.deepEqual(issues,[]);}
 await page.getByRole('link',{name:'Tasks',exact:true}).click();await page.getByRole('button',{name:'Edit QA task revised',exact:true}).waitFor();
-await page.getByRole('button',{name:'Edit QA task revised',exact:true}).click();assert.equal(await page.getByRole('dialog').isVisible(),true);const modalIssues=await page.evaluate(async()=>{const r=await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}});return r.violations.map(v=>v.id);});assert.deepEqual(modalIssues,[]);await page.keyboard.press('Escape');await page.waitForFunction(()=>document.activeElement?.textContent==='Edit QA task revised');assert.equal(await page.getByRole('dialog').count(),0);
+await page.getByRole('button',{name:'Edit QA task revised',exact:true}).click();assert.equal(await page.getByRole('dialog').isVisible(),true);const modalIssues=await page.evaluate(async()=>{const r=await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}});return r.violations.map(v=>v.id);});assert.deepEqual(modalIssues,[]);await page.keyboard.press('Escape');await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Edit QA task revised');assert.equal(await page.getByRole('dialog').count(),0);
 await page.goto(origin);await page.keyboard.press('Tab');assert.equal(await page.locator(':focus').textContent(),'Skip to content');await page.keyboard.press('Enter');assert.equal(await page.locator(':focus').getAttribute('id'),'main');
 assert.deepEqual(errors,[]);console.log('Browser workflow, reload, timer, keyboard, responsive and axe checks: PASS');
 if(selectedSuites.has('runRegressions')){await runRegressions({browser,origin,DB});executedSuites.push('runRegressions');}
@@ -84,6 +91,11 @@ if(selectedSuites.has('runDocumentTreeTests')){await runDocumentTreeTests({brows
 if(selectedSuites.has('runTimerTests')){await runTimerTests({browser,origin,DB,axe,addActor});executedSuites.push('runTimerTests');}
 if(selectedSuites.has('runTimeReviewTests')){await runTimeReviewTests({browser,origin,DB,axe,addActor});executedSuites.push('runTimeReviewTests');}
 if(selectedSuites.has('runFinanceTests')){await runFinanceTests({browser,origin,DB,axe,addActor});executedSuites.push('runFinanceTests');}
+if(selectedSuites.has('runProjectWorkspaceTests')){await runProjectWorkspaceTests({browser,origin,DB,axe,addActor});executedSuites.push('runProjectWorkspaceTests');}
+if(selectedSuites.has('runCompactListTests')){await runCompactListTests({browser,origin,DB,axe});executedSuites.push('runCompactListTests');}
+if(selectedSuites.has('runNavigationGroupTests')){await runNavigationGroupTests({browser,origin,DB,axe,addActor});executedSuites.push('runNavigationGroupTests');}
+
+if(selectedSuites.has('runSearchTests')){await runSearchTests({browser,origin,DB,axe,addActor});executedSuites.push('runSearchTests');}
 if(selectedSuites.has('runCommercialTests')){await runCommercialTests({browser,origin,DB,axe,addActor});executedSuites.push('runCommercialTests');}
 if(selectedSuites.has('runProposalReviewTests')){await runProposalReviewTests({browser,origin,DB,axe,addActor});executedSuites.push('runProposalReviewTests');}
 if(selectedSuites.has('runStripeTests')){await runStripeTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runStripeTests');}

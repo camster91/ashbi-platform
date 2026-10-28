@@ -105,7 +105,7 @@ export async function runTaskBoardTests({browser,origin,DB,axe}){
   assert.equal(await page.getByRole('button',{name:'Board',exact:true}).getAttribute('aria-pressed'),'true');
   assert.equal((await DB.prepare("SELECT status FROM tasks WHERE id='board-review'").first()).status,'done');
   await page.reload();await page.getByRole('button',{name:'Edit '+reviewTitle,exact:true}).waitFor();
-  assert.equal(await page.locator('article').filter({has:page.getByText(reviewTitle,{exact:true})}).getByText('done',{exact:true}).count(),1);
+  assert.equal(await page.locator('article').filter({has:page.getByText(reviewTitle,{exact:true})}).getByText('Done',{exact:true}).count(),1);
  });
  await test('#691 a concurrent task edit retains the local draft and refuses to overwrite',async t=>{
   const page=await browser.newPage();t.after(()=>page.close());await tasks(page,origin);await page.getByRole('button',{name:'Board',exact:true}).click();
@@ -115,7 +115,7 @@ export async function runTaskBoardTests({browser,origin,DB,axe}){
   assert.equal(await dialog.getByRole('alert').textContent(),'Record changed; reload and try again');assert.equal(await dialog.getByLabel('Status',{exact:true}).inputValue(),'doing');
   assert.equal((await DB.prepare("SELECT status FROM tasks WHERE id='board-review'").first()).status,'todo');
   await page.keyboard.press('Escape');await page.reload();await page.getByRole('button',{name:'Edit '+reviewTitle,exact:true}).waitFor();
-  assert.equal(await page.locator('article').filter({has:page.getByText(reviewTitle,{exact:true})}).getByText('todo',{exact:true}).count(),1);
+  assert.equal(await page.locator('article').filter({has:page.getByText(reviewTitle,{exact:true})}).getByText('To do',{exact:true}).count(),1);
  });
  await test('#691 Board is usable at phone/tablet/desktop widths with axe A/AA checks',async t=>{
   const page=await browser.newPage();t.after(()=>page.close());await tasks(page,origin);await page.getByRole('button',{name:'Board',exact:true}).click();await page.evaluate(axe);

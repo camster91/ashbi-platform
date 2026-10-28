@@ -1,3 +1,5 @@
+import {searchRoute} from './search.mjs';
+import {fontAsset} from './ui-font-assets.generated.mjs';
 import { html, css, clientScript } from './ui.mjs';
 import { authenticate } from './auth.mjs';
 import { filesRoute } from './files.mjs';
@@ -36,9 +38,13 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  if(url.pathname==='/api/stripe/webhook')return await stripeWebhook(request,env,json,providers.stripeFetch,ctx);
  let identity;try{identity=await authenticate(request,env,resolveKey);}catch{throw 401;}
  const actor=await env.DB.prepare('SELECT id,organization_id,role,client_id FROM actors WHERE email=? AND active=1').bind(identity.email).first();if(!actor)throw 403;
+ if(['GET','HEAD'].includes(request.method)&&url.pathname.startsWith('/fonts/')){
+  const bytes=fontAsset(url.pathname);if(!bytes)throw 404;
+  return new Response(request.method==='HEAD'?null:bytes,{headers:{...security,'Content-Type':'font/woff2','Content-Length':String(bytes.byteLength),'Cache-Control':'private, max-age=31536000, immutable'}});
+ }
  if(request.method==='GET'&&['/','/app.js','/app.css'].includes(url.pathname)){
   const type=url.pathname==='/'?'text/html':url.pathname==='/app.js'?'application/javascript':'text/css';
-  return new Response(url.pathname==='/'?html:url.pathname==='/app.js'?clientScript:css,{headers:{...security,'Content-Type':type+'; charset=utf-8','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"}});
+  return new Response(url.pathname==='/'?html:url.pathname==='/app.js'?clientScript:css,{headers:{...security,'Content-Type':type+'; charset=utf-8','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"}});
  }
  if(!['GET','HEAD'].includes(request.method)&&request.headers.get('origin')!==url.origin)throw 403;
  const history=url.pathname.match(/^\/api\/notes\/([a-zA-Z0-9-]{1,100})\/versions(?:\/(\d{1,16})(\/restore)?)?$/);
@@ -49,6 +55,7 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  if(url.pathname==='/api/me'&&request.method==='GET')return json({role:actor.role,id:actor.id,pilot:true,features:{files:!!env.FILES,finance:await hasFinance(env.DB,actor)}});
  if(url.pathname==='/api/source-history'||url.pathname.startsWith('/api/source-history/'))return await sourceHistoryRoute(request,env,actor,json);
  if(url.pathname==='/api/export'&&request.method==='GET')return await exportRecords(env.DB,actor,json);
+ if(url.pathname==='/api/search')return await searchRoute(request,env.DB,actor,json);
  if(url.pathname==='/api/dashboard/tasks')return await dashboardTasks(request,env.DB,actor,json);
  if(url.pathname==='/api/dashboard/invoices')return await dashboardInvoices(request,env,actor,json);
  if(url.pathname==='/api/dashboard/reviews')return await dashboardReviews(request,env.DB,actor,json);

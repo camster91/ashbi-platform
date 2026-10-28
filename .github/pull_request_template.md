@@ -58,9 +58,9 @@ Category: Added / Changed / Fixed / Security / Migration / Known issue / No rele
 
 Entry and user/operator impact:
 
-## Independent review
+## Review and verification
 
 - [ ] Draft until automated and applicable manual checks pass.
-- [ ] Reviewer is independent of the implementation.
-- [ ] Security/privacy/data/auth/finance/deployment-sensitive changes have an appropriate reviewer.
+- [ ] Applicable correctness, security, privacy, and release checks are recorded.
+- [ ] Implementation review is complete; a second reviewer is optional.
 - [ ] No direct push or failed-check bypass is required.
