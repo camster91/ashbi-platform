@@ -1,3 +1,4 @@
+import {cleanupBrowserScript} from './legacy-browser-cleanup.mjs';
 import {searchUiScript} from './ui-search.mjs';
 import {projectUiScript} from './ui-projects.mjs';
 import {recordsUiScript} from './ui-records.mjs';
@@ -119,7 +120,7 @@ ${projectUiScript}
  const current=state=>state&&!state.linkDenied&&state.generation===generation&&state.page===route()&&state.routeKey===location.hash;
  const refresh=async(state,focus=false)=>{if(current(state))await load(focus);};
  const node=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;};
- async function api(path,method='GET',body){const r=await fetch('/api/'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin'});if(r.redirected||!r.headers.get('content-type')?.includes('application/json')){const failure=Error(!r.redirected&&r.status>=500?'Request failed. Try again.':'Session ended. Sign out and sign in again.');failure.status=!r.redirected&&r.status>=500?r.status:401;throw failure;}const data=await r.json();if(!r.ok){const failure=Error(data.error||'Request failed');failure.status=r.status;throw failure;}return data;}
+ async function api(path,method='GET',body){const r=await fetch('/api/'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin'});if(r.redirected||!r.headers.get('content-type')?.includes('application/json')){const failure=Error(!r.redirected&&r.status>=500?'Request failed. Try again.':'Session ended. Sign out and sign in again.');failure.status=!r.redirected&&r.status>=500?r.status:401;throw failure;}const data=await r.json();if(!r.ok){if(r.status===401&&document.body.dataset.auth==='hub'){main.replaceChildren();location.replace('/login');}const failure=Error(data.error||'Request failed');failure.status=r.status;throw failure;}return data;}
  function updateTimerControls(){
   timerStop.disabled=timerBusy;timerRefresh.disabled=timerBusy;const losingFocus=document.activeElement===timerStop;timerStop.hidden=!timerKnown||!activeTimer;if(timerStop.hidden&&losingFocus)timerRefresh.focus();
   for(const b of main.querySelectorAll('[data-timer-project]')){const id=b.dataset.timerProject,name=b.dataset.projectName;b.disabled=timerBusy||!timerKnown||Boolean(activeTimer&&activeTimer.project_id!==id);b.textContent=!timerKnown?'Timer unavailable for '+name:activeTimer?.project_id===id?'Stop timer for '+name:activeTimer?'Timer running in another project':'Start timer for '+name;b.setAttribute('aria-label',activeTimer&&activeTimer.project_id!==id?'Timer running in another project; '+name:b.textContent);if(b.closest('.compact-record'))b.textContent=!timerKnown?'Timer unavailable':activeTimer?.project_id===id?'Stop timer':activeTimer?'Timer in use':'Start timer';}
@@ -308,6 +309,8 @@ ${searchUiScript}
   }catch(e){if(!current(state))return;view=state;if(page==='source-history'&&[401,403].includes(e.status)){sourceHistoryDenied(state);return;}main.replaceChildren(node('h1','Unable to open workspace'));error(e.message);main.append(button('Try again',()=>load(true),false,state));if(focus)main.focus();}
   finally{if(current(state))main.removeAttribute('aria-busy');}
  }
+ if(document.body.dataset.auth==='hub'){${cleanupBrowserScript}}
+ document.querySelector('#workspace-signout')?.addEventListener('click',async e=>{const control=e.currentTarget;control.disabled=true;try{await api('auth/logout','POST',{});main.replaceChildren();location.replace('/login');}catch(e){error('Sign out could not be confirmed. Try again.');control.disabled=false;}});
  document.querySelector('.skip').addEventListener('click',e=>{e.preventDefault();main.focus();});
  window.addEventListener('resize',revealCurrentNavigation);
  document.fonts.ready.then(revealCurrentNavigation);

@@ -29,6 +29,30 @@ journeys separately. Roll back code by promoting the retained prior Worker versi
 to 100%; database restoration needs separate review of intervening writes. A live
 release is not evidence of authenticated daily-use acceptance or legacy retirement.
 
+### Native authentication and hub.ashbi.ca cutover (#781)
+
+The approved replacement uses a **Worker Route**, `hub.ashbi.ca/*`, over a proxied
+A record pointing at the retained Hub origin. Do not use a Worker Custom Domain:
+a same-zone `fetch` must reach the original server for `/api/auth/*` authentication.
+The origin owns existing password/MFA/session state; the workspace owns D1 access.
+Set `AUTH_MODE=hub`, `APP_ORIGIN=https://hub.ashbi.ca` and the verified Hub
+organization ID on the exact tested Worker version. Preserve all other bindings.
+No D1/account migration or password copy is needed.
+
+Before cutover, save DNS/routes, the workspace Access app and its policies, runtime
+settings and previous Worker version privately. Verify the retained origin and
+matching active accounts. Promote the tested candidate, create only the explicit
+hub DNS record and Worker route, then verify native sign-in, unauthorized API
+rejection, cookie protections and the released hash. Remove only the obsolete
+workspace Access app after verification. Keep Access on unrelated applications.
+Record signed-in owner acceptance separately when no owner session is available.
+
+Rollback order: remove the new Worker route to restore the existing Hub at the
+same domain; restore the saved Access app/policies before restoring the old Worker
+version on workers.dev. Remove the new hub DNS record if needed to restore the
+previous DNS-only wildcard resolution. Never delete the retained auth origin,
+account data or workspace D1/R2 data as part of rollback. Owner: Cameron/operator.
+
 ## Legacy Hub controller
 
 Verified October 15, 2026: the owner-authorized SSH release of `4349f6d` passed

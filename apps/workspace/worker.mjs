@@ -1,7 +1,10 @@
+import {retiredServiceWorker} from './legacy-browser-cleanup.mjs';
 import {searchRoute} from './search.mjs';
 import {fontAsset} from './ui-font-assets.generated.mjs';
 import { html, css, clientScript } from './ui.mjs';
 import { authenticate } from './auth.mjs';
+import {hubIdentity,hubAuthRoute} from './hub-auth.mjs';
+import {loginHtml,loginScript} from './ui-login.mjs';
 import { filesRoute } from './files.mjs';
 import { records } from './records.mjs';
 import { dashboardTasks } from './dashboard.mjs';
@@ -22,6 +25,8 @@ import {sourceHistoryRoute} from './source-pilot.mjs';
 import { stripeWebhook, stripeLifecycleRoute, drainStripeEvents } from './stripe-lifecycle.mjs';
 import { stripePartLifecycleRoute } from './stripe-part-lifecycle.mjs';
 const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','Strict-Transport-Security':'max-age=31536000'};
+const contentPolicy="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+const pageResponse=(body,type='text/html')=>new Response(body,{headers:{...security,'Content-Type':type+'; charset=utf-8','Content-Security-Policy':contentPolicy}});
 export const json=(value,status=200)=>Response.json(value,{status,headers:security});
 export async function readBody(request){
  if(!request.headers.get('content-type')?.startsWith('application/json'))throw 400;
@@ -33,18 +38,34 @@ export async function readBody(request){
  if(!input||typeof input!=='object'||Array.isArray(input))throw 400;return input;
 }
 export function createWorker(resolveKey,providers={}){return {async scheduled(event,env,ctx){await drainStripeEvents(env,providers.stripeFetch,ctx);},async fetch(request,env,ctx){try{
- const url=new URL(request.url);if(url.origin!==env.APP_ORIGIN)throw 404;
+ const url=new URL(request.url),nativeAuth=env.AUTH_MODE==='hub';
+ if(url.origin!==env.APP_ORIGIN){if(nativeAuth&&url.origin==='https://ashbi-workspace.camster915391.workers.dev'&&request.method==='GET'&&url.pathname==='/')return new Response(null,{status:308,headers:{...security,Location:env.APP_ORIGIN+'/'}});throw 404;}
  if(url.pathname==='/health')return json({status:'ok',release:env.RELEASE||'unversioned'});
  if(url.pathname==='/api/stripe/webhook')return await stripeWebhook(request,env,json,providers.stripeFetch,ctx);
- let identity;try{identity=await authenticate(request,env,resolveKey);}catch{throw 401;}
+ if(nativeAuth){
+  if(url.pathname.startsWith('/api/auth/'))return await hubAuthRoute(request,env,readBody,security,providers.authFetch);
+  if(request.method==='GET'){
+   if(['/login','/reset-password','/security/two-factor-setup'].includes(url.pathname))return pageResponse(loginHtml);
+   if(url.pathname==='/sw.js')return pageResponse(retiredServiceWorker,'application/javascript');
+   if(url.pathname==='/login.js')return pageResponse(loginScript,'application/javascript');
+   if(url.pathname==='/app.css')return pageResponse(css,'text/css');
+  }
+  if(['GET','HEAD'].includes(request.method)&&url.pathname.startsWith('/fonts/')){const bytes=fontAsset(url.pathname);if(!bytes)throw 404;return new Response(request.method==='HEAD'?null:bytes,{headers:{...security,'Content-Type':'font/woff2','Content-Length':String(bytes.byteLength),'Cache-Control':'public, max-age=31536000, immutable'}});}
+ }
+ let identity;try{identity=nativeAuth?await hubIdentity(request,env,providers.authFetch):await authenticate(request,env,resolveKey);}catch(e){
+  if(nativeAuth&&e===401&&request.method==='GET'&&url.pathname==='/')return new Response(null,{status:303,headers:{...security,Location:'/login'}});
+  throw nativeAuth&&[401,403,503].includes(e)?e:401;
+ }
  const actor=await env.DB.prepare('SELECT id,organization_id,role,client_id FROM actors WHERE email=? AND active=1').bind(identity.email).first();if(!actor)throw 403;
+ if(nativeAuth&&actor.role!==identity.role)throw 403;
  if(['GET','HEAD'].includes(request.method)&&url.pathname.startsWith('/fonts/')){
   const bytes=fontAsset(url.pathname);if(!bytes)throw 404;
   return new Response(request.method==='HEAD'?null:bytes,{headers:{...security,'Content-Type':'font/woff2','Content-Length':String(bytes.byteLength),'Cache-Control':'private, max-age=31536000, immutable'}});
  }
  if(request.method==='GET'&&['/','/app.js','/app.css'].includes(url.pathname)){
   const type=url.pathname==='/'?'text/html':url.pathname==='/app.js'?'application/javascript':'text/css';
-  return new Response(url.pathname==='/'?html:url.pathname==='/app.js'?clientScript:css,{headers:{...security,'Content-Type':type+'; charset=utf-8','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"}});
+  const shell=nativeAuth?html.replace('<body>','<body data-auth="hub">').replace('<a class="sign-out" href="/cdn-cgi/access/logout">Sign out</a>','<button type="button" class="secondary" id="workspace-signout">Sign out</button>'):html;
+  return pageResponse(url.pathname==='/'?shell:url.pathname==='/app.js'?clientScript:css,type);
  }
  if(!['GET','HEAD'].includes(request.method)&&request.headers.get('origin')!==url.origin)throw 403;
  const history=url.pathname.match(/^\/api\/notes\/([a-zA-Z0-9-]{1,100})\/versions(?:\/(\d{1,16})(\/restore)?)?$/);

@@ -225,4 +225,15 @@ dialog > .panel:last-child { margin-bottom: 0; }
  button, .button, .badge { border-color: ButtonText; }
  :focus-visible { outline-color: Highlight; }
 }
+/* Authentication shares the workspace typography, controls and focus treatment. */
+.auth-page { display: grid; min-height: 100dvh; place-items: center; padding: 24px; }
+.auth-card { width: min(100%, 440px); background: var(--surface, #fff); border: 1px solid #d8d6e2; border-radius: 16px; padding: 32px; }
+.auth-card .brand { display: inline-block; margin-bottom: 24px; }
+.auth-card h1 { margin: 0 0 12px; }
+.auth-card form { display: grid; gap: 12px; margin: 20px 0; }
+.auth-card input { width: 100%; min-width: 0; }
+.auth-card #auth-message { overflow-wrap: anywhere; margin-block: 16px; }
+.auth-card [role=alert] { color: #a02222; }
+.auth-codes { white-space: pre-wrap; overflow-wrap: anywhere; font-family: monospace; }
+@media(max-width:480px) { .auth-page { padding: 16px; } .auth-card { padding: 24px; } }
 `;
