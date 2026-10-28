@@ -43,12 +43,14 @@ Before cutover, save DNS/routes, the workspace Access app and its policies, runt
 settings and previous Worker version privately. Verify the retained origin and
 matching active accounts. Promote the tested candidate, create only the explicit
 hub DNS record and Worker route, then verify native sign-in, unauthorized API
-rejection, cookie protections and the released hash. Remove only the obsolete
-workspace Access app after verification. Keep Access on unrelated applications.
+rejection, cookie protections and the released hash. Disable only the obsolete
+workers.dev Access gate using a bypass policy after verification; retain the app
+and its audience so restoring the saved policy restores the original boundary.
+No Access app is added to hub.ashbi.ca. Keep Access on unrelated applications.
 Record signed-in owner acceptance separately when no owner session is available.
 
 Rollback order: remove the new Worker route to restore the existing Hub at the
-same domain; restore the saved Access app/policies before restoring the old Worker
+same domain; restore the saved Access policy before restoring the old Worker
 version on workers.dev. Remove the new hub DNS record if needed to restore the
 previous DNS-only wildcard resolution. Never delete the retained auth origin,
 account data or workspace D1/R2 data as part of rollback. Owner: Cameron/operator.

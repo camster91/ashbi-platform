@@ -29,7 +29,7 @@ The native sign-in page supports existing passwords, authenticator/recovery-code
 
 Cameron and Bianca have matching active Hub accounts. Any workspace actor without an existing Hub account needs separately authorized provisioning; an email match alone does not establish a valid session. Retain the Hub origin and its account database while it provides authentication. Do not replace this route with a Worker Custom Domain: same-zone origin fetch behavior is a required architecture boundary. See [Cloudflare Routes](https://developers.cloudflare.com/workers/configuration/routing/routes/).
 
-Access JWT authentication remains only as a backward-compatible rollback mode when `AUTH_MODE` is absent. The native-mode runtime does not accept Access assertions. Remove the obsolete workspace Access application only after native routing, unauthorized request rejection and sign-in behavior are verified. Other Access applications are out of scope.
+Access JWT authentication remains only as a backward-compatible rollback mode when `AUTH_MODE` is absent. The native-mode runtime does not accept Access assertions. Disable the obsolete workers.dev Access gate with a reversible bypass policy only after native routing, unauthorized request rejection and sign-in behavior are verified. Retain its application/audience and the private policy backup for rollback. No Access app is added to hub.ashbi.ca. Other Access applications are out of scope.
 
 ## Data, deployment and rollback
 
