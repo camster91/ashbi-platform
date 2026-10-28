@@ -19,6 +19,34 @@ async function tasksRemain(page){
  assert.equal(await page.getByRole('alert').count(),0);
 }
 export async function runRegressions({browser,origin,DB}){
+ await test('#767 mobile active route stays visible on direct links, route changes and resize without moving document focus',async t=>{
+  const page=await browser.newPage({viewport:{width:390,height:844}});t.after(()=>page.close());
+  const activeVisible=()=>page.evaluate(()=>{const nav=document.querySelector('nav'),active=nav.querySelector('[aria-current=page]'),n=nav.getBoundingClientRect(),a=active.getBoundingClientRect();return a.left>=n.left&&a.right<=n.right;});
+  await page.goto(origin+'/#time');await page.getByRole('heading',{name:'Time',exact:true}).waitFor();await page.locator('main[aria-busy]').waitFor({state:'detached'});await page.evaluate(()=>document.fonts.ready);
+  assert.equal(await activeVisible(),true);
+  for(const route of ['overview','time']){
+   await page.evaluate(route=>{location.hash='#'+route;},route);await page.getByRole('heading',{name:route==='time'?'Time':'Overview',exact:true}).waitFor();await page.locator('main[aria-busy]').waitFor({state:'detached'});
+   assert.equal(await activeVisible(),true);
+  }
+  await page.setViewportSize({width:1440,height:844});await page.setViewportSize({width:390,height:844});await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
+  assert.equal(await activeVisible(),true);
+  const before=await page.evaluate(()=>{document.querySelector('main').focus();window.scrollTo(0,250);document.querySelector('nav').scrollLeft=0;return {y:scrollY,focus:document.activeElement.id};});
+  await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
+  assert.equal(await activeVisible(),true);assert.deepEqual(await page.evaluate(()=>({y:scrollY,focus:document.activeElement.id})),before);
+ });
+ await test('#767 task and project labels are readable while edits retain their stored status values',async t=>{
+  const project=await DB.prepare("SELECT id FROM projects WHERE name='QA project'").first();
+  await DB.prepare("INSERT INTO tasks(id,organization_id,project_id,title,status,client_visible) VALUES('presentation-task','qa-org',?,'Presentation status task','done',0)").bind(project.id).run();
+  const page=await browser.newPage();t.after(async()=>{await page.close();await DB.prepare("DELETE FROM tasks WHERE id='presentation-task'").run();});await ready(page,origin,'tasks');
+  await page.getByRole('button',{name:'Edit Presentation status task',exact:true}).click();const dialog=page.getByRole('dialog'),status=dialog.getByLabel('Status',{exact:true});
+  assert.equal(await status.locator('option[value=todo]').textContent(),'To do');assert.equal(await status.locator('option[value=doing]').textContent(),'In progress');
+  await status.selectOption({label:'In progress'});await dialog.getByRole('button',{name:'Save',exact:true}).click();await dialog.waitFor({state:'detached'});
+  const item=page.locator('article').filter({has:page.getByText('Presentation status task',{exact:true})});await item.getByText('In progress',{exact:true}).waitFor();
+  assert.equal((await DB.prepare("SELECT status FROM tasks WHERE id='presentation-task'").first()).status,'doing');
+  await page.getByRole('link',{name:'Projects',exact:true}).click();await page.getByRole('button',{name:'Edit QA project',exact:true}).click();
+  assert.equal(await page.getByRole('dialog').getByLabel('Status',{exact:true}).locator('option:checked').textContent(),'Active');
+  assert.equal(await page.getByRole('dialog').getByLabel('Status',{exact:true}).inputValue(),'active');
+ });
  await test('#704 delayed route success cannot replace Tasks records, controls or focus',async t=>{
   const page=await browser.newPage();t.after(()=>page.close());await ready(page,origin,'tasks');
   const old=await hold(page,'**/api/clients');
