@@ -58,7 +58,7 @@ Use `docs/local-verification.md` to provision a separate loopback test database;
 the development `ashbihub` URL above is deliberately rejected by those suites.
 Do not disable this safety guard or point fixture tests at shared/customer data.
 Commands are in `package.json` / `web/package.json`:
-- Backend: `npm run lint`, `npm run type-check`, `npm test` (~600 unit tests),
+- Backend: `npm run lint`, `npm run type-check`, `npm test` (unit and AI evaluation suites),
   `npm run build`.
 - Frontend: `npm test --prefix web` (Vitest; some tests intentionally assert
   thrown errors — the stderr stack traces are expected, not failures).
@@ -86,9 +86,10 @@ stale note.
 | Dashboard `/api/dashboard/stats` returned 500 (table casing) | `31c72df` (PR #251), broader hardening in `10bd6e0` (PR #238) | `src/routes/dashboard.routes.js:250` uses `FROM "invoices" i`; covered by `src/tests/integration/invoice.test.js` |
 | Clients page always showed 6 hardcoded `ASHBI_DESIGN_CLIENTS` | `31c72df` (PR #251); unused constant removed in `080866d` | `web/src/pages/Clients.jsx:124` returns `Array.isArray(clients) ? clients : []`; no fallback constant is referenced by the render path |
 
-For the current execution checklist, see issue **#565** and
-`docs/master-app-delivery-plan.md`; `docs/launch-status.md` records the dated
-deployment/QA evidence. #290/#291 are historical trackers, not competing work
-queues. Verify older issue claims against current code and acceptance evidence
-before changing behavior. Do not add new bug notes here; file a confirmed defect
-on GitHub and link the current checklist.
+On 27 October 2026, the owner requested closure of all remaining issues and
+pull requests. **#565**, #290/#291 and the issue references in
+`docs/master-app-delivery-plan.md` are historical trackers, not active work
+queues. Their closure does not establish implementation or acceptance.
+`docs/launch-status.md` retains dated deployment/QA evidence. Follow the current
+owner request and verify older claims against current code and acceptance
+evidence before changing behavior. Do not add new bug notes here.

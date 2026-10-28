@@ -2,6 +2,18 @@
 
 An all-in-one operations platform for a small creative agency: clients, projects, tasks, time, finance documents, team chat, media review and a client portal in one self-hosted app.
 
+This repository contains the existing Hub (`src/`, `web/`, `prisma/`) and a
+separate [Cloudflare workspace pilot](apps/workspace/README.md) in
+`apps/workspace/`. The pilot targets the smaller two-person workflow described
+in [tasks/plan.md](tasks/plan.md); it has its own dependencies and verification
+commands. The feature list and root commands below describe the existing Hub.
+Pilot source and local tests do not establish production replacement or cutover.
+
+On 27 October 2026, the owner closed the remaining issues and pull requests.
+Their references in planning documents preserve history and do not prove
+completion. Local cleanup evidence is in the
+[feature cleanup inventory](docs/feature-cleanup-inventory.md).
+
 LLM integrations use the provider-free [workspace HTTP API and MCP tools](docs/workspace-api-mcp.md).
 Embedded assistance is optional and hidden by default. A generated
 [GPT Actions schema](docs/workspace-actions.openapi.json) is available for API-key clients.
@@ -116,6 +128,8 @@ web/            React + Vite frontend (pages, components, hooks)
 prisma/         schema and committed migrations
 scripts/        importers, generators and maintenance CLIs
 tests/          Playwright browser, accessibility, PWA and visual tests
+apps/workspace/ Separate Cloudflare workspace pilot (own package and local checks)
+prototypes/     Earlier isolated runtime proofs
 docs/           design and reference documentation
 ```
 
