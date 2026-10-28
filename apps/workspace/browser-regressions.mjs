@@ -28,7 +28,8 @@ export async function runRegressions({browser,origin,DB}){
    await page.setViewportSize({width,height:1000});await ready(page,origin,'tasks');
    const opener=page.getByRole('button',{name:'Edit Record action fixture',exact:true});assert.equal(await opener.textContent(),'Edit task');
    for(const draft of ['', 'Unsaved edit']){
-    await opener.click();const dialog=page.getByRole('dialog');await dialog.getByLabel('Name',{exact:true}).fill(draft);
+    // Wait for actual DOM removal: a closed dialog leaves the accessibility tree before its close event restores focus.
+    await opener.click();const dialog=page.locator('dialog');await dialog.getByLabel('Name',{exact:true}).fill(draft);
     await dialog.getByRole('button',{name:'Cancel',exact:true}).click();await dialog.waitFor({state:'detached'});
     assert.equal(await opener.evaluate(element=>element===document.activeElement),true);
     assert.equal((await DB.prepare("SELECT title FROM tasks WHERE id='record-actions-task'").first()).title,'Record action fixture');
