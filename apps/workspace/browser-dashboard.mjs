@@ -19,6 +19,24 @@ export async function runDashboardTests({browser,origin,DB,addActor,stripe,axe})
  async function call(page,path){return page.evaluate(async path=>{const r=await fetch('/api/'+path);if(!r.ok)throw Error(path+' '+r.status);return r.json();},path);}
  async function settled(page,kind){await page.waitForFunction(label=>document.querySelector('section[aria-label="'+label+'"]')?.getAttribute('aria-busy')!=='true',{tasks:'Daily tasks',reviews:'Proposal approvals',invoices:'Outstanding invoices'}[kind]);}
  async function choose(page,label,value,kind='tasks'){const response=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/dashboard/'+kind);await page.getByLabel(label,{exact:true}).selectOption(value);await(await response).finished();await settled(page,kind);}
+ await test('#775 daily priorities reset conflicting filters and focus the selected feed',async t=>{
+  const page=await pageFor(t);await ready(page);
+  await choose(page,'Task status','done');await choose(page,'Task owner','unassigned');await choose(page,'Task client',otherClientId);
+  const response=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/dashboard/tasks');
+  await page.getByRole('button',{name:'Overdue tasks',exact:true}).focus();await page.keyboard.press('Enter');
+  const url=new URL((await response).url());assert.equal(url.searchParams.get('due'),'overdue');assert.equal(url.searchParams.get('status'),'open');assert.equal(url.searchParams.has('owner'),false);assert.equal(url.searchParams.has('clientId'),false);
+  await section(page,'tasks').getByRole('link',{name:'Open task Dashboard task 000',exact:true}).waitFor();assert.equal(await section(page,'tasks').getByRole('heading',{name:'Needs action',exact:true}).evaluate(e=>e===document.activeElement),true);
+  await page.getByRole('button',{name:'Due today',exact:true}).click();await section(page,'tasks').getByRole('link',{name:'Open task Dashboard task 001',exact:true}).waitFor();assert.equal(await page.getByLabel('Task due',{exact:true}).inputValue(),'today');
+  const invoices=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/dashboard/invoices');await page.getByRole('button',{name:'Overdue invoices',exact:true}).click();assert.equal(new URL((await invoices).url()).searchParams.get('due'),'overdue');
+  const positions=await page.evaluate(()=>['Daily priorities','Daily tasks','Workspace totals'].map(label=>document.querySelector('[aria-label="'+label+'"]').getBoundingClientRect().top));assert.ok(positions[0]<positions[1]&&positions[1]<positions[2]);
+ });
+ await test('#775 priorities reflect financial access and preserve client project navigation',async t=>{
+  for(const identity of ['dash-staff','dash-client']){
+   const page=await pageFor(t,identity);await ready(page);const allowed=identity==='dash-client';
+   assert.equal(await page.getByRole('button',{name:'Overdue invoices',exact:true}).count(),allowed?1:0);assert.equal(await page.getByRole('button',{name:'Approvals needing attention',exact:true}).count(),allowed?1:0);
+   await page.getByRole('button',{name:'Overdue tasks',exact:true}).click();await section(page,'tasks').getByRole('link',{name:'Open project Dashboard project A',exact:true}).first().click();await page.getByRole('heading',{name:'Project overview',exact:true}).waitFor();
+  }
+ });
  await test('Overview projects canonical daily tasks beside retained counts and independent financial sections',async t=>{
   const page=await pageFor(t);await ready(page);await section(page,'tasks').getByRole('heading',{name:'Needs action',exact:true}).waitFor();
   assert.equal(await page.locator('.stats').count(),1);assert.equal(await page.getByRole('button',{name:'Download data export',exact:true}).count(),1);
