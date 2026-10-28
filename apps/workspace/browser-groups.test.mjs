@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {browserGroups,selectBrowserSuites} from './browser-groups.mjs';
 
 const expected={
- core:['runRegressions','runTaskBoardTests','runCommentTests','runDocumentTests','runDocumentTreeTests','runTimerTests','runTimeReviewTests','runFinanceTests','runProjectWorkspaceTests','runCompactListTests','runNavigationGroupTests','runSearchTests'],
+ core:['runRegressions','runTaskBoardTests','runCommentTests','runDocumentTests','runDocumentTreeTests','runTimerTests','runTimeReviewTests','runFinanceTests','runProjectWorkspaceTests','runCompactListTests','runNavigationGroupTests','runSearchTests','runHubAuthTests'],
  commerce:['runCommercialTests','runProposalReviewTests','runStripeTests','runInvoiceTests','runRecordLinkTests'],
  contracts:['runDashboardTests','runContractTests','runContractPdfTests','runStripeIssuanceTests'],
  delivery:['runStripeDeliveryTests'],

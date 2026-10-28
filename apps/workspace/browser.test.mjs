@@ -1,3 +1,4 @@
+import {runHubAuthTests} from './browser-hub-auth.mjs';
 import {runNavigationGroupTests} from './browser-navigation-groups.mjs';
 
 import {runSearchTests} from './browser-search.mjs';
@@ -96,6 +97,7 @@ if(selectedSuites.has('runCompactListTests')){await runCompactListTests({browser
 if(selectedSuites.has('runNavigationGroupTests')){await runNavigationGroupTests({browser,origin,DB,axe,addActor});executedSuites.push('runNavigationGroupTests');}
 
 if(selectedSuites.has('runSearchTests')){await runSearchTests({browser,origin,DB,axe,addActor});executedSuites.push('runSearchTests');}
+if(selectedSuites.has('runHubAuthTests')){await runHubAuthTests({browser,axe});executedSuites.push('runHubAuthTests');}
 if(selectedSuites.has('runCommercialTests')){await runCommercialTests({browser,origin,DB,axe,addActor});executedSuites.push('runCommercialTests');}
 if(selectedSuites.has('runProposalReviewTests')){await runProposalReviewTests({browser,origin,DB,axe,addActor});executedSuites.push('runProposalReviewTests');}
 if(selectedSuites.has('runStripeTests')){await runStripeTests({browser,origin,DB,axe,addActor,stripe});executedSuites.push('runStripeTests');}

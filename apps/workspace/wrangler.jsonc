@@ -5,9 +5,11 @@
   "workers_dev": true,
   "preview_urls": false,
   "vars": {
-    "APP_ORIGIN": "https://ashbi-workspace.camster915391.workers.dev",
+    "APP_ORIGIN": "https://hub.ashbi.ca",
     "ACCESS_TEAM_DOMAIN": "https://camster91.cloudflareaccess.com",
-    "ACCESS_AUD": "8e494036a6600cbf748527a570ab915df430785c4a4a3aba2442b21204c76441"
+    "ACCESS_AUD": "8e494036a6600cbf748527a570ab915df430785c4a4a3aba2442b21204c76441",
+    "AUTH_MODE": "hub",
+    "HUB_AUTH_ORGANIZATION_ID": "ecdfebe8-e53d-4d2d-a438-99ce5c209f23"
   },
   "observability": {
     "enabled": true,
@@ -33,6 +35,12 @@
       "binding": "FILES",
       "bucket_name": "ashbi-workspace-private",
       "remote": false
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "hub.ashbi.ca/*",
+      "zone_name": "ashbi.ca"
     }
   ]
 }

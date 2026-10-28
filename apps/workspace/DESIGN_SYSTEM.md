@@ -78,3 +78,7 @@ Work contains daily delivery routes; Clients & billing contains relationship and
 ## Global search
 
 The header search button and Control/Command+K open a native modal. Search names/titles on the server, with separate bounded pages for clients, projects, tasks and documents. Results expose only identifiers and titles; canonical record views recheck access. Active-project and document-ancestor rules apply before pagination. Keep empty/loading/error states, Escape focus return and stale-response protection. Do not preload the dataset or infer complete counts from a result page.
+
+## Account access
+
+Native authentication uses the shared type, color, control and focus tokens in a centered responsive card. Password, MFA, enrollment and recovery states have explicit headings, labels and live status/error messages. Render secrets only in their intended password/enrollment controls; never persist them in browser storage. Session expiry returns to sign-in, while logout must confirm revocation before navigating away.
