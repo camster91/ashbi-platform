@@ -70,3 +70,7 @@ Daily priorities apply the existing server-side task/review/invoice filters and 
 ## Compact lists
 
 Client, project and task lists use `.compact-record`: aligned identity, status, details and actions above 1100px, stacked content below. Render through `compactRecord` to retain the same authorized actions as `recordItem`. Resolve parent and assignee names from already-loaded authorized choices; preserve source identifiers when a name is unavailable. Boards, dialogs and project overviews continue to use the ordinary record presentation. Never truncate essential names or reduce control targets to create density.
+
+## Navigation groups
+
+Work contains daily delivery routes; Clients & billing contains relationship and commercial workflows; Documents holds content and files; Administration holds source history. Groups have accessible names and disappear when every contained link is unavailable. `syncNavigation` owns presentation visibility and active route selection; APIs remain authoritative for access. Keep the same link names and native destinations at every width, and preserve active-link scrolling on the mobile strip.

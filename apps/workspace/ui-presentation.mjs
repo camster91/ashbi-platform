@@ -6,6 +6,16 @@ export const presentationUiScript=String.raw`
   const names=page==='tasks'?taskStatusNames:page==='projects'?projectStatusNames:{};
   return Object.hasOwn(names,value)?names[value]:value;
  }
+ function syncNavigation(state,identity){
+  const nav=document.querySelector('nav[aria-label="Workspace"]');
+  const selected='#'+(state.projectId?'projects':state.page);
+  for(const link of nav.querySelectorAll('a')){
+   const route=link.hash.slice(1),financial=identity.role==='staff'&&identity.features?.finance;
+   link.hidden=route==='source-history'&&!financial||identity.role==='client'&&['time','finance','commercial'].includes(route)||['invoices','contracts'].includes(route)&&identity.role==='staff'&&!financial;
+   if(link.hash===selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');
+  }
+  for(const group of nav.querySelectorAll('.nav-group'))group.hidden=![...group.querySelectorAll('a')].some(link=>!link.hidden);
+ }
  function revealCurrentNavigation(){
   const nav=document.querySelector('nav[aria-label="Workspace"]');
   const active=nav?.querySelector('a[aria-current="page"]:not([hidden])');
