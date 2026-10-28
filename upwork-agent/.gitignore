@@ -1,2 +1,6 @@
 .env
 node_modules/
+
+# Generated debugging and notification output
+/upwork-debug-screenshot.png
+/upwork-notify.txt
