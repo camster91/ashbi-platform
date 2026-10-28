@@ -7,7 +7,7 @@ import {hold} from './browser-regressions.mjs';
 export async function runSearchTests({browser,origin,DB,axe,addActor}){
  await DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('search-client','qa-org','Findme client')").run();
  await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES('search-project','qa-org','search-client','Findme project',1)").run();
- for(let i=0;i<21;i++)await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES(?,'qa-org','search-client',?,1)").bind('search-extra-'+String(i).padStart(2,'0'),'Findme extra project '+i).run();
+ for(let i=0;i<21;i++)await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES(?,'qa-org','search-client',?,1)").bind('search-zextra-'+String(i).padStart(2,'0'),'Findme extra project '+i).run();
  for(let i=0;i<25;i++)await DB.prepare("INSERT INTO tasks(id,organization_id,project_id,title,client_visible) VALUES(?,'qa-org','search-project',?,1)").bind('search-task-'+String(i).padStart(2,'0'),'Findme task '+i).run();
  await DB.prepare("INSERT INTO notes(id,organization_id,project_id,title,text,client_visible) VALUES('search-note','qa-org','search-project','Findme document','Synthetic search content',1)").run();
  await DB.prepare("INSERT INTO note_positions(id,organization_id,project_id) VALUES('search-note','qa-org','search-project')").run();
