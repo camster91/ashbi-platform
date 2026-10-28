@@ -82,3 +82,16 @@ On this Mac, the test command used a temporary directory without symlink path
 components: the default `/var` temporary path causes three existing CLI/artifact
 tests to fail on unchanged main. No test, security check or acceptance threshold
 was disabled. These are local checks, not hosted CI or production acceptance.
+
+## Validator and verification follow-up — 27 October 2026
+
+Removed `landingLeadSchema` and `landingLeadUpdateSchema`, which had no remaining
+application consumers after the legacy landing route removal. The generated
+OpenAPI document, mounted routes and active lead validators remain unchanged.
+
+Three existing CLI/artifact test fixtures now canonicalize their temporary
+root paths so macOS's `/var` alias does not cause false failures. Production
+path validation and all symlink/traversal rejection assertions are retained.
+The full `verify:quick` command passed on Node 24.22.0 with the default temporary
+directory: 2,631 backend and 1,949 frontend tests. The earlier temporary-directory
+override recorded above is no longer needed for these fixtures.
