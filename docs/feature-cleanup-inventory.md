@@ -135,3 +135,27 @@ contract tests, secret scanning and whitespace checks. A comparison confirmed
 that every moved/grouped frontend assertion was retained. Installed dependencies
 and generated build output can be recreated from the retained lockfiles and
 build commands; they are not source or backup evidence.
+
+## Documentation clarity — 27 October 2026
+
+Moved eight obsolete root reviews/plans/deployment checklists, the two earlier
+model-specific guides and the hidden August readiness plan into `docs/archive/`.
+Historical content remains available, with corrected relative links and clear
+warnings. The root Claude/Gemini files now point to the shared `AGENTS.md` and
+delivery policy. Active project guidance across those three files is 34 lines,
+down from 861; model-specific architecture and stale VM assumptions no longer
+compete with current instructions.
+
+Corrected `CONTRIBUTING.md` to name `docs/deployment-and-rollback.md`, rather than
+the superseded deployment checklist, as production authority. The README links
+the archive, and canonical status/planning pages distinguish the owner's bulk
+closure from historical issue/PR state claims. Updated the documentation tests
+to cover moved guides, their warnings and relative links. Four documentation
+checks, package-boundary verification, secret scanning and whitespace checks
+passed; no application behavior changed.
+
+Removed unreferenced `tsconfig.build.json`. Neither package scripts nor CI use
+it: the supported build generates Prisma and builds the frontend through Vite.
+The active `tsconfig.json` and type-check commands are unchanged. Original
+instructions and removed configuration were backed up outside the checkout
+before editing and remain recoverable from Git history.
