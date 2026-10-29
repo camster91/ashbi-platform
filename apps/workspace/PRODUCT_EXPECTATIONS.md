@@ -1,5 +1,7 @@
 # Professional workspace expectations
 
+Current release baseline: PR #788 deployed commit `8d2300c9` to hub.ashbi.ca on 29 October 2026, including migrations 0029–0031. Public release checks passed; signed-in owner acceptance remains separate. Earlier slice notes below describe their validation at implementation time.
+
 Research date: 29 October 2026. Continuation of UX rebuild #784. There is no established universal “2027 standard”; the requirements below use current primary sources as the baseline for 2027 planning. Competitor capabilities are references, not promises of parity.
 
 | Expectation and evidence | Ashbi evidence / gap | Acceptance direction |
@@ -59,3 +61,20 @@ Migration `0031.sql` adds per-account, per-message read receipts. Exact message 
 Source notification/message checks pass 10/10; compiled notification/message/record checks pass 49/49; compiled recovery checks pass 47/47, including restored personal read state. Core browser regression checks pass 158/158 with no skips. Release remains local, with pending migrations 0029, 0030 and 0031 required before the new Worker. Email/push delivery, task/file/billing notifications, read/unread toggling and notification preferences are outside this increment.
 
 Final-bundle focused browser acceptance passed: new arrivals remain unread, a lost read acknowledgement retries safely, per-account state survives reload, and Inbox passes axe WCAG 2.2 AA checks and overflow checks at 390/768/1440px. A separate two-session local walkthrough verified staff/client inbox independence, explicit mark-read and persistence; the mobile screenshot was inspected. The broader core regression suite passed 158/158 with no skips. The final bundle additionally includes the exact accessible unread count, a 99+ visual cap, and singular/plural inbox copy; its focused notification journey passed after the final build.
+
+
+## Expanded Inbox: implementation after PR #788
+
+The Inbox now combines project messages, task assignments, due/overdue tasks and newly published client uploads. Staff receive assignment and deadline notifications for their own tasks and upload notifications for their organization. Clients receive only messages from currently shared projects belonging to their client account. Current actor activity, role, organization and resource permissions are checked again for each read and receipt mutation.
+
+Assignments receive a new durable token on creation with an assignee and on an actual assignee change. Title/status edits do not invent new assignment alerts. Reassignment creates a fresh token in the same task write. Assignment/deadline alerts leave the Inbox when the task is completed, retired or archived, the project is archived, or the task is no longer assigned to that account. Due-date reminders become available on the due date (UTC); their ID includes the task and due date. These are in-app reminders, not scheduled email or push delivery. Existing assignments are not backfilled as new assignment events; existing due/overdue assigned tasks are eligible.
+
+Client-upload alerts appear only after successful publication, never while storage is pending, and disappear when the file is deleted. Existing files are not backfilled. Following a file notification opens that project's Files section; task notifications open the task. Project-message notifications retain the existing per-account receipts.
+
+Unread, Read and All filters provide a personal notification history within current permissions and actionable resource state. Mark read and Mark unread are idempotent explicit operations, scoped to exact typed IDs. The list is bounded to 50 rows with stable timestamp/type/ID pagination. Preference toggles persist per account in D1, apply consistently to rows and counts, and never change receipt state. Muting and re-enabling a category restores its prior read/unread state. Client preferences show only the category available to clients.
+
+Additive migration `0032.sql` adds assignment metadata, upload publication flags, personal preferences and typed read receipts, plus indexes for assignment and upload queries. Previous Worker code remains compatible with the additive schema. Full database backups include private preferences/receipts; general staff exports do not. Deploy only after backup, migration rehearsal and verified artifact promotion. This increment is local until separately recorded as released.
+
+Remaining readiness work includes structured mentions, email/push delivery, provider-backed billing acceptance, a scoped security assessment, representative production performance measurements and signed-in owner acceptance. These are not established by the notification tests.
+
+Validation for expanded Inbox: compiled notification/file/record API checks passed 59/59 and combined API/recovery run passed 107/107. After adding query indexes, the final compiled recovery run passed 48/48; the explicit publication-to-Inbox and revoked-upload checks passed in the 13/13 file suite. Focused browser journeys passed 2/2, including reload, category muting, read/unread history, later arrivals, uncertain retries and axe WCAG 2.2 AA/reflow checks. Final core browser regression passed 159/159 with no skips. The final mobile screenshot was inspected.

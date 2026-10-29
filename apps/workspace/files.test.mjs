@@ -70,7 +70,7 @@ test('private files use real local D1/R2 and preserve original bytes',async t=>{
   assert.equal((await setting(true)).status,200);
   assert.equal((await upload('other')).status,403);assert.equal((await upload('foreign')).status,404);
   assert.equal((await upload('client',{'x-client-visible':'false'})).status,400);
-  const uploaded=await upload('client');assert.equal(uploaded.status,201);const row=await uploaded.json();
+  const uploaded=await upload('client');assert.equal(uploaded.status,201);const row=await uploaded.json();assert.ok((await(await call('/api/inbox')).json()).items.some(item=>item.kind==='upload'&&item.id===row.id));
   assert.equal(row.client_visible,1);assert.equal((await call('/api/files/'+row.id+'/download','client')).status,200);assert.equal((await call('/api/files/'+row.id+'/download','other')).status,404);
   assert.equal((await call('/api/files/'+row.id,'client','PATCH',JSON.stringify({revision:0,deleted:true}),{'content-type':'application/json'})).status,403);
   for(const condition of ['client_uploads=0','client_visible=0','archived=1']){
@@ -78,7 +78,7 @@ test('private files use real local D1/R2 and preserve original bytes',async t=>{
    await DB.prepare("UPDATE projects SET client_uploads=1,client_visible=1,archived=0 WHERE id='p'").run();
   }
   const revoked={...env,FILES:{async put(...args){const stored=await FILES.put(...args);await DB.prepare("UPDATE projects SET client_uploads=0 WHERE id='p'").run();return stored;}}};
-  const result=await call('/api/files','client','POST',new Uint8Array([1]),{'content-type':'application/octet-stream','x-project-id':'p','x-file-name':'revoked-upload.txt','x-client-visible':'true'},revoked);assert.equal(result.status,403);
+  const result=await call('/api/files','client','POST',new Uint8Array([1]),{'content-type':'application/octet-stream','x-project-id':'p','x-file-name':'revoked-upload.txt','x-client-visible':'true'},revoked);assert.equal(result.status,403);assert.equal((await(await call('/api/inbox')).json()).items.some(item=>item.preview==='revoked-upload.txt'),false);
   const pending=await DB.prepare("SELECT * FROM files WHERE name='revoked-upload.txt'").first();assert.equal(pending.state,'pending');assert.equal((await call('/api/files/'+pending.id+'/download')).status,404);
   // Leave other pagination fixtures unchanged while retaining this test's private original.
   await DB.prepare('UPDATE files SET deleted=1 WHERE id=?').bind(row.id).run();
