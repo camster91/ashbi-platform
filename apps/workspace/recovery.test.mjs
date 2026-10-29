@@ -145,6 +145,7 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  await source.env.FILES.put('unreferenced/empty',new Uint8Array(),{customMetadata:{state:'pending'}});
  const conversationBody={content:'Recovered project conversation — café',requestId:crypto.randomUUID()};
  const conversation=await data(await call('projects/'+r.project.id+'/messages',conversationBody),201);
+ await data(await call('notifications/read',{messageIds:[conversation.id]},'client'));
  const checkpoint=join(root,'synthetic-checkpoint.json'),keyFile=join(root,'synthetic-keyring.json');
  await writeFile(checkpoint,JSON.stringify({image:await databaseImage(source.env.DB),objects:await captureObjects(source.env.FILES)}));
  // Synthetic keys are separate from database/object images. Real restore
@@ -152,7 +153,7 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  await writeFile(keyFile,JSON.stringify({active:'journey',keys:fixture.keyRing}),{mode:0o600});
  const {image,objects}=JSON.parse(await readFile(checkpoint,'utf8'));
  for(const key of Object.values(fixture.keyRing))assert.equal((await readFile(checkpoint,'utf8')).includes(key),false);
- assert.equal(Object.keys(image.tables).length,61);assert.equal(image.schema.filter(s=>s.type==='index').length,47);assert.ok(image.schema.some(s=>s.type==='index'&&s.name==='projects_archive'));assert.equal(objects.length,6);
+ assert.equal(Object.keys(image.tables).length,62);assert.equal(image.schema.filter(s=>s.type==='index').length,48);assert.ok(image.schema.some(s=>s.type==='index'&&s.name==='projects_archive'));assert.equal(objects.length,6);
  const sql=await exportDatabase(source);
  // External Stripe state is deliberately NOT restored with our D1/R2 image.
  const externalFinalize=provider.requests.findLast(p=>p.method==='POST'&&p.path==='/v1/invoices/'+externallyFinished.creation.stripeInvoiceId+'/finalize');
@@ -166,8 +167,8 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  const DB=target.env.DB,FILES=target.env.FILES;
  const verify=async()=>assert.deepEqual(await databaseImage(DB),image,'all schema and exact table images must match trusted checkpoint');
  const putRow=async(table,row)=>{const cols=Object.keys(row);await DB.prepare('INSERT INTO "'+table+'"('+cols.map(c=>'"'+c+'"').join(',')+') VALUES('+cols.map(()=>'?').join(',')+')').bind(...cols.map(c=>row[c])).run();};
- await t.test('all 61 tables and 47 indexes match before any restored application use',verify);
- await t.test('restored project messages preserve client visibility and original retry identity',async()=>{const thread=await data(await restored('projects/'+r.project.id+'/messages',undefined,'client'));assert.equal(thread.items[0].content,conversationBody.content);assert.equal((await data(await restored('projects/'+r.project.id+'/messages',conversationBody))).id,conversation.id);assert.equal((await restored('projects/'+r.project.id+'/messages',undefined,'other')).status,404);await verify();});
+ await t.test('all 62 tables and 48 indexes match before any restored application use',verify);
+ await t.test('restored project messages preserve client visibility and original retry identity',async()=>{const thread=await data(await restored('projects/'+r.project.id+'/messages',undefined,'client'));assert.equal(thread.items[0].content,conversationBody.content);assert.equal(thread.items[0].unread,0);assert.equal((await data(await restored('notifications/summary',undefined,'client'))).unreadCount,0);assert.equal((await data(await restored('projects/'+r.project.id+'/messages',conversationBody))).id,conversation.id);assert.equal((await restored('projects/'+r.project.id+'/messages',undefined,'other')).status,404);await verify();});
  await t.test('all paginated objects including orphans, empty data and private metadata match',()=>verifyObjects(FILES,objects));
 
  await t.test('restored delivery receipts and signed pending evidence remain local with the provider disabled',async()=>{
@@ -336,7 +337,7 @@ test('native isolated recovery preserves an ingested source package, original by
  await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name) VALUES('canonical-project','pilot-org','canonical-client','Site')").run();
  const objects=[];for(const[source,pins]of Object.entries(report.sourceFiles))for(const pin of pins)objects.push({source,path:pin.path,bytes:new Uint8Array(await readFile(join(fixture.root,source,pin.path)))});
  const input={requestId:crypto.randomUUID(),report,objects,snapshot:{clientRevision:0,projectRevision:0}},receipt=await applySourcePilot(source.env,actor,input),before=await readSourcePilot(source.env,actor,receipt.id),image=await databaseImage(DB),objectImage=await captureObjects(source.env.FILES);
- assert.equal(Object.keys(image.tables).length,61);assert.equal(image.schema.filter(s=>s.type==='index').length,47);assert.ok(image.schema.some(s=>s.type==='index'&&s.name==='projects_archive'));
+ assert.equal(Object.keys(image.tables).length,62);assert.equal(image.schema.filter(s=>s.type==='index').length,48);assert.ok(image.schema.some(s=>s.type==='index'&&s.name==='projects_archive'));
  assert.equal(image.tables.source_pilot_records.length,19);assert.equal(image.tables.source_pilot_objects.length,objects.length);
  const target=await importDatabase(join(root,'restored'),await exportDatabase(source));t.after(()=>target.dispose());await restoreObjects(target.env.FILES,objectImage);
  assert.deepEqual(await databaseImage(target.env.DB),image);assert.deepEqual(await readSourcePilot(target.env,actor,receipt.id),before);

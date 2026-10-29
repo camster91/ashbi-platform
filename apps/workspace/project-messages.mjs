@@ -12,7 +12,7 @@ export async function projectMessagesRoute(request,db,actor,projectId,readBody,j
  if(!posting){
   const after=url.searchParams.get('after');let cursor=[];
   if(after!==null){const match=after.match(/^(\d{1,16}):([a-zA-Z0-9-]{1,100})$/);if(!match||!Number.isSafeInteger(Number(match[1])))throw 400;cursor=[Number(match[1]),Number(match[1]),match[2]];}
-  const result=await db.prepare(`SELECT ${columns},a.role AS author_role FROM project_messages m JOIN actors a ON a.id=m.actor_id AND a.organization_id=m.organization_id WHERE m.organization_id=? AND m.project_id=? AND EXISTS(${allowed}) ${cursor.length?'AND (m.created_at<? OR (m.created_at=? AND m.id<?))':''} ORDER BY m.created_at DESC,m.id DESC LIMIT 51`).bind(actor.organization_id,projectId,...args,...cursor).all();
+  const result=await db.prepare(`SELECT ${columns},a.role AS author_role,CASE WHEN m.actor_id<>? AND NOT EXISTS(SELECT 1 FROM project_message_reads mr WHERE mr.organization_id=m.organization_id AND mr.actor_id=? AND mr.message_id=m.id) THEN 1 ELSE 0 END AS unread FROM project_messages m JOIN actors a ON a.id=m.actor_id AND a.organization_id=m.organization_id WHERE m.organization_id=? AND m.project_id=? AND EXISTS(${allowed}) ${cursor.length?'AND (m.created_at<? OR (m.created_at=? AND m.id<?))':''} ORDER BY m.created_at DESC,m.id DESC LIMIT 51`).bind(actor.id,actor.id,actor.organization_id,projectId,...args,...cursor).all();
   const items=result.results.slice(0,50),last=items.at(-1);return json({items,nextCursor:result.results.length>50?last.created_at+':'+last.id:null});
  }
  const input=await readBody(request);
