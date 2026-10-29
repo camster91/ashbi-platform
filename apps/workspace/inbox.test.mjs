@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {hubAuthFixture} from './hub-auth-fixture.mjs';
+const {createWorker}=await import(process.env.WORKSPACE_TEST_BUILT_WORKER?'./dist/worker.js':'./worker.mjs');
+test('personal inbox covers assignment lifecycle, deadlines, upload publication, preferences and history',async t=>{
+ const f=await hubAuthFixture(createWorker);t.after(()=>f.close());f.login();
+ const call=(path,body,method=body?'POST':'GET')=>f.call('/api/'+path,{method,body,cookie:f.cookie});
+ const data=async r=>{assert.equal(r.status<300,true,await r.clone().text());return r.json();};
+ await f.DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES('p','qa','own','Shared',1)").run();
+ let task=await data(await call('tasks',{title:'Assigned task',projectId:'p',clientVisible:true,assigneeId:'native-staff',dueOn:'2020-01-01'}));
+ const list=async(state='unread')=>data(await call('inbox?state='+state));const mark=(row,read=true)=>call('inbox/read',{items:[{id:row.id,kind:row.kind}],read});
+ let rows=(await list()).items;assert.deepEqual(new Set(rows.map(r=>r.kind)),new Set(['assignment','deadline']));
+ const assigned=rows.find(r=>r.kind==='assignment');await data(await mark(assigned));assert.equal((await list()).items.length,1);assert.equal((await list('read')).items[0].id,assigned.id);await data(await mark(assigned,false));assert.equal((await list()).items.length,2);
+ task=await data(await call('tasks/'+task.id,{revision:task.revision,title:'Renamed'},'PATCH'));assert.equal((await list()).items.find(r=>r.kind==='assignment').id,assigned.id);
+ task=await data(await call('tasks/'+task.id,{revision:task.revision,assigneeId:null},'PATCH'));assert.equal((await list()).items.length,0);
+ task=await data(await call('tasks/'+task.id,{revision:task.revision,assigneeId:'native-staff'},'PATCH'));assert.notEqual((await list()).items.find(r=>r.kind==='assignment').id,assigned.id);
+ task=await data(await call('tasks/'+task.id,{revision:task.revision,status:'done'},'PATCH'));assert.equal((await list()).items.length,0);
+ await f.DB.prepare("INSERT INTO files(id,organization_id,project_id,actor_id,name,object_key,size,sha256,created_at,notify_staff) VALUES('upload','qa','p','native-client','Review.pdf','fake',1,'hash',1,1)").run();assert.equal((await list()).items.length,0);
+ await f.DB.prepare("UPDATE files SET state='ready' WHERE id='upload'").run();assert.equal((await list()).items[0].kind,'upload');await data(await mark((await list()).items[0]));
+ await f.DB.prepare("INSERT INTO project_messages(id,organization_id,project_id,actor_id,request_id,content,created_at) VALUES('msg','qa','p','native-client','req','Hello',2)").run();assert.equal((await list()).items[0].kind,'message');await data(await mark((await list()).items[0]));assert.equal((await list('read')).items.length,2);await data(await mark((await list('read')).items.find(r=>r.kind==='message'),false));
+ const prefs={messages:false,assignments:true,deadlines:true,uploads:false,mentions:true};await data(await call('inbox/preferences',prefs,'PUT'));assert.deepEqual(await data(await call('inbox/preferences')),prefs);assert.equal((await list('all')).items.length,0);assert.equal((await data(await call('inbox/summary'))).unreadCount,0);
+ assert.equal((await call('inbox/preferences',{...prefs,actorId:'other'},'PUT')).status,400);assert.equal((await call('inbox/read',{items:[{id:'msg',kind:'message'}],read:'yes'})).status,400);assert.equal((await call('inbox?state=bad')).status,400);assert.equal((await call('inbox?after=bad')).status,400);
+ f.sessions.set(f.cookie,{id:'hub-client',email:'client@example.invalid',organizationId:'hub-org',role:'CLIENT'});assert.deepEqual(await data(await call('inbox/preferences')),{messages:true,assignments:true,deadlines:true,uploads:true,mentions:true});assert.equal((await list('all')).items.length,0);
+ await f.DB.prepare("INSERT INTO project_messages(id,organization_id,project_id,actor_id,request_id,content,created_at) VALUES('staff-msg','qa','p','native-staff','req2','Staff message',3)").run();assert.equal((await list()).items.length,1);
+ await f.DB.prepare("UPDATE projects SET client_visible=0 WHERE id='p'").run();assert.equal((await list('all')).items.length,0);await data(await mark({id:'staff-msg',kind:'message'}));assert.equal(await f.DB.prepare("SELECT * FROM project_message_reads WHERE message_id='staff-msg'").first(),null);
+});
+test('unified inbox pagination is stable and receipt writes recheck revoked access',async t=>{
+ const f=await hubAuthFixture(createWorker);t.after(()=>f.close());f.setUser({id:'hub-client',email:'client@example.invalid',organizationId:'hub-org',role:'CLIENT'});f.login();
+ await f.DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES('p','qa','own','Shared',1)").run();
+ for(let i=0;i<55;i++)await f.DB.prepare('INSERT INTO project_messages(id,organization_id,project_id,actor_id,request_id,content,created_at) VALUES(?,?,?,?,?,?,?)').bind('m-'+i,'qa','p','native-staff','r-'+i,'Hello',1).run();
+ const first=await (await f.call('/api/inbox',{cookie:f.cookie})).json();const next=await (await f.call('/api/inbox?after='+first.nextCursor,{cookie:f.cookie})).json();assert.equal(first.items.length,50);assert.equal(next.items.length,5);assert.equal(new Set([...first.items,...next.items].map(x=>x.id)).size,55);
+ const original=f.env.DB;f.env.DB={prepare:sql=>original.prepare(sql),async batch(statements){await original.prepare("UPDATE projects SET client_visible=0 WHERE id='p'").run();return original.batch(statements);}};
+ const r=await f.call('/api/inbox/read',{cookie:f.cookie,method:'POST',body:{items:[{kind:'message',id:'m-1'}],read:true}});assert.equal(r.status,200);assert.equal(await original.prepare('SELECT * FROM project_message_reads').first(),null);
+});

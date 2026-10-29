@@ -72,8 +72,10 @@ export async function records(request,db,actor,table,id,input,json){
    const row=await commitNote(db,actor,statement,token,null,position);if(row)return json(row);
    const exists=await db.prepare('SELECT id FROM notes WHERE organization_id=? AND id=?').bind(actor.organization_id,id).first();throw exists?409:404;
   }
-  const row=await db.prepare(`UPDATE ${table} SET ${keys.map(k=>`${columns[k]||k}=?`).join(',')},revision=revision+1 WHERE organization_id=? AND id=? AND revision=? RETURNING *`)
-   .bind(...keys.map(k=>sqlValue(input[k])),actor.organization_id,id,input.revision).first();
+  const assignment=table==='tasks'&&'assigneeId' in input;
+  const assignmentSql=assignment?'assignment_token=CASE WHEN assignee_id IS NOT ? THEN ? ELSE assignment_token END,assigned_at=CASE WHEN assignee_id IS NOT ? THEN ? ELSE assigned_at END,':'';
+  const row=await db.prepare(`UPDATE ${table} SET ${assignmentSql}${keys.map(k=>`${columns[k]||k}=?`).join(',')},revision=revision+1 WHERE organization_id=? AND id=? AND revision=? RETURNING *`)
+   .bind(...(assignment?[input.assigneeId,crypto.randomUUID(),input.assigneeId,Date.now()]:[]),...keys.map(k=>sqlValue(input[k])),actor.organization_id,id,input.revision).first();
   if(row)return json(row);
   const exists=await db.prepare(`SELECT id FROM ${table} WHERE organization_id=? AND id=?`).bind(actor.organization_id,id).first();throw exists?409:404;
  }
@@ -88,7 +90,8 @@ export async function records(request,db,actor,table,id,input,json){
   const position=Object.fromEntries(keys.filter(k=>['parentId','archived'].includes(k)).map(k=>[k,input[k]]));
   const row=await commitNote(db,actor,statement,token,null,position);if(!row)throw 409;return json(row,201);
  }
- await db.prepare(`INSERT INTO ${table}(id,organization_id,${keys.map(k=>columns[k]||k).join(',')}) VALUES(${Array(keys.length+2).fill('?').join(',')})`)
-  .bind(recordId,actor.organization_id,...keys.map(k=>sqlValue(input[k]))).run();
+ const assignment=table==='tasks'&&Boolean(input.assigneeId);
+ await db.prepare(`INSERT INTO ${table}(id,organization_id,${assignment?'assignment_token,assigned_at,':''}${keys.map(k=>columns[k]||k).join(',')}) VALUES(${Array(keys.length+2+(assignment?2:0)).fill('?').join(',')})`)
+  .bind(recordId,actor.organization_id,...(assignment?[crypto.randomUUID(),Date.now()]:[]),...keys.map(k=>sqlValue(input[k]))).run();
  return json(await db.prepare(`SELECT * FROM ${table} WHERE id=? AND organization_id=?`).bind(recordId,actor.organization_id).first(),201);
 }

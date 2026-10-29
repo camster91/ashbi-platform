@@ -1,0 +1,22 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {hubAuthFixture} from './hub-auth-fixture.mjs';
+const {createWorker}=await import(process.env.WORKSPACE_TEST_BUILT_WORKER?'./dist/worker.js':'./worker.mjs');
+test('project mentions enforce recipient scope, exact retry identity and independent preferences',async t=>{
+ const f=await hubAuthFixture(createWorker);t.after(()=>f.close());f.login();
+ await f.DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES('p','qa','own','Shared',1),('internal','qa','own','Internal',0)").run();
+ await f.DB.prepare("INSERT INTO actors VALUES('outsider','outsider@example.invalid','qa','client','other',1),('inactive','inactive@example.invalid','qa','staff',NULL,0),('foreign','foreign@example.invalid','foreign','staff',NULL,1)").run();
+ const staff={id:'hub-staff',email:'staff@example.invalid',organizationId:'hub-org',role:'ADMIN'},client={id:'hub-client',email:'client@example.invalid',organizationId:'hub-org',role:'CLIENT'};
+ const as=user=>f.sessions.set(f.cookie,user),call=(path,body,method=body?'POST':'GET')=>f.call('/api/'+path,{method,body,cookie:f.cookie});
+ assert.deepEqual((await(await call('projects/p/message-recipients')).json()).items.map(x=>x.id),['native-client']);assert.deepEqual((await(await call('projects/internal/message-recipients')).json()).items,[]);
+ const body={content:'Please review this',requestId:crypto.randomUUID(),mentionIds:['native-client']};const saved=await call('projects/p/messages',body);assert.equal(saved.status,201);const message=await saved.json();assert.equal((await call('projects/p/messages',body)).status,200);assert.equal((await call('projects/p/messages',{...body,mentionIds:[]})).status,409);
+ for(const ids of [['outsider'],['inactive'],['foreign'],['native-staff'],['native-client','native-client'],Array(11).fill('native-client'),null])assert.equal((await call('projects/p/messages',{...body,requestId:crypto.randomUUID(),mentionIds:ids})).status,400);
+ as(client);assert.deepEqual((await(await call('projects/p/message-recipients')).json()).items.map(x=>x.id),['native-staff']);assert.equal((await(await call('projects/p/messages')).json()).items[0].mentioned,1);
+ const prefs={messages:false,assignments:true,deadlines:true,uploads:true,mentions:true};assert.equal((await call('inbox/preferences',prefs,'PUT')).status,200);let inbox=await(await call('inbox')).json();assert.equal(inbox.items.length,1);assert.equal(inbox.items[0].mentioned,1);
+ await call('notifications/read',{messageIds:[message.id]});assert.equal((await(await call('inbox')).json()).items.length,0);assert.equal((await(await call('inbox?state=read')).json()).items.length,1);
+ await call('inbox/preferences',{...prefs,mentions:false},'PUT');assert.equal((await(await call('inbox?state=all')).json()).items.length,0);
+ const {mentions,...legacy}=prefs;await call('inbox/preferences',legacy,'PUT');assert.equal((await(await call('inbox/preferences')).json()).mentions,false);
+ as(staff);await f.DB.prepare("UPDATE actors SET active=0 WHERE id='native-client'").run();assert.equal((await call('projects/p/messages',body)).status,200);assert.equal((await call('projects/p/messages',{...body,requestId:crypto.randomUUID()})).status,400);
+ await f.DB.prepare("UPDATE actors SET active=1 WHERE id='native-client'").run();const original=f.env.DB;f.env.DB={prepare(sql){if(sql.startsWith('INSERT INTO project_messages'))return {bind(...args){return {async first(){await original.prepare("UPDATE projects SET client_visible=0 WHERE id='p'").run();return original.prepare(sql).bind(...args).first();}};}};return original.prepare(sql);}};
+ assert.equal((await call('projects/p/messages',{...body,requestId:crypto.randomUUID()})).status,409);assert.equal((await original.prepare('SELECT count(*) n FROM project_messages').first()).n,1);as(client);assert.equal((await call('projects/p/message-recipients')).status,404);assert.equal((await(await call('inbox?state=all')).json()).items.length,0);
+});

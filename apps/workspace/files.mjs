@@ -63,7 +63,7 @@ export async function filesRoute(request,env,actor,readBody,json){
   // never a download. D1/R2 are not one transaction; original bytes are not auto-deleted.
   await db.prepare('INSERT INTO files(id,organization_id,project_id,actor_id,name,object_key,size,sha256,client_visible,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(fileId,actor.organization_id,project,actor.id,name,key,bytes.length,sha256,visible==='true'?1:0,Date.now()).run();
   const object=await env.FILES.put(key,bytes,{sha256});if(!object)throw 503;
-  const published=await db.prepare("UPDATE files SET state='ready' WHERE id=? AND state='pending' AND EXISTS("+permissionSql+") RETURNING id").bind(fileId,...permissionArgs).first();
+  const published=await db.prepare("UPDATE files SET state='ready',notify_staff=? WHERE id=? AND state='pending' AND EXISTS("+permissionSql+") RETURNING id").bind(staff?0:1,fileId,...permissionArgs).first();
   if(!published)throw 403;
   const row=await db.prepare('SELECT '+publicColumns+' FROM files f WHERE f.id=?').bind(fileId).first();return json(row,201);
  }
