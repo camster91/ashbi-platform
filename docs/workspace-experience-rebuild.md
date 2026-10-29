@@ -77,10 +77,16 @@ All six browser groups passed against the unchanged compiled Worker:
 | Integrated journey | 3 |
 | Total | 562 |
 
-Every group completed with zero failures/cancellations. The journey covers synthetic shared work, approved time, proposal approval, contract signing/PDF, split billing and payment reconciliation. Compiled API contracts passed **414/414**, compiled installment/delivery contracts **91/91**, and compiled D1/R2 recovery **46/46**. Source installment and recovery verification remains pending at this checkpoint; the earlier complete configured source suite passed **576/576**.
+Every group completed with zero failures/cancellations. The journey covers synthetic shared work, approved time, proposal approval, contract signing/PDF, split billing and payment reconciliation. Compiled API contracts passed **414/414**, compiled installment/delivery contracts **91/91**, and compiled D1/R2 recovery **46/46**. Source installment/delivery verification subsequently passed **91/91** and source recovery **46/46**, in addition to the complete configured source suite at **576/576**.
 
 Native authentication/browser checks passed **6/6**. The phone Overview capture now verifies pressed state and panel visibility while switching views, then removes pointer/focus and transition capture artifacts; the final focused capture rerun passed **1/1** and the refreshed image was visually inspected. Navigation screenshot names describe actor roles; all three deliberately show Files. These capture findings did not require a product change.
 
 The checked artifact SHA-256 is `cc8f8a18af45538968c036ab04e5026810eb594197d090ec3044cbaec212287b`. No product source or generated artifact changed during this verification pass. The repository secret-check command and `git diff --check` passed; the changed test code was also reviewed for sensitive values. Temporary harnesses were removed. Interrupted and superseded runs are not counted as passes.
 
 PR #785 remains a draft. CI on the pushed checkpoint, owner walkthrough, production deployment and target-environment acceptance are separate and remain outstanding. Production is unchanged.
+
+## Dependency gate cleared — 29 October 2026
+
+All Cloudflare CI jobs passed for rebuild checkpoint `c7b6fd24` (run `40804430287`). The separate repository-wide audit found existing `systeminformation` 5.33.15 in the Hub dependency tree. Issue #786 and PR #787 patched only its version, resolved URL and integrity to 5.33.16. Local production audit reported zero vulnerabilities, the proxy-peer regression passed 3/3, and all required hosted gates passed (run `40805727729`). The stalled external-volume local install is not counted; the fresh hosted install passed.
+
+PR #787 was squash-merged as `304788046cd4a36747a3689388a81a0418aa47e1` and incorporated into the rebuild branch. The Cloudflare app's source and compiled artifact are unchanged by that dependency patch. Combined-head CI and owner walkthrough remain separate from the passed component checks. No deployment or owner acceptance is claimed.
