@@ -1,3 +1,4 @@
+import {projectMessagesUiScript} from './ui-project-messages.mjs';
 import {cleanupBrowserScript} from './legacy-browser-cleanup.mjs';
 import {taskViewsUiScript} from './ui-task-views.mjs';
 import {workspaceUiScript} from './ui-workspace.mjs';
@@ -117,6 +118,7 @@ export const clientScript=String.raw`(function uiMain(){
 ${presentationUiScript}
  const labels={clients:'Clients',projects:'Projects',tasks:'Tasks',notes:'Documents',time:'Time',finance:'Finance',invoices:'Invoices',commercial:'Proposals & contracts',reviews:'Proposal reviews',contracts:'Contracts',files:'Files','source-history':'Source history',overview:'Overview'};
 ${projectUiScript}
+${projectMessagesUiScript}
  function readRoute(){const key=location.hash,parts=key.slice(1).split('/'),project=projectRoute(parts,key);if(project)return project;const page=Object.hasOwn(labels,parts[0])?parts[0]:'overview';if(parts.length===1||page==='overview'&&parts[0]!=='overview')return {page,key};const id=value=>typeof value==='string'&&/^[a-zA-Z0-9-]{1,100}$/.test(value);if(page==='invoices'&&parts.length===4&&parts[2]==='parts'&&id(parts[1])&&id(parts[3]))return {page,key,recordId:parts[1],partId:parts[3]};const valid=parts.length===2&&['clients','notes','tasks','reviews','invoices','contracts'].includes(page)&&id(parts[1]);return {page,key,recordId:valid?parts[1]:null,linkError:!valid};}
  const route=()=>readRoute().page;
  const current=state=>state&&!state.linkDenied&&state.generation===generation&&state.page===route()&&state.routeKey===location.hash;
@@ -272,7 +274,7 @@ ${taskViewsUiScript}
  }
 ${searchUiScript}
 ${workspaceUiScript}
- function render(state){const {page,rows,parents}=state;captureDocumentDraft(state);captureTimeDraft(state);captureTaskDraft(state);main.replaceChildren();if(state.project)projectHeader(state);else pageHeading(state);if(state.linkError){main.append(node('p','This record link is invalid. Open the page to continue.','notice'));const link=node('a','Open '+labels[page]);link.href='#'+page;main.append(link);return;}if(state.project&&state.projectSection==='overview'){projectOverview(state);return;}if(page==='overview'){overviewPage(state);return;}
+ function render(state){const {page,rows,parents}=state;captureDocumentDraft(state);captureTimeDraft(state);captureTaskDraft(state);main.replaceChildren();if(state.project)projectHeader(state);else pageHeading(state);if(state.linkError){main.append(node('p','This record link is invalid. Open the page to continue.','notice'));const link=node('a','Open '+labels[page]);link.href='#'+page;main.append(link);return;}if(state.project&&state.projectSection==='messages'){projectMessages(state);return;}if(state.project&&state.projectSection==='overview'){projectOverview(state);return;}if(page==='overview'){overviewPage(state);return;}
   if(page==='source-history'){sourceHistoryPage(state);return;}if(page==='invoices'){invoicesPage(state);return;}if(page==='finance'){financePage(state);return;}if(page==='commercial'){commercialPage(state);return;}if(page==='reviews'){proposalReviewsPage(state);return;}if(page==='contracts'){contractsPage(state);return;}if(page==='files'&&!actor.features.files){main.append(node('p','Private file storage is awaiting R2 activation. No files have been imported.','notice'));return;}
   if(page==='tasks'){if(state.project&&actor.role==='staff')main.append(button('Add task',opener=>createRecord(state,opener),false,state));let opener;if(state.recordId){opener=button('Open linked task',b=>linkedTask(state,b),true,state);state.taskLinkOpener=opener;main.append(opener);}renderRows(state);if(state.recordId&&!state.recordOpened){state.recordOpened=true;linkedTask(state,opener);}return;}
   if(state.recordId&&['clients','notes'].includes(page)){const opener=button('Open linked record',b=>linkedRecord(state,b),true,state);main.append(opener);if(!state.recordOpened){state.recordOpened=true;linkedRecord(state,opener);}}

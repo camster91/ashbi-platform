@@ -233,6 +233,7 @@ dialog > .panel:last-child { margin-bottom: 0; }
 .saved-task-controls { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3); }
 .saved-task-controls label { flex: 1 1 220px; min-width: 0; }
 .saved-task-controls button { flex: 0 1 auto; }
+.task-views button.secondary { transition: none; }
 .task-views button.secondary[aria-pressed=true], .task-views button.secondary[aria-pressed=true]:hover:not(:disabled) { transition: none; background: var(--color-brand); color: var(--color-surface); border-color: var(--color-brand); }
 .task-views { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .task-toolbar { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: var(--space-4); margin: var(--space-4) 0 var(--space-5); }
