@@ -1,4 +1,5 @@
 import {cleanupBrowserScript} from './legacy-browser-cleanup.mjs';
+import {taskViewsUiScript} from './ui-task-views.mjs';
 import {workspaceUiScript} from './ui-workspace.mjs';
 import {searchUiScript} from './ui-search.mjs';
 import {projectUiScript} from './ui-projects.mjs';
@@ -239,10 +240,11 @@ ${proposalReviewUiScript}
 ${contractUiScript}
 ${overviewUiScript}
 
+${taskViewsUiScript}
  function taskRecords(state,panel){
   const options=state.taskOptions,names=taskStatusNames;
   const toolbar=node('form',undefined,'task-toolbar'),views=node('div',undefined,'task-views');views.setAttribute('role','group');views.setAttribute('aria-label','Task view');
-  const list=button('List',()=>{options.layout='list';update();},true,state),board=button('Board',()=>{options.layout='board';update();},true,state);views.append(list,board);panel.append(views);
+  const list=button('List',()=>{options.layout='list';update();},true,state),board=button('Board',()=>{options.layout='board';update();},true,state);views.append(list,board);if(actor.role==='staff'){const mine=button('Assigned to me',()=>{options.assignee=options.assignee===actor.id?'':actor.id;load(true);},true,state);mine.setAttribute('aria-pressed',String(options.assignee===actor.id));views.append(mine);}panel.append(views);savedTaskViews(state,panel);
   const project=field(toolbar,'projectFilter','Project filter','text',state.parents),status=field(toolbar,'statusFilter','Status filter','text',Object.entries(names).map(([id,name])=>({id,name})));
   const query=field(toolbar,'taskSearch','Search tasks','search');query.required=false;query.maxLength=200;query.value=options.q||'';
   const assignee=actor.role==='staff'?field(toolbar,'assigneeFilter','Assignee filter','text',[{id:'unassigned',name:'Unassigned'},...state.staff]):null;
@@ -260,11 +262,11 @@ ${overviewUiScript}
    content.replaceChildren();content.className=options.layout==='board'?'task-board':'';
    if(options.layout==='board'){
     for(const [status,name]of Object.entries(names)){const column=node('section',undefined,'task-column');column.setAttribute('aria-label',name);column.append(node('h2',name));const tasks=filtered.filter(r=>r.status===status);if(!tasks.length)column.append(node('p','No tasks in this status.','muted'));for(const record of tasks)column.append(recordItem(record,state));content.append(column);}
-   }else{if(!filtered.length)content.append(node('p','No matching tasks.'));for(const record of filtered)content.append(compactRecord(record,state));}
+   }else{if(!filtered.length)content.append(node('p','No tasks match these filters. Try another view or clear the task filters.'));for(const record of filtered)content.append(compactRecord(record,state));}
   }
   update();
  }
- function renderRows(state){const {page,rows,cursor}=state;const panel=node('section',undefined,'panel');panel.setAttribute('aria-label',labels[page]+' list');if(!rows.length)panel.append(node('p',page==='notes'?'No matching documents.':'No '+labels[page].toLowerCase()+' yet.'));
+ function renderRows(state){const {page,rows,cursor}=state;const panel=node('section',undefined,'panel');panel.setAttribute('aria-label',labels[page]+' list');if(!rows.length&&page!=='tasks')panel.append(node('p',page==='notes'?'No matching documents.':'No '+labels[page].toLowerCase()+' yet.'));
   if(page==='tasks')taskRecords(state,panel);else for(const record of rows)panel.append(['clients','projects'].includes(page)?compactRecord(record,state):recordItem(record,state));
   main.append(panel);if(cursor)main.append(button('Load more',async()=>{const more=await api(page==='notes'?documentPath(state,cursor):page==='projects'?projectPath(state,cursor):page==='tasks'?taskPath(state,cursor):page==='files'?filesPath(state,cursor):page+'?after='+encodeURIComponent(cursor));if(!current(state))return;state.rows=[...rows,...more.items];state.cursor=more.nextCursor;render(state);},false,state));
  }

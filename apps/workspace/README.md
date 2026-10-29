@@ -2,6 +2,8 @@
 
 The shared visual rules and component guidance are in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md). UI fonts are self-hosted, pinned and licensed; see [font provenance](ui-fonts/README.md).
 
+Current competitor research, readiness gaps and saved task-view behavior are recorded in [professional workspace expectations](PRODUCT_EXPECTATIONS.md). Saved views are explicitly stored per account/project in the current browser; they do not sync between devices or store task records.
+
 The workspace targets https://hub.ashbi.ca using the existing Hub account/session service and active D1 actors. The Worker route sits in front of the retained Hub origin; same-zone subrequests reach that origin for authentication. Passwords and MFA secrets are never copied into D1. The legacy Hub origin remains required for authentication and available as a routing rollback. Release proof and signed-in acceptance are recorded on the PR linked to #781. Authenticated daily-use acceptance and live billing remain separate from deployment; Stripe is still in test mode.
 
 See [deployment and rollback](../../docs/deployment-and-rollback.md) for the current release procedure. The source-increment sections below preserve historical implementation notes; their earlier “activation pending” statements do not describe current hosting.

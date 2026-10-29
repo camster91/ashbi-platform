@@ -1,0 +1,25 @@
+# Professional workspace expectations
+
+Research date: 29 October 2026. Continuation of UX rebuild #784. There is no established universal “2027 standard”; the requirements below use current primary sources as the baseline for 2027 planning. Competitor capabilities are references, not promises of parity.
+
+| Expectation and evidence | Ashbi evidence / gap | Acceptance direction |
+| --- | --- | --- |
+| Fast task navigation, search, filters, assignment and multiple views: [ClickUp views](https://help.clickup.com/hc/en-us/articles/35368731425175-The-views-control-bar), [keyboard shortcuts](https://help.clickup.com/hc/en-us/articles/6309030550167-Use-keyboard-shortcuts) | Search, list/board and server-side filters exist. Reusable named task views and one-click own assignments were missing. | This increment adds explicit saved task views and Assigned to me; verify reload, deletion, failure, mobile and keyboard behavior. |
+| Connected client collaboration with controlled project/task/file/billing visibility: [Bonsai portal](https://help.hellobonsai.com/en/articles/4409019-how-to-use-the-client-portal), [permissions](https://help.hellobonsai.com/en/articles/1894805-all-about-user-permissions-in-bonsai) | Scoped records, agreements and invoice workflows exist with synthetic integration coverage. Actual client-account acceptance, client uploads and messaging are not established by this work. | Test staff/client workflows with explicit sharing and denial paths; implement missing capabilities as separate complete slices. |
+| Accessible interactions: [WCAG 2.2](https://www.w3.org/TR/WCAG22/) | Existing automated checks largely target 2.1 AA. | Add 2.2 AA checks for changed surfaces, keyboard focus and mobile reflow; manual assistive-technology testing remains necessary before claiming conformance. |
+| Responsive loading and interaction: [Web Vitals](https://web.dev/articles/vitals) | No representative production field baseline established. | Target p75 LCP ≤2.5 seconds, INP ≤200 ms, CLS ≤0.1 separately on mobile/desktop. Lab checks are diagnostic, not field acceptance. |
+| Secure account, session and resource authorization: [OWASP ASVS](https://owasp.org/projects/asvs) | Native auth and tenant isolation have tests; no full ASVS assessment established. | Verify authorization/session requirements against a documented ASVS scope; do not label this increment security certification. |
+| Dependable paid workflows | Stripe remains test-only; real payments/email acceptance incomplete. | Provider-backed sandbox journey and reviewed live activation are release gates for billing. Do not present test receipts as delivery or payment. |
+| Recovery and operational reliability | Private D1 export restored successfully before last production release. | Maintain database/object recovery coverage and documented recovery objectives; interrupted-save behavior stays under regression testing. |
+
+## Implemented slice: reusable task views
+
+The Tasks page now offers Assigned to me for staff and explicit named saved views for each account/project context. A view stores applied search/project/status/assignee filters, archived-project inclusion and List/Board layout. Apply always re-queries the existing API; it does not cache results or widen authorization. Project routes retain their project boundary. Clear filters leaves saved views intact. Removing a view removes preferences only.
+
+Preferences stay on the current browser/origin, keyed by actor ID and project ID; they are not team-shared or synchronized. They may contain the user's view names/search text and opaque record IDs. Saving is explicit and explained before storage. Limits are 20 views per context, 60-character names and bounded validated preference records. Duplicate names, unavailable/full storage and malformed stored data produce visible errors. No credentials or task bodies are stored. Browser data clearing removes the views.
+
+## Validation and release status
+
+Implementation is local on `agent/784-saved-task-views`. Production remains the October 29 deployment. Automated/browser results are recorded after execution; this document does not establish hosted acceptance, full accessibility conformance, competitor parity or completion of the other gaps above.
+
+Verified locally on 29 October: dry-run Worker build passed; the core built-artifact browser group passed 155/155 with no skips. New coverage exercises saved filters/layout through reload, duplicate names, removal, isolated browser storage, unavailable storage and keyboard focus. The changed surface passed axe WCAG 2.2 AA rules; retained board checks passed at 390/768/1440px. A separate native-auth fixture walkthrough verified save/reload/apply and mobile overflow, with zero axe violations and rendered screenshots inspected. Initial regression runs caught a duplicate live-status selector and selected-button transition contrast; both were corrected without relaxing assertions. No real-provider, production performance or hosted acceptance claim follows from these checks.
