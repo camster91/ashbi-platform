@@ -1,7 +1,7 @@
 import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare} from 'miniflare';
 export async function hubAuthFixture(createWorker){
- const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'native-auth'},cf:false}),DB=await mf.getD1Database('DB');
+ const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'native-auth'},r2Buckets:['FILES'],cf:false}),DB=await mf.getD1Database('DB');
  for(const file of(await readdir(new URL('./migrations',import.meta.url))).filter(f=>f.endsWith('.sql')).sort()){const sql=await readFile(new URL('./migrations/'+file,import.meta.url),'utf8');await DB.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>DB.prepare(s)));}
  await DB.prepare("INSERT INTO actors VALUES('native-staff','staff@example.invalid','qa','staff',NULL,1),('native-client','client@example.invalid','qa','client','own',1)").run();
  await DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('own','qa','Own client'),('other','qa','Other client')").run();
@@ -29,5 +29,5 @@ export async function hubAuthFixture(createWorker){
   return response({error:'Unknown fixture route'},404);
  };
  const worker=createWorker(undefined,{authFetch:fetcher});
- return {DB,env,worker,calls,sessions,cookie,setMode:v=>{mode=v;},setUser:v=>{nextUser=v;},login:()=>{sessions.set(cookie,{...nextUser});},close:()=>mf.dispose(),call:(path,{method='GET',body,cookie:token,headers={}}={})=>worker.fetch(new Request(env.APP_ORIGIN+path,{method,headers:{...(body?{'Content-Type':'application/json',Origin:env.APP_ORIGIN}:{}),...(token?{Cookie:token}:{}),...headers},...(body?{body:JSON.stringify(body)}:{})}),env)};
+ return {DB,FILES:await mf.getR2Bucket('FILES'),env,worker,calls,sessions,cookie,setMode:v=>{mode=v;},setUser:v=>{nextUser=v;},login:()=>{sessions.set(cookie,{...nextUser});},close:()=>mf.dispose(),call:(path,{method='GET',body,cookie:token,headers={}}={})=>worker.fetch(new Request(env.APP_ORIGIN+path,{method,headers:{...(body?{'Content-Type':'application/json',Origin:env.APP_ORIGIN}:{}),...(token?{Cookie:token}:{}),...headers},...(body?{body:JSON.stringify(body)}:{})}),env)};
 }

@@ -24,6 +24,8 @@ function recordForm(record, container = main, state = view) {
   if (page === "projects") {
     field(form, "status", "Status", "text", Object.entries(projectStatusNames).map(([id, name]) => ({ id, name }))).value = "active";
     field(form, "archived", "Archive project", "checkbox");
+    field(form, "clientUploads", "Allow client uploads", "checkbox");
+    form.append(node("p", "Client uploads require a shared project that is not archived.", "help"));
   }
   if (page === "tasks") {
     field(form, "status", "Status", "text", Object.entries(taskStatusNames).map(([id, name]) => ({ id, name }))).value = "todo";
@@ -43,7 +45,7 @@ function recordForm(record, container = main, state = view) {
   if (page !== "clients") field(form, "clientVisible", "Share with client", "checkbox");
   if (record) {
     for (const input of form.elements) {
-      const column = { clientId: "client_id", projectId: "project_id", clientVisible: "client_visible", assigneeId: "assignee_id", dueOn: "due_on", parentId: "parent_id" }[input.name] || input.name;
+      const column = { clientUploads: "client_uploads", clientId: "client_id", projectId: "project_id", clientVisible: "client_visible", assigneeId: "assignee_id", dueOn: "due_on", parentId: "parent_id" }[input.name] || input.name;
       if (input.type === "checkbox") input.checked = Boolean(record[column]);
       else input.value = record[column] ?? "";
       if (["clientId", "projectId"].includes(input.name)) input.disabled = true;
@@ -69,7 +71,7 @@ function recordForm(record, container = main, state = view) {
     try {
       const body = Object.fromEntries(new FormData(form));
       if (page !== "clients") body.clientVisible = form.elements.clientVisible.checked;
-      if (page === "projects") body.archived = form.elements.archived.checked;
+      if (page === "projects") { body.archived = form.elements.archived.checked; body.clientUploads = form.elements.clientUploads.checked; }
       if (page === "tasks") {
         body.assigneeId = body.assigneeId || null;
         body.dueOn = body.dueOn || null;
@@ -112,13 +114,15 @@ function editRecord(record, opener, state) {
   dialog.showModal();
 }
 function fileForm(state) {
-  const { parents } = state;
-  if (actor.role !== "staff") return;
+  const staff = actor.role === "staff";
+  const parents = staff ? state.parents : state.parents.filter(p => p.client_uploads && p.client_visible && !p.archived);
+  if (!staff && !parents.length) { main.append(node("p", "Uploads are not enabled for your shared projects. Contact your project team to request access.", "notice")); return; }
   const panel = node("section", undefined, "panel"), form = document.createElement("form");
   panel.append(node("h2", "Upload private file"));
   field(form, "projectId", "Project", "text", parents);
   field(form, "original", "File (maximum 5 MiB)", "file");
-  field(form, "clientVisible", "Share with client", "checkbox");
+  if (staff) field(form, "clientVisible", "Share with client", "checkbox");
+  else panel.append(node("p", "Uploaded files are shared with your project team and other authorized contacts for this client. Files download as attachments.", "help"));
   projectField(form.elements.projectId, state.projectId);
   const save = node("button", "Upload file");
   save.type = "submit";
@@ -132,7 +136,7 @@ function fileForm(state) {
     try {
       const file = form.elements.original.files[0];
       if (!file || file.size < 1 || file.size > 5242880) throw Error("Choose a file between 1 byte and 5 MiB.");
-      const r = await fetch("/api/files", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/octet-stream", "X-Project-Id": form.elements.projectId.value, "X-File-Name": encodeURIComponent(file.name), "X-Client-Visible": String(form.elements.clientVisible.checked) }, body: file });
+      const r = await fetch("/api/files", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/octet-stream", "X-Project-Id": form.elements.projectId.value, "X-File-Name": encodeURIComponent(file.name), "X-Client-Visible": String(staff ? form.elements.clientVisible.checked : true) }, body: file });
       if (r.redirected || !r.headers.get("content-type")?.includes("application/json")) throw Error("Session ended. Sign in again.");
       const data = await r.json();
       if (!r.ok) throw Error(data.error || "Upload failed");

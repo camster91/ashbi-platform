@@ -1,3 +1,5 @@
+import {notificationsRoute} from './notifications.mjs';
+import {projectMessagesRoute} from './project-messages.mjs';
 import {retiredServiceWorker} from './legacy-browser-cleanup.mjs';
 import {searchRoute} from './search.mjs';
 import {fontAsset} from './ui-font-assets.generated.mjs';
@@ -72,6 +74,9 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  if(!['GET','HEAD'].includes(request.method)&&request.headers.get('origin')!==url.origin)throw 403;
  const history=url.pathname.match(/^\/api\/notes\/([a-zA-Z0-9-]{1,100})\/versions(?:\/(\d{1,16})(\/restore)?)?$/);
  if(history)return await documentHistory(request,env.DB,actor,history[1],history[2],Boolean(history[3]),readBody,json);
+ if(['/api/notifications','/api/notifications/summary','/api/notifications/read'].includes(url.pathname))return await notificationsRoute(request,env.DB,actor,readBody,json);
+ const messages=url.pathname.match(/^\/api\/projects\/([a-zA-Z0-9-]{1,100})\/messages$/);
+ if(messages)return await projectMessagesRoute(request,env.DB,actor,messages[1],readBody,json);
  const comment=url.pathname.match(/^\/api\/tasks\/([a-zA-Z0-9-]{1,100})\/comments$/);
  if(comment)return await commentsRoute(request,env.DB,actor,comment[1],readBody,json);
  if(url.pathname==='/api/files'||url.pathname.startsWith('/api/files/'))return await filesRoute(request,env,actor,readBody,json);

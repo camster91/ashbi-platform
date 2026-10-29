@@ -47,20 +47,24 @@ export async function filesRoute(request,env,actor,readBody,json){
   const rows=await db.prepare('SELECT '+publicColumns+join+' WHERE '+scope+(includeDeleted==='true'?'':' AND f.deleted=0')+(projectId?' AND f.project_id=?':'')+' AND f.id>? ORDER BY f.id LIMIT 51').bind(...scopeArgs,...(projectId?[projectId]:[]),after).all();
   return json({items:rows.results.slice(0,50),nextCursor:rows.results.length>50?rows.results[49].id:null});
  }
- if(!staff)throw 403;
+ if(!staff&&!(request.method==='POST'&&!id))throw 403;
  if(request.method==='POST'&&!id){
   if(request.headers.get('content-type')!=='application/octet-stream')throw 400;
   let name;try{name=decodeURIComponent(request.headers.get('x-file-name')||'');}catch{throw 400;}
   if(!name.trim()||name!==name.trim()||name.length>180||/[\p{Cc}\p{Cf}\\/]/u.test(name)||['.','..'].includes(name))throw 400;
   const project=request.headers.get('x-project-id'),visible=request.headers.get('x-client-visible');
   if(!project||!/^[a-zA-Z0-9-]{1,100}$/.test(project)||!['true','false'].includes(visible))throw 400;
-  if(!await db.prepare('SELECT id FROM projects WHERE id=? AND organization_id=?').bind(project,actor.organization_id).first())throw 404;
+  const permissionSql="SELECT p.id FROM projects p JOIN actors a ON a.organization_id=p.organization_id WHERE p.id=? AND p.organization_id=? AND a.id=? AND a.active=1 AND a.role=? AND a.client_id IS ?"+(staff?'':" AND p.client_id=? AND p.client_visible=1 AND p.client_uploads=1 AND p.archived=0");
+  const permissionArgs=[project,actor.organization_id,actor.id,actor.role,actor.client_id??null,...(staff?[]:[actor.client_id])];
+  if(!staff&&visible!=='true')throw 400;
+  if(!await db.prepare(permissionSql).bind(...permissionArgs).first())throw staff?404:403;
   const bytes=await boundedBytes(request),sha256=hex(await crypto.subtle.digest('SHA-256',bytes)),fileId=crypto.randomUUID(),key='originals/'+crypto.randomUUID();
   // Reserve hidden metadata first. A crash leaves a pending record for reconciliation,
   // never a download. D1/R2 are not one transaction; original bytes are not auto-deleted.
   await db.prepare('INSERT INTO files(id,organization_id,project_id,actor_id,name,object_key,size,sha256,client_visible,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(fileId,actor.organization_id,project,actor.id,name,key,bytes.length,sha256,visible==='true'?1:0,Date.now()).run();
   const object=await env.FILES.put(key,bytes,{sha256});if(!object)throw 503;
-  await db.prepare("UPDATE files SET state='ready' WHERE id=? AND state='pending'").bind(fileId).run();
+  const published=await db.prepare("UPDATE files SET state='ready' WHERE id=? AND state='pending' AND EXISTS("+permissionSql+") RETURNING id").bind(fileId,...permissionArgs).first();
+  if(!published)throw 403;
   const row=await db.prepare('SELECT '+publicColumns+' FROM files f WHERE f.id=?').bind(fileId).first();return json(row,201);
  }
  if(request.method==='PATCH'&&id&&!download){

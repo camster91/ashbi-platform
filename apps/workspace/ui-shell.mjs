@@ -3,6 +3,7 @@ import {brandLogo} from './ui-brand-assets.generated.mjs';
 
 // Decorative icons never replace the visible navigation names.
 const icons={
+ inbox:'M3 4h18v16H3z M3 12h5l2 3h4l2-3h5',
  overview:'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
  clients:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M16 3a4 4 0 0 1 0 8 M22 21v-2a4 4 0 0 0-3-3.87 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
  projects:'M3 7V4h6l2 3h10v13H3z',
@@ -18,12 +19,12 @@ const icons={
  'source-history':'M3 4v5h5 M3 9a9 9 0 1 1 1 9 M12 7v5l3 2'
 };
 const groups=[
- ['Work',[['overview','Overview'],['projects','Projects'],['tasks','Tasks'],['time','Time']]],
+ ['Work',[['overview','Overview'],['inbox','Inbox'],['projects','Projects'],['tasks','Tasks'],['time','Time']]],
  ['Clients &amp; billing',[['clients','Clients'],['finance','Finance'],['invoices','Invoices'],['commercial','Proposals &amp; contracts'],['reviews','Proposal reviews'],['contracts','Contracts']]],
  ['Documents',[['notes','Documents'],['files','Files']]],
  ['Administration',[['source-history','Source history']]]
 ];
-const navigation=groups.map(([label,links])=>`<div class="nav-group" role="group" aria-label="${label}"><p class="nav-label" aria-hidden="true">${label}</p>${links.map(([route,name])=>`<a href="#${route}"${route==='source-history'?' hidden':''}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${icons[route]}"/></svg><span>${name}</span></a>`).join('')}</div>`).join('');
+const navigation=groups.map(([label,links])=>`<div class="nav-group" role="group" aria-label="${label}"><p class="nav-label" aria-hidden="true">${label}</p>${links.map(([route,name])=>`<a href="#${route}"${route==='source-history'?' hidden':''}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${icons[route]}"/></svg><span>${name}</span>${route==='inbox'?'<span class="badge" data-unread-count hidden></span>':''}</a>`).join('')}</div>`).join('');
 
 export const html=`<!doctype html>
 <html lang="en-CA">

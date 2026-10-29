@@ -10,6 +10,18 @@ const reviewTitle='QA board review: '+('a long project handoff title to wrap on 
 async function tasks(page,origin){await page.goto(origin+'/#tasks');await page.getByLabel('Status filter',{exact:true}).waitFor();await page.locator('main[aria-busy]').waitFor({state:'detached'});}
 export async function runTaskBoardTests({browser,origin,DB,axe}){
  await runProjectArchiveTests({browser,origin,DB});
+ await test('saved task views restore filters and layout after reload and handle unavailable storage',async t=>{
+  const context=await browser.newContext(),page=await context.newPage();t.after(()=>context.close());await tasks(page,origin);
+  await page.getByRole('button',{name:'Assigned to me',exact:true}).click();await page.getByLabel('Assignee filter',{exact:true}).waitFor();assert.equal(await page.getByLabel('Assignee filter',{exact:true}).inputValue(),'qa');
+  await page.getByRole('button',{name:'Board',exact:true}).click();await page.getByRole('button',{name:'Save current view',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Save task view',exact:true});await dialog.getByLabel('View name',{exact:true}).fill('My delivery board');await dialog.getByRole('button',{name:'Save view',exact:true}).click();await dialog.waitFor({state:'detached'});
+  await page.reload();await page.getByLabel('Saved task view',{exact:true}).selectOption({label:'My delivery board'});await page.getByRole('button',{name:'Apply view',exact:true}).click();await page.getByLabel('Assignee filter',{exact:true}).waitFor();assert.equal(await page.getByLabel('Assignee filter',{exact:true}).inputValue(),'qa');assert.equal(await page.getByRole('button',{name:'Board',exact:true}).getAttribute('aria-pressed'),'true');
+  await page.getByRole('button',{name:'Save current view',exact:true}).click();await dialog.getByLabel('View name',{exact:true}).fill('my delivery board');await dialog.getByRole('button',{name:'Save view',exact:true}).click();await dialog.getByText('That view name already exists. Choose another name.').waitFor();await page.keyboard.press('Escape');assert.equal(await page.getByRole('button',{name:'Save current view',exact:true}).evaluate(el=>document.activeElement===el),true);
+  await page.evaluate(axe);assert.deepEqual(await page.evaluate(async()=> (await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa','wcag22aa']}})).violations.map(v=>v.id)),[]);
+  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  const isolated=await browser.newPage();try{await tasks(isolated,origin);assert.equal(await isolated.getByLabel('Saved task view',{exact:true}).locator('option').count(),1);}finally{await isolated.close();}
+  await page.getByLabel('Saved task view',{exact:true}).selectOption({label:'My delivery board'});await page.getByRole('button',{name:'Remove saved view',exact:true}).click();await page.reload();await page.getByLabel('Saved task view',{exact:true}).waitFor();assert.equal(await page.getByLabel('Saved task view',{exact:true}).locator('option').count(),1);
+  await page.evaluate(()=>{Storage.prototype.setItem=function(){throw new DOMException('Full','QuotaExceededError');};});await page.getByRole('button',{name:'Save current view',exact:true}).click();await dialog.getByLabel('View name',{exact:true}).fill('Unavailable');await dialog.getByRole('button',{name:'Save view',exact:true}).click();await dialog.getByText('Could not save this view. Browser storage may be unavailable or full. Your filters are unchanged.').waitFor();await page.keyboard.press('Escape');
+ });
  const project=await DB.prepare("SELECT id FROM projects WHERE name='QA project'").first();
  await DB.batch([
   DB.prepare("INSERT INTO clients(id,organization_id,name) VALUES('board-client','qa-org','QA board client')"),
@@ -122,7 +134,7 @@ export async function runTaskBoardTests({browser,origin,DB,axe}){
   const page=await browser.newPage();t.after(()=>page.close());await tasks(page,origin);await page.getByRole('button',{name:'Board',exact:true}).click();await page.evaluate(axe);
   for(const width of [390,768,1440]){
    await page.setViewportSize({width,height:1100});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-   const violations=await page.evaluate(async()=>{const r=await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}});return r.violations.map(v=>v.id);});assert.deepEqual(violations,[]);
+   const violations=await page.evaluate(async()=>{const r=await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}});return r.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))}));});assert.deepEqual(violations,[]);
    if(process.env.WORKSPACE_TEST_OUTPUT_DIR){await mkdir(process.env.WORKSPACE_TEST_OUTPUT_DIR,{recursive:true});await page.screenshot({path:join(process.env.WORKSPACE_TEST_OUTPUT_DIR,'task-board-'+width+'.png'),fullPage:true});}
    console.log(JSON.stringify({taskBoardWidth:width,overflow:false,axeViolations:0}));
   }
