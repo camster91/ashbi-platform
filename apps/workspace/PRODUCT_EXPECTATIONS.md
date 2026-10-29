@@ -1,6 +1,6 @@
 # Professional workspace expectations
 
-Current release baseline: PR #788 deployed commit `8d2300c9` to hub.ashbi.ca on 29 October 2026, including migrations 0029–0031. Public release checks passed; signed-in owner acceptance remains separate. Earlier slice notes below describe their validation at implementation time.
+Current release baseline: PR #789 deployed commit `da32a433` to hub.ashbi.ca on 29 October 2026, including migrations through 0033. Expanded Inbox, personal preferences, read history and structured mentions are live. Public release checks passed; signed-in owner acceptance remains separate. Earlier slice notes below describe their validation at implementation time.
 
 Research date: 29 October 2026. Continuation of UX rebuild #784. There is no established universal “2027 standard”; the requirements below use current primary sources as the baseline for 2027 planning. Competitor capabilities are references, not promises of parity.
 
@@ -89,3 +89,10 @@ Migration `0033.sql` adds the recipient-ID array to each message and a separate 
 A mentioned message has a personal **You were mentioned** marker in its conversation and Inbox. It remains one notification with the existing message read receipt, not a second unread event. Mentions and ordinary project messages are distinct preference categories: ordinary messages can be muted while mentions stay enabled. Older four-category preference clients preserve the current Mentions setting when saving. Mentions never grant project access and never send email/push. Current project visibility and actor permissions continue to govern Inbox reads and receipt writes.
 
 This increment remains local with migrations 0032 and 0033 pending deployment. The 113-check compiled API/recovery run and three focused browser journeys passed before final long-label wrapping verification. The recovery fixture retains a selected recipient and verifies the personal mention marker after restore; an explicit muted Mentions preference is also exercised. Final validation: core browser regression passed 160/160 with no skips. After the long-label wrapping adjustment, all three focused browser journeys passed again on the final bundle, with mobile screenshot inspection. The final 48/48 recovery run verifies both retained mention recipients and a muted Mentions preference. Worker dry-run build and whitespace checks passed.
+
+
+## Bulk Inbox read action (#790)
+
+A single **Mark loaded notifications read** action snapshots the loaded unread items across message, assignment, deadline and upload categories. Requests use the existing scoped API in batches of at most 50. Unloaded items and arrivals after the snapshot remain unread. A lost acknowledgement retains only the unconfirmed portion for explicit retry; refreshing the list does not expand that selection. Individual read/unread controls pause until the pending operation finishes to avoid contradictory actions. Navigation stops subsequent batches; after a reload, the server's saved receipts remain authoritative. No preview data or pending selection is persisted in browser storage.
+
+Local implementation; no schema or provider changes. Production remains PR #789 until a subsequent recorded release.
