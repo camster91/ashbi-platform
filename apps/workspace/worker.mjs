@@ -1,6 +1,7 @@
 import {retiredServiceWorker} from './legacy-browser-cleanup.mjs';
 import {searchRoute} from './search.mjs';
 import {fontAsset} from './ui-font-assets.generated.mjs';
+import {brandAsset} from './ui-brand-assets.generated.mjs';
 import { html, css, clientScript } from './ui.mjs';
 import { authenticate } from './auth.mjs';
 import {hubIdentity,hubAuthRoute} from './hub-auth.mjs';
@@ -41,6 +42,7 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  const url=new URL(request.url),nativeAuth=env.AUTH_MODE==='hub';
  if(url.origin!==env.APP_ORIGIN){if(nativeAuth&&url.origin==='https://ashbi-workspace.camster915391.workers.dev'&&request.method==='GET'&&url.pathname==='/')return new Response(null,{status:308,headers:{...security,Location:env.APP_ORIGIN+'/'}});throw 404;}
  if(url.pathname==='/health')return json({status:'ok',release:env.RELEASE||'unversioned'});
+ if(['GET','HEAD'].includes(request.method)&&url.pathname.startsWith('/brand/')){const bytes=brandAsset(url.pathname);if(!bytes)throw 404;return new Response(request.method==='HEAD'?null:bytes,{headers:{...security,'Content-Type':'image/png','Content-Length':String(bytes.byteLength),'Cache-Control':'public, max-age=31536000, immutable'}});}
  if(url.pathname==='/api/stripe/webhook')return await stripeWebhook(request,env,json,providers.stripeFetch,ctx);
  if(nativeAuth){
   if(url.pathname.startsWith('/api/auth/'))return await hubAuthRoute(request,env,readBody,security,providers.authFetch);
@@ -64,7 +66,7 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  }
  if(request.method==='GET'&&['/','/app.js','/app.css'].includes(url.pathname)){
   const type=url.pathname==='/'?'text/html':url.pathname==='/app.js'?'application/javascript':'text/css';
-  const shell=nativeAuth?html.replace('<body>','<body data-auth="hub">').replace('<a class="sign-out" href="/cdn-cgi/access/logout">Sign out</a>','<button type="button" class="secondary" id="workspace-signout">Sign out</button>'):html;
+  const shell=nativeAuth?html.replace('<body class="workspace-app">','<body class="workspace-app" data-auth="hub">').replace('<a class="sign-out" href="/cdn-cgi/access/logout">Sign out</a>','<button type="button" class="secondary" id="workspace-signout">Sign out</button>'):html;
   return pageResponse(url.pathname==='/'?shell:url.pathname==='/app.js'?clientScript:css,type);
  }
  if(!['GET','HEAD'].includes(request.method)&&request.headers.get('origin')!==url.origin)throw 403;

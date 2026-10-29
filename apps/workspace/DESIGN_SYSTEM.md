@@ -14,9 +14,13 @@ This is the shared presentation system for the Cloudflare app. It extends the ex
 
 Keep styles out of workflow strings. Reuse an existing primitive before adding a variant. Add a semantic token when a new role is needed; do not scatter literal colors or introduce page-specific font families. Preserve visible labels, native controls, focus restoration and authorization-driven visibility.
 
+## Brand assets
+
+Use the original Ashbi image in the navigation and sign-in card, preserving aspect ratio, transparency and colours. [Asset provenance](brand/SOURCES.md) records the original website repository, commit and SHA-256. `build-brand.mjs` checks those bytes before generating the fingerprinted public asset route. Do not invent client logos or substitute a text monogram. The website’s commercial brand fonts are not available as licensed web assets; Plus Jakarta Sans remains the verified UI font.
+
 ## Typography
 
-Use Plus Jakarta Sans variable normal (200–800), with a system sans fallback. The app uses 400 for body copy, 500 for navigation, 600 for labels and 650 for headings/actions. The wordmark uses 800. Use tabular numerals for metric totals and the active timer. Body text is 16px; record metadata and controls are 14px; compact labels/actions are 13px; badges/help are 12–13px. Section headings are 18px and page titles scale from 28 to 32px. Body line height is 1.55; headings are 1.3.
+Use Plus Jakarta Sans variable normal (200–800), with a system sans fallback. The app uses 400 for body copy, 500 for navigation, 600 for labels and 650 for headings/actions. The wordmark is the unchanged original image; never recreate it as text. Use tabular numerals for metric totals and the active timer. Record body text is 14px; compact metadata and controls use 11–13px, with 16px inputs on phones. Section headings are 16px and page titles scale from 24 to 28px. Body line height is 1.55; headings are 1.3.
 
 The Latin subset is preloaded (27,348 bytes). Other Unicode subsets load only as needed. Font delivery is same-origin, authenticated, content-fingerprinted and privately cacheable. `font-display: swap` keeps content visible during loading. Never add a third-party font request. Signed contract PDFs use separate multilingual fonts; UI font changes must not alter document rendering or evidence.
 
@@ -24,17 +28,17 @@ The Latin subset is preloaded (27,348 bytes). Other Unicode subsets load only as
 
 | Role | Token | Value |
 | --- | --- | --- |
-| Canvas | `--color-canvas` | `#faf9f5` |
+| Canvas | `--color-canvas` | `#f8f8f6` |
 | Raised surface | `--color-surface` | `#ffffff` |
-| Main text | `--color-text` | `#292840` |
-| Supporting text | `--color-muted` | `#626272` |
-| Brand / active navigation | `--color-brand` | `#2e2958` |
+| Main text | `--color-text` | `#2b2e52` |
+| Supporting text | `--color-muted` | `#586475` |
+| Brand / active navigation | `--color-brand` | `#42467d` |
 | Subtle selection / notice | `--color-brand-soft` | `#eeedf6` |
-| Primary action | `--color-action` | `#e6f354` |
+| Primary action | `--color-action` | `#e6f254` |
 | Keyboard focus | `--color-focus` | `#5145b5` |
 | Error text | `--color-error` | `#a22630` |
 
-Use the 4, 8, 12, 16, 24, 32, 48px spacing scale. Controls have 8px corners; panels/dialogs have 14px corners. Borders, spacing and typography establish hierarchy; reserve shadows for modal dialogs. Use indigo text on lime buttons, never white text on lime.
+Use the 4, 8, 12, 16, 24, 32, 48px spacing scale. Controls have 8px corners; panels have 10px corners. Borders, spacing and typography establish hierarchy; reserve shadows for modal dialogs. Use indigo text on lime buttons, never white text on lime.
 
 ## Primitives and states
 
@@ -49,9 +53,9 @@ Use the 4, 8, 12, 16, 24, 32, 48px spacing scale. Controls have 8px corners; pan
 
 ## Responsive and accessible behavior
 
-Below 768px navigation becomes a horizontally scrollable row and content uses 16px side padding. Filters become one column below 900px; task boards below 1100px. Metric cards use two columns below 900px. Content must wrap without widening the viewport at 390, 768 and 1440px; check long record names and error messages as well as empty states.
+Below 768px navigation becomes a 264px drawer and content uses 16px side padding. The drawer makes background content inert, contains keyboard focus and returns focus to its opener on dismissal. Desktop navigation uses a persistent 224px sidebar. Filters become one column below 900px; task boards below 1100px. Metric cards use two columns below 900px. Content must wrap without widening the viewport at 390, 768 and 1440px; check long record names and error messages as well as empty states.
 
-On narrow screens, direct links, route changes, font loading and viewport resizing keep the active navigation item visible by scrolling only the horizontal strip. Do not move document scroll or keyboard focus to reveal it. Task/project labels use the shared readable names; keep API and stored status values unchanged, and preserve unknown source values as text.
+Route changes close the mobile drawer; resizing to desktop restores normal navigation. Never scroll the document just to reveal a navigation item. Task/project labels use the shared readable names; keep API and stored status values unchanged, and preserve unknown source values as text.
 
 All focusable controls use a visible 3px focus ring. Keep the skip link and semantic headings. Respect reduced-motion and forced-colors preferences. The app currently defines a light theme only.
 
@@ -59,21 +63,29 @@ All focusable controls use a visible 3px focus ring. Keep the skip link and sema
 
 Run `npm run build`, focused API/auth checks and `npm run test:browser` in this package. Browser groups exercise real local D1 fixtures, navigation, dialogs, keyboard behavior, overflow and axe checks. Inspect dashboard, list/board and dialog screenshots at desktop and phone widths. Record results separately from production deployment or real-user acceptance.
 
+## Invoice preparation
+
+Above 900px, the initial invoice fields use two columns with a full-width title and line-item/review sections. Phones retain the same single-column DOM order. Do not change money validation, explicit preview/save confirmation or recovery controls for visual density.
+
 ## Project workspace
 
 Open projects at `#projects/:id`, with scoped Tasks, Documents, Files, Time and Billing sections. The project heading and selected section remain visible; section links use native navigation and `aria-current`. Keep the global Projects item active. Project selectors contain the current project only, and server queries filter before pagination. Use the existing workflow modules and permission checks; global recovery controls remain available for uncertain financial requests. Never infer client sharing or financial authority from a selected project.
 
 ## Actionable overview
 
+Work queue, Approvals, Outstanding invoices and Workspace are separate focused views. Load task work initially; load financial feeds and task/document inventory counts on demand. Client/project choices still load for authorized filters. Never equate unloaded data with zero.
+
 Daily priorities apply the existing server-side task/review/invoice filters and reset conflicting selections before requesting data. Show only authorized shortcuts. Keep daily feeds before inventory totals and exports. Link to canonical record and project workflows, preserve saved invoice observation warnings and per-currency totals, and never present a partial page length as a total. Shortcut activation focuses its destination heading immediately; asynchronous responses must not steal later focus.
 
 ## Compact lists
+
+Create records through the page’s Add action and a labeled native dialog. Retain client, project, task and document drafts in memory when their creation dialog is cancelled. A successful save clears that draft. This does not promise persistence across a browser reload or navigation to another page. Keep common actions visible; put less frequent actions in a native disclosure menu with a record-specific accessible name.
 
 Client, project and task lists use `.compact-record`: aligned identity, status, details and actions above 1100px, stacked content below. Render through `compactRecord` to retain the same authorized actions as `recordItem`. Resolve parent and assignee names from already-loaded authorized choices; preserve source identifiers when a name is unavailable. Boards, dialogs and project overviews continue to use the ordinary record presentation. Never truncate essential names or reduce control targets to create density.
 
 ## Navigation groups
 
-Work contains daily delivery routes; Clients & billing contains relationship and commercial workflows; Documents holds content and files; Administration holds source history. Groups have accessible names and disappear when every contained link is unavailable. `syncNavigation` owns presentation visibility and active route selection; APIs remain authoritative for access. Keep the same link names and native destinations at every width, and preserve active-link scrolling on the mobile strip.
+Work contains daily delivery routes; Clients & billing contains relationship and commercial workflows; Documents holds content and files; Administration holds source history. Groups have accessible names and disappear when every contained link is unavailable. `syncNavigation` owns presentation visibility and active route selection; APIs remain authoritative for access. Keep the same link names and native destinations at every width, and preserve keyboard containment and focus return in the mobile drawer.
 
 ## Global search
 

@@ -8,6 +8,7 @@ export const presentationUiScript=String.raw`
  }
  function syncNavigation(state,identity){
   const nav=document.querySelector('nav[aria-label="Workspace"]');
+  document.querySelector('#current-location').textContent=state.projectId?'Project workspace':labels[state.page];document.title=labels[state.page]+' · Ashbi';
   const selected='#'+(state.projectId?'projects':state.page);
   for(const link of nav.querySelectorAll('a')){
    const route=link.hash.slice(1),financial=identity.role==='staff'&&identity.features?.finance;

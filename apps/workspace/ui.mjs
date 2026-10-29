@@ -1,4 +1,5 @@
 import {cleanupBrowserScript} from './legacy-browser-cleanup.mjs';
+import {workspaceUiScript} from './ui-workspace.mjs';
 import {searchUiScript} from './ui-search.mjs';
 import {projectUiScript} from './ui-projects.mjs';
 import {recordsUiScript} from './ui-records.mjs';
@@ -162,7 +163,7 @@ ${projectUiScript}
  function projectPath(state,cursor){return 'projects?archived='+state.projectArchive+(cursor?'&after='+encodeURIComponent(cursor):'');}
  function taskPath(state,cursor){const params=new URLSearchParams(),options={...state.taskOptions,...(state.projectId?{project:state.projectId}: {})};for(const [key,value]of [['q',options.q],['projectId',options.project],['status',options.status],['assigneeId',options.assignee]])if(value)params.set(key,value);if(options.includeArchivedProjects)params.set('includeArchivedProjects','true');if(cursor)params.set('after',cursor);return 'tasks'+(params.size?'?'+params:'');}
  function captureTaskDraft(state){if(state?.page!=='tasks'||state.discardTaskDraft)return;const form=main.querySelector('form[data-task-create]');if(form)state.taskDraft={...Object.fromEntries(new FormData(form)),clientVisible:form.elements.clientVisible.checked};}
- function projectToolbar(state){const form=node('section',undefined,'panel'),select=field(form,'projectArchive','Project archive','text',[{id:'active',name:'Active projects'},{id:'archived',name:'Archived projects'},{id:'all',name:'All projects'}]);select.options[0].remove();select.value=state.projectArchive;select.onchange=()=>{if(!current(state))return;state.projectArchive=select.value;load(true);};main.append(form);}
+ function projectToolbar(state){const form=node('section',undefined,'collection-toolbar'),select=field(form,'projectArchive','Project archive','text',[{id:'active',name:'Active projects'},{id:'archived',name:'Archived projects'},{id:'all',name:'All projects'}]);select.options[0].remove();select.value=state.projectArchive;select.onchange=()=>{if(!current(state))return;state.projectArchive=select.value;load(true);};main.append(form);}
 ${recordsUiScript}
 
  function documentVersions(record,opener,state){
@@ -268,15 +269,16 @@ ${overviewUiScript}
   main.append(panel);if(cursor)main.append(button('Load more',async()=>{const more=await api(page==='notes'?documentPath(state,cursor):page==='projects'?projectPath(state,cursor):page==='tasks'?taskPath(state,cursor):page==='files'?filesPath(state,cursor):page+'?after='+encodeURIComponent(cursor));if(!current(state))return;state.rows=[...rows,...more.items];state.cursor=more.nextCursor;render(state);},false,state));
  }
 ${searchUiScript}
- function render(state){const {page,rows,parents}=state;captureDocumentDraft(state);captureTimeDraft(state);captureTaskDraft(state);main.replaceChildren();if(state.project)projectHeader(state);else main.append(node('h1',labels[page]));if(state.linkError){main.append(node('p','This record link is invalid. Open the page to continue.','notice'));const link=node('a','Open '+labels[page]);link.href='#'+page;main.append(link);return;}if(state.project&&state.projectSection==='overview'){projectOverview(state);return;}if(page==='overview'){overviewPage(state);return;}
+${workspaceUiScript}
+ function render(state){const {page,rows,parents}=state;captureDocumentDraft(state);captureTimeDraft(state);captureTaskDraft(state);main.replaceChildren();if(state.project)projectHeader(state);else pageHeading(state);if(state.linkError){main.append(node('p','This record link is invalid. Open the page to continue.','notice'));const link=node('a','Open '+labels[page]);link.href='#'+page;main.append(link);return;}if(state.project&&state.projectSection==='overview'){projectOverview(state);return;}if(page==='overview'){overviewPage(state);return;}
   if(page==='source-history'){sourceHistoryPage(state);return;}if(page==='invoices'){invoicesPage(state);return;}if(page==='finance'){financePage(state);return;}if(page==='commercial'){commercialPage(state);return;}if(page==='reviews'){proposalReviewsPage(state);return;}if(page==='contracts'){contractsPage(state);return;}if(page==='files'&&!actor.features.files){main.append(node('p','Private file storage is awaiting R2 activation. No files have been imported.','notice'));return;}
-  if(page==='tasks'){if(actor.role==='staff')main.append(button('Add task',()=>{const input=main.querySelector('input[name=title]');input.focus();},false,state));let opener;if(state.recordId){opener=button('Open linked task',b=>linkedTask(state,b),true,state);state.taskLinkOpener=opener;main.append(opener);}renderRows(state);recordForm(undefined,main,state);if(state.recordId&&!state.recordOpened){state.recordOpened=true;linkedTask(state,opener);}return;}
+  if(page==='tasks'){if(state.project&&actor.role==='staff')main.append(button('Add task',opener=>createRecord(state,opener),false,state));let opener;if(state.recordId){opener=button('Open linked task',b=>linkedTask(state,b),true,state);state.taskLinkOpener=opener;main.append(opener);}renderRows(state);if(state.recordId&&!state.recordOpened){state.recordOpened=true;linkedTask(state,opener);}return;}
   if(state.recordId&&['clients','notes'].includes(page)){const opener=button('Open linked record',b=>linkedRecord(state,b),true,state);main.append(opener);if(!state.recordOpened){state.recordOpened=true;linkedRecord(state,opener);}}
-  if(page==='notes'){if(actor.role==='staff')main.append(button('Add document',()=>main.querySelector('form[data-document-create] input[name=title]').focus(),false,state));documentToolbar(state);renderRows(state);recordForm(undefined,main,state);return;}
-  if(page==='projects')projectToolbar(state);if(page==='files'){main.append(node('p','Files download privately as attachments. Removal hides a file; original bytes remain available for staff restoration.','notice'));fileForm(state);}recordForm(undefined,main,state);if(page==='time'&&actor.role==='staff'){timeForm(state);timeReview(state);}if(!(state.projectId&&page==='time'))renderRows(state);updateTimerControls();
+  if(page==='notes'){if(state.project&&actor.role==='staff')main.append(button('Add document',opener=>createRecord(state,opener),false,state));documentToolbar(state);renderRows(state);return;}
+  if(page==='projects')projectToolbar(state);if(page==='files'){main.append(node('p','Files download privately as attachments. Removal hides a file; original bytes remain available for staff restoration.','notice'));fileForm(state);}if(page==='time'&&actor.role==='staff'){timeForm(state);timeReview(state);}if(!(state.projectId&&page==='time'))renderRows(state);updateTimerControls();
  }
  async function load(focus=false){
-  closeWorkspaceSearch();
+  closeNavigation(false);closeWorkspaceSearch();
   const focusSerial=overviewFocusSerial,focusBefore=document.activeElement;
   if(view?.page==='overview')view.overviewInvalidate?.();
   if(route()==='time'&&view?.page==='time')captureTimeDraft(view);

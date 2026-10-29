@@ -49,16 +49,11 @@ function recordForm(record, container = main, state = view) {
       if (["clientId", "projectId"].includes(input.name)) input.disabled = true;
     }
   }
-  if (page === "tasks" && !record && state.taskDraft) {
+  const draft = page === "tasks" ? state.taskDraft : page === "notes" ? state.documentDraft : state.recordDraft;
+  if (!record && draft) {
     for (const input of form.elements) {
-      if (input.type === "checkbox") input.checked = Boolean(state.taskDraft[input.name]);
-      else if (input.name in state.taskDraft) input.value = state.taskDraft[input.name];
-    }
-  }
-  if (page === "notes" && !record && state.documentDraft) {
-    for (const input of form.elements) {
-      if (input.type === "checkbox") input.checked = Boolean(state.documentDraft[input.name]);
-      else if (input.name in state.documentDraft) input.value = state.documentDraft[input.name];
+      if (input.type === "checkbox") input.checked = Boolean(draft[input.name]);
+      else if (input.name in draft) input.value = draft[input.name];
     }
   }
   if (!record && state.projectId) projectField(form.elements.projectId, state.projectId);
@@ -90,7 +85,9 @@ function recordForm(record, container = main, state = view) {
         state.discardDocumentDraft = true;
         state.documentOptions = { q: "", projectId: body.projectId, parentId: body.parentId || "root", includeArchived: false };
       }
-      await refresh(state, Boolean(record));
+      if (!record) { state.recordDraft = null; state.discardRecordDraft = true; }
+      if (!record && container.tagName === "DIALOG") container.close();
+      await refresh(state, true);
     } catch (err) {
       if (current(state)) error(err.message, form);
     } finally {
@@ -169,6 +166,8 @@ function compactRecord(record, state) {
   }
   if (!details.childElementCount) details.append(node("span", state.page === "tasks" ? "No due date" : "—", "help"));
   const actions = item.querySelector(".record-actions");
+  const destination = actions.querySelector(state.page === 'projects' ? 'a[href^="#projects/"]' : state.page === 'tasks' ? 'a[aria-label^="Open task details for "],a[aria-label^="Task link for "]' : 'a[data-record-destination]');
+  if (destination) { destination.textContent = record.name || record.title; identity.replaceChild(destination, title); }
   for (const action of actions.querySelectorAll("button")) {
     if (action.dataset.timerProject) continue;
     const label = action.getAttribute("aria-label") || action.textContent;
@@ -177,7 +176,15 @@ function compactRecord(record, state) {
     if (label.startsWith("Restore project ")) action.textContent = "Restore";
     if (label === "Complete task") action.textContent = "Complete";
     if (label === "Reopen task") action.textContent = "Reopen";
+    if (label.startsWith("Edit ")) action.textContent = "Edit";
   }
+  const overflow = node('details', undefined, 'record-menu'), menu = node('div'), summary = node('summary', 'More');
+  summary.setAttribute('aria-label', 'More actions for ' + (record.name || record.title));
+  for (const action of [...actions.children]) {
+    const label = action.getAttribute('aria-label') || action.textContent;
+    if (label.startsWith('Archive ') || label.startsWith('Restore ') || label.startsWith('Comments ') || action.tagName === 'A') menu.append(action);
+  }
+  if (menu.childElementCount) { overflow.append(summary, menu); actions.append(overflow); }
   if (state.page === "projects") {
     // Projects have no separate contact/due-date column.
     for (const child of [...details.children]) if (child.textContent !== "—") identity.append(child);
@@ -191,7 +198,7 @@ function recordItem(record, state) {
   const actions = node("div", undefined, "record-actions");
   const item = node("article", undefined, "item"), line = node("div", undefined, "row");
   line.append(node("strong", record.name || record.title || "Time entry"));
-  if (record.status) line.append(node("span", recordStatusName(page, record.status), "badge"));
+  if (record.status) { const status = node("span", recordStatusName(page, record.status), "badge"); status.dataset.status = record.status; line.append(status); }
   if (record.client_visible !== undefined) line.append(node("span", record.client_visible ? "Shared with client" : "Internal", "badge"));
   item.append(line);
   if (record.text) item.append(node("p", record.text));
