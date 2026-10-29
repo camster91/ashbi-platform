@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {hubAuthFixture} from './hub-auth-fixture.mjs';
+import {brandLogo} from './ui-brand-assets.generated.mjs';
+import {createHash} from 'node:crypto';
 const {createWorker}=await import(process.env.WORKSPACE_TEST_BUILT_WORKER?'./dist/worker.js':'./worker.mjs');
 test('existing Hub sessions authenticate the workspace without Access',async t=>{
  const f=await hubAuthFixture(createWorker);t.after(f.close);
  await t.test('public login and assets work; missing/forged sessions and Access headers grant no access',async()=>{
   assert.equal((await f.call('/')).status,303);assert.equal((await f.call('/login')).status,200);assert.equal((await f.call('/login.js')).status,200);assert.equal((await f.call('/app.css')).status,200);const sw=await f.call('/sw.js');assert.equal(sw.status,200);assert.equal(sw.headers.get('cache-control'),'no-store');assert.match(await sw.text(),/registration.unregister/);
+  const logo=await f.call(brandLogo);assert.equal(logo.status,200);assert.equal(logo.headers.get('content-type'),'image/png');assert.match(logo.headers.get('cache-control'),/immutable/);assert.equal(createHash('sha256').update(new Uint8Array(await logo.arrayBuffer())).digest('hex'),'2690c44df7a213bed3fac1fbe3a74cf06d1a7c427a0c383f9ceff508950a7ce9');assert.equal((await f.call('/brand/missing.png')).status,404);
   for(const options of [{},{headers:{'Cf-Access-Jwt-Assertion':'forged'}},{cookie:'token=forged'},{cookie:'token=fixture-session; token=forged'}])assert.equal((await f.call('/api/me',options)).status,401);
  });
  await t.test('login forwards only bounded same-origin JSON and secures its session cookie',async()=>{

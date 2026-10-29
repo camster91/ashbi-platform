@@ -68,3 +68,6 @@ data/
 # E2E test artifacts
 tests/e2e/.vitest-output.json
 tests/e2e/.vitest-cache/
+
+# Generated from the pinned original brand asset.
+apps/workspace/ui-brand-assets.generated.mjs

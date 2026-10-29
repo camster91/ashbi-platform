@@ -25,7 +25,7 @@ export async function runProjectWorkspaceTests({browser,origin,DB,axe,addActor})
   await tabs.getByRole('link',{name:'Tasks',exact:true}).click();await page.getByRole('button',{name:'Edit Review homepage direction',exact:true}).waitFor();
   assert.equal(await page.getByText('Other project task',{exact:true}).count(),0);
   assert.deepEqual(await page.getByLabel('Project filter',{exact:true}).locator('option').evaluateAll(xs=>xs.map(x=>x.value)),[project]);
-  const form=page.locator('[data-task-create]');assert.equal(await form.getByLabel('Project',{exact:true}).inputValue(),project);
+  await page.getByRole('button',{name:'Add task',exact:true}).click();const form=page.locator('[data-task-create]');assert.equal(await form.getByLabel('Project',{exact:true}).inputValue(),project);
   await form.getByLabel('Name',{exact:true}).fill('New scoped task');await form.getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('button',{name:'Edit New scoped task',exact:true}).waitFor();
   assert.equal((await DB.prepare("SELECT project_id FROM tasks WHERE title='New scoped task'").first()).project_id,project);
   await page.getByRole('button',{name:'Clear task filters',exact:true}).click();await page.getByRole('button',{name:'Edit New scoped task',exact:true}).waitFor();assert.equal(await page.getByText('Other project task',{exact:true}).count(),0);
@@ -34,7 +34,7 @@ export async function runProjectWorkspaceTests({browser,origin,DB,axe,addActor})
   await tabs.getByRole('link',{name:'Overview',exact:true}).click();await page.getByRole('heading',{name:'Project overview',exact:true}).waitFor();await page.goBack();await page.getByRole('dialog',{name:'Task details',exact:true}).waitFor();
  });
  await test('#771 documents, uploads and manual time use the selected project',async t=>{
-  const page=await open(t,'notes');const form=page.locator('[data-document-create]');
+  const page=await open(t,'notes');await page.getByRole('button',{name:'Add document',exact:true}).click();const form=page.locator('[data-document-create]');
   assert.equal(await form.getByLabel('Project',{exact:true}).inputValue(),project);
   await form.getByLabel('Name',{exact:true}).fill('Scoped brief');await form.getByLabel('Content',{exact:true}).fill('Synthetic project brief');await form.getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('button',{name:'Edit Scoped brief',exact:true}).waitFor();
   assert.equal((await DB.prepare("SELECT project_id FROM notes WHERE title='Scoped brief'").first()).project_id,project);
@@ -73,7 +73,7 @@ export async function runProjectWorkspaceTests({browser,origin,DB,axe,addActor})
     const link=page.getByRole('navigation',{name:'Project sections'}).getByRole('link',{name:section,exact:true});await link.focus();await page.keyboard.press('Enter');await page.locator('main[aria-busy]').waitFor({state:'detached'});await page.getByRole('navigation',{name:'Project sections'}).locator('[aria-current=page]').filter({hasText:section}).waitFor();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     const issues=await page.evaluate(async()=>{const r=await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}});return r.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.html)}));});assert.deepEqual(issues,[]);
-    if(process.env.WORKSPACE_TEST_OUTPUT_DIR){await mkdir(process.env.WORKSPACE_TEST_OUTPUT_DIR,{recursive:true});await page.screenshot({path:join(process.env.WORKSPACE_TEST_OUTPUT_DIR,'project-'+section.toLowerCase()+'-'+width+'.png')});}
+    if(process.env.WORKSPACE_TEST_OUTPUT_DIR){await mkdir(process.env.WORKSPACE_TEST_OUTPUT_DIR,{recursive:true});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:join(process.env.WORKSPACE_TEST_OUTPUT_DIR,'project-'+section.toLowerCase()+'-'+width+'.png')});}
    }
   }
  });

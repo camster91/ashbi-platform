@@ -1,4 +1,5 @@
 import {fontPreload} from './ui-font-assets.generated.mjs';
+import {brandLogo} from './ui-brand-assets.generated.mjs';
 
 // Decorative icons never replace the visible navigation names.
 const icons={
@@ -36,27 +37,28 @@ export const html=`<!doctype html>
  <link rel="stylesheet" href="/app.css">
  <script defer src="/app.js"></script>
 </head>
-<body>
+<body class="workspace-app">
  <a class="skip" href="#main">Skip to content</a>
  <header class="app-header">
-  <a class="brand" href="/">ashbi<span>Workspace</span></a>
-  <button type="button" id="workspace-search" class="secondary" aria-keyshortcuts="Control+k Meta+k">Search workspace</button>
+  <button type="button" id="navigation-toggle" class="secondary" aria-label="Open navigation" aria-controls="workspace-navigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+  <div class="workspace-breadcrumb"><span>Ashbi Studio</span><span aria-hidden="true">/</span><strong id="current-location">Overview</strong></div>
+  <button type="button" id="workspace-search" class="secondary" aria-keyshortcuts="Control+k Meta+k"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><span>Search workspace</span><kbd>⌘ K</kbd></button>
   <a class="sign-out" href="/cdn-cgi/access/logout">Sign out</a>
  </header>
- <section id="active-timer" aria-label="Active timer" hidden>
-  <div class="row">
-   <p id="timer-summary" aria-live="polite" aria-atomic="true">Checking active timer…</p>
-   <div class="timer-actions">
-    <button type="button" id="stop-active-timer" hidden>Stop active timer</button>
-    <button type="button" id="refresh-active-timer" class="secondary">Refresh timer</button>
-    <a class="button secondary" href="#time">Open time tracking</a>
-   </div>
-  </div>
- </section>
  <div class="shell">
-  <nav aria-label="Workspace">${navigation}</nav>
-  <main id="main" tabindex="-1"><h1>Opening your workspace</h1><p role="status">Checking access…</p></main>
+  <nav id="workspace-navigation" aria-label="Workspace">
+   <div class="workspace-brand"><a class="brand" href="/" aria-label="Ashbi workspace"><img src="${brandLogo}" alt="Ashbi" width="930" height="330"><span>WORKSPACE</span></a><button type="button" id="navigation-close" class="secondary" aria-label="Close navigation">×</button></div>
+   <div class="workspace-switcher"><div><strong>Ashbi Studio</strong><small>Your team workspace</small></div></div>
+   ${navigation}
+   <div class="sidebar-note">Ashbi Studio · Workspace</div>
+  </nav>
+  <button type="button" id="navigation-backdrop" aria-label="Close navigation" hidden></button>
+  <div class="workspace-content">
+   <section id="active-timer" aria-label="Active timer" hidden>
+    <div class="row"><p id="timer-summary" aria-live="polite" aria-atomic="true">Checking active timer…</p><div class="timer-actions"><button type="button" id="stop-active-timer" hidden>Stop active timer</button><button type="button" id="refresh-active-timer" class="secondary">Refresh timer</button><a class="button secondary" href="#time">Open time tracking</a></div></div>
+   </section>
+   <main id="main" tabindex="-1"><h1>Opening your workspace</h1><p role="status">Checking access…</p></main>
+  </div>
  </div>
- <footer class="app-footer">Ashbi workspace</footer>
 </body>
 </html>`;

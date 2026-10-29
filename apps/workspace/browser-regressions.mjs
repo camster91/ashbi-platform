@@ -10,7 +10,7 @@ export async function hold(page,pattern){
 }
 const json=data=>({status:200,contentType:'application/json',body:JSON.stringify(data)});
 const failed={status:503,contentType:'application/json',body:JSON.stringify({error:'Synthetic delayed failure'})};
-async function ready(page,origin,route){await page.goto(origin+'/#'+route);await page.locator(route==='overview'?'.stats':'section[aria-label="'+(route==='tasks'?'Tasks':'Files')+' list"]').waitFor();await page.locator('main[aria-busy]').waitFor({state:'detached'});}
+async function ready(page,origin,route){await page.goto(origin+'/#'+route);await page.locator(route==='overview'?'section[aria-label="Daily tasks"]':'section[aria-label="'+(route==='tasks'?'Tasks':'Files')+' list"]').waitFor();await page.locator('main[aria-busy]').waitFor({state:'detached'});}
 async function tasksRemain(page){
  assert.equal(new URL(page.url()).hash,'#tasks');
  assert.equal(await page.locator('h1').textContent(),'Tasks');
@@ -26,7 +26,7 @@ export async function runRegressions({browser,origin,DB}){
   t.after(async()=>{await page.close();await DB.prepare("DELETE FROM tasks WHERE id='record-actions-task'").run();});
   for(const width of [390,768,1440]){
    await page.setViewportSize({width,height:1000});await ready(page,origin,'tasks');
-   const opener=page.getByRole('button',{name:'Edit Record action fixture',exact:true});assert.equal(await opener.textContent(),'Edit task');
+   const opener=page.getByRole('button',{name:'Edit Record action fixture',exact:true});assert.equal(await opener.textContent(),'Edit');
    for(const draft of ['', 'Unsaved edit']){
     // Wait for actual DOM removal: a closed dialog leaves the accessibility tree before its close event restores focus.
     await opener.click();const dialog=page.locator('dialog');await dialog.getByLabel('Name',{exact:true}).fill(draft);
@@ -37,20 +37,20 @@ export async function runRegressions({browser,origin,DB}){
    }
   }
  });
- await test('#767 mobile active route stays visible on direct links, route changes and resize without moving document focus',async t=>{
+ await test('#784 mobile navigation preserves active routes, keyboard focus and resize behavior',async t=>{
   const page=await browser.newPage({viewport:{width:390,height:844}});t.after(()=>page.close());
-  const activeVisible=()=>page.evaluate(()=>{const nav=document.querySelector('nav'),active=nav.querySelector('[aria-current=page]'),n=nav.getBoundingClientRect(),a=active.getBoundingClientRect();return a.left>=n.left&&a.right<=n.right;});
-  await page.goto(origin+'/#time');await page.getByRole('heading',{name:'Time',exact:true}).waitFor();await page.locator('main[aria-busy]').waitFor({state:'detached'});await page.evaluate(()=>document.fonts.ready);
-  assert.equal(await activeVisible(),true);
-  for(const route of ['overview','time']){
-   await page.evaluate(route=>{location.hash='#'+route;},route);await page.getByRole('heading',{name:route==='time'?'Time':'Overview',exact:true}).waitFor();await page.locator('main[aria-busy]').waitFor({state:'detached'});
-   assert.equal(await activeVisible(),true);
+  const nav=page.getByRole('navigation',{name:'Workspace',exact:true}),toggle=page.getByRole('button',{name:'Open navigation',exact:true});
+  await page.goto(origin+'/#time');await page.getByRole('heading',{name:'Time',exact:true}).waitFor();await page.locator('main[aria-busy]').waitFor({state:'detached'});
+  for(const label of ['Time','Overview']){
+   await toggle.click();assert.equal(await nav.isVisible(),true);assert.equal(await page.locator('.workspace-content').evaluate(e=>e.inert),true);
+   const link=nav.getByRole('link',{name:label,exact:true});await link.focus();await page.keyboard.press('Enter');await page.getByRole('heading',{name:label,exact:true}).waitFor();await page.locator('main[aria-busy]').waitFor({state:'detached'});
+   assert.equal(await page.locator('#workspace-navigation a[href="#'+label.toLowerCase()+'"]').getAttribute('aria-current'),'page');assert.equal(await toggle.getAttribute('aria-expanded'),'false');assert.equal(await page.locator('.workspace-content').evaluate(e=>e.inert),false);
   }
-  await page.setViewportSize({width:1440,height:844});await page.setViewportSize({width:390,height:844});await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
-  assert.equal(await activeVisible(),true);
-  const before=await page.evaluate(()=>{document.querySelector('main').focus();window.scrollTo(0,250);document.querySelector('nav').scrollLeft=0;return {y:scrollY,focus:document.activeElement.id};});
-  await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
-  assert.equal(await activeVisible(),true);assert.deepEqual(await page.evaluate(()=>({y:scrollY,focus:document.activeElement.id})),before);
+  await toggle.click();await page.keyboard.press('Escape');assert.equal(await toggle.evaluate(e=>e===document.activeElement),true);
+  await toggle.click();await page.setViewportSize({width:1440,height:844});await page.waitForFunction(()=>!document.body.classList.contains('navigation-open'));assert.equal(await nav.isVisible(),true);assert.equal(await page.locator('.workspace-content').evaluate(e=>e.inert),false);
+  await page.setViewportSize({width:390,height:844});assert.equal(await nav.isVisible(),false);
+  const before=await page.evaluate(()=>{document.querySelector('main').focus();window.scrollTo(0,250);return {y:scrollY,focus:document.activeElement.id};});await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
+  assert.deepEqual(await page.evaluate(()=>({y:scrollY,focus:document.activeElement.id})),before);
  });
  await test('#767 task and project labels are readable while edits retain their stored status values',async t=>{
   const project=await DB.prepare("SELECT id FROM projects WHERE name='QA project'").first();
@@ -99,7 +99,7 @@ export async function runRegressions({browser,origin,DB}){
   await page.getByRole('button',{name:'Load more',exact:true}).click();await more.entered;
   await page.getByRole('link',{name:'Tasks',exact:true}).click();await page.getByRole('button',{name:'Edit QA task revised',exact:true}).waitFor();
   if(destination==='clients'){await page.getByRole('link',{name:'Clients',exact:true}).click();await page.getByRole('button',{name:'Edit QA client',exact:true}).waitFor();}
-  await page.getByLabel('Name',{exact:true}).fill('Keep unsaved value');await page.getByLabel('Name',{exact:true}).focus();
+  await page.getByRole('button',{name:destination==='tasks'?'Add task':'Add client',exact:true}).click();await page.getByLabel('Name',{exact:true}).fill('Keep unsaved value');await page.getByLabel('Name',{exact:true}).focus();
   await more.release(failure?failed:json({items:[{id:'delayed-client',name:'Delayed client'}],nextCursor:'stale-cursor'}));
   assert.equal(await page.getByLabel('Name',{exact:true}).inputValue(),'Keep unsaved value');
   assert.equal(await page.locator(':focus').getAttribute('name'),destination==='tasks'?'title':'name');
@@ -113,7 +113,7 @@ export async function runRegressions({browser,origin,DB}){
   const action=await hold(page,'**/api/tasks/*');
   await page.getByRole('button',{name:'Reopen task',exact:true}).click();await action.entered;
   await page.getByRole('link',{name:'Clients',exact:true}).click();await page.getByRole('button',{name:'Edit QA client',exact:true}).waitFor();
-  await page.getByLabel('Name',{exact:true}).fill('Keep client draft');await page.getByLabel('Name',{exact:true}).focus();
+  await page.getByRole('button',{name:'Add client',exact:true}).click();await page.getByLabel('Name',{exact:true}).fill('Keep client draft');await page.getByLabel('Name',{exact:true}).focus();
   await action.release(failure?failed:json({status:'todo'}));
   assert.equal(await page.getByLabel('Name',{exact:true}).inputValue(),'Keep client draft');
   assert.equal(await page.locator(':focus').getAttribute('name'),'name');assert.equal(await page.getByRole('alert').count(),0);
