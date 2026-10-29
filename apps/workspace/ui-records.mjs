@@ -49,16 +49,11 @@ function recordForm(record, container = main, state = view) {
       if (["clientId", "projectId"].includes(input.name)) input.disabled = true;
     }
   }
-  if (page === "tasks" && !record && state.taskDraft) {
+  const draft = page === "tasks" ? state.taskDraft : page === "notes" ? state.documentDraft : state.recordDraft;
+  if (!record && draft) {
     for (const input of form.elements) {
-      if (input.type === "checkbox") input.checked = Boolean(state.taskDraft[input.name]);
-      else if (input.name in state.taskDraft) input.value = state.taskDraft[input.name];
-    }
-  }
-  if (page === "notes" && !record && state.documentDraft) {
-    for (const input of form.elements) {
-      if (input.type === "checkbox") input.checked = Boolean(state.documentDraft[input.name]);
-      else if (input.name in state.documentDraft) input.value = state.documentDraft[input.name];
+      if (input.type === "checkbox") input.checked = Boolean(draft[input.name]);
+      else if (input.name in draft) input.value = draft[input.name];
     }
   }
   if (!record && state.projectId) projectField(form.elements.projectId, state.projectId);
@@ -90,6 +85,7 @@ function recordForm(record, container = main, state = view) {
         state.discardDocumentDraft = true;
         state.documentOptions = { q: "", projectId: body.projectId, parentId: body.parentId || "root", includeArchived: false };
       }
+      if (!record) { state.recordDraft = null; state.discardRecordDraft = true; }
       if (!record && container.tagName === "DIALOG") container.close();
       await refresh(state, true);
     } catch (err) {

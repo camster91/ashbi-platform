@@ -1,3 +1,4 @@
+import {openCreate,writeDraft,draftTitle} from './browser-draft-helpers.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
@@ -19,19 +20,19 @@ export async function runTaskBoardTests({browser,origin,DB,axe}){
  await test('task filters find matching work beyond the first fifty records',async t=>{
   const page=await browser.newPage();t.after(async()=>{await page.close();await DB.prepare("DELETE FROM tasks WHERE id LIKE 'filter-proof-%'").run();});
   await DB.batch(Array.from({length:55},(_,i)=>DB.prepare("INSERT INTO tasks(id,organization_id,project_id,title,status) VALUES(?,'qa-org',?,'Earlier distractor','todo')").bind('filter-proof-'+String(i).padStart(3,'0'),project.id)).concat([DB.prepare("INSERT INTO tasks(id,organization_id,project_id,title,status) VALUES('filter-proof-z','qa-org',?,'Needle late task','waiting')").bind(project.id)]));
-  await tasks(page,origin);await page.getByLabel('Name',{exact:true}).fill('Keep search draft');
+  await tasks(page,origin);await writeDraft(page,'task','Keep search draft');
   await page.getByLabel('Status filter',{exact:true}).selectOption('waiting');await page.locator('main[aria-busy]').waitFor({state:'detached'});
   await page.locator('main[aria-busy]').waitFor({state:'detached'});
   assert.equal(await page.getByRole('button',{name:'Edit Needle late task',exact:true}).count(),1);
   assert.equal(await page.getByRole('button',{name:'Load more',exact:true}).count(),0);
-  assert.equal(await page.getByLabel('Name',{exact:true}).inputValue(),'Keep search draft');
+  assert.equal(await draftTitle(page,'task'),'Keep search draft');
   await page.getByLabel('Search tasks',{exact:true}).fill('Needle');await page.getByRole('button',{name:'Search tasks',exact:true}).click();
   await page.getByRole('button',{name:'Edit Needle late task',exact:true}).waitFor();
   assert.equal(await page.getByLabel('Search tasks',{exact:true}).inputValue(),'Needle');
   await page.getByLabel('Assignee filter',{exact:true}).selectOption('unassigned');await page.locator('main[aria-busy]').waitFor({state:'detached'});await page.getByRole('button',{name:'Edit Needle late task',exact:true}).waitFor();
   await page.getByRole('button',{name:'Clear task filters',exact:true}).click();await page.getByLabel('Status filter',{exact:true}).waitFor();
   assert.equal(await page.getByLabel('Status filter',{exact:true}).inputValue(),'');assert.equal(await page.getByLabel('Search tasks',{exact:true}).inputValue(),'');
-  assert.equal(await page.getByLabel('Name',{exact:true}).inputValue(),'Keep search draft');
+  assert.equal(await draftTitle(page,'task'),'Keep search draft');
  });
  for(const pagination of [false,true])for(const failure of [false,true])await test('superseded task '+(pagination?'pagination':'filter')+' '+(failure?'failure':'success')+' preserves the current query, draft and focus',async t=>{
   const page=await browser.newPage();t.after(()=>page.close());await tasks(page,origin);
@@ -47,25 +48,25 @@ export async function runTaskBoardTests({browser,origin,DB,axe}){
   // The old request remains outstanding while a new visit obtains a different result.
   if(!pagination){await page.getByRole('link',{name:'Files',exact:true}).click();await page.getByRole('heading',{name:'Upload private file',exact:true}).waitFor();await page.getByRole('link',{name:'Tasks',exact:true}).click();await page.getByRole('button',{name:'Edit QA task revised',exact:true}).waitFor();}
   await page.getByLabel('Status filter',{exact:true}).selectOption('done');await page.locator('main[aria-busy]').waitFor({state:'detached'});await page.getByRole('button',{name:'Edit QA task revised',exact:true}).waitFor();
-  await page.getByLabel('Name',{exact:true}).fill('Current unsaved task');await page.getByLabel('Name',{exact:true}).focus();
+  await openCreate(page,'task');await page.getByLabel('Name',{exact:true}).fill('Current unsaved task');await page.getByLabel('Name',{exact:true}).focus();
   await pending.release(failure?{status:503,contentType:'application/json',body:JSON.stringify({error:'Old filter failed'})}:{json:{items:[{id:'stale-filter',title:'Stale filter result',status:'waiting'}],nextCursor:'stale-more'}});
-  assert.equal(await page.getByRole('button',{name:'Edit Stale filter result',exact:true}).count(),0);assert.equal(await page.getByRole('alert').count(),0);
+  assert.equal(await page.getByRole('button',{name:'Edit Stale filter result',exact:true,includeHidden:true}).count(),0);assert.equal(await page.getByRole('alert').count(),0);
   assert.equal(await page.getByLabel('Status filter',{exact:true}).inputValue(),'done');assert.equal(await page.getByLabel('Name',{exact:true}).inputValue(),'Current unsaved task');
   assert.equal(await page.locator(':focus').getAttribute('name'),'title');assert.equal(await page.locator('main').getAttribute('aria-busy'),null);
  });
  await test('current task search failure retries the same filter and retains the create draft',async t=>{
-  const page=await browser.newPage();t.after(()=>page.close());await tasks(page,origin);await page.getByLabel('Name',{exact:true}).fill('Retry draft');
+  const page=await browser.newPage();t.after(()=>page.close());await tasks(page,origin);await writeDraft(page,'task','Retry draft');
   await page.route('**/api/tasks?q=retry-proof',route=>route.fulfill({status:503,json:{error:'Search unavailable'}}),{times:1});
   await page.getByLabel('Search tasks',{exact:true}).fill('retry-proof');await page.getByRole('button',{name:'Search tasks',exact:true}).click();await page.getByRole('alert').waitFor();
   const retry=page.waitForRequest('**/api/tasks?q=retry-proof');await page.getByRole('button',{name:'Try again',exact:true}).click();await retry;await page.getByLabel('Search tasks',{exact:true}).waitFor();
-  assert.equal(await page.getByLabel('Search tasks',{exact:true}).inputValue(),'retry-proof');assert.equal(await page.getByLabel('Name',{exact:true}).inputValue(),'Retry draft');assert.equal(await page.getByRole('alert').count(),0);
+  assert.equal(await page.getByLabel('Search tasks',{exact:true}).inputValue(),'retry-proof');assert.equal(await draftTitle(page,'task'),'Retry draft');assert.equal(await page.getByRole('alert').count(),0);
  });
  await test('#691 List/Board and filters use the same records and retain the create draft',async t=>{
   const page=await browser.newPage();t.after(()=>page.close());await tasks(page,origin);
   assert.equal(await page.getByRole('button',{name:'List',exact:true}).getAttribute('aria-pressed'),'true');
-  await page.getByLabel('Name',{exact:true}).fill('Keep unsaved task');
+  await writeDraft(page,'task','Keep unsaved task');
   await page.getByRole('button',{name:'Board',exact:true}).click();
-  assert.equal(await page.getByLabel('Name',{exact:true}).inputValue(),'Keep unsaved task');
+  assert.equal(await draftTitle(page,'task'),'Keep unsaved task');
   const board=page.getByRole('region',{name:'Tasks board',exact:true});
   assert.equal(await board.getByRole('region',{name:'To do',exact:true}).getByText('QA other project',{exact:true}).count(),1);
   assert.equal(await board.getByRole('region',{name:'In progress',exact:true}).getByText(reviewTitle,{exact:true}).count(),1);
@@ -81,7 +82,7 @@ export async function runTaskBoardTests({browser,origin,DB,axe}){
   await page.getByLabel('Project filter',{exact:true}).selectOption('');await page.locator('main[aria-busy]').waitFor({state:'detached'});await page.getByLabel('Status filter',{exact:true}).selectOption('');await page.locator('main[aria-busy]').waitFor({state:'detached'});await page.getByLabel('Assignee filter',{exact:true}).selectOption('');await page.locator('main[aria-busy]').waitFor({state:'detached'});
   assert.equal(await board.locator('article').count(),3);
   await page.getByRole('button',{name:'List',exact:true}).click();assert.equal(await page.getByRole('region',{name:'Tasks list',exact:true}).locator('article').count(),3);
-  assert.equal(await page.getByLabel('Name',{exact:true}).inputValue(),'Keep unsaved task');
+  assert.equal(await draftTitle(page,'task'),'Keep unsaved task');
  });
  await test('#691 filtered pages retain their query and Board survives Load more',async t=>{
   const page=await browser.newPage();t.after(()=>page.close());

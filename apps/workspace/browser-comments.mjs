@@ -1,19 +1,20 @@
+import {openRecordMenu} from './browser-draft-helpers.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
 import {hold} from './browser-regressions.mjs';
 
 const title='QA task revised',literal='<script>window.unwantedCommentScript=true</script> Synthetic internal note';
-async function open(page,origin){await page.goto(origin+'/#tasks');await page.getByRole('button',{name:'Comments for '+title,exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByRole('region',{name:'Task comments',exact:true}).locator('[aria-busy]').waitFor({state:'detached'});await dialog.getByText('Loading comments…',{exact:true}).waitFor({state:'detached'});return dialog;}
+async function open(page,origin){await page.goto(origin+'/#tasks');await openRecordMenu(page,title);await page.getByRole('button',{name:'Comments for '+title,exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByRole('region',{name:'Task comments',exact:true}).locator('[aria-busy]').waitFor({state:'detached'});await dialog.getByText('Loading comments…',{exact:true}).waitFor({state:'detached'});return dialog;}
 async function post(dialog,content,shared=false){await dialog.getByLabel('Comment',{exact:true}).fill(content);if(shared)await dialog.getByLabel('Share with client',{exact:true}).check();await dialog.getByRole('button',{name:'Post comment',exact:true}).click();await dialog.getByText(content,{exact:true}).waitFor();}
 export async function runCommentTests({browser,origin,DB,axe,addActor}){
  const task=await DB.prepare('SELECT * FROM tasks WHERE title=?').bind(title).first(),project=await DB.prepare('SELECT * FROM projects WHERE id=?').bind(task.project_id).first();
  await addActor('qa-second','qa-second@example.invalid','staff',null);await addActor('qa-client','qa-client@example.invalid','client',project.client_id);
  await test('#691 staff comments persist as literal text with internal/share choices and keyboard focus',async t=>{
-  const page=await browser.newPage();t.after(()=>page.close());await page.goto(origin+'/#tasks');const opener=page.getByRole('button',{name:'Comments for '+title,exact:true});await opener.focus();await page.keyboard.press('Enter');
+  const page=await browser.newPage();t.after(()=>page.close());await page.goto(origin+'/#tasks');await openRecordMenu(page,title);const opener=page.getByRole('button',{name:'Comments for '+title,exact:true});await opener.focus();await page.keyboard.press('Enter');
   const dialog=page.getByRole('dialog');await dialog.getByText('No comments yet.',{exact:true}).waitFor();await post(dialog,literal);assert.equal(await page.evaluate(()=>window.unwantedCommentScript),undefined);
   await post(dialog,'Synthetic shared checkpoint',true);assert.equal(await dialog.getByLabel('Share with client',{exact:true}).isChecked(),false);
-  await page.keyboard.press('Escape');await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Comments for QA task revised');assert.equal(await page.getByRole('dialog').count(),0);
+  await page.keyboard.press('Escape');await page.locator('dialog').waitFor({state:'detached'});assert.equal(await page.locator(':focus').getAttribute('aria-label'),'Comments for QA task revised');
   const reloaded=await open(page,origin);assert.equal(await reloaded.getByText(literal,{exact:true}).count(),1);assert.equal(await reloaded.getByText('Synthetic shared checkpoint',{exact:true}).count(),1);
   const records=(await DB.prepare('SELECT * FROM task_comments WHERE task_id=? ORDER BY created_at,id').bind(task.id).all()).results;assert.equal(records.length,2);assert.equal(records.find(r=>r.content===literal).client_visible,0);assert.equal(records.find(r=>r.content==='Synthetic shared checkpoint').client_visible,1);
  });
@@ -44,7 +45,7 @@ export async function runCommentTests({browser,origin,DB,axe,addActor}){
   await dialog.getByRole('button',{name:'Load older comments',exact:true}).click();await dialog.getByRole('button',{name:'Load older comments',exact:true}).waitFor({state:'detached'});assert.equal(await dialog.locator('article').count(),total);assert.equal(await dialog.getByLabel('Comment',{exact:true}).inputValue(),'Keep reply draft');
  });
  await test('#691 a current thread load failure can retry while preserving the reply draft',async t=>{
-  const page=await browser.newPage();t.after(()=>page.close());await page.goto(origin+'/#tasks');
+  const page=await browser.newPage();t.after(()=>page.close());await page.goto(origin+'/#tasks');await openRecordMenu(page,title);
   await page.route('**/api/tasks/*/comments',route=>route.fulfill({status:503,json:{error:'Synthetic thread unavailable'}}),{times:1});
   await page.getByRole('button',{name:'Comments for '+title,exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByRole('alert').waitFor();
   assert.equal(await dialog.getByRole('alert').textContent(),'Synthetic thread unavailable');await dialog.getByLabel('Comment',{exact:true}).fill('Keep current retry draft');
@@ -58,7 +59,7 @@ export async function runCommentTests({browser,origin,DB,axe,addActor}){
   assert.equal(await dialog.locator('article').count(),50);assert.equal(await dialog.getByText('Stale older comment',{exact:true}).count(),0);assert.equal(await dialog.getByLabel('Comment',{exact:true}).inputValue(),'New paging draft');assert.equal(await page.getByRole('alert').count(),0);assert.equal(await page.locator(':focus').getAttribute('name'),'content');
  });
  for(const failure of [false,true])await test('#704 closed comment request '+(failure?'failure':'success')+' cannot affect a reopened dialog',async t=>{
-  const page=await browser.newPage();t.after(()=>page.close());await page.goto(origin+'/#tasks');const delayed=await hold(page,'**/api/tasks/*/comments');
+  const page=await browser.newPage();t.after(()=>page.close());await page.goto(origin+'/#tasks');await openRecordMenu(page,title);const delayed=await hold(page,'**/api/tasks/*/comments');
   await page.getByRole('button',{name:'Comments for '+title,exact:true}).click();await delayed.entered;await page.keyboard.press('Escape');await page.getByRole('dialog').waitFor({state:'detached'});
   await page.getByRole('button',{name:'Comments for '+title,exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByText('Newest comments first.',{exact:true}).waitFor();await dialog.getByLabel('Comment',{exact:true}).fill('New dialog draft');
   await delayed.release(failure?{status:503,json:{error:'Stale comment error'}}:{json:{items:[{id:'stale',actor_id:'qa',content:'Stale comment',created_at:0,client_visible:0}],nextCursor:null}});
@@ -78,6 +79,6 @@ export async function runCommentTests({browser,origin,DB,axe,addActor}){
    const issues=await page.evaluate(async()=>{const r=await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}});return r.violations.map(v=>v.id);});assert.deepEqual(issues,[]);
    if(process.env.WORKSPACE_TEST_OUTPUT_DIR)await page.screenshot({path:join(process.env.WORKSPACE_TEST_OUTPUT_DIR,'task-comments-'+width+'.png')});
   }
-  await page.keyboard.press('Escape');await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Comments for QA task revised');assert.equal(await page.getByRole('dialog').count(),0);
+  await page.keyboard.press('Escape');await page.locator('dialog').waitFor({state:'detached'});assert.equal(await page.locator(':focus').getAttribute('aria-label'),'Comments for QA task revised');
  });
 }

@@ -79,7 +79,7 @@ Daily priorities apply the existing server-side task/review/invoice filters and 
 
 ## Compact lists
 
-Create records through the page’s Add action and a labeled native dialog. Preserve drafts on cancellation where the existing workflow supports them. Keep common actions visible; put less frequent actions in a native disclosure menu with a record-specific accessible name.
+Create records through the page’s Add action and a labeled native dialog. Retain client, project, task and document drafts in memory when their creation dialog is cancelled. A successful save clears that draft. This does not promise persistence across a browser reload or navigation to another page. Keep common actions visible; put less frequent actions in a native disclosure menu with a record-specific accessible name.
 
 Client, project and task lists use `.compact-record`: aligned identity, status, details and actions above 1100px, stacked content below. Render through `compactRecord` to retain the same authorized actions as `recordItem`. Resolve parent and assignee names from already-loaded authorized choices; preserve source identifiers when a name is unavailable. Boards, dialogs and project overviews continue to use the ordinary record presentation. Never truncate essential names or reduce control targets to create density.
 

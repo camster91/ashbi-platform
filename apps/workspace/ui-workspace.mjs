@@ -14,8 +14,9 @@ export const workspaceUiScript=String.raw`
  }
  navigationToggle.onclick=openNavigation;document.querySelector('#navigation-close').onclick=()=>closeNavigation();document.querySelector('#navigation-backdrop').onclick=()=>closeNavigation();
  navigation.addEventListener('click',e=>{if(e.target.closest('a[href]'))closeNavigation(false);});
- document.addEventListener('click',e=>{for(const menu of document.querySelectorAll('.record-menu[open]'))if(!menu.contains(e.target))menu.open=false;});
+ document.addEventListener('click',e=>{if(e.target.closest('dialog'))return;for(const menu of document.querySelectorAll('.record-menu[open]'))if(!menu.contains(e.target))menu.open=false;});
  document.addEventListener('keydown',e=>{
+  if(e.target.closest('dialog'))return;
   if(e.key==='Escape'){const menu=document.activeElement.closest('.record-menu[open]');if(menu){menu.open=false;menu.querySelector('summary').focus();}}
   if(!document.body.classList.contains('navigation-open'))return;
   if(e.key==='Escape'){e.preventDefault();closeNavigation();return;}
@@ -35,9 +36,17 @@ export const workspaceUiScript=String.raw`
  }
  function createRecord(state,opener){
   if(!current(state))return;
+  state.discardRecordDraft=false;
   const dialog=node('dialog');dialog.className='record-dialog';dialog.setAttribute('aria-label','Add '+recordKinds[state.page]);
   const {actions}=recordForm(undefined,dialog,state);actions.append(button('Cancel',()=>dialog.close(),true,state));
-  dialog.addEventListener('close',()=>{captureTaskDraft(state);captureDocumentDraft(state);dialog.remove();if(current(state)&&opener?.isConnected)opener.focus();},{once:true});
+  dialog.addEventListener('close',()=>{
+   if(['clients','projects'].includes(state.page)&&!state.discardRecordDraft){
+    const form=dialog.querySelector('form');state.recordDraft=Object.fromEntries(new FormData(form));
+    for(const input of form.querySelectorAll('input[type=checkbox]'))state.recordDraft[input.name]=input.checked;
+   }
+   captureTaskDraft(state);captureDocumentDraft(state);dialog.remove();
+   if(current(state)&&opener?.isConnected)opener.focus();
+  },{once:true});
   main.append(dialog);dialog.showModal();dialog.querySelector('input,select,textarea')?.focus();
  }
 `;

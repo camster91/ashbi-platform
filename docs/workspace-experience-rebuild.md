@@ -45,3 +45,18 @@ Focused local verification uses isolated fabricated D1 data and the Chromium 120
 - Build and whitespace checks passed. Desktop and phone screenshots were inspected with synthetic records.
 
 This is an implementation checkpoint, not release approval. The interrupted broad source run is inconclusive; the full browser/release suite has not passed on this branch. Remaining work includes adapting task-board/document draft tests to contextual dialogs, exercising the remaining financial/recovery suites, and finishing the wider workflow refinement. Keep #784 open and production unchanged until those gates and the owner walkthrough are complete.
+
+## Drafts and core workflow verification — 28 October 2026
+
+Client/project creation now preserves cancelled drafts in the current page, matching task/document creation, and clears them after a successful save. Shared form restoration replaces duplicated loops. Modal interactions preserve the originating action menu; the search button has an explicit accessible name independent of its decorative shortcut.
+
+Updated the existing task-board, document-tree, comment, timer and financial stale-response tests to use contextual dialogs and visible action menus. Tests still verify real stored revisions, tenant/client visibility, history, retries, lost acknowledgements, draft values, keyboard focus and responsive accessibility; none of those protections were removed.
+
+Verification:
+
+- Complete source suite from the package's configured test list, with `--test-concurrency=2`: **576 passed**, zero failures/cancellations.
+- `WORKSPACE_BROWSER_GROUP=core npm run test:browser`: **154 passed**, zero failures/cancellations, against the rebuilt Worker with matching Chromium 1208.
+- Final focused task/document/auth draft checks: **34 passed**. The core run also includes those checks.
+- Build and `git diff --check`: passed. Temporary local harnesses removed.
+
+Next: remaining browser groups (commerce, contracts/Overview, delivery, overview_parts, journey), compiled financial/recovery release checks, remaining visual refinement and owner walkthrough. #785 remains a draft; neither production release nor full rebuild acceptance is claimed.

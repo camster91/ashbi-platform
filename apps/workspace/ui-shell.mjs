@@ -42,7 +42,7 @@ export const html=`<!doctype html>
  <header class="app-header">
   <button type="button" id="navigation-toggle" class="secondary" aria-label="Open navigation" aria-controls="workspace-navigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
   <div class="workspace-breadcrumb"><span>Ashbi Studio</span><span aria-hidden="true">/</span><strong id="current-location">Overview</strong></div>
-  <button type="button" id="workspace-search" class="secondary" aria-keyshortcuts="Control+k Meta+k"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><span>Search workspace</span><kbd>⌘ K</kbd></button>
+  <button type="button" id="workspace-search" class="secondary" aria-label="Search workspace" aria-keyshortcuts="Control+k Meta+k"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><span>Search workspace</span><kbd aria-hidden="true">⌘ K</kbd></button>
   <a class="sign-out" href="/cdn-cgi/access/logout">Sign out</a>
  </header>
  <div class="shell">
