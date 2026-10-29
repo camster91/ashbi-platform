@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare} from 'miniflare';
 import {generateKeyPair,SignJWT} from 'jose';
-import {createWorker} from './worker.mjs';
+const {createWorker}=await import(process.env.WORKSPACE_TEST_BUILT_WORKER?'./dist/worker.js':'./worker.mjs');
 const origin='https://files.example.invalid',issuer='https://identity.cloudflareaccess.com';
 test('private files use real local D1/R2 and preserve original bytes',async t=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'files'},r2Buckets:['FILES'],cf:false});t.after(()=>mf.dispose());
@@ -59,10 +59,29 @@ test('private files use real local D1/R2 and preserve original bytes',async t=>{
   const pending=await DB.prepare("SELECT id FROM files WHERE state='pending'").first();assert.ok(pending);assert.equal((await call('/api/files/'+pending.id+'/download')).status,404);assert.ok(!(await (await call('/api/files?includeDeleted=true')).json()).items.some(x=>x.id===pending.id));
  });
  await t.test('ready-transition failure retains the original while pending metadata stays hidden',async()=>{
-  const failedEnv={...env,DB:{prepare(sql){if(sql.startsWith("UPDATE files SET state='ready'"))return {bind(){return {run:async()=>{throw Error('synthetic finalization failure');}};}};return DB.prepare(sql);}}};
+  const failedEnv={...env,DB:{prepare(sql){if(sql.startsWith("UPDATE files SET state='ready'"))return {bind(){return {first:async()=>{throw Error('synthetic finalization failure');}};}};return DB.prepare(sql);}}};
   const r=await call('/api/files','staff','POST',new Uint8Array([7,8]),{'content-type':'application/octet-stream','x-project-id':'p','x-file-name':'finalization.txt','x-client-visible':'true'},failedEnv);assert.equal(r.status,500);
   const row=await DB.prepare("SELECT * FROM files WHERE name='finalization.txt'").first();assert.equal(row.state,'pending');const original=await FILES.get(row.object_key);assert.deepEqual(new Uint8Array(await original.arrayBuffer()),new Uint8Array([7,8]));
   for(const actor of ['staff','client']){assert.equal((await call('/api/files/'+row.id+'/download',actor)).status,404);assert.ok(!(await (await call('/api/files',actor)).json()).items.some(x=>x.id===row.id));}
+ });
+ await t.test('client uploads require staff opt-in and current project ownership through publication',async()=>{
+  const setting=(value,actor='staff')=>call('/api/projects/p',actor,'PATCH',JSON.stringify({revision:0,clientUploads:value}),{'content-type':'application/json'});
+  assert.equal((await setting(true,'client')).status,403);
+  assert.equal((await setting(true)).status,200);
+  assert.equal((await upload('other')).status,403);assert.equal((await upload('foreign')).status,404);
+  assert.equal((await upload('client',{'x-client-visible':'false'})).status,400);
+  const uploaded=await upload('client');assert.equal(uploaded.status,201);const row=await uploaded.json();
+  assert.equal(row.client_visible,1);assert.equal((await call('/api/files/'+row.id+'/download','client')).status,200);assert.equal((await call('/api/files/'+row.id+'/download','other')).status,404);
+  assert.equal((await call('/api/files/'+row.id,'client','PATCH',JSON.stringify({revision:0,deleted:true}),{'content-type':'application/json'})).status,403);
+  for(const condition of ['client_uploads=0','client_visible=0','archived=1']){
+   await DB.prepare('UPDATE projects SET '+condition+" WHERE id='p'").run();assert.equal((await upload('client')).status,403);
+   await DB.prepare("UPDATE projects SET client_uploads=1,client_visible=1,archived=0 WHERE id='p'").run();
+  }
+  const revoked={...env,FILES:{async put(...args){const stored=await FILES.put(...args);await DB.prepare("UPDATE projects SET client_uploads=0 WHERE id='p'").run();return stored;}}};
+  const result=await call('/api/files','client','POST',new Uint8Array([1]),{'content-type':'application/octet-stream','x-project-id':'p','x-file-name':'revoked-upload.txt','x-client-visible':'true'},revoked);assert.equal(result.status,403);
+  const pending=await DB.prepare("SELECT * FROM files WHERE name='revoked-upload.txt'").first();assert.equal(pending.state,'pending');assert.equal((await call('/api/files/'+pending.id+'/download')).status,404);
+  // Leave other pagination fixtures unchanged while retaining this test's private original.
+  await DB.prepare('UPDATE files SET deleted=1 WHERE id=?').bind(row.id).run();
  });
  await t.test('file lists paginate without duplication and reject client trash access',async()=>{
   const template=await DB.prepare('SELECT * FROM files WHERE id=?').bind(file.id).first();

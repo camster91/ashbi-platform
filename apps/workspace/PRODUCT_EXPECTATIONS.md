@@ -18,6 +18,16 @@ The Tasks page now offers Assigned to me for staff and explicit named saved view
 
 Preferences stay on the current browser/origin, keyed by actor ID and project ID; they are not team-shared or synchronized. They may contain the user's view names/search text and opaque record IDs. Saving is explicit and explained before storage. Limits are 20 views per context, 60-character names and bounded validated preference records. Duplicate names, unavailable/full storage and malformed stored data produce visible errors. No credentials or task bodies are stored. Browser data clearing removes the views.
 
+## Controlled client uploads
+
+Staff can now enable **Allow client uploads** when adding or editing a project. Migration `0029.sql` adds a default-off flag. Clients can upload only to their own shared, non-archived projects with this setting enabled. Client uploads are shared with the team and authorized contacts for that client; deletion, restoration and sharing changes remain staff controls.
+
+Active identity, organization, role, client ownership, sharing, archive status and opt-in are checked before upload and atomically before publication after storage. A revoked upload remains pending and unavailable. The 5 MiB stream limit, safe filenames, private originals, checksum verification, attachment-only downloads and Origin checks remain enforced. Disabling uploads prevents new submissions without unsharing existing files.
+
+Verified locally: source file API 13/13; combined compiled-file/native-auth/record API 58/58; core browser 156/156; compiled recovery 46/46. A separate two-session browser walkthrough verified staff opt-in, client upload, staff access and mobile rendering. The new browser journey checks byte-exact retrieval, revocation and WCAG 2.2 AA rules at 390/768/1440px. The final build adds explanatory text beside the setting; the final local walkthrough exercised that build.
+
+Production is unchanged. Apply the additive migration through the established backup/release procedure before deploying this bundle. Existing projects remain opted out until staff enables them. Antivirus scanning, automatic upload deduplication, client notifications and project messaging remain separate readiness gaps. Check Files before retrying an upload with a lost acknowledgement.
+
 ## Validation and release status
 
 Implementation is local on `agent/784-saved-task-views`. Production remains the October 29 deployment. Automated/browser results are recorded after execution; this document does not establish hosted acceptance, full accessibility conformance, competitor parity or completion of the other gaps above.
