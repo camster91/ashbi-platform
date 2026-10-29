@@ -60,3 +60,27 @@ Verification:
 - Build and `git diff --check`: passed. Temporary local harnesses removed.
 
 Next: remaining browser groups (commerce, contracts/Overview, delivery, overview_parts, journey), compiled financial/recovery release checks, remaining visual refinement and owner walkthrough. #785 remains a draft; neither production release nor full rebuild acceptance is claimed.
+
+## Financial journey and release verification — 28 October 2026
+
+Existing browser checks now select the focused Overview view and explicitly open contextual creation dialogs. Financial, tenant-isolation, stale-response, recovery and keyboard assertions remain intact. The view helper waits for loading only when switching views, so a deliberately held request cannot block a newer filter in race tests. Independent review tightened the owner assertion to verify the current user and assigned state together; its final focused check passed.
+
+All six browser groups passed against the unchanged compiled Worker:
+
+| Group | Passed |
+| --- | ---: |
+| Core | 154 |
+| Commerce | 227 |
+| Contracts and Overview | 138 |
+| Delivery | 24 |
+| Installment Overview | 16 |
+| Integrated journey | 3 |
+| Total | 562 |
+
+Every group completed with zero failures/cancellations. The journey covers synthetic shared work, approved time, proposal approval, contract signing/PDF, split billing and payment reconciliation. Compiled API contracts passed **414/414**, compiled installment/delivery contracts **91/91**, and compiled D1/R2 recovery **46/46**. Source installment and recovery verification remains pending at this checkpoint; the earlier complete configured source suite passed **576/576**.
+
+Native authentication/browser checks passed **6/6**. The phone Overview capture now verifies pressed state and panel visibility while switching views, then removes pointer/focus and transition capture artifacts; the final focused capture rerun passed **1/1** and the refreshed image was visually inspected. Navigation screenshot names describe actor roles; all three deliberately show Files. These capture findings did not require a product change.
+
+The checked artifact SHA-256 is `cc8f8a18af45538968c036ab04e5026810eb594197d090ec3044cbaec212287b`. No product source or generated artifact changed during this verification pass. The repository secret-check command and `git diff --check` passed; the changed test code was also reviewed for sensitive values. Temporary harnesses were removed. Interrupted and superseded runs are not counted as passes.
+
+PR #785 remains a draft. CI on the pushed checkpoint, owner walkthrough, production deployment and target-environment acceptance are separate and remain outstanding. Production is unchanged.
