@@ -8,7 +8,7 @@ test('notification reads stay personal, scoped and exact across retries and new 
  const staff={id:'hub-staff',email:'staff@example.invalid',organizationId:'hub-org',role:'ADMIN'},client={id:'hub-client',email:'client@example.invalid',organizationId:'hub-org',role:'CLIENT'};
  const as=user=>f.sessions.set(f.cookie,user);
  const call=(path,body)=>f.call('/api/'+path,{method:body?'POST':'GET',body,cookie:f.cookie});
- const add=async(id,project='p',actor='native-staff')=>f.DB.prepare('INSERT INTO project_messages VALUES(?,?,?,?,?,?,?)').bind(id,'qa',project,actor,crypto.randomUUID(),'Literal <b>notification</b> '+id,1).run();
+ const add=async(id,project='p',actor='native-staff')=>f.DB.prepare('INSERT INTO project_messages(id,organization_id,project_id,actor_id,request_id,content,created_at) VALUES(?,?,?,?,?,?,?)').bind(id,'qa',project,actor,crypto.randomUUID(),'Literal <b>notification</b> '+id,1).run();
  const count=async()=> (await (await call('notifications/summary')).json()).unreadCount;
  const mark=ids=>call('notifications/read',{messageIds:ids});
  await add('one');await add('foreign','other');await add('own','p','native-client');

@@ -26,7 +26,7 @@ test('project conversations preserve scope, retry identity, pagination and curre
   try{assert.equal((await call('POST',{content:'must not publish',requestId:crypto.randomUUID()})).status,404);assert.equal(revoked,true);assert.equal(await original.prepare("SELECT id FROM project_messages WHERE content='must not publish'").first(),null);}finally{f.env.DB=original;await original.prepare("UPDATE projects SET client_visible=1 WHERE id='conversation'").run();as(staff);}
  });
  await t.test('stable paging and strict input handling keep original history',async()=>{
-  for(let i=0;i<55;i++)await f.DB.prepare("INSERT INTO project_messages VALUES(?,'qa','conversation','native-staff',?,'Page item',1)").bind('page-'+String(i).padStart(3,'0'),crypto.randomUUID()).run();
+  for(let i=0;i<55;i++)await f.DB.prepare("INSERT INTO project_messages(id,organization_id,project_id,actor_id,request_id,content,created_at) VALUES(?,'qa','conversation','native-staff',?,'Page item',1)").bind('page-'+String(i).padStart(3,'0'),crypto.randomUUID()).run();
   const first=await (await call()).json(),second=await (await call('GET',undefined,'conversation/messages?after='+first.nextCursor)).json();assert.equal(first.items.length,50);assert.equal(second.items.length,7);assert.equal(new Set([...first.items,...second.items].map(r=>r.id)).size,57);assert.equal(second.nextCursor,null);
   for(const invalid of [{content:'',requestId},{content:'x',requestId:'invalid'},{content:'x'.repeat(10001),requestId},{...body,actorId:'native-client'}])assert.equal((await call('POST',invalid)).status,400);
   assert.equal((await call('GET',undefined,'conversation/messages?after=1:a&after=1:b')).status,400);assert.equal((await call('DELETE')).status,405);
