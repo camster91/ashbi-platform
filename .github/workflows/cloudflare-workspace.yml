@@ -16,8 +16,8 @@ permissions:
   contents: read
 
 jobs:
-  api:
-    name: Signed identity and compiled Worker contracts
+  api_source:
+    name: Signed identity and source Worker contracts
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
@@ -39,6 +39,28 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Exercise signed identity and local persistence
         run: npm test
+
+  api:
+    name: Signed identity and compiled Worker contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CI: true
+      WRANGLER_SEND_METRICS: 'false'
+    defaults:
+      run:
+        working-directory: apps/workspace
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+          cache: npm
+          cache-dependency-path: apps/workspace/package-lock.json
+      - name: Install locked workspace dependencies
+        run: npm ci --no-audit --no-fund
       - name: Build without publishing
         run: npm run build
       - name: Exercise compiled invoice persistence and financial contracts
@@ -147,15 +169,16 @@ jobs:
 
   workspace:
     name: Local Worker and D1 integration
-    needs: [api, api_parts, browser, recovery]
+    needs: [api_source, api, api_parts, browser, recovery]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 1
     steps:
       - name: Require API, installment, browser and recovery validation to succeed
         env:
+          SOURCE_RESULT: ${{ needs.api_source.result }}
           API_RESULT: ${{ needs.api.result }}
           PARTS_RESULT: ${{ needs.api_parts.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
           RECOVERY_RESULT: ${{ needs.recovery.result }}
-        run: '[[ "$API_RESULT" == success && "$PARTS_RESULT" == success && "$BROWSER_RESULT" == success && "$RECOVERY_RESULT" == success ]]'
+        run: '[[ "$SOURCE_RESULT" == success && "$API_RESULT" == success && "$PARTS_RESULT" == success && "$BROWSER_RESULT" == success && "$RECOVERY_RESULT" == success ]]'

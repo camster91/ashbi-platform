@@ -1,3 +1,6 @@
+import {emailNotificationRoute,drainNotificationEmails} from './notification-email.mjs';
+import {pushNotificationRoute,drainNotificationPush} from './notification-push.mjs';
+import {pushServiceWorker} from './push-service-worker.mjs';
 import {inboxRoute} from './inbox.mjs';
 import {notificationsRoute} from './notifications.mjs';
 import {projectMessagesRoute} from './project-messages.mjs';
@@ -29,7 +32,7 @@ import {sourceHistoryRoute} from './source-pilot.mjs';
 import { stripeWebhook, stripeLifecycleRoute, drainStripeEvents } from './stripe-lifecycle.mjs';
 import { stripePartLifecycleRoute } from './stripe-part-lifecycle.mjs';
 const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','Strict-Transport-Security':'max-age=31536000'};
-const contentPolicy="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+const contentPolicy="default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 const pageResponse=(body,type='text/html')=>new Response(body,{headers:{...security,'Content-Type':type+'; charset=utf-8','Content-Security-Policy':contentPolicy}});
 export const json=(value,status=200)=>Response.json(value,{status,headers:security});
 export async function readBody(request){
@@ -41,9 +44,10 @@ export async function readBody(request){
  let input;try{input=JSON.parse(new TextDecoder().decode(bytes));}catch{throw 400;}
  if(!input||typeof input!=='object'||Array.isArray(input))throw 400;return input;
 }
-export function createWorker(resolveKey,providers={}){return {async scheduled(event,env,ctx){await drainStripeEvents(env,providers.stripeFetch,ctx);},async fetch(request,env,ctx){try{
+export function createWorker(resolveKey,providers={}){return {async scheduled(event,env,ctx){const jobs=await Promise.allSettled([drainStripeEvents(env,providers.stripeFetch,ctx),drainNotificationEmails(env,providers.emailSend),drainNotificationPush(env,providers.pushSend)]);if(jobs.some(job=>job.status==='rejected'))throw Error('Scheduled work could not be completed');},async fetch(request,env,ctx){try{
  const url=new URL(request.url),nativeAuth=env.AUTH_MODE==='hub';
  if(url.origin!==env.APP_ORIGIN){if(nativeAuth&&url.origin==='https://ashbi-workspace.camster915391.workers.dev'&&request.method==='GET'&&url.pathname==='/')return new Response(null,{status:308,headers:{...security,Location:env.APP_ORIGIN+'/'}});throw 404;}
+ if(url.pathname==='/notifications-sw.js'&&request.method==='GET')return pageResponse(pushServiceWorker,'application/javascript');
  if(url.pathname==='/health')return json({status:'ok',release:env.RELEASE||'unversioned'});
  if(['GET','HEAD'].includes(request.method)&&url.pathname.startsWith('/brand/')){const bytes=brandAsset(url.pathname);if(!bytes)throw 404;return new Response(request.method==='HEAD'?null:bytes,{headers:{...security,'Content-Type':'image/png','Content-Length':String(bytes.byteLength),'Cache-Control':'public, max-age=31536000, immutable'}});}
  if(url.pathname==='/api/stripe/webhook')return await stripeWebhook(request,env,json,providers.stripeFetch,ctx);
@@ -75,6 +79,8 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  if(!['GET','HEAD'].includes(request.method)&&request.headers.get('origin')!==url.origin)throw 403;
  const history=url.pathname.match(/^\/api\/notes\/([a-zA-Z0-9-]{1,100})\/versions(?:\/(\d{1,16})(\/restore)?)?$/);
  if(history)return await documentHistory(request,env.DB,actor,history[1],history[2],Boolean(history[3]),readBody,json);
+ if(url.pathname==='/api/inbox/email')return await emailNotificationRoute(request,env,actor,readBody,json);
+ if(['/api/inbox/push','/api/inbox/push/check'].includes(url.pathname))return await pushNotificationRoute(request,env.DB,actor,env,readBody,json);
  if(['/api/inbox','/api/inbox/summary','/api/inbox/read','/api/inbox/preferences'].includes(url.pathname))return await inboxRoute(request,env.DB,actor,readBody,json);
  if(['/api/notifications','/api/notifications/summary','/api/notifications/read'].includes(url.pathname))return await notificationsRoute(request,env.DB,actor,readBody,json);
  const messages=url.pathname.match(/^\/api\/projects\/([a-zA-Z0-9-]{1,100})\/(?:messages|message-recipients)$/);

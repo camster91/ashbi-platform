@@ -1,7 +1,8 @@
+import {cleanupPushBrowserScript} from './push-browser-cleanup.mjs';
 import {brandLogo} from './ui-brand-assets.generated.mjs';
 import {cleanupBrowserScript} from './legacy-browser-cleanup.mjs';
 export const loginHtml=`<!doctype html><html lang="en-CA"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Sign in — Ashbi</title><link rel="stylesheet" href="/app.css"><script defer src="/login.js"></script></head><body class="auth-page"><main id="main" class="auth-card"><a class="brand" href="/login" aria-label="Ashbi sign in"><img src="${brandLogo}" alt="Ashbi" width="930" height="330"></a><h1 tabindex="-1">Sign in</h1><p id="auth-intro">Use your existing Ashbi account.</p><div id="auth-message" role="status" aria-live="polite"></div><div id="auth-form"></div><p><a href="/login" id="auth-back">Back to sign in</a></p></main></body></html>`;
-export const loginScript=cleanupBrowserScript+String.raw`
+export const loginScript=cleanupBrowserScript+cleanupPushBrowserScript+String.raw`
 const root=document.querySelector('#auth-form'),heading=document.querySelector('h1'),message=document.querySelector('#auth-message'),intro=document.querySelector('#auth-intro');
 let challenge='',resetToken=new URL(location.href).searchParams.get('token')||'';
 if(resetToken)history.replaceState(null,'',location.pathname);
