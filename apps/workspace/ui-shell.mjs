@@ -55,8 +55,8 @@ export const html=`<!doctype html>
   </nav>
   <button type="button" id="navigation-backdrop" aria-label="Close navigation" hidden></button>
   <div class="workspace-content">
-   <section id="active-timer" aria-label="Active timer" hidden>
-    <div class="row"><p id="timer-summary" aria-live="polite" aria-atomic="true">Checking active timer…</p><div class="timer-actions"><button type="button" id="stop-active-timer" hidden>Stop active timer</button><button type="button" id="refresh-active-timer" class="secondary">Refresh timer</button><a class="button secondary" href="#time">Open time tracking</a></div></div>
+   <section id="active-timer" aria-label="Active timer" data-state="idle" hidden>
+    <div class="row"><p id="timer-summary" aria-live="polite" aria-atomic="true">Checking active timer…</p><div class="timer-actions"><button type="button" id="stop-active-timer" hidden>Stop active timer</button><details id="timer-menu" class="timer-menu"><summary aria-label="Timer options"><span aria-hidden="true">⋯</span></summary><button type="button" id="refresh-active-timer" class="secondary">Refresh timer</button></details><a id="time-tracking-link" class="button secondary" href="#time" aria-label="Open time tracking">Time tracking</a></div></div>
    </section>
    <main id="main" tabindex="-1"><h1>Opening your workspace</h1><p role="status">Checking access…</p></main>
   </div>

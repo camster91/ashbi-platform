@@ -44,16 +44,16 @@ Use the 4, 8, 12, 16, 24, 32, 48px spacing scale. Controls have 8px corners; pan
 
 - `.panel`: contained work area; `.item`: individual record with a dividing rule; `.row`: wrapping title/action row.
 - `.stats` / `.stat`: responsive metric cards; `.badge`: compact supplementary status. Status must also have a text label.
-- `button` / `.button`: primary action; `.secondary`: supporting action. Links retain link semantics. Disabled controls remain visibly disabled; pressed controls use indigo and `aria-pressed`.
+- `button` / `.button`: lime primary action with a quiet border; `.secondary`: supporting action on a neutral surface. Links retain link semantics. Disabled controls remain visibly disabled; pressed controls use indigo and `aria-pressed`.
 - `.record-actions` / `.form-actions`: wrapping action rows with consistent 8px gaps. Keep metadata outside action groups. Edit controls use a compact visible label and retain the full record name in their accessible name. Save and Cancel share a form action row; Cancel remains `type="button"`.
-- Native labeled fields: at least 44px tall; 16px input text on phones prevents focus zoom. Do not replace labels with placeholders. Checkboxes retain native semantics.
+- Native labeled fields: 38px on desktop and at least 44px on phones; 16px input text on phones prevents focus zoom. Do not replace labels with placeholders. Checkboxes retain native semantics.
 - `.notice`, `.error`, `.help`: explanatory, failure and supporting content. Live-region behavior belongs to the workflow; color alone never communicates failure.
 - Native `dialog`: contained scroll, dimmed backdrop and consistent padding. Preserve keyboard containment, Escape handling and return focus.
 - Navigation: visible text plus decorative SVGs. `aria-current` identifies the active route. `[hidden]` always removes unauthorized/unavailable content from layout.
 
 ## Responsive and accessible behavior
 
-Below 768px navigation becomes a 264px drawer and content uses 16px side padding. The drawer makes background content inert, contains keyboard focus and returns focus to its opener on dismissal. Desktop navigation uses a persistent 224px sidebar. Filters become one column below 900px; task boards below 1100px. Metric cards use two columns below 900px. Content must wrap without widening the viewport at 390, 768 and 1440px; check long record names and error messages as well as empty states.
+Below 768px navigation becomes a 264px drawer and content uses 16px side padding. The drawer makes background content inert, contains keyboard focus and returns focus to its opener on dismissal. Desktop navigation uses a persistent 224px sidebar. Filters use two columns on phones where space permits, with search and long checkbox labels spanning the row; task boards stack below 1100px. Metric cards use two columns below 900px. Content must wrap without widening the viewport at 390, 768 and 1440px; check long record names and error messages as well as empty states.
 
 Route changes close the mobile drawer; resizing to desktop restores normal navigation. Never scroll the document just to reveal a navigation item. Task/project labels use the shared readable names; keep API and stored status values unchanged, and preserve unknown source values as text.
 
@@ -94,3 +94,12 @@ The header search button and Control/Command+K open a native modal. Search names
 ## Account access
 
 Native authentication uses the shared type, color, control and focus tokens in a centered responsive card. Password, MFA, enrollment and recovery states have explicit headings, labels and live status/error messages. Render secrets only in their intended password/enrollment controls; never persist them in browser storage. Session expiry returns to sign-in, while logout must confirm revocation before navigating away.
+
+
+## Control hierarchy and progressive disclosure
+
+Use 38px desktop controls and 44px mobile form/action targets; the compact timer strip retains a distinct small utility treatment. Keep visible field labels and 16px mobile input text. Avoid making every action a prominent outlined button. Main actions use lime; supporting actions use a neutral surface; selected states and focus remain explicit.
+
+Overview puts the work queue first. Filters are a labeled native disclosure beside each feed heading, with an active count and Reset filters. The filter state remains intact while collapsed. Daily priorities use a compact row that scrolls horizontally on phones; keyboard focus must bring each control into view. Feed panels own their inner spacing, with no doubled outer panel padding.
+
+Task filters and saved views expand by default on desktop and collapse initially on phones. Explicit expansion state survives same-page filtering. List/Board and Assigned to me remain visible. The inactive timer presents a compact utility link and an options disclosure; running and unavailable states expose the appropriate stop/recovery controls. These presentation choices never change stored task states, financial workflow confirmations or access rules.

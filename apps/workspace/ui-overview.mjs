@@ -19,13 +19,13 @@ export const overviewUiScript=String.raw`
   const totals=node('section');totals.setAttribute('aria-label','Workspace totals');totals.append(node('h2','Workspace totals'));const stats=node('div',undefined,'stats');totals.append(stats);root.append(totals);
   function control(text,action){const b=node('button',text,'secondary');b.type='button';b.onclick=()=>{if(alive())action(b);};return b;}
   const denied=e=>[401,403].includes(e.status)||e.message==='Session ended. Sign out and sign in again.';
-  const ownedFocus=(opener,serial,target)=>{if(opener&&alive()&&overviewFocusSerial===serial&&document.activeElement===document.body&&target?.isConnected&&!target.hidden&&!target.disabled)target.focus();};
+  const ownedFocus=(opener,serial,target)=>{if(opener&&alive()&&overviewFocusSerial===serial&&document.activeElement===document.body&&target?.isConnected&&!target.hidden&&!target.disabled){const disclosure=target.closest('details');if(disclosure&&!disclosure.open)disclosure.open=true;target.focus();}};
   function options(select,entries,empty){const old=select.value;select.replaceChildren();for(const [value,label]of [['',empty],...entries]){const option=node('option',label);option.value=value;select.append(option);}select.value=[...select.options].some(o=>o.value===old)?old:'';return old!==select.value;}
   function updateMetadata(type,rows){
    if(type==='staff'){for(const row of rows)staffNames.set(row.id,row.name);controllers.tasks?.draw?.();}
    for(const c of Object.values(controllers)){let changed=false;
     for(const [key,select]of Object.entries(c.selects)){if(type==='clients'&&key==='clientId')changed=options(select,rows.map(r=>[r.id,r.name]),'All clients')||changed;if(type==='projects'&&key==='projectId')changed=options(select,rows.map(r=>[r.id,r.name]),'All projects')||changed;if(type==='staff'&&key==='owner')changed=options(select,[['mine','Mine'],['unassigned','Unassigned'],...rows.map(r=>[r.id,r.name])],'All owners')||changed;}
-    if(changed){for(const [key,select]of Object.entries(c.selects))c.values[key]=select.value;c.load(false);}
+    if(changed){for(const [key,select]of Object.entries(c.selects))c.values[key]=select.value;c.updateFilters?.();c.load(false);}else c.updateFilters?.();
    }
   }
   async function counted(type,card,number,feedback,attempt){
@@ -41,12 +41,16 @@ export const overviewUiScript=String.raw`
   if(actor.role==='staff'){const exportButton=control('Download data export',async()=>{exportButton.disabled=true;try{const data=await api('export');if(!alive())return;const link=node('a');link.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));link.download='ashbi-workspace-export.json';link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);}catch(e){if(alive()){if(denied(e))denyOverview(state);else error(e.message,totals);}}finally{if(alive())exportButton.disabled=false;}});totals.append(exportButton);}
   totals.append(node('p','The export contains application records; it is not a complete identity or file backup.','help'));
   function makeSection(kind,label,title,definitions){
-   const panel=node('section',undefined,'panel');panels[kind]=panel;panel.setAttribute('aria-label',label);panel.append(node('h2',title));root.append(panel);
+   const panel=node('section',undefined,'panel');panels[kind]=panel;panel.dataset.overviewFeed=kind;panel.setAttribute('aria-label',label);const heading=node('h2',title),sectionToolbar=node('div',undefined,'overview-section-toolbar');sectionToolbar.dataset.overviewSectionToolbar='';sectionToolbar.append(heading);panel.append(sectionToolbar);root.append(panel);
    if(kind!=='tasks'&&actor.role==='staff'&&!actor.features.finance){panel.append(node('p','Financial access is not available for this account.','notice'));return;}
-   const filters=node('div',undefined,'task-toolbar'),summary=node('div'),feedback=node('div'),list=node('div'),footer=node('div',undefined,'row');
+   const filters=node('div',undefined,'task-toolbar'),summary=node('div'),feedback=node('div'),list=node('div'),footer=node('div',undefined,'row');filters.dataset.overviewFilterControls='';list.dataset.overviewList='';if(kind==='tasks')list.dataset.overviewTaskList='';
+   const filterDetails=node('details',undefined,'overview-filters'),filterTrigger=node('summary',undefined,'overview-filters-summary'),filterTitle=node('span','Filters'),filterCount=node('span',undefined,'overview-filter-count');filterDetails.dataset.overviewFilters='';filterTrigger.append(filterTitle,filterCount);filterDetails.append(filterTrigger);
    panel.classList.add('overview-feed');const c={kind,panel,selects:{},defaults:Object.fromEntries(definitions.map(([key,,entries])=>[key,entries[0][0]])),values:preferences[kind],epoch:0,rows:[],cursor:null,pending:null};controllers[kind]=c;operations.push(c);
-   for(const [key,label,entries]of definitions){const field=node('label',label),select=node('select');select.setAttribute('aria-label',label);for(const [value,text]of entries){const option=node('option',text);option.value=value;select.append(option);}if(c.values[key]&&!entries.some(e=>e[0]===c.values[key])){const prior=node('option','Previously selected (checking access)');prior.value=c.values[key];select.append(prior);}select.value=c.values[key]??entries[0][0];c.values[key]=select.value;select.onchange=()=>{if(!alive())return;c.values[key]=select.value;c.load(false);};field.append(select);filters.append(field);c.selects[key]=select;}
-   c.refresh=control('Refresh '+kind,b=>c.load(false,b));c.more=control('Load more '+kind,b=>c.load(true,b));c.more.hidden=true;footer.append(c.refresh,c.more);panel.append(filters,summary,feedback,list,footer);
+   let resetFilters;
+   c.updateFilters=()=>{const active=definitions.reduce((count,[key])=>count+(c.values[key]!==c.defaults[key]?1:0),0),selected=definitions.filter(([key])=>c.values[key]!==c.defaults[key]).map(([key,label])=>label+': '+(c.selects[key]?.selectedOptions?.[0]?.textContent||c.values[key]));filterCount.textContent=active?active+' active':'None applied';filterCount.dataset.activeCount=String(active);filterDetails.dataset.activeCount=String(active);filterDetails.dataset.filterSummary=selected.join(', ');if(resetFilters)resetFilters.disabled=active===0;};
+   for(const [key,label,entries]of definitions){const field=node('label',label),select=node('select');select.setAttribute('aria-label',label);for(const [value,text]of entries){const option=node('option',text);option.value=value;select.append(option);}if(c.values[key]&&!entries.some(e=>e[0]===c.values[key])){const prior=node('option','Previously selected (checking access)');prior.value=c.values[key];select.append(prior);}select.value=c.values[key]??entries[0][0];c.values[key]=select.value;select.onchange=()=>{if(!alive())return;c.values[key]=select.value;c.updateFilters();c.load(false);};field.append(select);filters.append(field);c.selects[key]=select;}
+   resetFilters=control('Reset filters',b=>{for(const [key]of definitions){c.values[key]=c.defaults[key];if(c.selects[key])c.selects[key].value=c.defaults[key];}c.updateFilters();c.load(false,b);});resetFilters.dataset.overviewFilterReset='';const filterContent=node('div',undefined,'overview-filters-content');filterContent.append(filters,resetFilters);filterDetails.append(filterContent);sectionToolbar.append(filterDetails);
+   c.refresh=control('Refresh '+kind,b=>c.load(false,b));c.more=control('Load more '+kind,b=>c.load(true,b));c.more.hidden=true;footer.append(c.refresh,c.more);panel.append(summary,feedback,list,footer);c.updateFilters();
    if(kind==='reviews')panel.append(node('p','Review expiry is separate from task due dates. Individual owners are not recorded; team responsibility follows the latest review round.','help'));
    if(kind==='invoices')panel.append(node('p','Saved invoice observations may be out of date. Opening this page does not refresh Stripe. Totals cover all matching saved outstanding invoices, separately per currency.','help'));
    function draw(){
@@ -95,7 +99,7 @@ export const overviewUiScript=String.raw`
    const c=controllers[kind];if(!c)return;
    const action=control(title,()=>{
     for(const [key,value]of Object.entries({...c.defaults,...values})){c.values[key]=value;if(c.selects[key])c.selects[key].value=value;}
-    c.load();selectOverview(kind);const heading=c.panel.querySelector('h2');heading.tabIndex=-1;heading.focus();
+    c.updateFilters?.();c.load();selectOverview(kind);const heading=c.panel.querySelector('h2');heading.tabIndex=-1;heading.focus();
    });
    action.classList.add('priority-action');action.setAttribute('aria-label',title);action.title=description;action.replaceChildren(node('strong',title));priorityActions.append(action);
   }
