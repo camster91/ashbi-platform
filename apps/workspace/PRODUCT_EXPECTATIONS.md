@@ -100,7 +100,7 @@ Local implementation; no schema or provider changes. Production remains PR #789 
 
 ## Opt-in external notification delivery (#792)
 
-Local implementation adds email preferences and browser subscription controls in Inbox, bounded scheduled delivery jobs, generic notification content and durable delivery receipts. Email uses Resend idempotency within a conservative retry window. Push uses real VAPID/Web Push encryption, explicit browser permission, scoped subscription revocation and server-side permission checks immediately before display. Unknown push outcomes are retained rather than blindly retried. Neither channel is activated by default.
+Local implementation adds email preferences and browser subscription controls in Inbox, bounded scheduled delivery jobs, generic notification content and durable delivery receipts. Email uses the Cloudflare Email Service Workers binding within a conservative retry window; because the binding has no application idempotency key, unknown email outcomes are retained as uncertain rather than blindly retried. Push uses real VAPID/Web Push encryption, explicit browser permission, scoped subscription revocation and server-side permission checks immediately before display. Unknown push outcomes are retained rather than blindly retried. Neither channel is activated by default.
 
 Additive migrations `0034.sql` and `0035.sql` are required for release. See [notification delivery](NOTIFICATION_DELIVERY.md) for configuration, recoverability, limits and real-provider acceptance. The new compiled route tests and browser journeys use synthetic accounts; provider-backed sending and signed-in production acceptance remain outstanding.
 

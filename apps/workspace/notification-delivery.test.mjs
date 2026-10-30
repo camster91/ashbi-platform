@@ -31,7 +31,7 @@ test('routed delivery settings default off, stay tenant-scoped and reject unauth
 });
 
 test('scheduled delivery stays side-effect free when providers are not configured',async t=>{
- const calls=[];const providers={emailFetch:()=>{calls.push('email');throw Error('email provider must stay disabled');},pushSend:()=>{calls.push('push');throw Error('push provider must stay disabled');},stripeFetch:()=>{calls.push('stripe');throw Error('stripe provider must stay idle');}};
+ const calls=[];const providers={emailSend:()=>{calls.push('email');throw Error('email provider must stay disabled');},pushSend:()=>{calls.push('push');throw Error('push provider must stay disabled');},stripeFetch:()=>{calls.push('stripe');throw Error('stripe provider must stay idle');}};
  const f=await hubAuthFixture((resolveKey,fixtureProviders)=>createWorker(resolveKey,{...fixtureProviders,...providers}));t.after(()=>f.close());
  const before=await Promise.all([f.DB.prepare('SELECT COUNT(*) n FROM notification_email_deliveries').first(),f.DB.prepare('SELECT COUNT(*) n FROM push_delivery_events').first()]);
  await f.worker.scheduled({},f.env,{});assert.deepEqual(calls,[]);
@@ -39,15 +39,15 @@ test('scheduled delivery stays side-effect free when providers are not configure
 });
 
 test('scheduled delivery accepts one new unread item per opted-in channel and stays idempotent',async t=>{
- const emailCalls=[],pushCalls=[];const providers={emailFetch:async(url,options)=>{emailCalls.push({url,options});return Response.json({id:'email-acceptance-1'});},pushSend:async request=>{pushCalls.push(request);return {status:201};}};
+ const emailCalls=[],pushCalls=[];const providers={emailSend:async message=>{emailCalls.push(message);return {messageId:'email-acceptance-1'};},pushSend:async request=>{pushCalls.push(request);return {status:201};}};
  const f=await hubAuthFixture((resolveKey,fixtureProviders)=>createWorker(resolveKey,{...fixtureProviders,...providers}));t.after(()=>f.close());f.login();
- Object.assign(f.env,await pushConfig(),{EMAIL_NOTIFICATIONS_ENABLED:'true',RESEND_API_KEY:'synthetic-resend-key',EMAIL_FROM:'Ashbi <notifications@example.invalid>'});
+ Object.assign(f.env,await pushConfig(),{EMAIL_NOTIFICATIONS_ENABLED:'true',EMAIL_FROM:'Ashbi <notifications@example.invalid>'});
  const emailOptIn=await f.call('/api/inbox/email',{method:'PUT',cookie:f.cookie,body:{email:true}});assert.equal(emailOptIn.status,200,await emailOptIn.clone().text());
  const pushOptIn=await f.call('/api/inbox/push',{method:'POST',cookie:f.cookie,body:subscription});assert.equal(pushOptIn.status,201,await pushOptIn.clone().text());
  await f.DB.prepare("INSERT INTO projects(id,organization_id,client_id,name,client_visible) VALUES('scheduled-project','qa','own','Scheduled project',1)").run();
  const createdAt=Date.now();await f.DB.prepare("INSERT INTO project_messages(id,organization_id,project_id,actor_id,request_id,content,created_at) VALUES('scheduled-message','qa','scheduled-project','native-client','scheduled-request','Synthetic unread activity',?)").bind(createdAt).run();
  await f.worker.scheduled({},f.env,{});assert.equal(emailCalls.length,1);assert.equal(pushCalls.length,1);
- assert.equal(emailCalls[0].url,'https://api.resend.com/emails');assert.deepEqual(JSON.parse(emailCalls[0].options.body).to,['staff@example.invalid']);assert.doesNotMatch(emailCalls[0].options.body,/Synthetic unread activity/);
+ assert.deepEqual(emailCalls[0].to,'staff@example.invalid');assert.deepEqual(emailCalls[0].from,{email:'notifications@example.invalid',name:'Ashbi'});assert.doesNotMatch(JSON.stringify(emailCalls[0]),/Synthetic unread activity/);
  assert.equal(pushCalls[0].actor.id,'native-staff');assert.equal(pushCalls[0].payload.body,'You have a new message.');assert.doesNotMatch(JSON.stringify(pushCalls[0].payload),/Synthetic unread activity/);
  const emailRow=await f.DB.prepare("SELECT status,provider_id FROM notification_email_deliveries WHERE organization_id='qa' AND actor_id='native-staff' AND item_id='scheduled-message'").first();assert.deepEqual(emailRow,{status:'ACCEPTED',provider_id:'email-acceptance-1'});
  const pushRow=await f.DB.prepare("SELECT state FROM push_delivery_events WHERE organization_id='qa' AND actor_id='native-staff' AND event_key='message:scheduled-message'").first();assert.deepEqual(pushRow,{state:'sent'});
@@ -56,5 +56,5 @@ test('scheduled delivery accepts one new unread item per opted-in channel and st
 
 test('notifications service worker is public but private by default',async t=>{
  const f=await hubAuthFixture(routedWorker);t.after(()=>f.close());
- const response=await f.worker.fetch(new Request(f.env.APP_ORIGIN+'/notifications-sw.js'),f.env);assert.equal(response.status,200);assert.match(response.headers.get('content-type'),/^application\/javascript/);assert.equal(response.headers.get('cache-control'),'no-store');assert.match(response.headers.get('content-security-policy'),/default-src 'none'/);const body=await response.text();assert.match(body,/showNotification/);assert.doesNotMatch(body,/PUSH_VAPID_PRIVATE_KEY|RESEND_API_KEY|p256dh/);
+ const response=await f.worker.fetch(new Request(f.env.APP_ORIGIN+'/notifications-sw.js'),f.env);assert.equal(response.status,200);assert.match(response.headers.get('content-type'),/^application\/javascript/);assert.equal(response.headers.get('cache-control'),'no-store');assert.match(response.headers.get('content-security-policy'),/default-src 'none'/);const body=await response.text();assert.match(body,/showNotification/);assert.doesNotMatch(body,/PUSH_VAPID_PRIVATE_KEY|EMAIL_FROM|p256dh/);
 });

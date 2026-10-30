@@ -16,14 +16,14 @@ Activation requires an operator's explicit release decision, verified sender/dom
 
 | Channel | Required settings |
 | --- | --- |
-| Email | `EMAIL_NOTIFICATIONS_ENABLED=true`, `RESEND_API_KEY`, `EMAIL_FROM`, canonical HTTPS `APP_ORIGIN` |
+| Email | `EMAIL_NOTIFICATIONS_ENABLED=true`, Cloudflare `EMAIL` `send_email` binding, `EMAIL_FROM`, canonical HTTPS `APP_ORIGIN` |
 | Browser push | `PUSH_NOTIFICATIONS_ENABLED=true`, `PUSH_VAPID_PUBLIC_KEY`, `PUSH_VAPID_PRIVATE_KEY`, `PUSH_VAPID_SUBJECT` |
 
 VAPID public key is the base64url encoding of an uncompressed 65-byte P-256 key; private key is the base64url 32-byte scalar. Subject is an operator contact URI. Preserve this key pair across deployments; changing it requires browser subscriptions to be renewed. Use the default push-service endpoint allowlist; custom endpoints are for an explicitly reviewed test/infrastructure configuration.
 
 The existing Worker scheduled handler runs the bounded delivery drains independently of HTTP requests. A reviewed Cron Trigger (for example every five minutes) is required for active delivery. This increment does not change the hosted schedule. Confirm the existing Stripe scheduled drain is included in the scheduling review. Provider flags must stay false/absent until activation. Disable the flag to stop sending while keeping account preferences and receipts; users can still revoke browser subscriptions when the provider is disabled.
 
-Email uses Resend's idempotency key for retries within a bounded window; an ambiguous request is not reported as delivered. Provider acceptance does not prove mailbox delivery. Push services do not offer equivalent application idempotency: unknown outcomes are retained as uncertain and are not blindly resent. A revoked/gone push endpoint is removed. Exact retry and queue limits are enforced in the transport modules; do not extend them without revisiting provider guarantees.
+Email uses Cloudflare Email Service's structured Workers binding (`env.EMAIL.send`) with a generic text-only payload. The binding returns a Cloudflare `messageId`, but does not provide an application idempotency key; explicit known transient errors may retry within the bounded window, while timeouts, missing IDs, unknown errors and expired claims remain terminal `UNCERTAIN` and are never blindly resent. Provider acceptance is not mailbox delivery. Push services likewise retain unknown outcomes as uncertain. A revoked/gone push endpoint is removed. Exact retry and queue limits are enforced in the transport modules; do not extend them without revisiting provider guarantees.
 
 ## Storage, recovery and release
 
@@ -37,4 +37,4 @@ Source and compiled route checks cover default-off behavior, origin/authenticati
 
 Before activation: verify a provider-backed email to an explicitly approved test recipient; subscribe an approved real browser, verify generic payload and same-account display, revoke it and confirm suppression; record sender authentication and provider identifiers privately. Run the Stripe sandbox checklist in `READINESS_VERIFICATION.md` separately. No live payments, emails, pushes or authenticated production acceptance are established by local tests.
 
-References: [Resend idempotency](https://resend.com/docs/dashboard/emails/idempotency-keys), [Web Push encryption (RFC 8291)](https://www.rfc-editor.org/rfc/rfc8291), [VAPID (RFC 8292)](https://www.rfc-editor.org/rfc/rfc8292), [PushManager subscription](https://developer.mozilla.org/en-US/docs/Web/API/PushManager/subscribe).
+References: [Cloudflare Email Sending Workers API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/), [Cloudflare send bindings](https://developers.cloudflare.com/email-service/configuration/send-bindings/), [Web Push encryption (RFC 8291)](https://www.rfc-editor.org/rfc/rfc8291), [VAPID (RFC 8292)](https://www.rfc-editor.org/rfc/rfc8292), [PushManager subscription](https://developer.mozilla.org/en-US/docs/Web/API/PushManager/subscribe).

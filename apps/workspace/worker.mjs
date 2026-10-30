@@ -44,7 +44,7 @@ export async function readBody(request){
  let input;try{input=JSON.parse(new TextDecoder().decode(bytes));}catch{throw 400;}
  if(!input||typeof input!=='object'||Array.isArray(input))throw 400;return input;
 }
-export function createWorker(resolveKey,providers={}){return {async scheduled(event,env,ctx){const jobs=await Promise.allSettled([drainStripeEvents(env,providers.stripeFetch,ctx),drainNotificationEmails(env,providers.emailFetch),drainNotificationPush(env,providers.pushSend)]);if(jobs.some(job=>job.status==='rejected'))throw Error('Scheduled work could not be completed');},async fetch(request,env,ctx){try{
+export function createWorker(resolveKey,providers={}){return {async scheduled(event,env,ctx){const jobs=await Promise.allSettled([drainStripeEvents(env,providers.stripeFetch,ctx),drainNotificationEmails(env,providers.emailSend),drainNotificationPush(env,providers.pushSend)]);if(jobs.some(job=>job.status==='rejected'))throw Error('Scheduled work could not be completed');},async fetch(request,env,ctx){try{
  const url=new URL(request.url),nativeAuth=env.AUTH_MODE==='hub';
  if(url.origin!==env.APP_ORIGIN){if(nativeAuth&&url.origin==='https://ashbi-workspace.camster915391.workers.dev'&&request.method==='GET'&&url.pathname==='/')return new Response(null,{status:308,headers:{...security,Location:env.APP_ORIGIN+'/'}});throw 404;}
  if(url.pathname==='/notifications-sw.js'&&request.method==='GET')return pageResponse(pushServiceWorker,'application/javascript');

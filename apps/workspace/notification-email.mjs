@@ -2,6 +2,13 @@ import {feed} from './inbox.mjs';
 
 const MAX_PER_RUN=50,PER_ACTOR_MAX=10,MAX_ATTEMPTS=4,LEASE_MS=120000,RETRY_BASE_MS=60000,RETRY_MAX_MS=6*60*60*1000,EVENT_TTL_MS=24*60*60*1000,RETRY_TTL_MS=23*60*60*1000,PROVIDER_TIMEOUT_MS=10000;
 const kinds=new Set(['message','assignment','deadline','upload']);
+const transientProviderCodes=new Map([['E_RATE_LIMIT_EXCEEDED','rate_limit'],['E_DAILY_LIMIT_EXCEEDED','daily_limit'],['E_DELIVERY_FAILED','delivery_failed'],['E_INTERNAL_SERVER_ERROR','provider_internal']]);
+const terminalProviderCodes=new Map([
+ ['E_VALIDATION_ERROR','validation_error'],['E_FIELD_MISSING','field_missing'],['E_TOO_MANY_RECIPIENTS','too_many_recipients'],['E_TOO_MANY_ATTACHMENTS','too_many_attachments'],
+ ['E_SENDER_NOT_VERIFIED','sender_not_verified'],['E_RECIPIENT_NOT_ALLOWED','recipient_not_allowed'],['E_RECIPIENT_SUPPRESSED','recipient_suppressed'],['E_ACCOUNT_SUSPENDED','account_suspended'],
+ ['E_SENDER_DOMAIN_NOT_AVAILABLE','sender_domain_unavailable'],['E_CONTENT_TOO_LARGE','content_too_large'],['E_HEADER_NOT_ALLOWED','header_not_allowed'],['E_HEADER_USE_API_FIELD','header_use_api_field'],
+ ['E_HEADER_VALUE_INVALID','header_value_invalid'],['E_HEADER_VALUE_TOO_LONG','header_value_too_long'],['E_HEADER_NAME_INVALID','header_name_invalid'],['E_HEADERS_TOO_LARGE','headers_too_large'],['E_HEADERS_TOO_MANY','headers_too_many']
+]);
 
 function enabled(env){return env?.EMAIL_NOTIFICATIONS_ENABLED==='true';}
 function canonicalOrigin(value){
@@ -14,23 +21,20 @@ function canonicalOrigin(value){
   return url.origin;
  }catch{return null;}
 }
-function configured(env){return enabled(env)&&typeof env.RESEND_API_KEY==='string'&&env.RESEND_API_KEY.length>0&&typeof env.EMAIL_FROM==='string'&&env.EMAIL_FROM.length>0&&Boolean(canonicalOrigin(env.APP_ORIGIN));}
 function boundedEmail(value){return typeof value==='string'&&value.length>0&&value.length<=320&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);}
+function parseSender(value){
+ if(typeof value!=='string'||value.length>320)return null;
+ const trimmed=value.trim(),named=trimmed.match(/^([^<>\r\n]{1,200})\s*<([^<>\s]+)>$/);
+ if(named&&boundedEmail(named[2]))return {email:named[2],name:named[1].trim()||undefined};
+ return boundedEmail(trimmed)?{email:trimmed}:null;
+}
+function configured(env,sendOverride){return enabled(env)&&Boolean(parseSender(env.EMAIL_FROM))&&Boolean(canonicalOrigin(env.APP_ORIGIN))&&(typeof sendOverride==='function'||typeof env?.EMAIL?.send==='function');}
 function genericMessage(env){
  const origin=canonicalOrigin(env?.APP_ORIGIN);
  return {subject:'New activity in your Ashbi Inbox',text:`You have new activity in your Ashbi Inbox. Open Ashbi to review it${origin?`: ${origin}/#inbox`:'.'}.`};
 }
-function responseError(response){const status=Number(response.status);return Number.isInteger(status)&&status>=400&&status<=599?`http_${status}`:'provider_error';}
 function nowMs(clock){return typeof clock==='function'?clock():Date.now();}
 function retryAt(now,attempts){return now+Math.min(RETRY_MAX_MS,RETRY_BASE_MS*2**Math.max(0,attempts-1));}
-async function boundedJsonBody(response){
- if(!response.body)return {};
- const length=Number(response.headers.get('content-length'));if(Number.isFinite(length)&&length>8192){try{await response.body.cancel();}catch{}const error=new Error('provider_body_too_large');error.providerCode='provider_body_too_large';throw error;}
- const reader=response.body.getReader(),chunks=[];let size=0;
- for(;;){const part=await reader.read();if(part.done)break;size+=part.value.byteLength;if(size>8192){await reader.cancel();const error=new Error('provider_body_too_large');error.providerCode='provider_body_too_large';throw error;}chunks.push(part.value);}
- const bytes=new Uint8Array(size);let offset=0;for(const part of chunks){bytes.set(part,offset);offset+=part.byteLength;}
- try{return JSON.parse(new TextDecoder().decode(bytes));}catch{return {};}
-}
 function snapshot(env,actor){return {recipientEmail:actor.email,sender:env.EMAIL_FROM,payloadFingerprint:`v1|${env.APP_ORIGIN||''}`};}
 async function idempotencyKey(actor,row){
  const raw=`inbox/${actor.organization_id}/${actor.id}/${row.kind}/${row.id}`;
@@ -41,7 +45,7 @@ async function idempotencyKey(actor,row){
 
 async function candidatesFor(db,actor,limit=500,now=Date.now()){
  const {sql,args}=feed(actor);
- const rows=await db.prepare(sql+"SELECT kind,id,project_name,created_at,unread FROM candidates WHERE unread=1 AND NOT EXISTS (SELECT 1 FROM notification_email_deliveries d WHERE d.organization_id=? AND d.actor_id=? AND d.kind=candidates.kind AND d.item_id=candidates.id AND (d.status IN ('ACCEPTED','FAILED','DISABLED') OR d.next_attempt_at>? OR d.lease_until>?)) ORDER BY created_at DESC,kind DESC,id DESC LIMIT ?").bind(...args,actor.organization_id,actor.id,now,now,limit).all();
+ const rows=await db.prepare(sql+"SELECT kind,id,project_name,created_at,unread FROM candidates WHERE unread=1 AND NOT EXISTS (SELECT 1 FROM notification_email_deliveries d WHERE d.organization_id=? AND d.actor_id=? AND d.kind=candidates.kind AND d.item_id=candidates.id AND (d.status IN ('ACCEPTED','FAILED','DISABLED','UNCERTAIN') OR d.next_attempt_at>? OR d.lease_until>?)) ORDER BY created_at DESC,kind DESC,id DESC LIMIT ?").bind(...args,actor.organization_id,actor.id,now,now,limit).all();
  return rows.results.filter(row=>kinds.has(row.kind));
 }
 
@@ -68,37 +72,48 @@ async function createOrClaim(db,env,actor,row,now){
  const existing=await db.prepare('SELECT * FROM notification_email_deliveries WHERE organization_id=? AND actor_id=? AND kind=? AND item_id=?').bind(actor.organization_id,actor.id,row.kind,row.id).first();
  if(!existing||existing.status==='ACCEPTED'||existing.status==='FAILED'||existing.status==='DISABLED')return null;
  if(existing.recipient_email!==current.recipientEmail||existing.sender!==current.sender||existing.payload_fingerprint!==current.payloadFingerprint){await db.prepare("UPDATE notification_email_deliveries SET status='DISABLED',lease_until=0,lease_token=NULL,updated_at=?,error_code='snapshot_changed' WHERE organization_id=? AND actor_id=? AND kind=? AND item_id=? AND status IN ('PENDING','RETRY','UNCERTAIN')").bind(now,actor.organization_id,actor.id,row.kind,row.id).run();return null;}
+ if(existing.status==='PENDING'&&Number(existing.attempts)>0&&Number(existing.lease_until)>0&&Number(existing.lease_until)<=now){await db.prepare("UPDATE notification_email_deliveries SET status='UNCERTAIN',lease_until=0,lease_token=NULL,updated_at=?,error_code='lease_expired' WHERE organization_id=? AND actor_id=? AND kind=? AND item_id=? AND status='PENDING'").bind(now,actor.organization_id,actor.id,row.kind,row.id).run();return null;}
  if(now-Number(existing.created_at)>=RETRY_TTL_MS){await db.prepare("UPDATE notification_email_deliveries SET status='FAILED',lease_until=0,lease_token=NULL,updated_at=?,error_code='expired' WHERE organization_id=? AND actor_id=? AND kind=? AND item_id=? AND status IN ('PENDING','RETRY','UNCERTAIN')").bind(now,actor.organization_id,actor.id,row.kind,row.id).run();return null;}
  if(Number(existing.attempts)>=MAX_ATTEMPTS){await db.prepare("UPDATE notification_email_deliveries SET status='FAILED',lease_until=0,lease_token=NULL,updated_at=?,error_code='attempts_exhausted' WHERE organization_id=? AND actor_id=? AND kind=? AND item_id=? AND status IN ('PENDING','RETRY','UNCERTAIN')").bind(now,actor.organization_id,actor.id,row.kind,row.id).run();return null;}
  const token=crypto.randomUUID(),until=now+LEASE_MS;
- const claimed=await db.prepare("UPDATE notification_email_deliveries SET status='PENDING',attempts=attempts+1,lease_until=?,lease_token=?,last_attempt_at=?,updated_at=? WHERE organization_id=? AND actor_id=? AND kind=? AND item_id=? AND status IN ('PENDING','RETRY','UNCERTAIN') AND next_attempt_at<=? AND (lease_until=0 OR lease_until<?) AND attempts<? RETURNING *").bind(until,token,now,now,actor.organization_id,actor.id,row.kind,row.id,now,now,MAX_ATTEMPTS).first();
+ const claimed=await db.prepare("UPDATE notification_email_deliveries SET status='PENDING',attempts=attempts+1,lease_until=?,lease_token=?,last_attempt_at=?,updated_at=? WHERE organization_id=? AND actor_id=? AND kind=? AND item_id=? AND status IN ('PENDING','RETRY') AND next_attempt_at<=? AND (lease_until=0 OR lease_until<?) AND attempts<? RETURNING *").bind(until,token,now,now,actor.organization_id,actor.id,row.kind,row.id,now,now,MAX_ATTEMPTS).first();
  return claimed?.lease_token===token?claimed:null;
 }
 
-async function sendEmail(env,fetchFn,actor,delivery){
- const message=genericMessage(env),headers={'Authorization':`Bearer ${env.RESEND_API_KEY}`,'Content-Type':'application/json','Idempotency-Key':delivery.idempotency_key};
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),PROVIDER_TIMEOUT_MS);
- let response;try{response=await fetchFn('https://api.resend.com/emails',{method:'POST',headers,body:JSON.stringify({from:delivery.sender,to:[delivery.recipient_email],subject:message.subject,text:message.text}),redirect:'manual',signal:controller.signal});const body=await boundedJsonBody(response);
-  if(!response.ok){const error=responseError(response);const e=new Error(error);e.providerStatus=response.status;e.providerCode=error;throw e;}
-  if(typeof body?.id!=='string'||!/^[A-Za-z0-9._:-]{1,200}$/.test(body.id)){const e=new Error('provider_missing_id');e.providerCode='provider_missing_id';throw e;}
-  return {providerId:body.id};
- }finally{clearTimeout(timer);}
+async function sendEmail(env,sendFn,actor,delivery){
+ const message=genericMessage(env),from=parseSender(delivery.sender);
+ if(!from){const error=new Error('sender_invalid');error.providerCode='sender_invalid';throw error;}
+ let timer;
+ try{
+  const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{const error=new Error('provider_timeout');error.providerCode='provider_timeout';reject(error);},PROVIDER_TIMEOUT_MS);});
+  const result=await Promise.race([Promise.resolve().then(()=>sendFn({to:delivery.recipient_email,from,subject:message.subject,text:message.text})),timeout]);
+  if(typeof result?.messageId!=='string'||result.messageId.length<1||result.messageId.length>512||/[\u0000-\u001f\u007f]/.test(result.messageId)){const error=new Error('provider_missing_id');error.providerCode='provider_missing_id';throw error;}
+  return {providerId:result.messageId};
+ }finally{if(timer)clearTimeout(timer);}
 }
 
-async function deliverOne(env,db,fetchFn,actor,delivery,now){
+function providerFailure(error){
+ const providerCode=typeof error?.code==='string'?error.code:'';
+ if(transientProviderCodes.has(providerCode))return {status:'RETRY',code:transientProviderCodes.get(providerCode)};
+ if(terminalProviderCodes.has(providerCode))return {status:'FAILED',code:terminalProviderCodes.get(providerCode)};
+ if(error?.providerCode==='sender_invalid')return {status:'FAILED',code:'sender_invalid'};
+ if(error?.providerCode==='provider_missing_id')return {status:'UNCERTAIN',code:'provider_missing_id'};
+ return {status:'UNCERTAIN',code:error?.providerCode==='provider_timeout'?'provider_timeout':'provider_unknown'};
+}
+
+async function deliverOne(env,db,sendFn,actor,delivery,now){
  // eligibility is checked again after claiming; age uses the injected job clock.
  if(now-Number(delivery.created_at)>=RETRY_TTL_MS||!await eventEligible(db,actor,delivery,now)){
   await db.prepare("UPDATE notification_email_deliveries SET status='DISABLED',lease_until=0,lease_token=NULL,error_code='eligibility_changed',updated_at=? WHERE organization_id=? AND actor_id=? AND kind=? AND item_id=? AND lease_token=?").bind(now,actor.organization_id,actor.id,delivery.kind,delivery.item_id,delivery.lease_token).run();return 'DISABLED';
  }
  try{
-  const result=await sendEmail(env,fetchFn,actor,delivery);
+  const result=await sendEmail(env,sendFn,actor,delivery);
   await db.prepare("UPDATE notification_email_deliveries SET status='ACCEPTED',lease_until=0,lease_token=NULL,provider_id=?,error_code=NULL,updated_at=? WHERE organization_id=? AND actor_id=? AND kind=? AND item_id=? AND lease_token=?").bind(result.providerId,now,actor.organization_id,actor.id,delivery.kind,delivery.item_id,delivery.lease_token).run();
   return 'ACCEPTED';
  }catch(error){
-  const attempts=Number(delivery.attempts)||1,expired=attempts>=MAX_ATTEMPTS||now-Number(delivery.created_at)>=RETRY_TTL_MS,timeout=error?.name==='AbortError',uncertain=!error?.providerStatus;
-  const code=timeout?'network_timeout':uncertain?(['provider_missing_id','provider_body_too_large'].includes(error?.providerCode)?error.providerCode:'network_error'):(/^http_[45]\d\d$/.test(String(error?.providerCode))?error.providerCode:'provider_error');
-  await db.prepare(`UPDATE notification_email_deliveries SET status=?,next_attempt_at=?,lease_until=0,lease_token=NULL,error_code=?,updated_at=? WHERE organization_id=? AND actor_id=? AND kind=? AND item_id=? AND lease_token=?`).bind(expired?'FAILED':uncertain?'UNCERTAIN':'RETRY',expired?now:retryAt(now,attempts),code,now,actor.organization_id,actor.id,delivery.kind,delivery.item_id,delivery.lease_token).run();
-  return expired?'FAILED':uncertain?'UNCERTAIN':'RETRY';
+  const attempts=Number(delivery.attempts)||1,expired=attempts>=MAX_ATTEMPTS||now-Number(delivery.created_at)>=RETRY_TTL_MS,classified=providerFailure(error),status=expired?'FAILED':classified.status;
+  await db.prepare(`UPDATE notification_email_deliveries SET status=?,next_attempt_at=?,lease_until=0,lease_token=NULL,error_code=?,updated_at=? WHERE organization_id=? AND actor_id=? AND kind=? AND item_id=? AND lease_token=?`).bind(status,status==='RETRY'?retryAt(now,attempts):now,expired?'attempts_exhausted':classified.code,now,actor.organization_id,actor.id,delivery.kind,delivery.item_id,delivery.lease_token).run();
+  return status;
  }
 }
 
@@ -113,8 +128,8 @@ async function actorWindow(db){
 }
 
 export async function drainNotificationEmails(env,fetchOverride,clock){
- if(!configured(env)||!env?.DB)return {enabled:enabled(env),configured:false,processed:0,sent:0,retried:0,failed:0,uncertain:0};
- const fetchFn=fetchOverride||globalThis.fetch;
+ if(!configured(env,fetchOverride)||!env?.DB)return {enabled:enabled(env),configured:false,processed:0,sent:0,retried:0,failed:0,uncertain:0};
+ const sendFn=fetchOverride||env.EMAIL.send.bind(env.EMAIL);
  const actors=await actorWindow(env.DB);let lastScanned=null;
  let processed=0,sent=0,retried=0,failed=0,uncertain=0;
  for(const actor of actors){
@@ -123,7 +138,7 @@ export async function drainNotificationEmails(env,fetchOverride,clock){
   await disableStale(env.DB,actor,nowMs(clock));
   const visible=(await candidatesFor(env.DB,actor,500,nowMs(clock))).filter(row=>Number(row.created_at)>=Number(actor.email_enabled_since));
   const active=visible.slice(0,PER_ACTOR_MAX);
-  for(const row of active){if(processed>=MAX_PER_RUN)break;if(!boundedEmail(actor.email))continue;const delivery=await createOrClaim(env.DB,env,actor,row,nowMs(clock));if(!delivery)continue;processed++;const status=await deliverOne(env,env.DB,fetchFn,actor,delivery,nowMs(clock));if(status==='ACCEPTED')sent++;else if(status==='RETRY')retried++;else if(status==='UNCERTAIN')uncertain++;else failed++;}
+  for(const row of active){if(processed>=MAX_PER_RUN)break;if(!boundedEmail(actor.email))continue;const delivery=await createOrClaim(env.DB,env,actor,row,nowMs(clock));if(!delivery)continue;processed++;const status=await deliverOne(env,env.DB,sendFn,actor,delivery,nowMs(clock));if(status==='ACCEPTED')sent++;else if(status==='RETRY')retried++;else if(status==='UNCERTAIN')uncertain++;else failed++;}
  }
  if(lastScanned)await env.DB.prepare('INSERT INTO notification_email_scheduler(id,organization_id,actor_id,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET organization_id=excluded.organization_id,actor_id=excluded.actor_id,updated_at=excluded.updated_at').bind(lastScanned.organization_id,lastScanned.id,nowMs(clock)).run();
  return {enabled:true,configured:true,processed,sent,retried,failed,uncertain};
