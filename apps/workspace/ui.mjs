@@ -1,3 +1,4 @@
+import {notificationDeliveryUiScript} from './ui-notification-delivery.mjs';
 import {notificationsUiScript} from './ui-notifications.mjs';
 import {projectMessagesUiScript} from './ui-project-messages.mjs';
 import {cleanupBrowserScript} from './legacy-browser-cleanup.mjs';
@@ -120,6 +121,7 @@ ${presentationUiScript}
  const labels={inbox:'Inbox',clients:'Clients',projects:'Projects',tasks:'Tasks',notes:'Documents',time:'Time',finance:'Finance',invoices:'Invoices',commercial:'Proposals & contracts',reviews:'Proposal reviews',contracts:'Contracts',files:'Files','source-history':'Source history',overview:'Overview'};
 ${projectUiScript}
 ${projectMessagesUiScript}
+${notificationDeliveryUiScript}
 ${notificationsUiScript}
  function readRoute(){const key=location.hash,parts=key.slice(1).split('/'),project=projectRoute(parts,key);if(project)return project;const page=Object.hasOwn(labels,parts[0])?parts[0]:'overview';if(parts.length===1||page==='overview'&&parts[0]!=='overview')return {page,key};const id=value=>typeof value==='string'&&/^[a-zA-Z0-9-]{1,100}$/.test(value);if(page==='invoices'&&parts.length===4&&parts[2]==='parts'&&id(parts[1])&&id(parts[3]))return {page,key,recordId:parts[1],partId:parts[3]};const valid=parts.length===2&&['clients','notes','tasks','reviews','invoices','contracts'].includes(page)&&id(parts[1]);return {page,key,recordId:valid?parts[1]:null,linkError:!valid};}
  const route=()=>readRoute().page;
@@ -319,7 +321,7 @@ ${workspaceUiScript}
   finally{if(current(state))main.removeAttribute('aria-busy');}
  }
  if(document.body.dataset.auth==='hub'){${cleanupBrowserScript}}
- document.querySelector('#workspace-signout')?.addEventListener('click',async e=>{const control=e.currentTarget;control.disabled=true;try{await api('auth/logout','POST',{});main.replaceChildren();location.replace('/login');}catch(e){error('Sign out could not be confirmed. Try again.');control.disabled=false;}});
+ document.querySelector('#workspace-signout')?.addEventListener('click',async e=>{const control=e.currentTarget;control.disabled=true;try{try{await disableCurrentPush();}catch{/* Logout still revokes the session; the push worker checks current identity. */}await api('auth/logout','POST',{});main.replaceChildren();location.replace('/login');}catch(e){error('Sign out could not be confirmed. Try again.');control.disabled=false;}});
  document.querySelector('.skip').addEventListener('click',e=>{e.preventDefault();main.focus();});
  window.addEventListener('resize',revealCurrentNavigation);
  document.fonts.ready.then(revealCurrentNavigation);

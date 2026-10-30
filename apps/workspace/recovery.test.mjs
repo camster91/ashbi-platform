@@ -149,6 +149,11 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  const inboxTask=await data(await call('tasks',{title:'Recovery assignment',projectId:r.project.id,clientVisible:false,assigneeId:conversation.actor_id}),201);
  await data(await call('inbox/read',{items:[{kind:'assignment',id:inboxTask.assignment_token}],read:true}));
  await source.env.DB.prepare('INSERT INTO notification_preferences(organization_id,actor_id,messages,assignments,deadlines,uploads,mentions) VALUES(?,?,1,1,0,0,0)').bind(inboxTask.organization_id,conversation.actor_id).run();
+ await source.env.DB.prepare('UPDATE notification_preferences SET email=1,email_enabled_since=1 WHERE organization_id=? AND actor_id=?').bind(inboxTask.organization_id,conversation.actor_id).run();
+ await source.env.DB.prepare("INSERT INTO notification_email_deliveries(organization_id,actor_id,kind,item_id,idempotency_key,status,attempts,next_attempt_at,created_at,updated_at,recipient_email,sender,payload_fingerprint) VALUES(?,?,'assignment',?,'synthetic-recovery-email','UNCERTAIN',1,1,1,1,'recipient@example.invalid','sender@example.invalid','synthetic-fingerprint')").bind(inboxTask.organization_id,conversation.actor_id,inboxTask.assignment_token).run();
+ const pushKeys=await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveBits']),pushPublic=Buffer.from(await crypto.subtle.exportKey('raw',pushKeys.publicKey)).toString('base64url'),pushAuth=Buffer.alloc(16,7).toString('base64url');
+ await source.env.DB.prepare("INSERT INTO push_subscriptions(organization_id,actor_id,endpoint,endpoint_hash,p256dh,auth,subscribed_since,created_at,updated_at) VALUES(?,?,'https://fcm.googleapis.com/fcm/send/synthetic-recovery',?,?,?,1,1,1)").bind(inboxTask.organization_id,conversation.actor_id,'a'.repeat(64),pushPublic,pushAuth).run();
+ await source.env.DB.prepare("INSERT INTO push_delivery_events(organization_id,actor_id,endpoint,event_key,subscription_p256dh,subscription_auth,subscription_since,state,attempts,next_attempt_at,created_at,updated_at,last_error) VALUES(?,?,'https://fcm.googleapis.com/fcm/send/synthetic-recovery',?,?,?,1,'failed',1,1,1,1,'uncertain')").bind(inboxTask.organization_id,conversation.actor_id,'assignment:'+inboxTask.assignment_token,pushPublic,pushAuth).run();
  const checkpoint=join(root,'synthetic-checkpoint.json'),keyFile=join(root,'synthetic-keyring.json');
  await writeFile(checkpoint,JSON.stringify({image:await databaseImage(source.env.DB),objects:await captureObjects(source.env.FILES)}));
  // Synthetic keys are separate from database/object images. Real restore
@@ -156,7 +161,7 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  await writeFile(keyFile,JSON.stringify({active:'journey',keys:fixture.keyRing}),{mode:0o600});
  const {image,objects}=JSON.parse(await readFile(checkpoint,'utf8'));
  for(const key of Object.values(fixture.keyRing))assert.equal((await readFile(checkpoint,'utf8')).includes(key),false);
- assert.equal(Object.keys(image.tables).length,64);assert.equal(image.schema.filter(s=>s.type==='index').length,50);assert.ok(image.schema.some(s=>s.type==='index'&&s.name==='projects_archive'));assert.equal(objects.length,6);
+ assert.equal(Object.keys(image.tables).length,69);assert.equal(image.schema.filter(s=>s.type==='index').length,57);assert.ok(image.schema.some(s=>s.type==='index'&&s.name==='projects_archive'));assert.equal(objects.length,6);
  const sql=await exportDatabase(source);
  // External Stripe state is deliberately NOT restored with our D1/R2 image.
  const externalFinalize=provider.requests.findLast(p=>p.method==='POST'&&p.path==='/v1/invoices/'+externallyFinished.creation.stripeInvoiceId+'/finalize');
@@ -170,7 +175,8 @@ test('complete native D1 and private R2 recovery retains the joined workspace, e
  const DB=target.env.DB,FILES=target.env.FILES;
  const verify=async()=>assert.deepEqual(await databaseImage(DB),image,'all schema and exact table images must match trusted checkpoint');
  const putRow=async(table,row)=>{const cols=Object.keys(row);await DB.prepare('INSERT INTO "'+table+'"('+cols.map(c=>'"'+c+'"').join(',')+') VALUES('+cols.map(()=>'?').join(',')+')').bind(...cols.map(c=>row[c])).run();};
- await t.test('all 64 tables and 50 indexes match before any restored application use',verify);
+ await t.test('all 69 tables and 57 indexes match before any restored application use',verify);
+ await t.test('restored external notification receipts preserve opt-in and uncertain outcomes without sending',async()=>{const email=await data(await restored('inbox/email'));assert.equal(email.email,true);assert.equal(email.available,false);assert.equal(email.items[0].status,'UNCERTAIN');const push=await data(await restored('inbox/push'));assert.equal(push.available,false);assert.equal(push.subscriptions[0].id,'a'.repeat(64));assert.equal((await DB.prepare("SELECT last_error FROM push_delivery_events WHERE event_key=?").bind('assignment:'+inboxTask.assignment_token).first()).last_error,'uncertain');await verify();});
  await t.test('restored project messages preserve client visibility and original retry identity',async()=>{const thread=await data(await restored('projects/'+r.project.id+'/messages',undefined,'client'));assert.equal(thread.items[0].content,conversationBody.content);assert.equal(thread.items[0].unread,0);assert.equal(thread.items[0].mentioned,1);assert.equal((await data(await restored('notifications/summary',undefined,'client'))).unreadCount,0);assert.equal((await data(await restored('projects/'+r.project.id+'/messages',conversationBody))).id,conversation.id);assert.equal((await restored('projects/'+r.project.id+'/messages',undefined,'other')).status,404);await verify();});
  await t.test('restored inbox retains personal preferences and exact assignment receipts',async()=>{const prefs=await data(await restored('inbox/preferences'));assert.equal(prefs.deadlines,false);assert.equal(prefs.uploads,false);assert.equal(prefs.mentions,false);const inbox=await data(await restored('inbox?state=read'));assert.ok(inbox.items.some(row=>row.id===inboxTask.assignment_token&&row.unread===0));await verify();});
  await t.test('all paginated objects including orphans, empty data and private metadata match',()=>verifyObjects(FILES,objects));
@@ -341,7 +347,7 @@ test('native isolated recovery preserves an ingested source package, original by
  await DB.prepare("INSERT INTO projects(id,organization_id,client_id,name) VALUES('canonical-project','pilot-org','canonical-client','Site')").run();
  const objects=[];for(const[source,pins]of Object.entries(report.sourceFiles))for(const pin of pins)objects.push({source,path:pin.path,bytes:new Uint8Array(await readFile(join(fixture.root,source,pin.path)))});
  const input={requestId:crypto.randomUUID(),report,objects,snapshot:{clientRevision:0,projectRevision:0}},receipt=await applySourcePilot(source.env,actor,input),before=await readSourcePilot(source.env,actor,receipt.id),image=await databaseImage(DB),objectImage=await captureObjects(source.env.FILES);
- assert.equal(Object.keys(image.tables).length,64);assert.equal(image.schema.filter(s=>s.type==='index').length,50);assert.ok(image.schema.some(s=>s.type==='index'&&s.name==='projects_archive'));
+ assert.equal(Object.keys(image.tables).length,69);assert.equal(image.schema.filter(s=>s.type==='index').length,57);assert.ok(image.schema.some(s=>s.type==='index'&&s.name==='projects_archive'));
  assert.equal(image.tables.source_pilot_records.length,19);assert.equal(image.tables.source_pilot_objects.length,objects.length);
  const target=await importDatabase(join(root,'restored'),await exportDatabase(source));t.after(()=>target.dispose());await restoreObjects(target.env.FILES,objectImage);
  assert.deepEqual(await databaseImage(target.env.DB),image);assert.deepEqual(await readSourcePilot(target.env,actor,receipt.id),before);

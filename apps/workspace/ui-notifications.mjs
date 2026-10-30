@@ -37,7 +37,7 @@ export const notificationsUiScript=String.raw`
   form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{await api('inbox/preferences','PUT',Object.fromEntries(Object.entries(inputs).map(([k,input])=>[k,input.checked])));if(!alive())return;settingsStatus.textContent='Preferences saved.';await read(false);refreshUnread();}catch(e){if(alive())settingsStatus.textContent='Preferences could not be confirmed. Saving again is safe. '+e.message;}finally{if(alive())save.disabled=false;}};
   settings.append(button('Reload preferences',()=>loadPreferences(),true,state));
   const inboxActions=node('div');inboxActions.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:8px';inboxActions.append(refreshButton,bulk);
-  panel.append(filters,inboxActions,node('p','Marks only loaded unread notifications. New arrivals and notifications on unloaded pages stay unread.','help'),settings,feedback,status,list,more);main.append(panel);read(false);loadPreferences();
+  panel.append(filters,inboxActions,node('p','Marks only loaded unread notifications. New arrivals and notifications on unloaded pages stay unread.','help'),settings,notificationDeliverySettings(state),feedback,status,list,more);main.append(panel);read(false);loadPreferences();
  }
  window.addEventListener('focus',()=>refreshUnread());
  document.addEventListener('visibilitychange',()=>refreshUnread());
