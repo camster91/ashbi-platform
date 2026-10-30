@@ -8,6 +8,8 @@ The workspace targets https://hub.ashbi.ca using the existing Hub account/sessio
 
 See [deployment and rollback](../../docs/deployment-and-rollback.md) for the current release procedure. The source-increment sections below preserve historical implementation notes; their earlier “activation pending” statements do not describe current hosting.
 
+Optional email and browser push delivery is implemented with default-off provider flags and private per-account controls. See [notification delivery](NOTIFICATION_DELIVERY.md) and [readiness verification](READINESS_VERIFICATION.md). This local increment requires migrations `0034.sql` and `0035.sql`; provider activation and real-device acceptance are separate from code deployment.
+
 ## Local checks
 
 `npm ci`, `npm test`, `npm run build`, `npx playwright install chromium`, `npm run test:browser` from this directory. Build is a dry-run only. The default browser command runs all six CI groups in separate processes with fresh synthetic databases, one group at a time locally, with the same ten-minute per-group timeout as CI. Set `WORKSPACE_BROWSER_GROUP` to one named group for a focused check; no group is omitted from the default command. `auth.test.mjs` verifies real RSA signatures and claims; `test.mjs` runs the application handler with real local D1 through Miniflare. This is not a hosted identity/MFA login test. Legacy-mode tests inject a signing key into the exported handler factory. Native-mode contracts and browser tests inject an isolated synthetic authentication service; production always contacts the configured same-zone Hub origin. Fixture identities are never configured in the hosted Worker.

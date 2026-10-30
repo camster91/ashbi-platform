@@ -1,6 +1,6 @@
 # Professional workspace expectations
 
-Current release baseline: PR #789 deployed commit `da32a433` to hub.ashbi.ca on 29 October 2026, including migrations through 0033. Expanded Inbox, personal preferences, read history and structured mentions are live. Public release checks passed; signed-in owner acceptance remains separate. Earlier slice notes below describe their validation at implementation time.
+Current release baseline: PR #791 deployed commit `10404214` to hub.ashbi.ca on 29 October 2026, including migrations through 0033. Expanded Inbox, personal preferences, read history, structured mentions and bulk read controls are live. Public release checks passed; signed-in owner acceptance remains separate. Earlier slice notes below describe their validation at implementation time.
 
 Research date: 29 October 2026. Continuation of UX rebuild #784. There is no established universal “2027 standard”; the requirements below use current primary sources as the baseline for 2027 planning. Competitor capabilities are references, not promises of parity.
 
@@ -96,3 +96,12 @@ This increment remains local with migrations 0032 and 0033 pending deployment. T
 A single **Mark loaded notifications read** action snapshots the loaded unread items across message, assignment, deadline and upload categories. Requests use the existing scoped API in batches of at most 50. Unloaded items and arrivals after the snapshot remain unread. A lost acknowledgement retains only the unconfirmed portion for explicit retry; refreshing the list does not expand that selection. Individual read/unread controls pause until the pending operation finishes to avoid contradictory actions. Navigation stops subsequent batches; after a reload, the server's saved receipts remain authoritative. No preview data or pending selection is persisted in browser storage.
 
 Local implementation; no schema or provider changes. Production remains PR #789 until a subsequent recorded release.
+
+
+## Opt-in external notification delivery (#792)
+
+Local implementation adds email preferences and browser subscription controls in Inbox, bounded scheduled delivery jobs, generic notification content and durable delivery receipts. Email uses Resend idempotency within a conservative retry window. Push uses real VAPID/Web Push encryption, explicit browser permission, scoped subscription revocation and server-side permission checks immediately before display. Unknown push outcomes are retained rather than blindly retried. Neither channel is activated by default.
+
+Additive migrations `0034.sql` and `0035.sql` are required for release. See [notification delivery](NOTIFICATION_DELIVERY.md) for configuration, recoverability, limits and real-provider acceptance. The new compiled route tests and browser journeys use synthetic accounts; provider-backed sending and signed-in production acceptance remain outstanding.
+
+[Readiness verification](READINESS_VERIFICATION.md) records the bounded security assessment, Stripe sandbox configuration tests and a representative local performance fixture with tasks, messages, assignments, deadlines and read receipts. These checks do not establish full security certification, real Stripe payment acceptance or production field performance.

@@ -1,6 +1,6 @@
 const preferenceKeys=['messages','assignments','deadlines','uploads','mentions'];
 // Every query, including read writes, rechecks the current identity and resource scope.
-function feed(actor){
+export function feed(actor){
  const args=[actor.id,actor.organization_id,actor.role,actor.client_id??null];
  const identity='SELECT * FROM actors WHERE id=? AND organization_id=? AND role=? AND client_id IS ? AND active=1';
  const projects='SELECT p.* FROM projects p JOIN identity a ON a.organization_id=p.organization_id WHERE a.role=\'staff\' OR (p.client_visible=1 AND p.client_id=a.client_id)';
