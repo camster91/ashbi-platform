@@ -88,6 +88,8 @@ test('manual Meta Ads agency workspace enforces tenant and client boundaries',as
   assert.equal((await call('/api/meta-ads/c1','staff','PATCH',{revision:0,websiteUrl:'javascript:alert(1)'})).status,400);
   assert.equal((await call('/api/meta-ads/c1','staff','PATCH',{revision:0,notes:'No origin'},{Origin:'https://attacker.invalid'})).status,403);
   assert.ok((await (await call('/api/meta-ads/c1/activity','staff')).json()).items.length>=4);
+  assert.equal((await call('/api/export','client1')).status,403);
+  const archive=await call('/api/export','staff');assert.equal(archive.status,200);const payload=await archive.json();assert.equal(payload.tables.meta_ad_leads.length,1);assert.ok(payload.tables.meta_ad_activity.length>=4);
  });
 });
 
