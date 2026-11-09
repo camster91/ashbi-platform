@@ -111,11 +111,13 @@ function validateReport(input){
   reportDate:isoDate,spendMinor:v=>integer(v),revenueMinor:v=>integer(v),currency:v=>currencies.has(v),
   impressions:v=>integer(v),reach:v=>integer(v),clicks:v=>integer(v),leads:v=>integer(v),
   qualifiedLeads:v=>integer(v),estimatesBooked:v=>integer(v),jobsWon:v=>integer(v),
-  clientVisible:v=>typeof v==='boolean',notes:v=>text(v,2000)
+  clientVisible:v=>typeof v==='boolean',notes:v=>text(v,2000),campaignId:shortId
  };
+ const required=['reportDate','spendMinor','revenueMinor','currency','impressions','reach','clicks','leads','qualifiedLeads','estimatesBooked','jobsWon','campaignId'];
+ for(const key of required)if(!Object.hasOwn(input,key)||!fields[key](input[key]))throw 400;
+ for(const key of Object.keys(fields))if(Object.hasOwn(input,key)&&!fields[key](input[key]))throw 400;
  const map={reportDate:'report_date',spendMinor:'spend_minor',revenueMinor:'revenue_minor',qualifiedLeads:'qualified_leads',estimatesBooked:'estimates_booked',jobsWon:'jobs_won',clientVisible:'client_visible'};
- for(const [key,valid] of Object.entries(fields))if(!Object.hasOwn(input,key)||!valid(input[key]))throw 400;
- return Object.fromEntries(Object.keys(input).filter(k=>Object.hasOwn(fields,k)).map(k=>[map[k]||k,input[k]]));
+ return Object.fromEntries(Object.keys(input).filter(k=>Object.hasOwn(fields,k)&&k!=='campaignId').map(k=>[map[k]||k,input[k]]));
 }
 function updateSql(table,columns,body,idValue,actor,revision){
  const keys=Object.keys(body);if(!keys.length)throw 400;
@@ -143,7 +145,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    const values=[body.business_name||'',body.business_portfolio_id||'',body.facebook_page_name||'',body.facebook_page_id||'',body.instagram_handle||'',body.instagram_account_id||'',body.ad_account_id||'',body.dataset_id||'',body.website_url||'',JSON.stringify(input.serviceAreas||[]),body.currency||'CAD',body.timezone||'America/Toronto',body.partner_access_status||'not_requested',checklistJson,body.notes||''];
    const activity=activityStatement(actor,client.id,'account',accountId,'created',{});
    const statements=[
-    db.prepare('INSERT INTO meta_ad_accounts(id,organization_id,client_id,'+columns.join(',')+',revision,created_by,created_at,updated_at) VALUES('+Array(18).fill('?').join(',')+')').bind(accountId,actor.organization_id,client.id,...values,0,actor.id,timestamp,timestamp),
+    db.prepare('INSERT INTO meta_ad_accounts(id,organization_id,client_id,'+columns.join(',')+',revision,created_by,created_at,updated_at) VALUES('+Array(22).fill('?').join(',')+')').bind(accountId,actor.organization_id,client.id,...values,0,actor.id,timestamp,timestamp),
     db.prepare(activity.statement).bind(...activity.values)
    ];
    await db.batch(statements);
@@ -160,10 +162,8 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    if(!integer(input.revision))throw 400;
    const body=validateAccount(input,true);delete body.client_id;
    if(!Object.keys(body).length)throw 400;
-   if('service_areas' in body)body.service_areas_json=JSON.stringify(body.service_areas);
-   delete body.service_areas;
-   if('checklist' in input)body.checklist_json=JSON.stringify(input.checklist);
-   delete body.checklist;
+   if('serviceAreas' in body){body.service_areas_json=JSON.stringify(body.serviceAreas);delete body.serviceAreas;}
+   if('checklist' in body){body.checklist_json=JSON.stringify(body.checklist);delete body.checklist;}
    const current=await accountFor(db,actor,clientId);
    const keys=Object.keys(body),columns=keys.map(k=>k);
    const statement=db.prepare('UPDATE meta_ad_accounts SET '+columns.map(k=>k+'=?').join(',')+',revision=revision+1,updated_at=? WHERE organization_id=? AND client_id=? AND revision=?')
@@ -200,7 +200,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
  const campaignPath=path[0]==='campaigns'&&shortId(path[1]);
  if(campaignPath&&path.length===2){
   const campaign=await db.prepare('SELECT * FROM meta_ad_campaigns WHERE id=? AND organization_id=?').bind(path[1],actor.organization_id).first();
-  if(!campaign||actor.role==='client'&&campaign.client_id!==actor.client_id)throw 404;
+  if(!campaign||actor.role==='client'&&(campaign.client_id!==actor.client_id||!campaign.client_visible))throw 404;
   if(method==='PATCH'){
    requireStaff(actor);const input=await readBody(request);if(!integer(input.revision))throw 400;
    const body=validateCampaign(input,true);delete body.client_id;if(!Object.keys(body).length)throw 400;
@@ -234,7 +234,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    if(body.status==='awaiting_approval'&&!body.clientVisible)throw 400;
    const activity=activityStatement(actor,campaign.client_id,'creative',recordId,'created',{name:body.name});
    await db.batch([
-    db.prepare('INSERT INTO meta_ad_creatives(id,organization_id,client_id,campaign_id,'+columns.join(',')+',created_by,created_at,updated_at) VALUES('+Array(values.length+7).fill('?').join(',')+')').bind(recordId,actor.organization_id,campaign.client_id,campaign.id,...values,actor.id,timestamp,null,timestamp,timestamp),
+    db.prepare('INSERT INTO meta_ad_creatives(id,organization_id,client_id,campaign_id,'+columns.join(',')+',created_by,created_at,updated_at) VALUES('+Array(values.length+7).fill('?').join(',')+')').bind(recordId,actor.organization_id,campaign.client_id,campaign.id,...values,actor.id,timestamp,timestamp),
     db.prepare(activity.statement).bind(...activity.values)
    ]);
    return json(await db.prepare('SELECT * FROM meta_ad_creatives WHERE id=? AND organization_id=?').bind(recordId,actor.organization_id).first(),201);
@@ -339,7 +339,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
   throw 405;
  }
  if(path.length===2&&shortId(path[0])&&path[1]==='activity'&&method==='GET'){
-  const clientId=path[0];await accountFor(db,actor,clientId);
+  requireStaff(actor);const clientId=path[0];await accountFor(db,actor,clientId);
   const rows=await db.prepare('SELECT id,entity_type,entity_id,action,detail_json,created_at FROM meta_ad_activity WHERE organization_id=? AND client_id=? ORDER BY created_at DESC,id DESC LIMIT 100').bind(actor.organization_id,clientId).all();
   return json({items:rows.results.map(row=>({...row,detail:parseJson(row.detail_json,{})}))});
  }
