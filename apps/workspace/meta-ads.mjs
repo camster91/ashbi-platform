@@ -304,7 +304,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
   if(!lead||actor.role==='client'&&lead.client_id!==actor.client_id)throw 404;
   if(method==='PATCH'){
    requireStaff(actor);const input=await readBody(request);if(!integer(input.revision))throw 400;
-   const body=validateLead(input,true);if(!Object.keys(body).length)throw 400;
+   const body=validateLead(input,true);if(!Object.keys(body).length)throw 400;if(body.campaign_id==='')body.campaign_id=null;
    const columns=Object.keys(body).map(k=>k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase()));
    if(body.campaign_id){const campaign=await db.prepare('SELECT id FROM meta_ad_campaigns WHERE id=? AND organization_id=? AND client_id=?').bind(body.campaign_id,actor.organization_id,lead.client_id).first();if(!campaign)throw 404;}
    const activity=conditionalActivityStatement(actor,lead.client_id,'lead',lead.id,'updated',{fields:Object.keys(body)});
