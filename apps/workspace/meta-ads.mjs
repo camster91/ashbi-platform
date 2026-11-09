@@ -33,8 +33,7 @@ function activityStatement(actor,clientId,entityType,entityId,action,detail={}){
 
 function conditionalActivityStatement(actor,clientId,entityType,entityId,action,detail,table,revision){
  const event=activityStatement(actor,clientId,entityType,entityId,action,detail);
- event.statement=event.statement.replace('VALUES(?,?,?,?,?,?,?,?,?)','SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM '+table+' WHERE organization_id=? AND id=? AND revision=?)');
- event.values.push(actor.organization_id,entityId,revision);
+ event.statement=event.statement.replace('VALUES(?,?,?,?,?,?,?,?,?)','SELECT ?,?,?,?,?,?,?,?,? WHERE changes()=1');
  return event;
 }
 
@@ -274,7 +273,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
   const creative=await db.prepare('SELECT * FROM meta_ad_creatives WHERE id=? AND organization_id=? AND client_id=? AND client_visible=1').bind(path[1],actor.organization_id,actor.client_id).first();
   if(!creative||creative.status!=='awaiting_approval')throw 404;
   const timestamp=now(),approvalId=id(),newRevision=creative.revision+1;
-  const approval=db.prepare('INSERT INTO meta_ad_approvals(id,organization_id,client_id,creative_id,actor_id,decision,feedback,created_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM meta_ad_creatives WHERE id=? AND organization_id=? AND revision=? AND status=?)').bind(approvalId,actor.organization_id,actor.client_id,creative.id,actor.id,input.decision,input.feedback||'',timestamp,creative.id,actor.organization_id,newRevision,input.decision);
+  const approval=db.prepare('INSERT INTO meta_ad_approvals(id,organization_id,client_id,creative_id,actor_id,decision,feedback,created_at) SELECT ?,?,?,?,?,?,?,? WHERE changes()=1').bind(approvalId,actor.organization_id,actor.client_id,creative.id,actor.id,input.decision,input.feedback||'',timestamp);
   const update=db.prepare('UPDATE meta_ad_creatives SET status=?,reviewed_by=?,reviewed_at=?,revision=revision+1,updated_at=? WHERE id=? AND organization_id=? AND client_id=? AND revision=? AND status=? AND client_visible=1')
    .bind(input.decision,actor.id,timestamp,timestamp,creative.id,actor.organization_id,actor.client_id,creative.revision,'awaiting_approval');
   const activity=conditionalActivityStatement(actor,actor.client_id,'creative',creative.id,input.decision,{revision:newRevision,feedback:input.feedback||''},'meta_ad_creatives',newRevision);
