@@ -30,6 +30,14 @@ function activityStatement(actor,clientId,entityType,entityId,action,detail={}){
  return {statement: 'INSERT INTO meta_ad_activity(id,organization_id,client_id,actor_id,entity_type,entity_id,action,detail_json,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
  values:[id(),actor.organization_id,clientId,actor.id,entityType,entityId,action,JSON.stringify(detail),now()]};
 }
+
+function conditionalActivityStatement(actor,clientId,entityType,entityId,action,detail,table,revision){
+ const event=activityStatement(actor,clientId,entityType,entityId,action,detail);
+ event.statement=event.statement.replace('VALUES(?,?,?,?,?,?,?,?,?)','SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM '+table+' WHERE organization_id=? AND id=? AND revision=?)');
+ event.values.push(actor.organization_id,entityId,revision);
+ return event;
+}
+
 async function writeActivity(db,actor,clientId,entityType,entityId,action,detail={}){
  const e=activityStatement(actor,clientId,entityType,entityId,action,detail);
  await db.prepare(e.statement).bind(...e.values).run();
@@ -168,7 +176,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    const keys=Object.keys(body),columns=keys.map(k=>k);
    const statement=db.prepare('UPDATE meta_ad_accounts SET '+columns.map(k=>k+'=?').join(',')+',revision=revision+1,updated_at=? WHERE organization_id=? AND client_id=? AND revision=?')
     .bind(...columns.map(k=>body[k]),now(),actor.organization_id,clientId,input.revision);
-   const activity=activityStatement(actor,clientId,'account',current.id,'updated',{fields:columns});
+   const activity=conditionalActivityStatement(actor,clientId,'account',current.id,'updated',{fields:columns},'meta_ad_accounts',input.revision+1);
    const results=await db.batch([statement,db.prepare(activity.statement).bind(...activity.values)]);
    if(results[0].meta.changes!==1)throw 409;
    return json(accountView(await accountFor(db,actor,clientId)));
@@ -207,7 +215,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    const columns=Object.fromEntries(Object.keys(body).map(k=>[k,k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase())]));
    if(body.currency&&body.currency!==campaign.currency)throw 400;
    const sets=Object.keys(body).map(k=>columns[k]+'=?');
-   const activity=activityStatement(actor,campaign.client_id,'campaign',campaign.id,'updated',{fields:Object.keys(body)});
+   const activity=conditionalActivityStatement(actor,campaign.client_id,'campaign',campaign.id,'updated',{fields:Object.keys(body)},'meta_ad_campaigns',input.revision+1);
    const results=await db.batch([
     db.prepare('UPDATE meta_ad_campaigns SET '+sets.join(',')+',revision=revision+1,updated_at=? WHERE organization_id=? AND id=? AND revision=?').bind(...Object.keys(body).map(k=>typeof body[k]==='boolean'?Number(body[k]):body[k]),now(),actor.organization_id,campaign.id,input.revision),
     db.prepare(activity.statement).bind(...activity.values)
@@ -249,7 +257,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    const body=validateCreative(input,true);if(!Object.keys(body).length)throw 400;
    const columns=Object.keys(body).map(k=>k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase()));
    if(body.status==='awaiting_approval'&&!body.clientVisible)throw 400;
-   const activity=activityStatement(actor,creative.client_id,'creative',creative.id,'updated',{fields:Object.keys(body)});
+   const activity=conditionalActivityStatement(actor,creative.client_id,'creative',creative.id,'updated',{fields:Object.keys(body)},'meta_ad_creatives',input.revision+1);
    const results=await db.batch([
     db.prepare('UPDATE meta_ad_creatives SET '+columns.map(k=>k+'=?').join(',')+',reviewed_by=NULL,reviewed_at=NULL,revision=revision+1,updated_at=? WHERE organization_id=? AND id=? AND revision=?').bind(...Object.values(body).map(v=>typeof v==='boolean'?Number(v):v),now(),actor.organization_id,creative.id,input.revision),
     db.prepare(activity.statement).bind(...activity.values)
@@ -266,10 +274,10 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
   const creative=await db.prepare('SELECT * FROM meta_ad_creatives WHERE id=? AND organization_id=? AND client_id=? AND client_visible=1').bind(path[1],actor.organization_id,actor.client_id).first();
   if(!creative||creative.status!=='awaiting_approval')throw 404;
   const timestamp=now(),approvalId=id(),newRevision=creative.revision+1;
-  const approval=db.prepare('INSERT INTO meta_ad_approvals(id,organization_id,client_id,creative_id,actor_id,decision,feedback,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(approvalId,actor.organization_id,actor.client_id,creative.id,actor.id,input.decision,input.feedback||'',timestamp);
+  const approval=db.prepare('INSERT INTO meta_ad_approvals(id,organization_id,client_id,creative_id,actor_id,decision,feedback,created_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM meta_ad_creatives WHERE id=? AND organization_id=? AND revision=? AND status=?)').bind(approvalId,actor.organization_id,actor.client_id,creative.id,actor.id,input.decision,input.feedback||'',timestamp,creative.id,actor.organization_id,newRevision,input.decision);
   const update=db.prepare('UPDATE meta_ad_creatives SET status=?,reviewed_by=?,reviewed_at=?,revision=revision+1,updated_at=? WHERE id=? AND organization_id=? AND client_id=? AND revision=? AND status=? AND client_visible=1')
    .bind(input.decision,actor.id,timestamp,timestamp,creative.id,actor.organization_id,actor.client_id,creative.revision,'awaiting_approval');
-  const activity=activityStatement(actor,actor.client_id,'creative',creative.id,input.decision,{revision:newRevision,feedback:input.feedback||''});
+  const activity=conditionalActivityStatement(actor,actor.client_id,'creative',creative.id,input.decision,{revision:newRevision,feedback:input.feedback||''},'meta_ad_creatives',newRevision);
   const results=await db.batch([update,approval,db.prepare(activity.statement).bind(...activity.values)]);
   if(results[0].meta.changes!==1)throw 409;
   return json(await db.prepare('SELECT * FROM meta_ad_creatives WHERE id=? AND organization_id=?').bind(creative.id,actor.organization_id).first());
@@ -304,7 +312,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    const body=validateLead(input,true);if(!Object.keys(body).length)throw 400;
    const columns=Object.keys(body).map(k=>k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase()));
    if(body.campaign_id){const campaign=await db.prepare('SELECT id FROM meta_ad_campaigns WHERE id=? AND organization_id=? AND client_id=?').bind(body.campaign_id,actor.organization_id,lead.client_id).first();if(!campaign)throw 404;}
-   const activity=activityStatement(actor,lead.client_id,'lead',lead.id,'updated',{fields:Object.keys(body)});
+   const activity=conditionalActivityStatement(actor,lead.client_id,'lead',lead.id,'updated',{fields:Object.keys(body)},'meta_ad_leads',input.revision+1);
    const results=await db.batch([
     db.prepare('UPDATE meta_ad_leads SET '+columns.map(k=>k+'=?').join(',')+',revision=revision+1,updated_at=? WHERE organization_id=? AND id=? AND revision=?').bind(...Object.values(body).map(v=>typeof v==='boolean'?Number(v):v),now(),actor.organization_id,lead.id,input.revision),
     db.prepare(activity.statement).bind(...activity.values)
