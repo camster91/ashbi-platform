@@ -247,7 +247,8 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
   if(method==='PATCH'){
    requireStaff(actor);const input=await readBody(request);if(!integer(input.revision))throw 400;
    const body=validateCreative(input,true);if(!Object.keys(body).length)throw 400;
-   if(body.client_visible){const parent=await db.prepare('SELECT client_visible FROM meta_ad_campaigns WHERE id=? AND organization_id=? AND client_id=?').bind(creative.campaign_id,actor.organization_id,creative.client_id).first();if(!parent||!parent.client_visible)throw 400;}
+   const sharedWithClient=Object.hasOwn(body,'client_visible')?body.client_visible:Boolean(creative.client_visible);
+   if((body.client_visible||body.status==='awaiting_approval'&&sharedWithClient)){const parent=await db.prepare('SELECT client_visible FROM meta_ad_campaigns WHERE id=? AND organization_id=? AND client_id=?').bind(creative.campaign_id,actor.organization_id,creative.client_id).first();if(!parent||!parent.client_visible)throw 400;}
    const columns=Object.keys(body).map(k=>k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase()));
    if(body.status==='awaiting_approval'&&!(Object.hasOwn(body,'client_visible')?body.client_visible:Boolean(creative.client_visible)))throw 400;
    const activity=conditionalActivityStatement(actor,creative.client_id,'creative',creative.id,'updated',{fields:Object.keys(body)});
