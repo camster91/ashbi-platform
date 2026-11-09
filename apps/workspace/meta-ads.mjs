@@ -31,7 +31,7 @@ function activityStatement(actor,clientId,entityType,entityId,action,detail={}){
  values:[id(),actor.organization_id,clientId,actor.id,entityType,entityId,action,JSON.stringify(detail),now()]};
 }
 
-function conditionalActivityStatement(actor,clientId,entityType,entityId,action,detail,table,revision){
+function conditionalActivityStatement(actor,clientId,entityType,entityId,action,detail){
  const event=activityStatement(actor,clientId,entityType,entityId,action,detail);
  event.statement=event.statement.replace('VALUES(?,?,?,?,?,?,?,?,?)','SELECT ?,?,?,?,?,?,?,?,? WHERE changes()=1');
  return event;
@@ -175,7 +175,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    const keys=Object.keys(body),columns=keys.map(k=>k);
    const statement=db.prepare('UPDATE meta_ad_accounts SET '+columns.map(k=>k+'=?').join(',')+',revision=revision+1,updated_at=? WHERE organization_id=? AND client_id=? AND revision=?')
     .bind(...columns.map(k=>body[k]),now(),actor.organization_id,clientId,input.revision);
-   const activity=conditionalActivityStatement(actor,clientId,'account',current.id,'updated',{fields:columns},'meta_ad_accounts',input.revision+1);
+   const activity=conditionalActivityStatement(actor,clientId,'account',current.id,'updated',{fields:columns});
    const results=await db.batch([statement,db.prepare(activity.statement).bind(...activity.values)]);
    if(results[0].meta.changes!==1)throw 409;
    return json(accountView(await accountFor(db,actor,clientId)));
@@ -214,7 +214,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    const columns=Object.fromEntries(Object.keys(body).map(k=>[k,k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase())]));
    if(body.currency&&body.currency!==campaign.currency)throw 400;
    const sets=Object.keys(body).map(k=>columns[k]+'=?');
-   const activity=conditionalActivityStatement(actor,campaign.client_id,'campaign',campaign.id,'updated',{fields:Object.keys(body)},'meta_ad_campaigns',input.revision+1);
+   const activity=conditionalActivityStatement(actor,campaign.client_id,'campaign',campaign.id,'updated',{fields:Object.keys(body)});
    const results=await db.batch([
     db.prepare('UPDATE meta_ad_campaigns SET '+sets.join(',')+',revision=revision+1,updated_at=? WHERE organization_id=? AND id=? AND revision=?').bind(...Object.keys(body).map(k=>typeof body[k]==='boolean'?Number(body[k]):body[k]),now(),actor.organization_id,campaign.id,input.revision),
     db.prepare(activity.statement).bind(...activity.values)
@@ -256,7 +256,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    const body=validateCreative(input,true);if(!Object.keys(body).length)throw 400;
    const columns=Object.keys(body).map(k=>k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase()));
    if(body.status==='awaiting_approval'&&!body.clientVisible)throw 400;
-   const activity=conditionalActivityStatement(actor,creative.client_id,'creative',creative.id,'updated',{fields:Object.keys(body)},'meta_ad_creatives',input.revision+1);
+   const activity=conditionalActivityStatement(actor,creative.client_id,'creative',creative.id,'updated',{fields:Object.keys(body)});
    const results=await db.batch([
     db.prepare('UPDATE meta_ad_creatives SET '+columns.map(k=>k+'=?').join(',')+',reviewed_by=NULL,reviewed_at=NULL,revision=revision+1,updated_at=? WHERE organization_id=? AND id=? AND revision=?').bind(...Object.values(body).map(v=>typeof v==='boolean'?Number(v):v),now(),actor.organization_id,creative.id,input.revision),
     db.prepare(activity.statement).bind(...activity.values)
@@ -276,7 +276,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
   const approval=db.prepare('INSERT INTO meta_ad_approvals(id,organization_id,client_id,creative_id,actor_id,decision,feedback,created_at) SELECT ?,?,?,?,?,?,?,? WHERE changes()=1').bind(approvalId,actor.organization_id,actor.client_id,creative.id,actor.id,input.decision,input.feedback||'',timestamp);
   const update=db.prepare('UPDATE meta_ad_creatives SET status=?,reviewed_by=?,reviewed_at=?,revision=revision+1,updated_at=? WHERE id=? AND organization_id=? AND client_id=? AND revision=? AND status=? AND client_visible=1')
    .bind(input.decision,actor.id,timestamp,timestamp,creative.id,actor.organization_id,actor.client_id,creative.revision,'awaiting_approval');
-  const activity=conditionalActivityStatement(actor,actor.client_id,'creative',creative.id,input.decision,{revision:newRevision,feedback:input.feedback||''},'meta_ad_creatives',newRevision);
+  const activity=conditionalActivityStatement(actor,actor.client_id,'creative',creative.id,input.decision,{revision:newRevision,feedback:input.feedback||''});
   const results=await db.batch([update,approval,db.prepare(activity.statement).bind(...activity.values)]);
   if(results[0].meta.changes!==1)throw 409;
   return json(await db.prepare('SELECT * FROM meta_ad_creatives WHERE id=? AND organization_id=?').bind(creative.id,actor.organization_id).first());
@@ -311,7 +311,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    const body=validateLead(input,true);if(!Object.keys(body).length)throw 400;
    const columns=Object.keys(body).map(k=>k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase()));
    if(body.campaign_id){const campaign=await db.prepare('SELECT id FROM meta_ad_campaigns WHERE id=? AND organization_id=? AND client_id=?').bind(body.campaign_id,actor.organization_id,lead.client_id).first();if(!campaign)throw 404;}
-   const activity=conditionalActivityStatement(actor,lead.client_id,'lead',lead.id,'updated',{fields:Object.keys(body)},'meta_ad_leads',input.revision+1);
+   const activity=conditionalActivityStatement(actor,lead.client_id,'lead',lead.id,'updated',{fields:Object.keys(body)});
    const results=await db.batch([
     db.prepare('UPDATE meta_ad_leads SET '+columns.map(k=>k+'=?').join(',')+',revision=revision+1,updated_at=? WHERE organization_id=? AND id=? AND revision=?').bind(...Object.values(body).map(v=>typeof v==='boolean'?Number(v):v),now(),actor.organization_id,lead.id,input.revision),
     db.prepare(activity.statement).bind(...activity.values)
