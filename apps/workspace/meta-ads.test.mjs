@@ -50,6 +50,10 @@ test('manual Meta Ads agency workspace enforces tenant and client boundaries',as
   assert.equal((await call('/api/meta-ads/c1/campaigns','client1','POST',{name:'No',objective:'leads',conversionLocation:'instant_form',dailyBudgetMinor:1000,currency:'CAD'})).status,403);
   assert.equal((await call('/api/meta-ads/campaigns/'+campaign.id,'staff','PATCH',{revision:0,status:'entered_in_meta'})).status,200);
   assert.equal((await call('/api/meta-ads/campaigns/'+campaign.id,'staff','PATCH',{revision:0,status:'paused'})).status,409);
+  assert.equal((await call('/api/meta-ads/c1','staff','PATCH',{revision:0,currency:'USD'})).status,400);
+  const hidden=await call('/api/meta-ads/c1/campaigns','staff','POST',{name:'Hidden plan',objective:'leads',conversionLocation:'instant_form',dailyBudgetMinor:1000,currency:'CAD',clientVisible:false});assert.equal(hidden.status,201);const hiddenCampaign=await hidden.json();
+  assert.equal((await call('/api/meta-ads/campaigns/'+hiddenCampaign.id,'client1')).status,404);
+  assert.equal((await call('/api/meta-ads/campaigns/'+hiddenCampaign.id+'/creatives','staff','POST',{name:'Hidden creative',format:'feed_square',status:'awaiting_approval',clientVisible:true})).status,400);
  });
  await t.test('creative approval is explicit and never publishes in Meta',async()=>{
   const response=await call('/api/meta-ads/campaigns/'+campaign.id+'/creatives','staff','POST',{name:'Before and after',format:'feed_portrait',primaryText:'Refresh your home with professional painting.',headline:'Get a free estimate',cta:'get_quote',status:'awaiting_approval',clientVisible:true});
