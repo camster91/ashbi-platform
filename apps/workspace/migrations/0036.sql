@@ -117,6 +117,7 @@ CREATE TABLE meta_ad_leads (
  city TEXT NOT NULL DEFAULT '' CHECK(length(city)<=120),
  service TEXT NOT NULL DEFAULT '' CHECK(length(service)<=160),
  stage TEXT NOT NULL DEFAULT 'new' CHECK(stage IN ('new','contacted','qualified','estimate_booked','won','lost')),
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
  follow_up_on TEXT,
  client_visible INTEGER NOT NULL DEFAULT 0 CHECK(client_visible IN (0,1)),
  internal_notes TEXT NOT NULL DEFAULT '' CHECK(length(internal_notes)<=2000),
