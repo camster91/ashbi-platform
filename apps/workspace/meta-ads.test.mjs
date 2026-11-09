@@ -64,6 +64,8 @@ test('manual Meta Ads agency workspace enforces tenant and client boundaries',as
   const decision=await call('/api/meta-ads/creatives/'+creative.id+'/decision','client1','POST',{decision:'approved',feedback:'Looks good'});
   assert.equal(decision.status,200);assert.equal((await decision.json()).status,'approved');
   assert.equal((await DB.prepare('SELECT COUNT(*) AS n FROM meta_ad_approvals WHERE creative_id=?').bind(creative.id).first()).n,1);
+  const edited=await call('/api/meta-ads/creatives/'+creative.id,'staff','PATCH',{revision:1,headline:'Revised headline'});assert.equal(edited.status,200);const revised=await edited.json();assert.equal(revised.status,'draft');assert.equal(revised.reviewed_by,null);
+  assert.equal((await call('/api/meta-ads/creatives/'+creative.id,'staff','PATCH',{revision:2,status:'approved'})).status,400);
  });
  await t.test('lead PII and internal notes are restricted to the correct client and staff',async()=>{
   const response=await call('/api/meta-ads/c1/leads','staff','POST',{fullName:'Synthetic Lead',email:'lead@example.invalid',phone:'4165550100',city:'Toronto',service:'Interior painting',campaignId:campaign.id,stage:'new',internalNotes:'Internal qualification note',clientVisible:false});
