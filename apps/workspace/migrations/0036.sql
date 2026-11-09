@@ -50,7 +50,7 @@ CREATE TABLE meta_ad_campaigns (
  service_area TEXT NOT NULL DEFAULT '' CHECK(length(service_area)<=300),
  start_date TEXT,
  end_date TEXT,
- status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','awaiting_approval','approved','entered_in_meta','paused','completed')),
+ status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','approved','entered_in_meta','paused','completed')),
  client_visible INTEGER NOT NULL DEFAULT 0 CHECK(client_visible IN (0,1)),
  notes TEXT NOT NULL DEFAULT '' CHECK(length(notes)<=4000),
  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
