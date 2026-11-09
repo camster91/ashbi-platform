@@ -56,7 +56,7 @@ function checklist(value){
 }
 function validateAccount(input,partial=false){
  const fields={
-  businessName:v=>text(v,200),businessPortfolioId:v=>text(v,100),facebookPageName:v=>text(v,200),facebookPageId:v=>text(v,100),
+  businessName:v=>text(v,200),businessPortfolioId:v=>text(v,100),ashbiBusinessId:v=>text(v,100),facebookPageName:v=>text(v,200),facebookPageId:v=>text(v,100),
   instagramHandle:v=>text(v,100),instagramAccountId:v=>text(v,100),adAccountId:v=>text(v,100),datasetId:v=>text(v,100),
   websiteUrl:v=>text(v,2048)&&(!v||(()=>{try{return new URL(v).protocol==='https:';}catch{return false;}})()),
   serviceAreas:v=>Array.isArray(v)&&v.length<=20&&v.every(x=>text(x,80,true)),
@@ -64,7 +64,7 @@ function validateAccount(input,partial=false){
   partnerAccessStatus:v=>['not_requested','requested','granted','blocked'].includes(v),
   checklist:checklist,notes:v=>text(v,4000)
  };
- const map={businessName:'business_name',businessPortfolioId:'business_portfolio_id',facebookPageName:'facebook_page_name',facebookPageId:'facebook_page_id',instagramHandle:'instagram_handle',instagramAccountId:'instagram_account_id',adAccountId:'ad_account_id',datasetId:'dataset_id',websiteUrl:'website_url',currency:'currency',timezone:'timezone',partnerAccessStatus:'partner_access_status',notes:'notes'};
+ const map={businessName:'business_name',businessPortfolioId:'business_portfolio_id',ashbiBusinessId:'ashbi_business_id',facebookPageName:'facebook_page_name',facebookPageId:'facebook_page_id',instagramHandle:'instagram_handle',instagramAccountId:'instagram_account_id',adAccountId:'ad_account_id',datasetId:'dataset_id',websiteUrl:'website_url',currency:'currency',timezone:'timezone',partnerAccessStatus:'partner_access_status',notes:'notes'};
  for(const [key,valid] of Object.entries(fields)){
   if(!Object.hasOwn(input,key)){if(!partial&&['currency','timezone','partnerAccessStatus','serviceAreas','checklist','notes'].includes(key))continue;continue;}
   if(!valid(input[key]))throw 400;
@@ -138,11 +138,11 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    requireStaff(actor);const input=await readBody(request),client=await clientExists(db,actor,input.clientId);
    const body=validateAccount(input);
    const timestamp=now(),accountId=id(),checklistJson=JSON.stringify(input.checklist||{});
-   const columns=['business_name','business_portfolio_id','facebook_page_name','facebook_page_id','instagram_handle','instagram_account_id','ad_account_id','dataset_id','website_url','service_areas_json','currency','timezone','partner_access_status','checklist_json','notes'];
-   const values=[body.business_name||'',body.business_portfolio_id||'',body.facebook_page_name||'',body.facebook_page_id||'',body.instagram_handle||'',body.instagram_account_id||'',body.ad_account_id||'',body.dataset_id||'',body.website_url||'',JSON.stringify(input.serviceAreas||[]),body.currency||'CAD',body.timezone||'America/Toronto',body.partner_access_status||'not_requested',checklistJson,body.notes||''];
+   const columns=['business_name','business_portfolio_id','ashbi_business_id','facebook_page_name','facebook_page_id','instagram_handle','instagram_account_id','ad_account_id','dataset_id','website_url','service_areas_json','currency','timezone','partner_access_status','checklist_json','notes'];
+   const values=[body.business_name||'',body.business_portfolio_id||'',body.ashbi_business_id||'',body.facebook_page_name||'',body.facebook_page_id||'',body.instagram_handle||'',body.instagram_account_id||'',body.ad_account_id||'',body.dataset_id||'',body.website_url||'',JSON.stringify(input.serviceAreas||[]),body.currency||'CAD',body.timezone||'America/Toronto',body.partner_access_status||'not_requested',checklistJson,body.notes||''];
    const activity=activityStatement(actor,client.id,'account',accountId,'created',{});
    const statements=[
-    db.prepare('INSERT INTO meta_ad_accounts(id,organization_id,client_id,'+columns.join(',')+',revision,created_by,created_at,updated_at) VALUES('+Array(22).fill('?').join(',')+')').bind(accountId,actor.organization_id,client.id,...values,0,actor.id,timestamp,timestamp),
+    db.prepare('INSERT INTO meta_ad_accounts(id,organization_id,client_id,'+columns.join(',')+',revision,created_by,created_at,updated_at) VALUES('+Array(23).fill('?').join(',')+')').bind(accountId,actor.organization_id,client.id,...values,0,actor.id,timestamp,timestamp),
     db.prepare(activity.statement).bind(...activity.values)
    ];
    await db.batch(statements);
