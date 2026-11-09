@@ -31,7 +31,7 @@ Ashbi staff can manage client workspaces within the agency organization. A clien
 
 1. Create or select an existing Ashbi client record.
 2. Add the client's Meta Business details and website/service area.
-3. Complete the partner-access and launch-readiness checklist.
+3. Record Ashbi's Business ID for the client and complete the partner-access and launch-readiness checklist. The client uses this ID in Meta Business Settings → Users → Partners → Add.
 4. Create a campaign plan with objective, conversion destination, daily budget, service area and dates.
 5. Prepare ad creative, copy and asset reference.
 6. Share the creative with the client for approval.
