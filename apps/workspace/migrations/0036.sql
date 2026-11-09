@@ -4,6 +4,7 @@ CREATE TABLE meta_ad_accounts (
  client_id TEXT NOT NULL,
  business_name TEXT NOT NULL DEFAULT '',
  business_portfolio_id TEXT NOT NULL DEFAULT '',
+ ashbi_business_id TEXT NOT NULL DEFAULT '' CHECK(length(ashbi_business_id)<=100),
  facebook_page_name TEXT NOT NULL DEFAULT '',
  facebook_page_id TEXT NOT NULL DEFAULT '',
  instagram_handle TEXT NOT NULL DEFAULT '',
