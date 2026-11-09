@@ -162,6 +162,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    if('serviceAreas' in body){body.service_areas_json=JSON.stringify(body.serviceAreas);delete body.serviceAreas;}
    if('checklist' in body){body.checklist_json=JSON.stringify(body.checklist);delete body.checklist;}
    const current=await accountFor(db,actor,clientId);
+   if(body.currency&&body.currency!==current.currency){const existing=await db.prepare('SELECT COUNT(*) AS n FROM meta_ad_campaigns WHERE organization_id=? AND client_id=?').bind(actor.organization_id,clientId).first();if(existing.n>0)throw 400;}
    const keys=Object.keys(body),columns=keys.map(k=>k);
    const statement=db.prepare('UPDATE meta_ad_accounts SET '+columns.map(k=>k+'=?').join(',')+',revision=revision+1,updated_at=? WHERE organization_id=? AND client_id=? AND revision=?')
     .bind(...columns.map(k=>body[k]),now(),actor.organization_id,clientId,input.revision);
