@@ -5,7 +5,7 @@ const CHECKLIST_KEYS = Object.freeze([
 const currencies = new Set(['CAD','USD','EUR','GBP']);
 const objectives = new Set(['leads','traffic','engagement','sales','awareness']);
 const conversions = new Set(['instant_form','website','messages']);
-const campaignStates = new Set(['draft','awaiting_approval','approved','entered_in_meta','paused','completed']);
+const campaignStates = new Set(['draft','approved','entered_in_meta','paused','completed']);
 const creativeFormats = new Set(['feed_portrait','feed_square','story_reel','carousel']);
 const creativeStates = new Set(['draft','awaiting_approval','approved','changes_requested']);
 const ctas = new Set(['get_quote','learn_more','send_message','sign_up','book_now']);
@@ -184,7 +184,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
   }
   if(method==='POST'){
    requireStaff(actor);const input=await readBody(request),body=validateCampaign(input);
-   const account=await accountFor(db,actor,clientId);if(body.currency!==account.currency||body.status==='awaiting_approval'&&!body.client_visible)throw 400;
+   const account=await accountFor(db,actor,clientId);if(body.currency!==account.currency)throw 400;
    const timestamp=now(),recordId=id(),columns=Object.keys(body).map(k=>k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase()));
    const values=Object.values(body).map(v=>typeof v==='boolean'?Number(v):v);
    const activity=activityStatement(actor,clientId,'campaign',recordId,'created',{name:body.name});
@@ -203,7 +203,6 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
   if(method==='PATCH'){
    requireStaff(actor);const input=await readBody(request);if(!integer(input.revision))throw 400;
    const body=validateCampaign(input,true);delete body.client_id;if(!Object.keys(body).length)throw 400;
-   if(body.status==='awaiting_approval'&&!(Object.hasOwn(body,'client_visible')?body.client_visible:Boolean(campaign.client_visible)))throw 400;
    const columns=Object.fromEntries(Object.keys(body).map(k=>[k,k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase())]));
    if(body.currency&&body.currency!==campaign.currency)throw 400;
    const sets=Object.keys(body).map(k=>columns[k]+'=?');
