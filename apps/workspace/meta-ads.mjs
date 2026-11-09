@@ -37,10 +37,6 @@ function conditionalActivityStatement(actor,clientId,entityType,entityId,action,
  return event;
 }
 
-async function writeActivity(db,actor,clientId,entityType,entityId,action,detail={}){
- const e=activityStatement(actor,clientId,entityType,entityId,action,detail);
- await db.prepare(e.statement).bind(...e.values).run();
-}
 async function clientExists(db,actor,clientId){
  if(!shortId(clientId))throw 400;
  if(actor.role==='client'&&actor.client_id!==clientId)throw 404;
@@ -125,10 +121,6 @@ function validateReport(input){
  for(const key of Object.keys(fields))if(Object.hasOwn(input,key)&&!fields[key](input[key]))throw 400;
  const map={reportDate:'report_date',spendMinor:'spend_minor',revenueMinor:'revenue_minor',qualifiedLeads:'qualified_leads',estimatesBooked:'estimates_booked',jobsWon:'jobs_won',clientVisible:'client_visible'};
  return Object.fromEntries(Object.keys(input).filter(k=>Object.hasOwn(fields,k)&&k!=='campaignId').map(k=>[map[k]||k,input[k]]));
-}
-function updateSql(table,columns,body,idValue,actor,revision){
- const keys=Object.keys(body);if(!keys.length)throw 400;
- return 'UPDATE '+table+' SET '+keys.map(k=>columns[k]+'=?').join(',')+',revision=revision+1,updated_at=? WHERE organization_id=? AND id=? AND revision=?';
 }
 function safeLead(row,actor){
  if(actor.role==='staff')return row;
