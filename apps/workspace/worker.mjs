@@ -31,6 +31,7 @@ import {stripeDeliveryRoute} from './stripe-delivery.mjs';
 import {sourceHistoryRoute} from './source-pilot.mjs';
 import { stripeWebhook, stripeLifecycleRoute, drainStripeEvents } from './stripe-lifecycle.mjs';
 import { stripePartLifecycleRoute } from './stripe-part-lifecycle.mjs';
+import { metaAdsRoute } from './meta-ads.mjs';
 const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','Strict-Transport-Security':'max-age=31536000'};
 const contentPolicy="default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 const pageResponse=(body,type='text/html')=>new Response(body,{headers:{...security,'Content-Type':type+'; charset=utf-8','Content-Security-Policy':contentPolicy}});
@@ -90,6 +91,7 @@ export function createWorker(resolveKey,providers={}){return {async scheduled(ev
  if(url.pathname==='/api/files'||url.pathname.startsWith('/api/files/'))return await filesRoute(request,env,actor,readBody,json);
  if(url.pathname==='/api/me'&&request.method==='GET')return json({role:actor.role,id:actor.id,pilot:true,features:{files:!!env.FILES,finance:await hasFinance(env.DB,actor)}});
  if(url.pathname==='/api/source-history'||url.pathname.startsWith('/api/source-history/'))return await sourceHistoryRoute(request,env,actor,json);
+ if(url.pathname==='/api/meta-ads'||url.pathname.startsWith('/api/meta-ads/'))return await metaAdsRoute(request,env.DB,actor,readBody,json);
  if(url.pathname==='/api/export'&&request.method==='GET')return await exportRecords(env.DB,actor,json);
  if(url.pathname==='/api/search')return await searchRoute(request,env.DB,actor,json);
  if(url.pathname==='/api/dashboard/tasks')return await dashboardTasks(request,env.DB,actor,json);
