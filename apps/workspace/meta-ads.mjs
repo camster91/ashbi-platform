@@ -82,7 +82,6 @@ function validateCampaign(input,partial=false){
  for(const [key,valid] of Object.entries(fields))if(Object.hasOwn(input,key)&&!valid(input[key]))throw 400;
  if(!partial)for(const key of ['name','objective','conversionLocation','dailyBudgetMinor','currency'])if(!Object.hasOwn(input,key))throw 400;
  if(input.startDate&&input.endDate&&input.endDate<input.startDate)throw 400;
- if(input.status==='awaiting_approval'&&!input.clientVisible)throw 400;
  return Object.fromEntries(Object.keys(input).filter(k=>Object.hasOwn(fields,k)).map(k=>[map[k]||k,input[k]]));
 }
 function validateCreative(input,partial=false){
@@ -94,7 +93,6 @@ function validateCreative(input,partial=false){
  const map={primaryText:'primary_text',assetReference:'asset_reference',clientVisible:'client_visible'};
  for(const [key,valid] of Object.entries(fields))if(Object.hasOwn(input,key)&&!valid(input[key]))throw 400;
  if(!partial)for(const key of ['name','format'])if(!Object.hasOwn(input,key))throw 400;
- if(input.status==='awaiting_approval'&&!input.clientVisible)throw 400;
  return Object.fromEntries(Object.keys(input).filter(k=>Object.hasOwn(fields,k)).map(k=>[map[k]||k,input[k]]));
 }
 function validateLead(input,partial=false){
@@ -184,7 +182,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
   }
   if(method==='POST'){
    requireStaff(actor);const input=await readBody(request),body=validateCampaign(input);
-   const account=await accountFor(db,actor,clientId);if(body.currency!==account.currency)throw 400;
+   const account=await accountFor(db,actor,clientId);if(body.currency!==account.currency||body.status==='awaiting_approval'&&!body.client_visible)throw 400;
    const timestamp=now(),recordId=id(),columns=Object.keys(body).map(k=>k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase()));
    const values=Object.values(body).map(v=>typeof v==='boolean'?Number(v):v);
    const activity=activityStatement(actor,clientId,'campaign',recordId,'created',{name:body.name});
@@ -203,6 +201,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
   if(method==='PATCH'){
    requireStaff(actor);const input=await readBody(request);if(!integer(input.revision))throw 400;
    const body=validateCampaign(input,true);delete body.client_id;if(!Object.keys(body).length)throw 400;
+   if(body.status==='awaiting_approval'&&!(Object.hasOwn(body,'client_visible')?body.client_visible:Boolean(campaign.client_visible)))throw 400;
    const columns=Object.fromEntries(Object.keys(body).map(k=>[k,k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase())]));
    if(body.currency&&body.currency!==campaign.currency)throw 400;
    const sets=Object.keys(body).map(k=>columns[k]+'=?');
@@ -230,7 +229,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    requireStaff(actor);const input=await readBody(request),body=validateCreative(input);
    const timestamp=now(),recordId=id(),columns=Object.keys(body).map(k=>k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase()));
    const values=Object.values(body).map(v=>typeof v==='boolean'?Number(v):v);
-   if(body.status==='awaiting_approval'&&!body.clientVisible)throw 400;
+   if(body.status==='awaiting_approval'&&!body.client_visible)throw 400;
    const activity=activityStatement(actor,campaign.client_id,'creative',recordId,'created',{name:body.name});
    await db.batch([
     db.prepare('INSERT INTO meta_ad_creatives(id,organization_id,client_id,campaign_id,'+columns.join(',')+',created_by,created_at,updated_at) VALUES('+Array(values.length+7).fill('?').join(',')+')').bind(recordId,actor.organization_id,campaign.client_id,campaign.id,...values,actor.id,timestamp,timestamp),
@@ -247,7 +246,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    requireStaff(actor);const input=await readBody(request);if(!integer(input.revision))throw 400;
    const body=validateCreative(input,true);if(!Object.keys(body).length)throw 400;
    const columns=Object.keys(body).map(k=>k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase()));
-   if(body.status==='awaiting_approval'&&!body.clientVisible)throw 400;
+   if(body.status==='awaiting_approval'&&!(Object.hasOwn(body,'client_visible')?body.client_visible:Boolean(creative.client_visible)))throw 400;
    const activity=conditionalActivityStatement(actor,creative.client_id,'creative',creative.id,'updated',{fields:Object.keys(body)});
    const results=await db.batch([
     db.prepare('UPDATE meta_ad_creatives SET '+columns.map(k=>k+'=?').join(',')+',reviewed_by=NULL,reviewed_at=NULL,revision=revision+1,updated_at=? WHERE organization_id=? AND id=? AND revision=?').bind(...Object.values(body).map(v=>typeof v==='boolean'?Number(v):v),now(),actor.organization_id,creative.id,input.revision),
