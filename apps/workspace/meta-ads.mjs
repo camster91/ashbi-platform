@@ -125,6 +125,7 @@ function safeLead(row,actor){
  const {internal_notes,...visible}=row;return visible;
 }
 export async function metaAdsRoute(request,db,actor,readBody,json){
+ if(!['staff','client'].includes(actor.role))throw 403;
  const url=new URL(request.url),path=url.pathname.replace(/^\/api\/meta-ads\/?/,'').split('/').filter(Boolean),method=request.method;
  if(url.searchParams.getAll('clientId').length>1)throw 400;
  if(path.length===0){
