@@ -55,6 +55,10 @@ revisions and form defaults and are filtered directly by organization. This
 extends the existing offboarding export; it does not add an importer or prove
 source cutover, real-tenant export or restore acceptance.
 
+## Cloudflare Workspace pilot export distinction
+
+The separate Cloudflare Workspace pilot at `hub.ashbi.ca` exposes a staff-only `GET /api/export` snapshot with a 1,000-row-per-table bound. It includes the manual Meta Ads tables (client account profiles, campaign plans, creative approvals, lead records, reporting snapshots and activity history). This API export is not the complete operator offboarding archive described below: it does not include private R2 objects or prove full restore/offboarding acceptance. Do not present it as a complete customer export.
+
 ## Running an export
 
 1. Confirm the request: the organization id, who asked, and where the export

@@ -16,11 +16,13 @@ const icons={
  commercial:'M4 4h16v16H4z M8 8h8 M8 12h8 M8 16h4',
  reviews:'M21 11v9H3V4h12 M8 11l3 3L21 4',
  contracts:'M14 2H5v20h14V7z M14 2v5h5 M8 16l2-2 2 2 4-4',
- 'source-history':'M3 4v5h5 M3 9a9 9 0 1 1 1 9 M12 7v5l3 2'
+ 'source-history':'M3 4v5h5 M3 9a9 9 0 1 1 1 9 M12 7v5l3 2',
+ 'meta-ads':'M3 3h18v18H3z M7 16v-4 M12 16V8 M17 16v-6'
 };
 const groups=[
  ['Work',[['overview','Overview'],['inbox','Inbox'],['projects','Projects'],['tasks','Tasks'],['time','Time']]],
  ['Clients &amp; billing',[['clients','Clients'],['finance','Finance'],['invoices','Invoices'],['commercial','Proposals &amp; contracts'],['reviews','Proposal reviews'],['contracts','Contracts']]],
+ ['Growth',[['meta-ads','Meta Ads']]],
  ['Documents',[['notes','Documents'],['files','Files']]],
  ['Administration',[['source-history','Source history']]]
 ];
