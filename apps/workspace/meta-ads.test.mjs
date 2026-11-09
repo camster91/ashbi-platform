@@ -31,9 +31,9 @@ test('manual Meta Ads agency workspace enforces tenant and client boundaries',as
  const call=(path,actor='staff',method='GET',body,extra={})=>worker.fetch(new Request(origin+path,{method,headers:{...(actor?{'Cf-Access-Jwt-Assertion':tokens[actor]}:{}),...(body?{'Content-Type':'application/json','Origin':origin}:{}),...extra},body:body?JSON.stringify(body):undefined}),env);
  await t.test('authentication and client workspace creation',async()=>{
   assert.equal((await call('/api/meta-ads',null)).status,401);
-  const response=await call('/api/meta-ads','staff','POST',{clientId:'c1',businessName:'Painting Co',currency:'CAD',timezone:'America/Toronto',serviceAreas:['Toronto','Scarborough'],checklist:{partner_access:'complete'}});
+  const response=await call('/api/meta-ads','staff','POST',{clientId:'c1',businessName:'Painting Co',ashbiBusinessId:'987654321',currency:'CAD',timezone:'America/Toronto',serviceAreas:['Toronto','Scarborough'],checklist:{partner_access:'complete'}});
   assert.equal(response.status,201);
-  const account=await response.json();assert.equal(account.client_id,'c1');assert.equal(account.service_areas[0],'Toronto');assert.equal(account.checklist.partner_access,'complete');
+  const account=await response.json();assert.equal(account.client_id,'c1');assert.equal(account.ashbi_business_id,'987654321');assert.equal(account.service_areas[0],'Toronto');assert.equal(account.checklist.partner_access,'complete');
   assert.equal((await call('/api/meta-ads/c1','client1')).status,200);
   assert.equal((await call('/api/meta-ads/c1','client2')).status,404);
   assert.equal((await call('/api/meta-ads/c1','foreign')).status,404);
