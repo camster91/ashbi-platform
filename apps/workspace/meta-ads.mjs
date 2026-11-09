@@ -228,6 +228,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
   }
   if(method==='POST'){
    requireStaff(actor);const input=await readBody(request),body=validateCreative(input);
+   if(body.client_visible&&!campaign.client_visible)throw 400;
    const timestamp=now(),recordId=id(),columns=Object.keys(body).map(k=>k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase()));
    const values=Object.values(body).map(v=>typeof v==='boolean'?Number(v):v);
    if(body.status==='awaiting_approval'&&!body.client_visible)throw 400;
@@ -246,6 +247,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
   if(method==='PATCH'){
    requireStaff(actor);const input=await readBody(request);if(!integer(input.revision))throw 400;
    const body=validateCreative(input,true);if(!Object.keys(body).length)throw 400;
+   if(body.client_visible){const parent=await db.prepare('SELECT client_visible FROM meta_ad_campaigns WHERE id=? AND organization_id=? AND client_id=?').bind(creative.campaign_id,actor.organization_id,creative.client_id).first();if(!parent||!parent.client_visible)throw 400;}
    const columns=Object.keys(body).map(k=>k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase()));
    if(body.status==='awaiting_approval'&&!(Object.hasOwn(body,'client_visible')?body.client_visible:Boolean(creative.client_visible)))throw 400;
    const activity=conditionalActivityStatement(actor,creative.client_id,'creative',creative.id,'updated',{fields:Object.keys(body)});
@@ -264,6 +266,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
   const input=await readBody(request);if(!['approved','changes_requested'].includes(input.decision)||!text(input.feedback||'',2000))throw 400;
   const creative=await db.prepare('SELECT * FROM meta_ad_creatives WHERE id=? AND organization_id=? AND client_id=? AND client_visible=1').bind(path[1],actor.organization_id,actor.client_id).first();
   if(!creative||creative.status!=='awaiting_approval')throw 404;
+  const parent=await db.prepare('SELECT client_visible FROM meta_ad_campaigns WHERE id=? AND organization_id=? AND client_id=?').bind(creative.campaign_id,actor.organization_id,actor.client_id).first();if(!parent||!parent.client_visible)throw 404;
   const timestamp=now(),approvalId=id(),newRevision=creative.revision+1;
   const approval=db.prepare('INSERT INTO meta_ad_approvals(id,organization_id,client_id,creative_id,actor_id,decision,feedback,created_at) SELECT ?,?,?,?,?,?,?,? WHERE changes()=1').bind(approvalId,actor.organization_id,actor.client_id,creative.id,actor.id,input.decision,input.feedback||'',timestamp);
   const update=db.prepare('UPDATE meta_ad_creatives SET status=?,reviewed_by=?,reviewed_at=?,revision=revision+1,updated_at=? WHERE id=? AND organization_id=? AND client_id=? AND revision=? AND status=? AND client_visible=1')
