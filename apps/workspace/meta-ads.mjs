@@ -265,7 +265,7 @@ export async function metaAdsRoute(request,db,actor,readBody,json){
    if(results[0].meta.changes!==1)throw 409;
    return json(await db.prepare('SELECT * FROM meta_ad_creatives WHERE id=? AND organization_id=?').bind(creative.id,actor.organization_id).first());
   }
-  if(method==='GET')return actor.role==='staff'||creative.client_visible?json(creative):json({error:'Not found'},404);
+  if(method==='GET'){if(actor.role==='client'){const parent=await db.prepare('SELECT client_visible FROM meta_ad_campaigns WHERE id=? AND organization_id=? AND client_id=?').bind(creative.campaign_id,actor.organization_id,actor.client_id).first();if(!creative.client_visible||!parent||!parent.client_visible)throw 404;}return json(creative);}
   throw 405;
  }
  if(path[0]==='creatives'&&shortId(path[1])&&path[2]==='decision'&&path.length===3&&method==='POST'){
