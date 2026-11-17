@@ -49,10 +49,10 @@ test('browser proxy peer is explicitly development-only, not an optional subtree
   assert.equal(resolve(lock.packages, browsers[0], 'proxy-agent'), 'node_modules/proxy-agent');
 });
 
-test('both browser proxy 8 and Lighthouse proxy 6 retain complete required dependency closures', () => {
+test('both browser proxy 8 and Lighthouse proxy 8 retain complete required dependency closures', () => {
   const browser = requiredClosure(lock.packages, 'node_modules/proxy-agent');
   const lighthouseProxy = resolve(lock.packages, 'node_modules/@lhci/cli', 'proxy-agent');
-  assert.match(lock.packages[lighthouseProxy].version, /^6\./);
+  assert.match(lock.packages[lighthouseProxy].version, /^8\./);
   const lighthouse = requiredClosure(lock.packages, lighthouseProxy);
   assert.ok(browser.size > 10);
   assert.ok(lighthouse.size > 10);
