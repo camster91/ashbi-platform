@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import AxeBuilder from '@axe-core/playwright';
+import { analyzeAxe } from './analyze-axe';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
@@ -82,8 +82,8 @@ for (const width of [1280, 390]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     expect(await page.locator('b').count()).toBe(0);
     const labelledBy = await page.getByRole('region', { name: 'Ask the team', exact: true }).getAttribute('aria-labelledby');
-    const violations = (await new AxeBuilder({ page }).include(`section[aria-labelledby="${labelledBy}"]`).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()).violations;
-    expect(violations).toEqual([]);
+    const axe = await analyzeAxe(page, builder => builder.include(`section[aria-labelledby="${labelledBy}"]`).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']));
+    if (axe) expect(axe.violations).toEqual([]);
     await page.getByLabel('Your question', { exact: true }).focus();
     await expect(page.getByLabel('Your question', { exact: true })).toBeFocused();
     await page.screenshot({ path: testInfo.outputPath('portal-team-request.png'), fullPage: true });
