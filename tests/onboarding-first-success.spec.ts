@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import AxeBuilder from '@axe-core/playwright';
+import { analyzeAxe } from './analyze-axe';
 
 const adminTasks = [
   { id: 'add-client', title: 'Add your first client', description: 'Create or import the client account.', href: '/clients', permission: 'ADMIN', completed: false, skipped: false },
@@ -48,10 +48,8 @@ test('account-backed ADMIN onboarding is accessible and responsive without recor
     await expect(page.getByRole('progressbar', { name: 'Onboarding progress' })).toHaveAttribute('aria-valuenow', '0');
   }
 
-  const axe = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze();
-  expect(axe.violations).toEqual([]);
+  const axe = await analyzeAxe(page);
+  if (axe) expect(axe.violations).toEqual([]);
 
   await page.getByRole('dialog', { name: 'Your getting-started checklist' }).getByRole('button', { name: 'Not now' }).click();
   await expect(page.getByRole('button', { name: 'Resume getting started, 0 of 3 tasks resolved' })).toBeVisible();

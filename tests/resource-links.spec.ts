@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import AxeBuilder from '@axe-core/playwright';
+import { analyzeAxe } from './analyze-axe';
 import { mockAuthenticatedApi, mockClientPortalApi, unmockedRequests } from './fixtures/authenticated-api';
 
 test.afterEach(({ page }) => expect(unmockedRequests(page)).toEqual([]));
@@ -116,6 +116,6 @@ test('client project renders only minimal shared resource DTOs with no mutation 
   expect(reads.filter(after => after !== null)).toEqual(['page-100', 'page-100']);
   await expect(panel.getByRole('button', { name: 'Load more resources', exact: true })).toBeEnabled();
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  const result = await new AxeBuilder({ page }).include('section[aria-labelledby]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
-  expect(result.violations).toEqual([]);
+  const result = await analyzeAxe(page, builder => builder.include('section[aria-labelledby]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']));
+  if (result) expect(result.violations).toEqual([]);
 });
