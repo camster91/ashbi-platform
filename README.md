@@ -2,12 +2,23 @@
 
 An all-in-one operations platform for a small creative agency: clients, projects, tasks, time, finance documents, team chat, media review and a client portal in one self-hosted app.
 
-This repository contains the existing Hub (`src/`, `web/`, `prisma/`) and a
-separate [Cloudflare workspace pilot](apps/workspace/README.md) in
-`apps/workspace/`. The pilot targets the smaller two-person workflow described
-in [tasks/plan.md](tasks/plan.md); it has its own dependencies and verification
-commands. The feature list and root commands below describe the existing Hub.
-Pilot source and local tests do not establish production replacement or cutover.
+It is Ashbi Design's internal tool. This repository holds two apps:
+
+- The existing **Hub** (`src/`, `web/`, `prisma/`). The feature list and root
+  commands below describe this app. It is now the fallback app and still provides
+  sign-in for the workspace.
+- The **Cloudflare workspace** in [apps/workspace](apps/workspace/README.md), which the
+  owner selected for daily use. It has its own dependencies, commands and tests.
+
+## Status
+
+Both apps are built. [Deployment and rollback](docs/deployment-and-rollback.md)
+records the workspace selection and the last recorded Hub release. Authenticated
+daily-use acceptance, live billing (workspace Stripe is documented as test mode) and
+retirement of the Hub are recorded as separate and not established by deployment.
+Many Hub features are in the code but not verified in production; check
+[product status](docs/product-status.md) and [launch status](docs/launch-status.md)
+per feature. The product is not yet proven as a general-market replacement.
 
 On 27 October 2026, the owner closed the remaining issues and pull requests.
 Their references in planning documents preserve history and do not prove
@@ -22,9 +33,11 @@ Embedded assistance is optional and hidden by default. A generated
 
 ## Why
 
-Ashbi Design runs its client work across many separate tools (task boards, wikis, chat, screen recordings, design review, invoicing). Ashbi Hub brings that work into one multi-tenant app with a single permission model, an audit trail and a client-facing portal, so staff and clients see the same source of truth. It is built and used in-house; the honest, per-feature status of every capability lives in [docs/product-status.md](docs/product-status.md).
+Ashbi Design runs its client work across many separate tools (task boards, wikis, chat, screen recordings, design review, invoicing). Ashbi Hub brings that work into one multi-tenant app with a single permission model, an audit trail and a client-facing portal, so staff and clients see the same source of truth. It is built in-house; the dated, per-feature status lives in [docs/product-status.md](docs/product-status.md).
 
 ## Key features
+
+These are present in the Hub source. See the status section for what has been verified.
 
 - **Clients and CRM**: client records with contacts, health tracking, sales pipeline and intake forms.
 - **Projects and tasks**: task lists and kanban boards, milestones, project templates, a project planner, and a daily operator queue that sorts open work into *Needs action*, *Awaiting approval*, *Waiting on client* and *At risk*.
@@ -33,8 +46,8 @@ Ashbi Design runs its client work across many separate tools (task boards, wikis
 - **Client portal**: clients sign in to see their own projects, shared files, reviews, invoices and proposals. Portal sessions are revoked immediately when a client is paused or a contact is removed, and internal data (budgets, AI summaries, risks) never reaches it.
 - **Team chat with media**: per-project conversations where each message is *Internal* or *Visible to client*, with pasted screenshots, screenshot markup, and in-browser screen and camera recordings.
 - **Media review**: review sessions over images, PDFs, video and recordings with pin, area, arrow and freehand markup, timestamped comments, versioning, client approval decisions and exportable evidence.
-- **Docs and inbox**: a project wiki, an email inbox with threaded replies through a connected Gmail mailbox, and global and semantic search.
-- **Governed AI**: Claude, Gemini or Ollama for summaries and drafting; an organization-level bring-your-own-key option with monthly budgets and kill switches; and an AI tool registry where anything that would change data becomes a pending action that a human approves.
+- **Docs and inbox**: a project wiki, an email inbox with threaded replies through a connected Gmail mailbox, and global search and optional semantic search.
+- **Governed AI** (embedded features are hidden unless `VITE_EMBEDDED_AI_ENABLED=true` at build time): Claude, Gemini or Ollama for summaries and drafting; an organization-level bring-your-own-key option with monthly budgets and kill switches; and an AI tool registry where anything that would change data becomes a pending action that a human approves.
 - **Security and administration**: roles and tenancy, TOTP two-factor (enforceable per organization), step-up confirmation for sensitive actions, audited read-only support impersonation, an encrypted credential vault, upload validation policy and an append-only audit log.
 - **Migration importers**: dry-run-first CLI importers for Notion, Slack, Loom, MarkUp.io, Bonsai and ClickUp exports, with reconciliation reports and rollback by run id where supported.
 - **PWA**: installable web app with offline support for the public shell only. Private API data is never cached on the device.
@@ -85,7 +98,23 @@ npm run dev:worker
 
 The API listens on `http://localhost:3000` and Vite serves the app on `http://localhost:5173`, proxying API and socket traffic. Create the first administrator with `POST /api/auth/register` using the `ADMIN_INVITE_TOKEN` you set in your local `.env`.
 
-Prefer containers? `docker compose -f docker-compose.yml -f docker-compose.dev.yml up` runs the app, worker, PostgreSQL (pgvector) and Redis, with database and cache ports published to your machine for local tools.
+Prefer containers? `docker compose -f docker-compose.yml -f docker-compose.dev.yml up` runs the app, worker, PostgreSQL (pgvector) and Redis, with database and cache ports published to your machine for local tools. The containerized app is on `http://localhost:3002`. Compose also needs `DB_PASSWORD`.
+
+### Environment variables
+
+[.env.example](.env.example) lists most names. The main ones:
+
+| Variable | Use |
+|---|---|
+| `DATABASE_URL`, `REDIS_URL` | PostgreSQL and Redis connections |
+| `JWT_SECRET`, `CREDENTIALS_KEY` | Sessions and credential vault; startup fails without them in staging and production |
+| `ADMIN_INVITE_TOKEN` | First administrator registration |
+| `NODE_ENV`, `PORT`, `CORS_ORIGIN`, `APP_URL`, `PORTAL_BASE_URL` | Runtime and URLs |
+| `STRIPE_*`, `MAILGUN_*`, `GMAIL_*`, `GOOGLE_CALENDAR_*`, `SLACK_*`, `VAPID_*` | Integrations |
+| `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OLLAMA_*`, `AI_DISABLED` | AI providers and kill switch |
+| `SENTRY_DSN`, `OTLP_ENDPOINT` | Observability |
+
+### Database changes
 
 Use `prisma db push` only against a disposable local database. Shared environments always use the committed migration chain.
 
@@ -116,6 +145,8 @@ npm run test:e2e
 npm run test:e2e:teardown
 ```
 
+The workspace has separate tests; run them from `apps/workspace` (see [its README](apps/workspace/README.md#local-checks)).
+
 Install browsers for Playwright once with `npx playwright install --with-deps chromium firefox webkit`. Visual regression baselines run with `npm run test:visual` (see [docs/visual-baselines.md](docs/visual-baselines.md)).
 
 ## Project structure
@@ -125,17 +156,20 @@ src/            Fastify backend
   domains/      route registrars grouped by domain (identity, revenue, client delivery, ...)
   routes/       API route modules
   services/     business logic
-  ai/           AI providers, agents and the governed tool registry
+  ai/           AI providers and the governed tool registry
+  agents/       AI agent modules
+  auth/         sessions, MFA, step-up, OAuth and socket authentication
   jobs/         BullMQ worker and background jobs
   realtime/     Socket.IO rooms and events
-  security/     auth, step-up, credential vault and upload policy
+  security/     upload, outbound URL and Slack event policies
   tests/        unit, integration and AI evaluation suites
 web/            React + Vite frontend (pages, components, hooks)
 prisma/         schema and committed migrations
 scripts/        importers, generators and maintenance CLIs
 tests/          Playwright browser, accessibility, PWA and visual tests
-apps/workspace/ Separate Cloudflare workspace pilot (own package and local checks)
+apps/workspace/ Cloudflare workspace (own package and checks)
 prototypes/     Earlier isolated runtime proofs
+upwork-agent/   Separate Upwork sync scripts (own package)
 docs/           design and reference documentation
 ```
 
@@ -143,7 +177,12 @@ The backend's composition and domain boundaries are described in [docs/backend-a
 
 ## Production
 
-Production has one controller: the immutable direct-VPS procedure in [docs/deployment-and-rollback.md](docs/deployment-and-rollback.md). GitHub Actions and Coolify do not promote production. Every release uses the reviewed revision, archive checksum, immutable image ID, migration/status preflight, dependency-aware API/worker readiness, retained rollback containers, trusted HTTPS verification, and the encrypted backup policy in [docs/backup-and-restore.md](docs/backup-and-restore.md).
+[docs/deployment-and-rollback.md](docs/deployment-and-rollback.md) is the authority for both apps.
+
+- **Workspace**: a tested bundle is uploaded as a Cloudflare Worker version and promoted separately, with the previous version kept for rollback.
+- **Hub**: the documented controller is the immutable direct-VPS procedure. Releases use the reviewed revision, archive checksum, immutable image ID, migration/status preflight, dependency-aware API/worker readiness, retained rollback containers, trusted HTTPS verification, and the encrypted backup policy in [docs/backup-and-restore.md](docs/backup-and-restore.md).
+
+A push to `main` can also start the [checked Coolify workflow](.github/workflows/checked-coolify-deploy.yml) after the release gates pass, if `COOLIFY_RELEASE_ENABLED` is `true`. It uses the `production` environment. The [adoption notes](docs/checked-coolify-release.md) say adoption is incomplete and the switch should stay off until then, so check it before merging.
 
 ## Reference docs
 
